@@ -394,10 +394,10 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
         protoSchema->set_stable_name(schema.StableName().Underlying());
     }
 
-    protoSchema->set_type(static_cast<int>(GetPhysicalType(schema.CastToV1Type())));
+    protoSchema->set_type(ToProto(GetPhysicalType(schema.CastToV1Type())));
 
     if (schema.IsOfV1Type()) {
-        protoSchema->set_simple_logical_type(static_cast<int>(schema.CastToV1Type()));
+        protoSchema->set_simple_logical_type(ToProto(schema.CastToV1Type()));
     } else {
         protoSchema->clear_simple_logical_type();
     }
@@ -428,7 +428,7 @@ void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema)
         protoSchema->clear_aggregate();
     }
     if (schema.SortOrder()) {
-        protoSchema->set_sort_order(static_cast<int>(*schema.SortOrder()));
+        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
     } else {
         protoSchema->clear_sort_order();
     }
@@ -1505,7 +1505,7 @@ void ToProto(NProto::TTableSchemaExt* protoSchema, const TTableSchema& schema)
     ToProto(protoSchema->mutable_deleted_columns(), schema.DeletedColumns());
     protoSchema->set_strict(schema.GetStrict());
     protoSchema->set_unique_keys(schema.GetUniqueKeys());
-    protoSchema->set_schema_modification(static_cast<int>(schema.GetSchemaModification()));
+    protoSchema->set_schema_modification(ToProto(schema.GetSchemaModification()));
 }
 
 void FromProto(TTableSchema* schema, const NProto::TTableSchemaExt& protoSchema)

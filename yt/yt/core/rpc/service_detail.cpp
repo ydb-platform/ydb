@@ -1236,7 +1236,7 @@ private:
             ToProto(header.mutable_realm_id(), GetRealmId());
         }
         header.set_sequence_number(payload->SequenceNumber);
-        header.set_codec(static_cast<int>(payload->Codec));
+        header.set_codec(ToProto(payload->Codec));
 
         auto message = CreateStreamingPayloadMessage(header, payload->Attachments);
 

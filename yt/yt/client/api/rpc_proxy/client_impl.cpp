@@ -1057,7 +1057,7 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
     if (user) {
         req->set_user(ToProto(*user));
     }
-    req->set_permission(static_cast<int>(permission));
+    req->set_permission(ToProto(permission));
     req->set_acl(ConvertToYsonString(acl).ToString());
     req->set_ignore_missing_subjects(options.IgnoreMissingSubjects);
 

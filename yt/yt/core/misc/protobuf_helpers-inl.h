@@ -372,7 +372,7 @@ void ToProtoArrayImpl(
         if (originalArray.IsValidIndex(key)) {
             const auto& value = originalArray[key];
             auto* pair = serializedArray->Add();
-            pair->set_key(static_cast<i32>(key));
+            pair->set_key(ToProto(key));
             SetPairValueImpl(pair, value);
         }
     }

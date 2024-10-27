@@ -254,7 +254,7 @@ private:
                 return TError("Invalid \"Content-Type\" header value")
                     << TErrorAttribute("value", *contentTypeString);
             }
-            rpcHeader->set_request_format(static_cast<i32>(*decodedType));
+            rpcHeader->set_request_format(ToProto(*decodedType));
         }
 
         auto requestFormatOptionsYson = httpHeaders->Find(RequestFormatOptionsHeaderName);
@@ -269,7 +269,7 @@ private:
                 return TError("Invalid \"Accept\" header value")
                     << TErrorAttribute("value", *acceptString);
             }
-            rpcHeader->set_response_format(static_cast<i32>(*decodedType));
+            rpcHeader->set_response_format(ToProto(*decodedType));
         }
 
         auto responseFormatOptionsYson = httpHeaders->Find(ResponseFormatOptionsHeaderName);

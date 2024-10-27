@@ -423,7 +423,7 @@ void Deserialize(TError& error, NYson::TYsonPullParserCursor* cursor)
 void ToProto(NYT::NProto::TError* protoError, const TError& error)
 {
     if (error.IsOK()) {
-        protoError->set_code(static_cast<int>(NYT::EErrorCode::OK));
+        protoError->set_code(ToProto(NYT::EErrorCode::OK));
         protoError->clear_message();
         return;
     }

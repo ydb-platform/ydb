@@ -12,6 +12,8 @@ using namespace NYT::NYson;
 using namespace NConcurrency;
 using namespace NCrypto;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TNonExistingServiceProxy
@@ -581,7 +583,7 @@ TYPED_TEST(TNotGrpcTest, Compression)
     proxy.SetDefaultEnableLegacyRpcCodecs(false);
 
     auto req = proxy.Compression();
-    req->set_request_codec(static_cast<int>(requestCodecId));
+    req->set_request_codec(ToProto(requestCodecId));
     req->set_message(message);
     for (const auto& attachmentString : attachmentStrings) {
         req->Attachments().push_back(TSharedRef::FromString(attachmentString));
@@ -929,7 +931,7 @@ TYPED_TEST(TNotGrpcTest, MemoryOvercommit)
     TTestProxy proxy(this->CreateChannel());
     proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
     auto req = proxy.SlowCall();
-    req->set_request_codec(static_cast<int>(requestCodecId));
+    req->set_request_codec(ToProto(requestCodecId));
     req->Attachments().push_back(TSharedRef::FromString(TString(6_KB, 'x')));
     WaitFor(req->Invoke()).ThrowOnError();
     {
@@ -961,7 +963,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
 
     for (int i = 0; i < 15; ++i) {
         auto req = proxies[i].SlowCall();
-        req->set_request_codec(static_cast<int>(requestCodecId));
+        req->set_request_codec(ToProto(requestCodecId));
         req->set_message(TString(2_MB, 'x'));
         futures.push_back(req->Invoke().AsVoid());
     }
@@ -971,7 +973,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
         auto req = proxy.SlowCall();
-        req->set_request_codec(static_cast<int>(requestCodecId));
+        req->set_request_codec(ToProto(requestCodecId));
         req->set_message(TString(1_MB, 'x'));
         EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
     }

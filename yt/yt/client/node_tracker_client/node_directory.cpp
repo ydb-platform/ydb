@@ -321,7 +321,7 @@ void ToProto(NNodeTrackerClient::NProto::TNodeAddressMap* proto, const NNodeTrac
 {
     for (const auto& [addressType, addresses] : nodeAddresses) {
         auto* entry = proto->add_entries();
-        entry->set_address_type(static_cast<int>(addressType));
+        entry->set_address_type(ToProto(addressType));
         ToProto(entry->mutable_addresses(), addresses);
     }
 }

@@ -140,7 +140,7 @@ void Deserialize(TWorkloadDescriptor& descriptor, NYson::TYsonPullParserCursor* 
 
 void ToProto(NYT::NProto::TWorkloadDescriptor* protoDescriptor, const TWorkloadDescriptor& descriptor)
 {
-    protoDescriptor->set_category(static_cast<int>(descriptor.Category));
+    protoDescriptor->set_category(ToProto(descriptor.Category));
     protoDescriptor->set_band(descriptor.Band);
     protoDescriptor->set_instant(ToProto(descriptor.Instant));
     ToProto(protoDescriptor->mutable_annotations(), descriptor.Annotations);
@@ -148,7 +148,7 @@ void ToProto(NYT::NProto::TWorkloadDescriptor* protoDescriptor, const TWorkloadD
 
 void FromProto(TWorkloadDescriptor* descriptor, const NYT::NProto::TWorkloadDescriptor& protoDescriptor)
 {
-    descriptor->Category = EWorkloadCategory(protoDescriptor.category());
+    descriptor->Category = FromProto<EWorkloadCategory>(protoDescriptor.category());
     descriptor->Band = protoDescriptor.band();
     descriptor->Instant = FromProto<TInstant>(protoDescriptor.instant());
     FromProto(&descriptor->Annotations, protoDescriptor.annotations());

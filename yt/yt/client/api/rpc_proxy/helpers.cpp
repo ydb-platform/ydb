@@ -600,7 +600,7 @@ void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletI
 {
     ToProto(protoTabletInfo->mutable_tablet_id(), tabletInfo.TabletId);
     protoTabletInfo->set_mount_revision(ToProto(tabletInfo.MountRevision));
-    protoTabletInfo->set_state(static_cast<i32>(tabletInfo.State));
+    protoTabletInfo->set_state(ToProto(tabletInfo.State));
     ToProto(protoTabletInfo->mutable_pivot_key(), tabletInfo.PivotKey);
     if (tabletInfo.CellId) {
         ToProto(protoTabletInfo->mutable_cell_id(), tabletInfo.CellId);

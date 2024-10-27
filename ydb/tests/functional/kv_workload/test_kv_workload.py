@@ -50,7 +50,7 @@ class TestYdbKvWorkload(object):
                 "--seconds", "100",
                 "--threads", "10",
 
-                "  223", "5",
+                "--cols", "5",
                 "--len", "200",
                 "--int-cols", "2",
                 "--key-cols", "3"

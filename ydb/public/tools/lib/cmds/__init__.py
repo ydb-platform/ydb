@@ -94,7 +94,7 @@ def write_file(args, suffix, content):
         write_file_flushed(os.path.join(args.ydb_working_dir, suffix), content)
         return
 
-    write_file_flushed(os.path.join(yatest.commmon.output_path(suffix)), content)
+    write_file_flushed(os.path.join(yatest.common.output_path(suffix)), content)
 
     try:
         write_file_flushed(suffix, content)
@@ -107,7 +107,7 @@ def read_file(args, suffix):
         with open(os.path.join(args.ydb_working_dir, suffix), 'r') as fd:
             return fd.read()
 
-    with open(os.path.join(yatest.commmon.output_path(suffix)), 'r') as fd:
+    with open(os.path.join(yatest.common.output_path(suffix)), 'r') as fd:
         return fd.read()
 
 
@@ -223,7 +223,7 @@ class Recipe(object):
         if self.arguments.ydb_working_dir:
             self.data_path = self.arguments.ydb_working_dir
             return self.data_path
-        self.data_path = yatest.commmon.output_path(self.data_path_template % random_string())
+        self.data_path = yatest.common.output_path(self.data_path_template % random_string())
         return ensure_path_exists(self.data_path)
 
 

@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_unique_path_for_current_test(output_path, sub_folder):
-    test_name = yatest.common.context.test_name or ""
+    # TODO: remove yatest dependency from harness
+    try:
+        test_name = yatest.common.context.test_name
+    except AttributeError:
+        test_name = ""
     test_name = test_name.replace(':', '_')
 
     return os.path.join(output_path, test_name, sub_folder)

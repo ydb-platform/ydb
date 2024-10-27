@@ -3,6 +3,7 @@
 
 import yatest.common
 
+
 def unpack_list(list_of_tuples_of_tuples_and_values):
     """
     >>> unpack_list([((1, 2), 3), ((5, 6), 7)])
@@ -61,6 +62,7 @@ def wrap_in_list(item):
         return item
     else:
         return [item]
+
 
 def plain_or_under_sanitizer(plain, sanitized):
     """

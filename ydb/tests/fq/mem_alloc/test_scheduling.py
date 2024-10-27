@@ -6,8 +6,6 @@ import os
 import pytest
 import time
 
-import yatest
-
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr

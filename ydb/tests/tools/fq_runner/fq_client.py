@@ -12,8 +12,6 @@ import library.python.retry as retry
 from ydb.public.api.grpc.draft.fq_v1_pb2_grpc import FederatedQueryServiceStub
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-import yatest
-
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.timestamp_pb2 import Timestamp
 

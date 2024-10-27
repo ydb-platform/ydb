@@ -8,6 +8,7 @@ import random
 import os
 import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig

@@ -6,7 +6,6 @@ import logging
 import os
 import pytest
 import time
-import yatest
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer

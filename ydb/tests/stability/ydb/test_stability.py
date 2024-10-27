@@ -4,6 +4,8 @@ import time
 import logging
 import sys
 
+import yatest
+
 logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
 
@@ -12,8 +14,6 @@ from ydb.tests.library.harness import param_constants # noqa
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory # noqa
 from ydb.tests.library.matchers.collection import is_empty # noqa
 from ydb.tests.library.wardens.factories import safety_warden_factory, liveness_warden_factory # noqa
-
-import yatest
 
 logger = logging.getLogger('ydb.connection')
 logger.setLevel(logging.CRITICAL)

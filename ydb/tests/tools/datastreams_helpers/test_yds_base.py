@@ -3,8 +3,6 @@
 
 import time
 
-import yatest
-
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule
 from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream

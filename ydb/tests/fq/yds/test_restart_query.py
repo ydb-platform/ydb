@@ -5,8 +5,6 @@ import os
 import pytest
 import time
 
-import yatest
-
 import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase

@@ -7,8 +7,6 @@ import pytest
 import six
 import time
 
-import yatest
-
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient

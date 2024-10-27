@@ -5,8 +5,6 @@ import os
 import pytest
 import time
 
-import yatest
-
 import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition

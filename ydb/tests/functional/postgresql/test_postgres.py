@@ -1,4 +1,3 @@
-from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
@@ -17,12 +16,12 @@ DATA_PATH = os.path.join(arcadia_root, yatest.common.test_source_path('cases'))
 
 
 def get_unique_path_case(sub_folder, file):
-    test_name = yatest_common.context.test_name or ""
+    test_name = yatest.common.context.test_name or ""
     test_name = test_name.replace(':', '_')
     lb, rb = re.escape('['), re.escape(']')
     test_case = re.search(lb + '(.+?)' + rb, test_name)
     assert test_case
-    dirpath = os.path.join(yatest_common.output_path(), test_case.group(1), sub_folder)
+    dirpath = os.path.join(yatest.common.output_path(), test_case.group(1), sub_folder)
     if not os.path.exists(dirpath):
         os.makedirs(dirpath, exist_ok=True)
     return os.path.join(dirpath, file)
@@ -39,7 +38,7 @@ def get_ids():
 
 
 def psql_binary_path():
-    return yatest_common.binary_path('ydb/tests/functional/postgresql/psql/psql')
+    return yatest.common.binary_path('ydb/tests/functional/postgresql/psql/psql')
 
 
 def execute_binary(binary_name, cmd, stdin_string=None):

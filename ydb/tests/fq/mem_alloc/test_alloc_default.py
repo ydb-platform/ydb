@@ -7,8 +7,8 @@ import pytest
 import six
 import time
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
@@ -54,8 +54,8 @@ def kikimr(request):
 
 def wait_until(
     predicate,
-    wait_time=yatest_common.plain_or_under_sanitizer(10, 50),
-    wait_step=yatest_common.plain_or_under_sanitizer(0.5, 2),
+    wait_time=plain_or_under_sanitizer(10, 50),
+    wait_step=plain_or_under_sanitizer(0.5, 2),
 ):
     deadline = time.time() + wait_time
     while time.time() < deadline:

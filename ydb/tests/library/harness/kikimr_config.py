@@ -11,7 +11,8 @@ import yaml
 from google.protobuf.text_format import Parse
 from importlib_resources import read_binary
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
+
 from ydb.core.protos import config_pb2
 from ydb.tests.library.common.types import Erasure
 
@@ -180,7 +181,7 @@ class KikimrConfigGenerator(object):
         self.__grpc_tls_cert = None
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
-            self.__grpc_tls_data_path = grpc_tls_data_path or yatest_common.output_path()
+            self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
             cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
             self.__grpc_tls_ca = cert_pem
             self.__grpc_tls_key = key_pem
@@ -225,7 +226,7 @@ class KikimrConfigGenerator(object):
 
         self.__dynamic_pdisks = dynamic_pdisks
 
-        self.__output_path = output_path or yatest_common.output_path()
+        self.__output_path = output_path or yatest.common.output_path()
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
@@ -477,7 +478,7 @@ class KikimrConfigGenerator(object):
             return path
 
         def get_cwd_for_test(output_path):
-            test_name = yatest_common.context.test_name or ""
+            test_name = yatest.common.context.test_name or ""
             test_name = test_name.replace(':', '_')
             return os.path.join(output_path, test_name)
 
@@ -495,7 +496,7 @@ class KikimrConfigGenerator(object):
             return path
 
         def get_cwd_for_test(output_path):
-            test_name = yatest_common.context.test_name or ""
+            test_name = yatest.common.context.test_name or ""
             test_name = test_name.replace(':', '_')
             return os.path.join(output_path, test_name)
 
@@ -564,7 +565,7 @@ class KikimrConfigGenerator(object):
     def get_yql_udfs_to_load(self):
         if not self.__load_udfs:
             return []
-        udfs_path = self.__udfs_path or yatest_common.build_path("yql/udfs")
+        udfs_path = self.__udfs_path or yatest.common.build_path("yql/udfs")
         result = []
         for dirpath, dnames, fnames in os.walk(udfs_path):
             is_loaded = False

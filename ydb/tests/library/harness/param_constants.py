@@ -5,8 +5,8 @@ import yatest
 
 config_name = yatest.common.get_param("kikimr.ci.cluster_name", None)
 ssh_username = yatest.common.get_param("kikimr.ci.ssh_username", os.getenv('NEMESIS_USER', 'robot-nemesis'))
-deploy_cluster = yatest.common.get_bool_param("kikimr.ci.deploy_cluster", False)
-use_packages = yatest.common.get_bool_param('kikimr.ci.packages', True)
+deploy_cluster = yatest.common.get_param("kikimr.ci.deploy_cluster", "true") == "true"
+use_packages = yatest.common.get_param('kikimr.ci.packages', "false") == "true"
 
 log_level = int(yatest.common.get_param('kikimr.ci.driver.log_level', 5))
 
@@ -32,7 +32,7 @@ def next_version_kikimr_driver_path():
 
 
 def kikimr_stderr_to_console():
-    return yatest.common.get_bool_param("kikimr.ci.stderr_to_console", False)
+    return yatest.common.get_param("kikimr.ci.stderr_to_console", "false") == "true"
 
 
 def kikimr_driver_path():

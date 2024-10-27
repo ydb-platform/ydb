@@ -10,8 +10,9 @@ import typing  # noqa: F401
 import sys
 from six.moves.urllib.parse import urlparse
 
+import yatest
+
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
-from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
@@ -56,7 +57,7 @@ def parse_erasure(args):
 
 
 def driver_path_packages(package_path):
-    return yatest_common.build_path(
+    return yatest.commmon.build_path(
         "{}/Berkanavt/kikimr/bin/kikimr".format(
             package_path
         )
@@ -64,7 +65,7 @@ def driver_path_packages(package_path):
 
 
 def udfs_path_packages(package_path):
-    return yatest_common.build_path(
+    return yatest.commmon.build_path(
         "{}/Berkanavt/kikimr/libs".format(
             package_path
         )
@@ -93,7 +94,7 @@ def write_file(args, suffix, content):
         write_file_flushed(os.path.join(args.ydb_working_dir, suffix), content)
         return
 
-    write_file_flushed(os.path.join(yatest_common.output_path(suffix)), content)
+    write_file_flushed(os.path.join(yatest.common.output_path(suffix)), content)
 
     try:
         write_file_flushed(suffix, content)
@@ -106,7 +107,7 @@ def read_file(args, suffix):
         with open(os.path.join(args.ydb_working_dir, suffix), 'r') as fd:
             return fd.read()
 
-    with open(os.path.join(yatest_common.output_path(suffix)), 'r') as fd:
+    with open(os.path.join(yatest.common.output_path(suffix)), 'r') as fd:
         return fd.read()
 
 
@@ -222,7 +223,7 @@ class Recipe(object):
         if self.arguments.ydb_working_dir:
             self.data_path = self.arguments.ydb_working_dir
             return self.data_path
-        self.data_path = yatest_common.output_path(self.data_path_template % random_string())
+        self.data_path = yatest.common.output_path(self.data_path_template % random_string())
         return ensure_path_exists(self.data_path)
 
 

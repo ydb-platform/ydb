@@ -25,21 +25,12 @@ ui64 IColumnEngine::GetMetadataLimit() {
     }
 }
 
-size_t TSelectInfo::NumChunks() const {
-    size_t records = 0;
-    for (auto& portionInfo : PortionsOrderedPK) {
-        records += portionInfo->NumChunks();
-    }
-    return records;
-}
-
 TSelectInfo::TStats TSelectInfo::Stats() const {
     TStats out;
     out.Portions = PortionsOrderedPK.size();
 
     THashSet<TUnifiedBlobId> uniqBlob;
     for (auto& portionInfo : PortionsOrderedPK) {
-        out.Records += portionInfo->NumChunks();
         out.Rows += portionInfo->GetRecordsCount();
         for (auto& blobId : portionInfo->GetBlobIds()) {
             out.Bytes += blobId.BlobSize();

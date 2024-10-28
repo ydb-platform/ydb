@@ -30,14 +30,12 @@ class TManager;
 struct TSelectInfo {
     struct TStats {
         size_t Portions{};
-        size_t Records{};
         size_t Blobs{};
         size_t Rows{};
         size_t Bytes{};
 
         const TStats& operator+=(const TStats& stats) {
             Portions += stats.Portions;
-            Records += stats.Records;
             Blobs += stats.Blobs;
             Rows += stats.Rows;
             Bytes += stats.Bytes;
@@ -46,8 +44,6 @@ struct TSelectInfo {
     };
 
     std::vector<std::shared_ptr<TPortionInfo>> PortionsOrderedPK;
-
-    size_t NumChunks() const;
 
     TStats Stats() const;
 

@@ -497,7 +497,6 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             ui64 txId = 1;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK[0]->NumChunks(), columnIds.size() + TIndexInfo::GetSnapshotColumnIdsSet().size() - 1);
         }
 
         { // select another pathId

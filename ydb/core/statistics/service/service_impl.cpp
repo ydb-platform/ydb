@@ -657,6 +657,9 @@ private:
             << ", StatRequests.size() = " << request.StatRequests.size());
 
         if (request.StatType == EStatType::COUNT_MIN_SKETCH) {
+            const auto tenantName = CanonizePath(AppData()->TenantName);
+            SA_LOG_D("Load COUNT_MIN_SKETCH TenantName: " << tenantName);
+
             request.StatResponses.reserve(request.StatRequests.size());
             ui32 reqIndex = 0;
             for (const auto& req : request.StatRequests) {
@@ -669,7 +672,8 @@ private:
                 }
                 ui64 loadCookie = NextLoadQueryCookie++;
                 LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
-                Register(CreateLoadStatisticsQuery(SelfId(), "",
+
+                Register(CreateLoadStatisticsActor(loadCookie, SelfId(), tenantName,
                     req.PathId, request.StatType, *req.ColumnTag, loadCookie));
                 ++request.ReplyCounter;
                 ++reqIndex;

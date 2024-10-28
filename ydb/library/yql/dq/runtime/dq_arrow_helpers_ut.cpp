@@ -44,7 +44,7 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
         case NUdf::EDataSlot::Uint16:
             return NUdf::TUnboxedValuePod(static_cast<ui16>(value % (1 << 16)));
         case NUdf::EDataSlot::Int32:
-            return NUdf::TUnboxedValuePod(static_cast<i32>(-(value % ((1 << 31) - 1))));
+            return NUdf::TUnboxedValuePod(static_cast<i32>(-(value % ((1ULL << 31) - 1))));
         case NUdf::EDataSlot::Uint32:
             return NUdf::TUnboxedValuePod(static_cast<ui32>(value % (1 << 31)));
         case NUdf::EDataSlot::Int64:

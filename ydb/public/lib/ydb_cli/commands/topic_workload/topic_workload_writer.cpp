@@ -1,6 +1,5 @@
 #include "topic_workload_writer.h"
 #include "topic_workload_writer_producer.h"
-#include "topic_workload_describe.h"
 
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
@@ -19,12 +18,17 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
         // write to random partition, cause workload CLI tool can be launched in several instances
         // and they need to load different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
+        auto clock = NUnifiedAgent::TClock();
+        if (!clock.Configured()) {
+            clock.Configure(); 
+        }
 
         Producers.emplace_back(
                 Params,
                 StatsCollector,
                 TGUID::CreateTimebased().AsGuidString(), // ProducerId
-                partitionId
+                partitionId,
+                std::move(clock)
         );
     }
 
@@ -35,7 +39,7 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
 
 TTopicWorkloadWriterWorker::~TTopicWorkloadWriterWorker()
 {
-    for (auto &producer: Producers) {
+    for (auto& producer: Producers) {
         producer.Close();
     }
 }
@@ -43,7 +47,7 @@ TTopicWorkloadWriterWorker::~TTopicWorkloadWriterWorker()
 void TTopicWorkloadWriterWorker::Close()
 {
     Closed->store(true);
-    for (auto &producer: Producers) {
+    for (auto& producer: Producers) {
         producer.Close();
     }
 }
@@ -76,18 +80,9 @@ void TTopicWorkloadWriterWorker::WaitTillNextMessageExpectedCreateTimeAndContinu
     TDuration timeToNextMessage = Params.BytesPerSec == 0 ? TDuration::Zero() :
                                   GetExpectedCurrMessageCreationTimestamp() - now;
 
-    if (timeToNextMessage > TDuration::Zero() || !producer.ContinuationToken)
+    if (timeToNextMessage > TDuration::Zero() || !producer.ContinuationTokenDefined())
     {
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-            << "WriterId " << Params.WriterIdx
-            << " producer id " << producer.ProducerId
-            << " for partition " << producer.PartitionId
-            << ": WaitEvent for timeToNextMessage " << timeToNextMessage);
         producer.WaitForContinuationToken(timeToNextMessage);
-    } else
-    {
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "WriterIdx: "
-            << Params.WriterIdx << " for partition " << producer.PartitionId <<  ": No wait");
     }
 }
 
@@ -111,7 +106,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
         WaitTillNextMessageExpectedCreateTimeAndContinuationToken(producer);
 
-        bool writingAllowed = producer.ContinuationToken.Defined();
+        bool writingAllowed = producer.ContinuationTokenDefined();
 
         if (Params.BytesPerSec != 0)
         {
@@ -148,11 +143,10 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
             ProducerIndex++;
 
-            // ToDo: put in callback
             WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-                    << "Written message " << producer.MessageId - 1
+                    << "Written message " << producer.GetCurrentMessageId() - 1
                     << " in writer " << Params.WriterIdx
-                    << " For partition " << producer.PartitionId
+                    << " For partition " << producer.GetPartitionId()
                     << " message create ts " << createTimestamp
                     << " delta from now " << (Params.BytesPerSec == 0 ? TDuration() : now - createTimestamp));
         }
@@ -170,21 +164,11 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 size_t TTopicWorkloadWriterWorker::InflightMessagesSize() {
     size_t total = 0;
 
-    for (auto &producer: Producers) {
-        total += producer.InflightMessagesCreateTs.size();
+    for (auto& producer: Producers) {
+        total += producer.InflightMessagesCnt();
     }
 
     return total;
-}
-
-bool TTopicWorkloadWriterWorker::InflightMessagesEmpty() {
-    for (auto &producer: Producers) {
-        if (!producer.InflightMessagesCreateTs.empty()) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 void TTopicWorkloadWriterWorker::RetryableWriterLoop(TTopicWorkloadWriterParams& params) {
@@ -246,11 +230,6 @@ void TTopicWorkloadWriterWorker::TryCommitTx(TInstant& commitTime)
             << ", messages needed for commit: " << Params.CommitMessages
             << " current rows in transactions: " << TxSupport->Rows.size()
         );
-        return;
-    }
-
-    if (!InflightMessagesEmpty()) {
-        WaitForCommitTx = true;
         return;
     }
 

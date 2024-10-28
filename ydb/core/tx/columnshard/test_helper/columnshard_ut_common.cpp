@@ -434,16 +434,22 @@ namespace NKikimr::NColumnShard {
     NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
                          const std::vector<NArrow::NTest::TTestColumn>& key) {
         THashMap<ui32, NTable::TColumn> columns;
+        THashMap<TString, NTable::TColumn*> columnByName;
         for (ui32 i = 0; i < ydbSchema.size(); ++i) {
             ui32 id = i + 1;
             auto& name = ydbSchema[i].GetName();
             auto& type = ydbSchema[i].GetType();
 
             columns[id] = NTable::TColumn(name, id, type, "");
+            AFL_VERIFY(columnByName.emplace(name, &columns[id]).second);
         }
 
         std::vector<TString> pkNames;
+        ui32 idx = 0;
         for (const auto& c : key) {
+            auto it = columnByName.find(c.GetName());
+            AFL_VERIFY(it != columnByName.end());
+            it->second->KeyOrder = idx++;
             pkNames.push_back(c.GetName());
         }
         return NOlap::TIndexInfo::BuildDefault(NOlap::TTestStoragesManager::GetInstance(), columns, pkNames);

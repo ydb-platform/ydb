@@ -1,4 +1,46 @@
 {
+    "test.test[SeqMode-action_shared_subquery_expr_after_commit-default.txt-Debug]": [
+        {
+            "checksum": "c6059498fd9eceecfaffc3e2d5f00142",
+            "size": 1623,
+            "uri": "https://{canondata_backend}/1936947/ebbf7e82de84b9967fb6c75f9c2e09b018c80f7c/resource.tar.gz#test.test_SeqMode-action_shared_subquery_expr_after_commit-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[SeqMode-action_shared_subquery_expr_after_commit-default.txt-Plan]": [
+        {
+            "checksum": "6b212f626afce6daa91562598b47342f",
+            "size": 5769,
+            "uri": "https://{canondata_backend}/1936947/ebbf7e82de84b9967fb6c75f9c2e09b018c80f7c/resource.tar.gz#test.test_SeqMode-action_shared_subquery_expr_after_commit-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[SeqMode-action_shared_subquery_expr_after_commit-default.txt-Results]": [
+        {
+            "checksum": "bdea5726342a2fbb8acd35387e11e129",
+            "size": 1388,
+            "uri": "https://{canondata_backend}/1936947/ebbf7e82de84b9967fb6c75f9c2e09b018c80f7c/resource.tar.gz#test.test_SeqMode-action_shared_subquery_expr_after_commit-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[SeqMode-shared_named_expr-default.txt-Debug]": [
+        {
+            "checksum": "75445fa74a15f6b92a9dd8aa91fa68c8",
+            "size": 290,
+            "uri": "https://{canondata_backend}/1599023/8c46ce50e18f0b2bbaa34aaa844e9a963d4d24e1/resource.tar.gz#test.test_SeqMode-shared_named_expr-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[SeqMode-shared_named_expr-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1599023/8c46ce50e18f0b2bbaa34aaa844e9a963d4d24e1/resource.tar.gz#test.test_SeqMode-shared_named_expr-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[SeqMode-shared_named_expr-default.txt-Results]": [
+        {
+            "checksum": "bdea5726342a2fbb8acd35387e11e129",
+            "size": 1388,
+            "uri": "https://{canondata_backend}/1599023/8c46ce50e18f0b2bbaa34aaa844e9a963d4d24e1/resource.tar.gz#test.test_SeqMode-shared_named_expr-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[action-evaluate_pure--Debug]": [
         {
             "checksum": "63240656d5c383a22f65b6f0d092a5d9",

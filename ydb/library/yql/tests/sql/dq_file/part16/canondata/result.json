@@ -1,4 +1,26 @@
 {
+    "test.test[SeqMode-simple1-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1925821/53324a6da5db86940359e666456af74325f417cd/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[SeqMode-simple1-default.txt-Debug]": [
+        {
+            "checksum": "b40f67aff1a1f2d7dcf60ba1281e9d65",
+            "size": 289,
+            "uri": "https://{canondata_backend}/1925821/53324a6da5db86940359e666456af74325f417cd/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[SeqMode-simple1-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1925821/53324a6da5db86940359e666456af74325f417cd/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[SeqMode-simple1-default.txt-Results]": [],
     "test.test[action-action_eval_cluster_use--Analyze]": [
         {
             "checksum": "4f1be07e94fcf0a8c67e043e37e0b610",

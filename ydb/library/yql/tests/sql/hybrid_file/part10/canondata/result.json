@@ -1,4 +1,32 @@
 {
+    "test.test[SeqMode-shared_subquery_expr_after_commit-default.txt-Debug]": [
+        {
+            "checksum": "15f957c976f1a2e6b9b0ece1ba623069",
+            "size": 1860,
+            "uri": "https://{canondata_backend}/1871182/13df84f96d423d51ca72df6205b7299be4285d83/resource.tar.gz#test.test_SeqMode-shared_subquery_expr_after_commit-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[SeqMode-shared_subquery_expr_after_commit-default.txt-Plan]": [
+        {
+            "checksum": "52ebde104654b9d7eac0961fee32bc50",
+            "size": 6097,
+            "uri": "https://{canondata_backend}/1871182/13df84f96d423d51ca72df6205b7299be4285d83/resource.tar.gz#test.test_SeqMode-shared_subquery_expr_after_commit-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[SeqMode-simple1-default.txt-Debug]": [
+        {
+            "checksum": "30e34d0dfba0284dfea0738e4b10d7eb",
+            "size": 288,
+            "uri": "https://{canondata_backend}/1871182/13df84f96d423d51ca72df6205b7299be4285d83/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[SeqMode-simple1-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871182/13df84f96d423d51ca72df6205b7299be4285d83/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[action-action_eval_cluster_and_table-default.txt-Debug]": [
         {
             "checksum": "9ac9f3f7fbc9490617be1d993fb4bf98",

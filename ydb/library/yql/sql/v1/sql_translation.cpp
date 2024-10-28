@@ -4508,7 +4508,7 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
         TBlocks innerBlocks;
 
         const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
-        auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped) : nullptr;
+        auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped, Ctx.SeqMode) : nullptr;
         WarnUnusedNodes();
         Ctx.ScopeLevel--;
         Ctx.Scoped = saveScoped;
@@ -4621,7 +4621,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
         return false;
     }
 
-    auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped) : nullptr;
+    auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped, Ctx.SeqMode) : nullptr;
     WarnUnusedNodes();
     Ctx.Scoped = saveScoped;
     Ctx.ScopeLevel--;

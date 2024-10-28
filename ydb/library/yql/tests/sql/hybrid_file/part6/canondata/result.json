@@ -1,4 +1,18 @@
 {
+    "test.test[SeqMode-subquery_shared_subquery-default.txt-Debug]": [
+        {
+            "checksum": "f6793e0532fa12a1292cb5f0060b7542",
+            "size": 230,
+            "uri": "https://{canondata_backend}/1775319/00cb44d0fe47ad7ccdbbbaed09e3de0ad1ecd9ff/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[SeqMode-subquery_shared_subquery-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1775319/00cb44d0fe47ad7ccdbbbaed09e3de0ad1ecd9ff/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[action-eval_anon_table--Debug]": [
         {
             "checksum": "ef859a25effd025cb3ad921eccdaa5b9",

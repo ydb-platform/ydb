@@ -578,13 +578,13 @@ template <typename TOnDemandValue>
                     break;
                 }
                 case simdjson::fallback::number_type::signed_integer: {
-                    i64 v;
+                    int64_t v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
                     callbacks.OnInteger(v);
                     break;
                 }
                 case simdjson::fallback::number_type::unsigned_integer: {
-                    ui64 v;
+                    uint64_t v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
                     callbacks.OnUInteger(v);
                     break;
@@ -662,13 +662,13 @@ template <typename TOnDemandValue>
             break;
         }
         case simdjson::dom::element_type::INT64: {
-            i64 v;
+            int64_t v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
             callbacks.OnInteger(v);
             break;
         }
         case simdjson::dom::element_type::UINT64: {
-            ui64 v;
+            uint64_t v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
             callbacks.OnUInteger(v);
             break;

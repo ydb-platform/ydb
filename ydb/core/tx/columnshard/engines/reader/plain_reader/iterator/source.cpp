@@ -59,7 +59,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
     for (auto&& i : columnIds) {
-        auto columnChunks = Portion->GetColumnChunksPointers(i);
+        auto columnChunks = TPortionDataAccessor(*Portion).GetColumnChunksPointers(i);
         if (columnChunks.empty()) {
             continue;
         }
@@ -152,7 +152,7 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
     THashMap<ui32, std::vector<TString>> indexBlobs;
     std::set<ui32> indexIds = indexChecker->GetIndexIds();
     //    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
-    std::vector<TPortionInfo::TPage> pages = Portion->BuildPages();
+    std::vector<TPortionDataAccessor::TPage> pages = TPortionDataAccessor(*Portion).BuildPages();
     NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& p : pages) {
         for (auto&& i : p.GetIndexes()) {

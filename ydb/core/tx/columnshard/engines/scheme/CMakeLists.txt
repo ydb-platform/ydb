@@ -50,5 +50,7 @@ target_sources(columnshard-engines-scheme PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/index_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/tier_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/column_features.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/schema_diff.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/objects_cache.cpp
 )
 

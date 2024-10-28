@@ -30,5 +30,6 @@ target_link_libraries(schemeshard-olap-ttl PUBLIC
 target_sources(schemeshard-olap-ttl PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/ttl/schema.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/ttl/update.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/ttl/validator.cpp
 )
 

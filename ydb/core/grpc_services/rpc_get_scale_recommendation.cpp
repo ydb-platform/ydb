@@ -96,8 +96,22 @@ public:
 
     void Handle(TEvHive::TEvResponseScaleRecommendation::TPtr& ev) {
         TResponse response;
-        ui32 recommendedNodes = ev->Get()->Record.GetRecommendedNodes();
-        response.mutable_recommended_resources()->add_computational_units()->set_count(recommendedNodes);
+        
+        switch (ev->Get()->Record.GetStatus()) {
+        case NKikimrProto::OK: {
+            ui32 recommendedNodes = ev->Get()->Record.GetRecommendedNodes();
+            response.mutable_recommended_resources()->add_computational_units()->set_count(recommendedNodes);
+            response.set_status(Ydb::StatusIds::SUCCESS);
+            break;
+        }
+        case NKikimrProto::NOTREADY:
+            response.set_status(Ydb::StatusIds::UNAVAILABLE);
+            break;
+        default:
+            response.set_status(Ydb::StatusIds::INTERNAL_ERROR);
+            break;
+        }
+        
         return this->Reply(response);
     }
 

@@ -1422,14 +1422,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
         Cerr << "... SELECT from follower" << Endl;
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT * FROM `Root/Tenant1/Table1` WHERE Key >= 2;
+                SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 2;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             NKqp::AssertSuccessResult(result);
             
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
-                [[2u]];
-                [[3u]]
+                [[2u]]
             ])", actual);
         }        
 

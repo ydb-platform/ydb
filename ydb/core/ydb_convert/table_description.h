@@ -90,7 +90,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 
 // out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
-    const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic);
+    const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic, const TMap<ui64, ui64>& nodeMap);
 
 // out
 void FillStorageSettings(Ydb::Table::DescribeTableResult& out,

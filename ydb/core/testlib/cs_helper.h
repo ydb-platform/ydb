@@ -57,7 +57,6 @@ public:
         Columns { Name: "level" Type: "Int32" DataAccessorConstructor{ ClassName: "SPARSED" }}
         Columns { Name: "message" Type: "Utf8" }
         KeyColumnNames: "timestamp"
-        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
 
     void WithSomeNulls() {

@@ -116,7 +116,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                              Columns { Name: "Datetime_column" Type: "Datetime" }
                                              #Columns { Name: "Interval_column" Type: "Interval" }
                                              KeyColumnNames: "key"
-                                             Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                                          }
                                      }
         )");

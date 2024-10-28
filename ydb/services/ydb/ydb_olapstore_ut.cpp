@@ -90,7 +90,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                     Columns { Name: "saved_at" Type: "Timestamp" }
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: ["timestamp", "resource_type", "resource_id", "uid"]
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )", notNullStr, notNullStr, allowedTypes[opts.TsType].c_str(), notNullStr, notNullStr);

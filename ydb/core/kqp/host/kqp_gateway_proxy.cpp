@@ -393,8 +393,6 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     for (const auto& keyColumn : metadata.KeyColumnNames) {
         schema.AddKeyColumnNames(keyColumn);
     }
-
-    schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
 }
 
 bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,

@@ -69,7 +69,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )";
@@ -91,7 +90,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )");
@@ -136,7 +134,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -149,7 +146,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "comment" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -161,7 +157,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -174,7 +169,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
                 KeyColumnNames: "data"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -186,7 +180,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "nottimestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -198,7 +191,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "String" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusSchemeError});
 
@@ -210,7 +202,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -234,7 +225,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
         )", {NKikimrScheme::StatusAccepted});
     }
@@ -338,7 +328,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" NotNull: true }
                 KeyColumnNames: "some"
                 KeyColumnNames: "data"
-                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
             }
             Sharding {
                 HashSharding {
@@ -586,7 +575,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                     Columns { Name: "data" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )";

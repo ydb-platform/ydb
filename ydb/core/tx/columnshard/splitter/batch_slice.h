@@ -33,12 +33,6 @@ public:
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
         return Schema->GetFieldByColumnIdOptional(columnId);
     }
-    virtual bool NeedMinMaxForColumn(const ui32 columnId) const override {
-        return Schema->GetIndexInfo().GetMinMaxIdxColumns().contains(columnId);
-    }
-    virtual bool IsSortedColumn(const ui32 columnId) const override {
-        return Schema->GetIndexInfo().IsSortedColumn(columnId);
-    }
 
     virtual std::optional<NArrow::NSplitter::TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const override {
         auto stats = Stats->GetColumnInfo(columnId);

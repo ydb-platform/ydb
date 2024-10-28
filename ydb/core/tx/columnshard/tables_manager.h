@@ -1,24 +1,26 @@
 #pragma once
 
-#include "blobs_action/abstract/storages_manager.h"
 #include "columnshard_schema.h"
 #include "columnshard_ttl.h"
+
+#include "blobs_action/abstract/storages_manager.h"
 #include "engines/column_engine.h"
 
-#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/base/row_version.h>
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NColumnShard {
 
-template<class TVersionData>
+template <class TVersionData>
 class TVersionedSchema {
 private:
     TMap<NOlap::TSnapshot, ui64> Versions;
     TMap<ui64, TVersionData> VersionsById;
     TMap<ui64, NOlap::TSnapshot> MinVersionById;
+
 public:
     bool IsEmpty() const {
         return VersionsById.empty();
@@ -55,11 +57,12 @@ public:
     }
 };
 
-class TSchemaPreset : public TVersionedSchema<NKikimrTxColumnShard::TSchemaPresetVersionInfo> {
+class TSchemaPreset: public TVersionedSchema<NKikimrTxColumnShard::TSchemaPresetVersionInfo> {
 public:
     using TSchemaPresetVersionInfo = NKikimrTxColumnShard::TSchemaPresetVersionInfo;
     ui32 Id = 0;
     TString Name;
+
 public:
     bool IsStandaloneTable() const {
         return Id == 0;
@@ -126,15 +129,16 @@ public:
     TTableInfo() = default;
 
     TTableInfo(const ui64 pathId)
-        : PathId(pathId)
-    {}
+        : PathId(pathId) {
+    }
 
     template <class TRow>
     bool InitFromDB(const TRow& rowset) {
         PathId = rowset.template GetValue<Schema::TableInfo::PathId>();
         TieringUsage = rowset.template GetValue<Schema::TableInfo::TieringUsage>();
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
-            DropVersion.emplace(rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
+            DropVersion.emplace(
+                rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
         return true;
     }
@@ -144,12 +148,14 @@ class TTablesManager {
 private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
+    THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     THashSet<ui64> PathsToDrop;
     TTtl Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     ui64 TabletId = 0;
+
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
@@ -245,12 +251,14 @@ public:
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);
 
-    void AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
+    void AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema,
+        NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo,
         const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const ui64 pathId, const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const ui64 pathId,
+        const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 };
 
-}
+}   // namespace NKikimr::NColumnShard

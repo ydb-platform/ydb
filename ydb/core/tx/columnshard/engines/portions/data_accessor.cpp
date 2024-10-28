@@ -367,7 +367,7 @@ std::vector<TPortionDataAccessor::TPage> TPortionDataAccessor::BuildPages() cons
     std::map<ui32, ui32> currentCursor;
     ui32 currentSize = 0;
     ui32 currentId = 0;
-    for (auto&& i : Records) {
+    for (auto&& i : PortionInfo->Records) {
         if (currentId != i.GetColumnId()) {
             currentSize = 0;
             currentId = i.GetColumnId();
@@ -376,7 +376,7 @@ std::vector<TPortionDataAccessor::TPage> TPortionDataAccessor::BuildPages() cons
         ++currentCursor[currentSize];
         entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetRecordsCount());
     }
-    for (auto&& i : Indexes) {
+    for (auto&& i : PortionInfo->Indexes) {
         if (currentId != i.GetIndexId()) {
             currentSize = 0;
             currentId = i.GetIndexId();
@@ -453,7 +453,7 @@ ui64 TPortionDataAccessor::GetMinMemoryForReadColumns(const std::optional<std::s
         BlobBytesCurrent = 0;
     };
 
-    for (auto&& i : Records) {
+    for (auto&& i : PortionInfo->Records) {
         if (columnIds && !columnIds->contains(i.GetColumnId())) {
             continue;
         }

@@ -151,6 +151,8 @@ private:
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     ui64 TabletId = 0;
 public:
+    friend class TTxInit;
+
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId);
 
     bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;

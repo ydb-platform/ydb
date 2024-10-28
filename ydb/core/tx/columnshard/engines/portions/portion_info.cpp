@@ -45,15 +45,6 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     if (RemoveSnapshot.Valid()) {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
     }
-    sb << "chunks:(" << Records.size() << ");";
-    if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
-        std::vector<TBlobRange> blobRanges;
-        for (auto&& i : Records) {
-            blobRanges.emplace_back(RestoreBlobRange(i.BlobRange));
-        }
-        sb << "blobs:" << JoinSeq(",", blobRanges) << ";ranges_count:" << blobRanges.size() << ";";
-        sb << "blob_ids:" << JoinSeq(",", BlobIds) << ";blobs_count:" << BlobIds.size() << ";";
-    }
     return sb << ")";
 }
 
@@ -137,9 +128,17 @@ TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(
         return TConclusionStatus::Fail("cannot parse meta");
     }
     TPortionInfo result(constructor.Build());
-    auto parse = result.DeserializeFromProto(proto);
-    if (!parse) {
-        return parse;
+    {
+        auto parse = result.DeserializeFromProto(proto);
+        if (!parse) {
+            return parse;
+        }
+    }
+    {
+        auto parse = TPortionDataAccessor(result).DeserializeFromProto(proto);
+        if (!parse) {
+            return parse;
+        }
     }
     return result;
 }

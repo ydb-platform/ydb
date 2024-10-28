@@ -173,7 +173,7 @@ public:
 
     void InsertPortionOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
-        AFL_VERIFY(!InsertedPortions.contains(portion->GetInsertWriteIdVerified()));
+        AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
         portion.SaveToDatabase(wrapper, 0, false);
     }
@@ -188,7 +188,7 @@ public:
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
         TDbWrapper wrapper(txc.DB, nullptr);
-        it->second->SaveToDatabase(wrapper, 0, true);
+        TPortionDataAccessor(*it->second).SaveToDatabase(wrapper, 0, true);
     }
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);

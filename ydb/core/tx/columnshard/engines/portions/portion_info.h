@@ -91,12 +91,20 @@ private:
     TPortionMeta Meta;
     YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
     std::vector<TUnifiedBlobId> BlobIds;
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
     std::vector<TIndexChunk> Indexes;
     std::vector<TColumnRecord> Records;
 
+    void FullValidation() const {
+        AFL_VERIFY(PathId);
+        AFL_VERIFY(PortionId);
+        AFL_VERIFY(MinSnapshotDeprecated.Valid());
+        AFL_VERIFY(BlobIds.size());
+    }
+
 public:
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
+
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
         return BlobIds;
     }

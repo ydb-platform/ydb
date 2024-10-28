@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
@@ -499,10 +500,10 @@ void TPortionDataAccessor::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColu
     db.WritePortion(*PortionInfo);
     if (!saveOnlyMeta) {
         for (auto& record : PortionInfo->Records) {
-            db.WriteColumn(*this, record, firstPKColumnId);
+            db.WriteColumn(*PortionInfo, record, firstPKColumnId);
         }
         for (auto& record : PortionInfo->Indexes) {
-            db.WriteIndex(*this, record);
+            db.WriteIndex(*PortionInfo, record);
         }
     }
 }
@@ -510,19 +511,17 @@ void TPortionDataAccessor::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColu
 void TPortionDataAccessor::RemoveFromDatabase(IDbWrapper& db) const {
     db.ErasePortion(*PortionInfo);
     for (auto& record : PortionInfo->Records) {
-        db.EraseColumn(*this, record);
+        db.EraseColumn(*PortionInfo, record);
     }
     for (auto& record : PortionInfo->Indexes) {
-        db.EraseIndex(*this, record);
+        db.EraseIndex(*PortionInfo, record);
     }
 }
 
 void TPortionDataAccessor::FullValidation() const {
     CheckChunksOrder(PortionInfo->Records);
     CheckChunksOrder(PortionInfo->Indexes);
-    AFL_VERIFY(PathId);
-    AFL_VERIFY(PortionId);
-    AFL_VERIFY(MinSnapshotDeprecated.Valid());
+    PortionInfo->FullValidation();
     std::set<ui32> blobIdxs;
     for (auto&& i : PortionInfo->Records) {
         blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
@@ -532,12 +531,9 @@ void TPortionDataAccessor::FullValidation() const {
             blobIdxs.emplace(bRange->GetBlobIdxVerified());
         }
     }
-    if (BlobIds.size()) {
-        AFL_VERIFY(BlobIds.size() == blobIdxs.size());
-        AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
-    } else {
-        AFL_VERIFY(blobIdxs.empty());
-    }
+    AFL_VERIFY(blobIdxs.size());
+    AFL_VERIFY(PortionInfo->BlobIds.size() == blobIdxs.size());
+    AFL_VERIFY(PortionInfo->BlobIds.size() == *blobIdxs.rbegin() + 1);
 }
 
 TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAccessor::TPreparedColumn::AssembleAccessor() const {

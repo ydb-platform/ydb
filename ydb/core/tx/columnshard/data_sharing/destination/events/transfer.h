@@ -65,7 +65,7 @@ public:
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
         proto.SetPathId(PathId);
         for (auto&& i : Portions) {
-            i.SerializeToProto(*proto.AddPortions());
+            TPortionDataAccessor(i).SerializeToProto(*proto.AddPortions());
         }
     };
 

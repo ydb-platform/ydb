@@ -542,6 +542,7 @@ namespace NActors {
             CloseOnIdleWatchdog.Disarm();
             LostConnectionWatchdog.Rearm(SelfId());
             Proxy->Metrics->SetConnected(0);
+            Proxy->RegisterDisconnect();
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
         }
         if (XdcSocket) {

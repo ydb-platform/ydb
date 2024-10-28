@@ -40,7 +40,7 @@ TSelectInfo::TStats TSelectInfo::Stats() const {
     THashSet<TUnifiedBlobId> uniqBlob;
     for (auto& portionInfo : PortionsOrderedPK) {
         out.Records += portionInfo->NumChunks();
-        out.Rows += portionInfo->NumRows();
+        out.Rows += portionInfo->GetRecordsCount();
         for (auto& blobId : portionInfo->GetBlobIds()) {
             out.Bytes += blobId.BlobSize();
         }

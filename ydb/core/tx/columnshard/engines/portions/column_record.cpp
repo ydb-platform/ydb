@@ -10,7 +10,7 @@ namespace NKikimr::NOlap {
 
 TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto) {
     if (proto.HasNumRows()) {
-        NumRows = proto.GetNumRows();
+        RecordsCount = proto.GetNumRows();
     }
     if (proto.HasRawBytes()) {
         RawBytes = proto.GetRawBytes();
@@ -28,7 +28,7 @@ TChunkMeta::TChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& 
 
 NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
-    meta.SetNumRows(NumRows);
+    meta.SetNumRows(RecordsCount);
     meta.SetRawBytes(RawBytes);
     return meta;
 }

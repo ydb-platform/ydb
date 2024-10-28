@@ -10,7 +10,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     const std::string prod = ::ToString(portion.GetMeta().Produced);
     NArrow::Append<arrow::StringType>(*builders[1], prod);
     NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
-    NArrow::Append<arrow::UInt64Type>(*builders[3], portion.NumRows());
+    NArrow::Append<arrow::UInt64Type>(*builders[3], portion.GetRecordsCount());
     NArrow::Append<arrow::UInt64Type>(*builders[4], portion.GetColumnRawBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetIndexRawBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[6], portion.GetColumnBlobBytes());

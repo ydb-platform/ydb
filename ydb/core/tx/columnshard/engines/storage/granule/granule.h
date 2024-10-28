@@ -27,7 +27,7 @@ public:
         ColumnPortionsSize += info.GetColumnBlobBytes();
         TotalPortionsSize += info.GetTotalBlobBytes();
         MetadataMemoryPortionsSize += info.GetMetadataMemorySize();
-        RecordsCount += info.NumRows();
+        RecordsCount += info.GetRecordsCount();
         ++PortionsCount;
     }
 
@@ -38,7 +38,7 @@ public:
         Y_ABORT_UNLESS(ColumnPortionsSize >= 0);
         TotalPortionsSize -= info.GetTotalBlobBytes();
         Y_ABORT_UNLESS(TotalPortionsSize >= 0);
-        RecordsCount -= info.NumRows();
+        RecordsCount -= info.GetRecordsCount();
         Y_ABORT_UNLESS(RecordsCount >= 0);
         --PortionsCount;
         Y_ABORT_UNLESS(PortionsCount >= 0);

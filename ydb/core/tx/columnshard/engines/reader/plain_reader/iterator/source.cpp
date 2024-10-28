@@ -63,23 +63,23 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         if (columnChunks.empty()) {
             continue;
         }
-        auto itFilter = cFilter.GetIterator(false, Portion->NumRows());
+        auto itFilter = cFilter.GetIterator(false, Portion->GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
-            if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRows())) {
+            if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
-                defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetNumRows(),
+                defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
                                                            Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
                 ++nullChunks;
             }
-            itFinished = !itFilter.Next(c->GetMeta().GetNumRows());
+            itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows());
+        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
         "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());

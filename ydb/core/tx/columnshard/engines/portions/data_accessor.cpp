@@ -77,7 +77,7 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
             }
             auto it = blobsData.find(rec.GetAddress());
             AFL_VERIFY(it != blobsData.end())("size", blobsData.size())("address", rec.GetAddress().DebugString());
-            currentAssembler->AddBlobInfo(rec.Chunk, rec.GetMeta().GetNumRows(), std::move(it->second));
+            currentAssembler->AddBlobInfo(rec.Chunk, rec.GetMeta().GetRecordsCount(), std::move(it->second));
             blobsData.erase(it);
         }
     }
@@ -297,6 +297,201 @@ TString TPortionDataAccessor::DebugString() const {
         sb << "blobs:" << JoinSeq(",", blobRanges) << ";ranges_count:" << blobRanges.size() << ";";
     }
     return sb << ")";
+}
+
+ui64 TPortionDataAccessor::GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetMeta().GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, PortionInfo->Records, &entityIds, validation);
+    return sum;
+}
+
+ui64 TPortionDataAccessor::GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TColumnRecord& r) {
+        sum += r.GetBlobRange().GetSize();
+    };
+    AggregateIndexChunksData(aggr, PortionInfo->Records, &entityIds, validation);
+    return sum;
+}
+
+ui64 TPortionDataAccessor::GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, PortionInfo->Indexes, &entityIds, validation);
+    return sum;
+}
+
+ui64 TPortionDataAccessor::GetIndexRawBytes(const bool validation /*= true*/) const {
+    ui64 sum = 0;
+    const auto aggr = [&](const TIndexChunk& r) {
+        sum += r.GetRawBytes();
+    };
+    AggregateIndexChunksData(aggr, PortionInfo->Indexes, nullptr, validation);
+    return sum;
+}
+
+std::vector<const TColumnRecord*> TPortionDataAccessor::GetColumnChunksPointers(const ui32 columnId) const {
+    std::vector<const TColumnRecord*> result;
+    for (auto&& c : PortionInfo->Records) {
+        if (c.ColumnId == columnId) {
+            Y_ABORT_UNLESS(c.Chunk == result.size());
+            Y_ABORT_UNLESS(c.GetMeta().GetRecordsCount());
+            result.emplace_back(&c);
+        }
+    }
+    return result;
+}
+
+std::vector<TPortionDataAccessor::TPage> TPortionDataAccessor::BuildPages() const {
+    std::vector<TPage> pages;
+    struct TPart {
+    public:
+        const TColumnRecord* Record = nullptr;
+        const TIndexChunk* Index = nullptr;
+        const ui32 RecordsCount;
+        TPart(const TColumnRecord* record, const ui32 recordsCount)
+            : Record(record)
+            , RecordsCount(recordsCount) {
+        }
+        TPart(const TIndexChunk* record, const ui32 recordsCount)
+            : Index(record)
+            , RecordsCount(recordsCount) {
+        }
+    };
+    std::map<ui32, std::deque<TPart>> entities;
+    std::map<ui32, ui32> currentCursor;
+    ui32 currentSize = 0;
+    ui32 currentId = 0;
+    for (auto&& i : Records) {
+        if (currentId != i.GetColumnId()) {
+            currentSize = 0;
+            currentId = i.GetColumnId();
+        }
+        currentSize += i.GetMeta().GetRecordsCount();
+        ++currentCursor[currentSize];
+        entities[i.GetColumnId()].emplace_back(&i, i.GetMeta().GetRecordsCount());
+    }
+    for (auto&& i : Indexes) {
+        if (currentId != i.GetIndexId()) {
+            currentSize = 0;
+            currentId = i.GetIndexId();
+        }
+        currentSize += i.GetRecordsCount();
+        ++currentCursor[currentSize];
+        entities[i.GetIndexId()].emplace_back(&i, i.GetRecordsCount());
+    }
+    const ui32 entitiesCount = entities.size();
+    ui32 predCount = 0;
+    for (auto&& i : currentCursor) {
+        if (i.second != entitiesCount) {
+            continue;
+        }
+        std::vector<const TColumnRecord*> records;
+        std::vector<const TIndexChunk*> indexes;
+        for (auto&& c : entities) {
+            ui32 readyCount = 0;
+            while (readyCount < i.first - predCount && c.second.size()) {
+                if (c.second.front().Record) {
+                    records.emplace_back(c.second.front().Record);
+                } else {
+                    AFL_VERIFY(c.second.front().Index);
+                    indexes.emplace_back(c.second.front().Index);
+                }
+                readyCount += c.second.front().RecordsCount;
+                c.second.pop_front();
+            }
+            AFL_VERIFY(readyCount == i.first - predCount)("ready", readyCount)("cursor", i.first)("pred_cursor", predCount);
+        }
+        pages.emplace_back(std::move(records), std::move(indexes), i.first - predCount);
+        predCount = i.first;
+    }
+    for (auto&& i : entities) {
+        AFL_VERIFY(i.second.empty());
+    }
+    return pages;
+}
+
+ui64 TPortionDataAccessor::GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const {
+    ui32 columnId = 0;
+    ui32 chunkIdx = 0;
+
+    struct TDelta {
+        i64 BlobBytes = 0;
+        i64 RawBytes = 0;
+        void operator+=(const TDelta& add) {
+            BlobBytes += add.BlobBytes;
+            RawBytes += add.RawBytes;
+        }
+    };
+
+    std::map<ui64, TDelta> diffByPositions;
+    ui64 position = 0;
+    ui64 RawBytesCurrent = 0;
+    ui64 BlobBytesCurrent = 0;
+    std::optional<ui32> recordsCount;
+
+    const auto doFlushColumn = [&]() {
+        if (!recordsCount && position) {
+            recordsCount = position;
+        } else {
+            AFL_VERIFY(*recordsCount == position);
+        }
+        if (position) {
+            TDelta delta;
+            delta.RawBytes = -1 * RawBytesCurrent;
+            delta.BlobBytes = -1 * BlobBytesCurrent;
+            diffByPositions[position] += delta;
+        }
+        position = 0;
+        chunkIdx = 0;
+        RawBytesCurrent = 0;
+        BlobBytesCurrent = 0;
+    };
+
+    for (auto&& i : Records) {
+        if (columnIds && !columnIds->contains(i.GetColumnId())) {
+            continue;
+        }
+        if (columnId != i.GetColumnId()) {
+            if (columnId) {
+                doFlushColumn();
+            }
+            AFL_VERIFY(i.GetColumnId() > columnId);
+            AFL_VERIFY(i.GetChunkIdx() == 0);
+            columnId = i.GetColumnId();
+        } else {
+            AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
+        }
+        chunkIdx = i.GetChunkIdx();
+        TDelta delta;
+        delta.RawBytes = -1 * RawBytesCurrent + i.GetMeta().GetRawBytes();
+        delta.BlobBytes = -1 * BlobBytesCurrent + i.GetBlobRange().Size;
+        diffByPositions[position] += delta;
+        position += i.GetMeta().GetRecordsCount();
+        RawBytesCurrent = i.GetMeta().GetRawBytes();
+        BlobBytesCurrent = i.GetBlobRange().Size;
+    }
+    if (columnId) {
+        doFlushColumn();
+    }
+    i64 maxRawBytes = 0;
+    TDelta current;
+    for (auto&& i : diffByPositions) {
+        current += i.second;
+        AFL_VERIFY(current.BlobBytes >= 0);
+        AFL_VERIFY(current.RawBytes >= 0);
+        if (maxRawBytes < current.RawBytes) {
+            maxRawBytes = current.RawBytes;
+        }
+    }
+    AFL_VERIFY(current.BlobBytes == 0)("real", current.BlobBytes);
+    AFL_VERIFY(current.RawBytes == 0)("real", current.RawBytes);
+    return maxRawBytes;
 }
 
 TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAccessor::TPreparedColumn::AssembleAccessor() const {

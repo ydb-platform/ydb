@@ -81,7 +81,7 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
 TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     TColumnEngineStats::TPortionsStats deltaStats;
     deltaStats.Bytes = 0;
-    deltaStats.Rows = portionInfo.NumRows();
+    deltaStats.Rows = portionInfo.GetRecordsCount();
     deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
     deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
     deltaStats.Blobs = portionInfo.GetBlobIdsCount();

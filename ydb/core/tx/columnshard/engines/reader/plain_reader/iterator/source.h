@@ -294,9 +294,9 @@ private:
         }
         //        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
         if (SequentialEntityIds.size()) {
-            result.InsertValue("min_memory_seq", Portion->GetMinMemoryForReadColumns(SequentialEntityIds));
-            result.InsertValue("min_memory_seq_blobs", Portion->GetColumnBlobBytes(SequentialEntityIds));
-            result.InsertValue("in_mem", Portion->GetColumnRawBytes(columns, false));
+            result.InsertValue("min_memory_seq", TPortionDataAccessor(*Portion).GetMinMemoryForReadColumns(SequentialEntityIds));
+            result.InsertValue("min_memory_seq_blobs", TPortionDataAccessor(*Portion).GetColumnBlobBytes(SequentialEntityIds));
+            result.InsertValue("in_mem", TPortionDataAccessor(*Portion).GetColumnRawBytes(columns, false));
         }
         result.InsertValue("columns_in_mem", JoinSeq(",", columns));
         result.InsertValue("portion_id", Portion->GetPortionId());
@@ -361,10 +361,11 @@ public:
                     selectedInMem.emplace(i);
                 }
             }
-            result = Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq, false) +
-                   Portion->GetColumnRawBytes(selectedInMem, false);
+            result = TPortionDataAccessor(*Portion).GetMinMemoryForReadColumns(selectedSeq) +
+                     TPortionDataAccessor(*Portion)->GetColumnBlobBytes(selectedSeq, false) +
+                     TPortionDataAccessor(*Portion)->GetColumnRawBytes(selectedInMem, false);
         } else {
-            result = Portion->GetColumnRawBytes(columnsIds, false);
+            result = TPortionDataAccessor(*Portion)->GetColumnRawBytes(columnsIds, false);
         }
         FingerprintedData.emplace(fp, result);
         return result;

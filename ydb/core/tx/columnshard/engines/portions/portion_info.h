@@ -92,50 +92,6 @@ private:
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
-    template <class TChunkInfo>
-    static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
-        ui32 entityId = 0;
-        ui32 chunkIdx = 0;
-        for (auto&& i : chunks) {
-            if (entityId != i.GetEntityId()) {
-                AFL_VERIFY(entityId < i.GetEntityId());
-                AFL_VERIFY(i.GetChunkIdx() == 0);
-                entityId = i.GetEntityId();
-                chunkIdx = 0;
-            } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
-                chunkIdx = i.GetChunkIdx();
-            }
-        }
-    }
-
-    template <class TAggregator, class TChunkInfo>
-    static void AggregateIndexChunksData(
-        const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::set<ui32>* columnIds, const bool validation) {
-        if (columnIds) {
-            auto itColumn = columnIds->begin();
-            auto itRecord = chunks.begin();
-            ui32 recordsInEntityCount = 0;
-            while (itRecord != chunks.end() && itColumn != columnIds->end()) {
-                if (itRecord->GetEntityId() < *itColumn) {
-                    ++itRecord;
-                } else if (*itColumn < itRecord->GetEntityId()) {
-                    AFL_VERIFY(!validation || recordsInEntityCount)("problem", "validation")("reason", "no_chunks_for_column")(
-                        "column_id", *itColumn);
-                    ++itColumn;
-                    recordsInEntityCount = 0;
-                } else {
-                    ++recordsInEntityCount;
-                    aggr(*itRecord);
-                    ++itRecord;
-                }
-            }
-        } else {
-            for (auto&& i : chunks) {
-                aggr(i);
-            }
-        }
-    }
     std::vector<TColumnRecord> Records;
 
 public:
@@ -146,8 +102,6 @@ public:
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
     }
-
-    ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
 
@@ -232,6 +186,13 @@ public:
         RuntimeFeatures &= (Max<TRuntimeFeatures>() - (TRuntimeFeatures)feature);
     }
 
+    TString GetTierNameDef(const TString& defaultTierName) const {
+        if (GetMeta().GetTierName()) {
+            return GetMeta().GetTierName();
+        }
+        return defaultTierName;
+    }
+
     bool HasRuntimeFeature(const ERuntimeFeature feature) const {
         if (feature == ERuntimeFeature::Optimized) {
             if ((RuntimeFeatures & (TRuntimeFeatures)feature)) {
@@ -266,31 +227,8 @@ public:
     ui64 GetTxVolume() const;   // fake-correct method for determ volume on rewrite this portion in transaction progress
     ui64 GetMetadataMemorySize() const;
 
-    class TPage {
-    private:
-        YDB_READONLY_DEF(std::vector<const TColumnRecord*>, Records);
-        YDB_READONLY_DEF(std::vector<const TIndexChunk*>, Indexes);
-        YDB_READONLY(ui32, RecordsCount, 0);
-
-    public:
-        TPage(std::vector<const TColumnRecord*>&& records, std::vector<const TIndexChunk*>&& indexes, const ui32 recordsCount)
-            : Records(std::move(records))
-            , Indexes(std::move(indexes))
-            , RecordsCount(recordsCount) {
-        }
-    };
-
-    TString GetTierNameDef(const TString& defaultTierName) const {
-        if (GetMeta().GetTierName()) {
-            return GetMeta().GetTierName();
-        }
-        return defaultTierName;
-    }
-
     static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
-
-    std::vector<TPage> BuildPages() const;
 
     const std::vector<TColumnRecord>& GetRecords() const {
         return Records;
@@ -348,8 +286,6 @@ public:
     }
 
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
-
-    std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
 
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
@@ -529,12 +465,6 @@ public:
         return result;
     }
 
-    ui32 NumRows() const {
-        return GetRecordsCount();
-    }
-
-    ui64 GetIndexRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetIndexRawBytes(const bool validation = true) const;
     ui64 GetIndexBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Indexes) {
@@ -543,10 +473,15 @@ public:
         return sum;
     }
 
-    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes() const;
+    ui64 GetIndexRawBytes() const noexcept {
+        ui64 sum = 0;
+        for (const auto& rec : Indexes) {
+            sum += rec.GetRawBytes();
+        }
+        return sum;
+    }
 
-    ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnRawBytes() const;
     ui64 GetColumnBlobBytes() const;
 
     ui64 GetTotalBlobBytes() const noexcept {

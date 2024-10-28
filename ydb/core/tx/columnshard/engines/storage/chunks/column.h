@@ -59,7 +59,7 @@ public:
     TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address, const TSimpleColumnInfo& columnInfo)
         : TBase(address.GetColumnId())
         , Data(data)
-        , Record(address, column, columnInfo)
+        , Record(address, column)
         , ColumnInfo(columnInfo) {
         Y_ABORT_UNLESS(column->GetRecordsCount());
         First = column->GetScalar(0);

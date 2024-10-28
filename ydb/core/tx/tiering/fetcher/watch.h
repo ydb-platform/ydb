@@ -259,7 +259,7 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_CRIT(NKikimrServices::TX_TIERING)("error", "event_undelivered_to_scheme_cache")("reason", ev->Get()->Reason);
+        AFL_WARN(NKikimrServices::TX_TIERING)("error", "event_undelivered_to_scheme_cache")("reason", ev->Get()->Reason);
         for (const TString& tieringRuleId : WatchedTieringRules) {
             Send(Owner, new NTiers::TEvTieringRuleResolutionFailed(tieringRuleId, NTiers::TBaseEvObjectResolutionFailed::LOOKUP_ERROR));
         }

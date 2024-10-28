@@ -676,6 +676,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         if (reboots) {
             Cerr << "INTERMEDIATE REBOOT(" << i << ")" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            NTxUT::RefreshTiering(runtime, sender);
         }
 
         // Read data after eviction

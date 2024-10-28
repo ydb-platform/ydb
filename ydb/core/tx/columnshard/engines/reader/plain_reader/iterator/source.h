@@ -362,21 +362,21 @@ public:
                 }
             }
             result = TPortionDataAccessor(*Portion).GetMinMemoryForReadColumns(selectedSeq) +
-                     TPortionDataAccessor(*Portion)->GetColumnBlobBytes(selectedSeq, false) +
-                     TPortionDataAccessor(*Portion)->GetColumnRawBytes(selectedInMem, false);
+                     TPortionDataAccessor(*Portion).GetColumnBlobBytes(selectedSeq, false) +
+                     TPortionDataAccessor(*Portion).GetColumnRawBytes(selectedInMem, false);
         } else {
-            result = TPortionDataAccessor(*Portion)->GetColumnRawBytes(columnsIds, false);
+            result = TPortionDataAccessor(*Portion).GetColumnRawBytes(columnsIds, false);
         }
         FingerprintedData.emplace(fp, result);
         return result;
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {
-        return Portion->GetColumnBlobBytes(columnsIds, false);
+        return TPortionDataAccessor(*Portion).GetColumnBlobBytes(columnsIds, false);
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
-        return Portion->GetIndexRawBytes(indexIds, false);
+        return TPortionDataAccessor(*Portion).GetIndexRawBytes(indexIds, false);
     }
 
     const TPortionInfo& GetPortionInfo() const {

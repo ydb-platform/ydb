@@ -91,7 +91,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         return {};
     }
     NYDBTest::TControllers::GetColumnShardController()->OnPortionActualization(source.PortionInfo);
-    auto pages = source.PortionInfo.BuildPages();
+    auto pages = TPortionDataAccessor(source.PortionInfo).BuildPages();
     std::vector<ui32> pageSizes;
     for (auto&& p : pages) {
         pageSizes.emplace_back(p.GetRecordsCount());

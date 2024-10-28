@@ -342,13 +342,22 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     }
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
+
+    auto joinAlgo = EJoinAlgoType::GraceJoin;
+    for (size_t i=0; i<join.Flags().Size(); i++) {
+        if (join.Flags().Item(i).StringValue() == "broadcast") {
+            joinAlgo = EJoinAlgoType::MapJoin;
+            break;
+        }
+    }
+
     auto resStats = std::make_shared<TOptimizerStatistics>(
             ctx.ComputeJoinStats(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys, 
-                EJoinAlgoType::GraceJoin,
+                joinAlgo,
                 ConvertToJoinKind(join.JoinKind().StringValue()),
                 FindCardHint(unionOfLabels, hints)
             )

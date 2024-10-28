@@ -241,6 +241,11 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
     auto leftInput = ExpandJoinInput(*itemTypeLeft, ctx.NewCallable(graceJoin.LeftInput().Pos(), "ToFlow", {graceJoin.LeftInput().Ptr()}), ctx, leftConvertedItems, pos);
     auto rightInput = ExpandJoinInput(*itemTypeRight, ctx.NewCallable(graceJoin.RightInput().Pos(), "ToFlow", {graceJoin.RightInput().Ptr()}), ctx, rightConvertedItems, pos);
 
+    TExprNode::TListType flags;
+    if (auto maybeFlags = graceJoin.Flags().Maybe<TCoAtomList>()) {
+        flags = maybeFlags.Cast().Ref().ChildrenList();
+    }
+
     auto graceJoinCore = Build<TCoGraceJoinCore>(ctx, pos)
             .LeftInput(std::move(leftInput))
             .RightInput(std::move(rightInput))
@@ -251,7 +256,7 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
             .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
             .LeftKeysColumnNames(graceJoin.LeftJoinKeyNames())
             .RightKeysColumnNames(graceJoin.RightJoinKeyNames())
-            .Flags()
+            .Flags(ctx.NewList(pos, std::move(flags)))
             .Build()
         .Done();
 

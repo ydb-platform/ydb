@@ -1446,7 +1446,15 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
+        auto joinAlgo = "(Grace)";
+        if (auto flags = join.Flags().Maybe<TCoAtomList>()) {
+            for (size_t i=0; i<flags.Cast().Size(); i++) {
+                if (flags.Cast().Item(i).StringValue() == "broadcast") {
+                    joinAlgo = "(Map)";
+                }
+            }
+        }
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
 
         TOperator op;
         op.Properties["Name"] = name;

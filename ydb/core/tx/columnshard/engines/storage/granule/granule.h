@@ -198,7 +198,7 @@ public:
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         TDbWrapper wrapper(txc.DB, nullptr);
-        it->second->RemoveFromDatabase(wrapper);
+        TPortionDataAccessor(*it->second).RemoveFromDatabase(wrapper);
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId) {

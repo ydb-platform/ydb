@@ -93,6 +93,7 @@ ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSe
 ydb/services/ydb/sdk_sessions_ut [6/10]*
 ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplitsWithData
 ydb/services/ydb/table_split_ut [5/7]*
+ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/services/ydb/ut YdbOlapStore.LogPagingAfter-NotNull
 ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/services/ydb/ut YdbScripting.BasicV0

@@ -1069,8 +1069,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             Name: "%s"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
-                Columns { Name: "modified_at" Type: "%s" }
-                KeyColumnNames: ["key"]
+                Columns { Name: "modified_at" Type: "%s" NotNull: true }
+                KeyColumnNames: ["modified_at"]
             }
             TtlSettings {
                 Enabled {
@@ -1148,10 +1148,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             Name: "TTLEnabledTable"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
-                Columns { Name: "modified_at" Type: "Timestamp" }
+                Columns { Name: "modified_at" Type: "Timestamp" NotNull: true }
                 Columns { Name: "saved_at" Type: "Datetime" }
                 Columns { Name: "data" Type: "Utf8" }
-                KeyColumnNames: ["key"]
+                KeyColumnNames: ["modified_at"]
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -1176,18 +1176,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         )");
         env.TestWaitNotification(runtime, txId);
         CheckTtlSettings(runtime, OlapTtlChecker());
-
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TTLEnabledTable"
-            AlterTtlSettings {
-              Enabled {
-                ColumnName: "saved_at"
-                ExpireAfterSeconds: 3600
-              }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-        CheckTtlSettings(runtime, OlapTtlChecker("saved_at"));
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"

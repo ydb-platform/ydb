@@ -1,76 +1,8 @@
 #include "schema.h"
 #include <ydb/core/tx/schemeshard/common/validation.h>
+#include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
 
 namespace NKikimr::NSchemeShard {
-
-namespace {
-static inline bool IsDropped(const TOlapColumnsDescription::TColumn& col) {
-    Y_UNUSED(col);
-    return false;
-}
-
-static inline ui32 GetType(const TOlapColumnsDescription::TColumn& col) {
-    Y_ABORT_UNLESS(col.GetType().GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-    return col.GetType().GetTypeId();
-}
-
-}
-
-static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl,
-    const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
-    const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
-    const THashMap<TString, ui32>& colName2Id,
-    IErrorCollector& errors) {
-    const TString colName = ttl.GetColumnName();
-
-    auto it = colName2Id.find(colName);
-    if (it == colName2Id.end()) {
-        errors.AddError(Sprintf("Cannot enable TTL on unknown column: '%s'", colName.data()));
-        return false;
-    }
-
-    const TOlapColumnsDescription::TColumn* column = nullptr;
-    const ui32 colId = it->second;
-    if (alterColumns.contains(colId)) {
-        column = &alterColumns.at(colId);
-    } else if (sourceColumns.contains(colId)) {
-        column = &sourceColumns.at(colId);
-    } else {
-        Y_ABORT_UNLESS("Unknown column");
-    }
-
-    if (IsDropped(*column)) {
-        errors.AddError(Sprintf("Cannot enable TTL on dropped column: '%s'", colName.data()));
-        return false;
-    }
-
-    if (ttl.HasExpireAfterBytes()) {
-        errors.AddError("TTL with eviction by size is not supported yet");
-        return false;
-    }
-
-    if (!ttl.HasExpireAfterSeconds()) {
-        errors.AddError("TTL without eviction time");
-        return false;
-    }
-
-    auto unit = ttl.GetColumnUnit();
-
-    switch (GetType(*column)) {
-        case NScheme::NTypeIds::DyNumber:
-            errors.AddError("Unsupported column type for TTL in column tables");
-            return false;
-        default:
-            break;
-    }
-
-    TString errStr;
-    if (!NValidation::TTTLValidator::ValidateUnit(GetType(*column), unit, errStr)) {
-        errors.AddError(errStr);
-        return false;
-    }
-    return true;
-}
 
 bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
@@ -82,7 +14,7 @@ bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycl
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            return ValidateColumnTableTtl(ttl.GetEnabled(), {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
+            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
         }
         case TTtlProto::kDisabled:
         default:

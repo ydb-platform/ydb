@@ -30,13 +30,6 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
     public:
-        virtual bool NeedMinMaxForColumn(const ui32 /*columnId*/) const override {
-            return true;
-        }
-        virtual bool IsSortedColumn(const ui32 /*columnId*/) const override {
-            return false;
-        }
-
         virtual std::optional<NKikimr::NArrow::NSplitter::TColumnSerializationStat> GetColumnSerializationStats(
             const ui32 /*columnId*/) const override {
             return {};

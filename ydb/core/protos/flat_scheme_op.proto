@@ -556,9 +556,6 @@ message TColumnTableSchema {
     repeated TOlapColumnDescription Columns = 1;
     repeated string KeyColumnNames = 2;
 
-    // A type of engine used by the table
-    optional EColumnTableEngine Engine = 3;
-
     // Internal fields
     optional uint32 NextColumnId = 4;
 
@@ -569,9 +566,22 @@ message TColumnTableSchema {
     //optional int32 DefaultCompressionLevel = 7; // deprecated, not used before replace
     optional TCompressionOptions DefaultCompression = 8;
 
-    optional bool CompositeMarksDeprecated = 9 [ default = false ];
     repeated TOlapIndexDescription Indexes = 10;
     optional TColumnTableSchemeOptions Options = 12;
+}
+
+message TColumnTableSchemaDiff {
+    optional uint64 Version = 1;
+
+    repeated TOlapColumnDescription UpsertColumns = 2;
+    repeated uint32 DropColumns = 3;
+
+    optional TCompressionOptions DefaultCompression = 4;
+
+    repeated TOlapIndexDescription UpsertIndexes = 5;
+    repeated uint32 DropIndexes = 6;
+
+    optional TColumnTableSchemeOptions Options = 7;
 }
 
 message TColumnTableRequestedOptions {

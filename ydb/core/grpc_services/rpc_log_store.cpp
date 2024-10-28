@@ -120,7 +120,6 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         }
     }
 
-    to.SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     status = {};
     return true;
 }
@@ -128,11 +127,6 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
 bool ConvertSchemaFromInternalToPublic(const NKikimrSchemeOp::TColumnTableSchema& from, Ydb::LogStore::Schema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
-    if (from.GetEngine() != NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES) {
-        status = Ydb::StatusIds::INTERNAL_ERROR;
-        error = TStringBuilder() << "Unexpected table engine: " << NKikimrSchemeOp::EColumnTableEngine_Name(from.GetEngine());
-        return false;
-    }
     to.mutable_primary_key()->CopyFrom(from.GetKeyColumnNames());
     for (const auto& column : from.GetColumns()) {
         auto* col = to.add_columns();

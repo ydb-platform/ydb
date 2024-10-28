@@ -10,6 +10,10 @@ namespace NDecimal {
 static const TUint128 Ten(10U);
 
 TUint128 GetDivider(ui8 scale) {
+    if (scale > MaxPrecision) {
+        return Inf();
+    }
+
     TUint128 d(1U);
     while (scale--)
         d *= Ten;

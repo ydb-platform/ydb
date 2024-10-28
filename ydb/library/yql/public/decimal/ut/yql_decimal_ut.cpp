@@ -215,6 +215,7 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
         UNIT_ASSERT(FromStringEx("-1e-99", 10, 2) == 0);
         UNIT_ASSERT(FromStringEx("-510e-3", 1, 0) == -1);
         UNIT_ASSERT(FromStringEx("+99E3", 5, 0) == 99000);
+        UNIT_ASSERT(FromStringEx("2.1E-130", 35, 2) == 0);
     }
 
     Y_UNIT_TEST(TestFormStringExInvalidValues) {

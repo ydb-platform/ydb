@@ -261,7 +261,7 @@ private:
             return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
                     {.Message = ERROR_MESSAGE, .Retryable = false}}};
         }
-        if (request.Password.Empty()) {
+        if (request.Password.empty()) {
             LDAP_LOG_D("LDAP login failed for user " << TString(dn) << ". Empty password");
             NKikimrLdap::MemFree(dn);
             return {{.Status = TEvLdapAuthProvider::EStatus::UNAUTHORIZED, .Error = {.Message = TString(ERROR_MESSAGE) + ". Empty password", .Retryable = false}}};

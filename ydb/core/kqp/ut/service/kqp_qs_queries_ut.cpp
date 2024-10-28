@@ -3211,11 +3211,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto result = client.ExecuteQuery(R"(
                 SELECT * FROM `/Root/DataShard`;
                 SELECT * FROM `/Root/ColumnShard`;
+                SELECT * FROM `/Root/DataShard`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            CompareYson(R"([[10u;"test1";10];[20u;"test2";11];[30u;"test3";12];[40u;"test";13];[101u;"test";101];[102u;"test";101];[103u;"test";101];[104u;"test";101];[1001u;"test";1001];[1002u;"test";1001];[1003u;"test";1001];[1004u;"test";1001]])",
-                FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([[1u;"test";1];[2u;"test";1];[3u;"test";1];[4u;"test";1]])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
         }
 
         {

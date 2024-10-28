@@ -9,6 +9,7 @@
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 
 
 namespace NKqpRun {
@@ -159,8 +160,12 @@ public:
 
         TYdbSetup::StopTraceOpt();
 
+        if (!meta.Plan) {
+            meta.Plan = ExecutionMeta_.Plan;
+        }
+
         PrintScriptAst(meta.Ast);
-        PrintScriptProgress(ExecutionMeta_.Plan);
+        PrintScriptProgress(meta.Plan);
         PrintScriptPlan(meta.Plan);
         PrintScriptFinish(meta, queryTypeStr);
 
@@ -176,8 +181,9 @@ public:
         return true;
     }
 
-    void WaitAsyncQueries() const {
+    void FinalizeRunner() const {
         YdbSetup_.WaitAsyncQueries();
+        YdbSetup_.CloseSessions();
     }
 
     bool FetchScriptResults() {
@@ -262,6 +268,7 @@ private:
         }
 
         PrintScriptAst(ExecutionMeta_.Ast);
+        PrintScriptProgress(ExecutionMeta_.Plan);
         PrintScriptPlan(ExecutionMeta_.Plan);
         PrintScriptFinish(ExecutionMeta_, "Script");
 
@@ -351,6 +358,15 @@ private:
 
             outputStream << "\nPlan visualization:" << Endl;
             PrintPlan(convertedPlan, &outputStream);
+
+            outputStream.Finish();
+        }
+        if (Options_.ScriptQueryTimelineFile) {
+            TFileOutput outputStream(Options_.ScriptQueryTimelineFile);
+
+            TPlanVisualizer planVisualizer;
+            planVisualizer.LoadPlans(plan);
+            outputStream.Write(planVisualizer.PrintSvg());
 
             outputStream.Finish();
         }
@@ -445,8 +461,8 @@ void TKqpRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
     Impl_->ExecuteQuery(query, TImpl::EQueryType::AsyncQuery);
 }
 
-void TKqpRunner::WaitAsyncQueries() const {
-    Impl_->WaitAsyncQueries();
+void TKqpRunner::FinalizeRunner() const {
+    Impl_->FinalizeRunner();
 }
 
 bool TKqpRunner::FetchScriptResults() {

@@ -18,9 +18,7 @@ The `topic write` command writes messages to a topic from a file or `stdin`:
 
 `--file VAL` (`-f VAL`): Read a stream of incoming messages and write them to a topic from the specified file. If not set, messages are read from `stdin`.
 
-`--format STR`: Format of the incoming message stream.
-
-* Supported formats
+`--format STR`: Format of the incoming message stream. Supported formats:
 
    | Name | Description |
    ---|---

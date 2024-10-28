@@ -9,13 +9,10 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")
-    REQUIREMENTS(
-        ram:16
-    )
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)

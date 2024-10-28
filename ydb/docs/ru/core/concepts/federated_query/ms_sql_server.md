@@ -3,6 +3,7 @@
 В этом разделе описана основная информация про работу с внешней базой данных [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16).
 
 Для работы с внешней базой данных Microsoft SQL Server необходимо выполнить следующие шаги:
+
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
 
     ```yql
@@ -27,6 +28,7 @@
 1. [Выполнить запрос](#query) к базе данных.
 
 ## Синтаксис запросов {#query}
+
 Для работы с Microsoft SQL Server используется следующая форма SQL-запроса:
 
 ```yql
@@ -34,6 +36,7 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 ```
 
 где:
+
 - `ms_sql_server_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
@@ -44,6 +47,16 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
+
+    |Тип данных {{ ydb-short-name }}|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Int16`|
+    |`Int32`|
+    |`Int64`|
+    |`Float`|
+    |`Double`|
 
 ## Поддерживаемые типы данных
 

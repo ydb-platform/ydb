@@ -330,7 +330,27 @@ namespace NKikimr::NBsController {
 
             // check that group modification would not degrade failure model
             if (!suppressFailModelChecking) {
+                THashSet<TGroupId> groupsToCheck;
+                for (auto&& [base, overlay] : state.VSlots.Diff()) {
+                    if (base && base->second->Group) {
+                        if (!overlay->second || !overlay->second->Group) {
+                            // Disk moved or became inactive
+                            groupsToCheck.emplace(base->second->GroupId);
+                        } else {
+                            const NKikimrBlobStorage::EVDiskStatus prevStatus = base->second->GetStatus();
+                            const NKikimrBlobStorage::EVDiskStatus curStatus = overlay->second->GetStatus();
+
+                            if (prevStatus != NKikimrBlobStorage::EVDiskStatus::ERROR && curStatus == NKikimrBlobStorage::EVDiskStatus::ERROR) {
+                                // VDisk's status has changed to ERROR
+                                groupsToCheck.emplace(overlay->second->GroupId);
+                            }
+                        }
+                    }
+                }
                 for (TGroupId groupId : state.GroupFailureModelChanged) {
+                    if (!groupsToCheck.contains(groupId)) {
+                        continue;
+                    }
                     if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->VDisksInGroup) {
                         // process only groups with changed content; create topology for group
                         auto& topology = *group->Topology;

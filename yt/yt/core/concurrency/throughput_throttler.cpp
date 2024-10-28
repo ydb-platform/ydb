@@ -40,18 +40,20 @@ i64 ClampingAdd(i64 lhs, i64 rhs, i64 max)
 
 DECLARE_REFCOUNTED_STRUCT(TThrottlerRequest)
 
-struct TThrottlerRequest
-    : public TRefCounted
+struct TThrottlerRequest final
 {
-    explicit TThrottlerRequest(i64 amount)
+    TThrottlerRequest(
+        i64 amount,
+        NTracing::TTraceContextPtr traceContext)
         : Amount(amount)
+        , TraceContext(std::move(traceContext))
     { }
 
-    i64 Amount;
-    TPromise<void> Promise;
-    std::atomic_flag Set = ATOMIC_FLAG_INIT;
-    NProfiling::TCpuInstant StartTime = NProfiling::GetCpuInstant();
-    NTracing::TTraceContextPtr TraceContext;
+    const NProfiling::TCpuInstant StartTime = NProfiling::GetCpuInstant();
+    const TPromise<void> Promise = NewPromise<void>();
+    const i64 Amount;
+    const NTracing::TTraceContextPtr TraceContext;
+    std::atomic<bool> Set = false;
 };
 
 DEFINE_REFCOUNTED_TYPE(TThrottlerRequest)
@@ -307,34 +309,50 @@ private:
         }
 
         // Enqueue request to be executed later.
-        auto promise = NewPromise<void>();
-        auto request = New<TThrottlerRequest>(amount);
-        request->TraceContext = NTracing::CreateTraceContextFromCurrent("Throttler");
-
-        YT_LOG_DEBUG(
-            "Started waiting for throttler (Amount: %v, RequestTraceId: %v)",
+        auto request = New<TThrottlerRequest>(
             amount,
-            request->TraceContext->GetTraceId());
+            NTracing::CreateTraceContextFromCurrent("Throttler"));
 
-        promise.OnCanceled(BIND([weakRequest = MakeWeak(request), amount, this, weakThis = MakeWeak(this)] (const TError& error) {
+        {
+            // Just install this trace context as the current, don't finish it.
+            NTracing::TCurrentTraceContextGuard traceContextGuard(request->TraceContext);
+            YT_LOG_DEBUG(
+                "Started waiting for throttler (Amount: %v)",
+                amount);
+        }
+
+        request->Promise.OnCanceled(BIND_NO_PROPAGATE([weakRequest = MakeWeak(request), amount, this, weakThis = MakeWeak(this)] (const TError& error) {
             auto request = weakRequest.Lock();
-            if (request && !request->Set.test_and_set()) {
-                NTracing::TTraceContextFinishGuard guard(std::move(request->TraceContext));
-                YT_LOG_DEBUG(
-                    "Canceled waiting for throttler (Amount: %v)",
-                    amount);
-                request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
-                    << error);
-
-                // NB(coteeq): Weak ref will break cycle "promise -> this -> request -> promise"
-                if (auto this_ = weakThis.Lock()) {
-                    QueueTotalAmount_ -= amount;
-                    QueueSizeGauge_.Update(QueueTotalAmount_);
-                }
+            if (!request) {
+                return;
             }
+            if (request->Set.exchange(true)) {
+                return;
+            }
+
+            // Install the trace context as the current and also finish it.
+            NTracing::TTraceContextGuard traceContextGuard(request->TraceContext);
+
+            request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
+                << error);
+
+            // NB(coteeq): Weak ref will break cycle "promise -> this -> request -> promise"
+            auto this_ = weakThis.Lock();
+            if (!this_) {
+                return;
+            }
+
+            // NB: Cannot log any earlier, need this_ for this.
+            YT_LOG_DEBUG(
+                error,
+                "Canceled waiting for throttler (Amount: %v)",
+                amount);
+
+            QueueTotalAmount_ -= amount;
+            QueueSizeGauge_.Update(QueueTotalAmount_);
         }));
-        request->Promise = std::move(promise);
         Requests_.push(request);
+
         QueueTotalAmount_ += amount;
         QueueSizeGauge_.Update(QueueTotalAmount_);
 
@@ -474,7 +492,7 @@ private:
     {
         VERIFY_SPINLOCK_AFFINITY(SpinLock_);
 
-        std::vector<TThrottlerRequestPtr> readyList;
+        std::vector<TThrottlerRequestPtr> readyRequests;
 
         auto limit = Limit_.load();
         auto canSpend = [&] {
@@ -482,30 +500,36 @@ private:
             return
                 limit < 0 ||
                 // NB(coteeq): Do not spend tokens if limit is zero.
-                (limit == 0 && available > 0) ||
-                (limit > 0 && available >= 0);
+                limit == 0 && available > 0 ||
+                limit > 0 && available >= 0;
         };
 
         while (!Requests_.empty() && canSpend()) {
-            const auto& request = Requests_.front();
-            if (!request->Set.test_and_set()) {
-                NTracing::TTraceContextGuard traceGuard(std::move(request->TraceContext));
-
-                auto waitTime = NProfiling::CpuDurationToDuration(NProfiling::GetCpuInstant() - request->StartTime);
-                YT_LOG_DEBUG(
-                    "Finished waiting for throttler (Amount: %v, WaitTime: %v)",
-                    request->Amount,
-                    waitTime);
-
-                if (limit >= 0) {
-                    Available_ -= request->Amount;
-                }
-                readyList.push_back(request);
-                QueueTotalAmount_ -= request->Amount;
-                QueueSizeGauge_.Update(QueueTotalAmount_);
-                WaitTimer_.Record(waitTime);
-            }
+            auto request = std::move(Requests_.front());
             Requests_.pop();
+
+            if (request->Set.exchange(true)) {
+                continue;
+            }
+
+            // Install the trace context as the current and also finish it.
+            NTracing::TTraceContextGuard traceGuard(request->TraceContext);
+
+            auto waitTime = NProfiling::CpuDurationToDuration(NProfiling::GetCpuInstant() - request->StartTime);
+            YT_LOG_DEBUG(
+                "Finished waiting for throttler (Amount: %v, WaitTime: %v)",
+                request->Amount,
+                waitTime);
+
+            if (limit >= 0) {
+                Available_ -= request->Amount;
+            }
+            QueueTotalAmount_ -= request->Amount;
+
+            QueueSizeGauge_.Update(QueueTotalAmount_);
+            WaitTimer_.Record(waitTime);
+
+            readyRequests.push_back(std::move(request));
         }
 
         if (!Requests_.empty()) {
@@ -514,7 +538,7 @@ private:
 
         guard.Release();
 
-        for (const auto& request : readyList) {
+        for (const auto& request : readyRequests) {
             request->Promise.Set();
         }
     }

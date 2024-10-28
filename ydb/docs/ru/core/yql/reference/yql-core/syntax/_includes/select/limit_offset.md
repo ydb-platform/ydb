@@ -7,22 +7,22 @@
 
 ## Примеры
 
-``` yql
+```yql
 SELECT key FROM my_table
 LIMIT 7;
 ```
 
-``` yql
+```yql
 SELECT key FROM my_table
 LIMIT 7 OFFSET 3;
 ```
 
-``` yql
+```yql
 SELECT key FROM my_table
 LIMIT 3, 7; -- эквивалентно предыдущему примеру
 ```
 
-``` yql
+```yql
 SELECT key FROM my_table
 LIMIT NULL OFFSET NULL; -- эквивалентно SELECT key FROM my_table
 ```

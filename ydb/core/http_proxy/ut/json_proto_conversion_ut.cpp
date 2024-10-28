@@ -202,6 +202,18 @@ Y_UNIT_TEST(ProtoMapToJson) {
   }
 }
 
+Y_UNIT_TEST(ProtoMapToJson_ReceiveMessageResult) {
+  // Test using ReceiveMessageResult that has a repeated field with TRANSFORM_BASE64.
+  // Before fix it failed on messages with attributes.
+  {
+    Ydb::Ymq::V1::ReceiveMessageResult message;
+    message.add_messages()->mutable_message_attributes()->insert({google::protobuf::MapPair<TString, Ydb::Ymq::V1::MessageAttribute>("a", {})});
+
+    NJson::TJsonValue jsonObject;
+    NKikimr::NHttpProxy::ProtoToJson(message, jsonObject, false);
+  }
+}
+
 Y_UNIT_TEST(NlohmannJsonToProtoMap) {
   {
     nlohmann::json jsonObject;

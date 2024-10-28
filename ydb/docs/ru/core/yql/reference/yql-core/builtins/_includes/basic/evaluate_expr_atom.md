@@ -22,7 +22,7 @@ EvaluateAtom позволяет динамически создать [атом]
 
 ### Примеры
 
-``` yql
+```yql
 $now = CurrentUtcDate();
 SELECT EvaluateExpr(
     DateTime::MakeDate(DateTime::StartOfWeek($now)

@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
                            {NLs::PathVersionEqual(6),
                             NLs::HasEffectiveRight("+U:user0@builtin"),
-                            NLs::HasNotEffectiveRight("+U:user1@builtin:-")});
+                            NLs::HasNoEffectiveRight("+U:user1@builtin:-")});
 
         {
             TestMkDir(runtime, ++txId, "/MyRoot/DirA", "DirB");
@@ -616,7 +616,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/DirB"),
                            {NLs::PathVersionEqual(5),
                             NLs::HasEffectiveRight("+U:user0@builtin"),
-                            NLs::HasNotEffectiveRight("+U:user1@builtin:-")});
+                            NLs::HasNoEffectiveRight("+U:user1@builtin:-")});
 
     }
 
@@ -3597,6 +3597,35 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             NLs::IsBackupTable(true),
         });
 
+        // cannot alter backup table
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            DropColumns { Name: "value" }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // cannot add cdc stream to backup table
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "CopyTable"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // cannot add sequence to backup table
+        TestCreateSequence(runtime, ++txId, "/MyRoot/CopyTable", R"(
+            Name: "Sequence"
+        )", {NKikimrScheme::StatusSchemeError});
+
+        // cannot add index to backup table
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/CopyTable", "Index", {"value"});
+        env.TestWaitNotification(runtime, txId);
+        {
+            auto desc = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+            UNIT_ASSERT_EQUAL(desc.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED);
+        }
+
         // consistent copy table
         TestConsistentCopyTables(runtime, ++txId, "/", R"(
             CopyTableDescriptions {
@@ -3735,16 +3764,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )", {NKikimrScheme::StatusInvalidParameter});
 
         // cannot remove 'IsBackup' property from existent table
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
             Name: "CopyTable"
             IsBackup: false
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
             Name: "CopyTable"
             IsBackup: false
             DropColumns { Name: "value" }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusInvalidParameter});
 
         // sanity check
 
@@ -6331,6 +6362,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         "PartitionPerTablet: 10 "
                         "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
                         );
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup_1", true),
                            {NLs::CheckPartCount("PQGroup_1", 100, 10, 10, 100),
@@ -6853,7 +6885,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncForceDropUnsafe(runtime, ++txId, pVer.PathId.LocalPathId);
 
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
+        TestModificationResults(runtime, txId-1, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
         TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
 
         TActorId sender = runtime.AllocateEdgeActor();

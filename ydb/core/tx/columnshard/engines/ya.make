@@ -16,6 +16,8 @@ SRCS(
     defs.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(column_engine_logs.h)
+
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base

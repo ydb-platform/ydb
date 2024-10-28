@@ -292,21 +292,17 @@ private:
 
 ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config)
 {
-    if (config->UseAsyncTxPinger) {
-        YT_LOG_DEBUG("Using async transaction pinger");
-        auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
-        httpClientConfig->MaxIdleConnections = 16;
-        auto httpPoller = NConcurrency::CreateThreadPoolPoller(
-            config->AsyncHttpClientThreads,
-            "tx_http_client_poller");
-        auto httpClient = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
+    YT_LOG_DEBUG("Using async transaction pinger");
+    auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
+    httpClientConfig->MaxIdleConnections = 16;
+    auto httpPoller = NConcurrency::CreateThreadPoolPoller(
+        config->AsyncHttpClientThreads,
+        "tx_http_client_poller");
+    auto httpClient = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
 
-        return MakeIntrusive<TSharedTransactionPinger>(
-            std::move(httpClient),
-            config->AsyncTxPingerPoolThreads);
-    } else {
-        return MakeIntrusive<TThreadPerTransactionPinger>();
-    }
+    return MakeIntrusive<TSharedTransactionPinger>(
+        std::move(httpClient),
+        config->AsyncTxPingerPoolThreads);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

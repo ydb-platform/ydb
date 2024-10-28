@@ -14,7 +14,7 @@ Automatically run [COMMIT](../../commit.md) after every statement.
 | --- | --- |
 | String | — |
 
-Add the specified prefix to the cluster table paths. It uses standard file system path concatenation, supporting parent folder `..`referencing and requiring no trailing slash. For example,
+Add the specified prefix to the cluster table paths. It uses standard file system path concatenation, supporting parent folder `..` referencing and requiring no trailing slash. For example,
 
 `PRAGMA TablePathPrefix = "home/yql";
 SELECT * FROM test;`

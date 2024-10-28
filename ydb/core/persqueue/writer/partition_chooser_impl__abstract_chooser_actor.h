@@ -38,7 +38,7 @@ public:
 
 
     TAbstractPartitionChooserActor(TActorId parentId,
-                                   std::shared_ptr<IPartitionChooser>& chooser,
+                                   const std::shared_ptr<IPartitionChooser>& chooser,
                                    NPersQueue::TTopicConverterPtr& fullConverter,
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition)
@@ -175,7 +175,7 @@ protected:
     }
 
     void HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
         DEBUG("HandleUpdate PartitionPersisted=" << PartitionPersisted << " Status=" << record.GetYdbStatus());
 
         if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {

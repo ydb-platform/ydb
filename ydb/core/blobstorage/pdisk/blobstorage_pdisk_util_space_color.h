@@ -1,8 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/protos/blobstorage_config.pb.h>
-#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>

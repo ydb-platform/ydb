@@ -540,14 +540,14 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         case TEntry::StInitResolve:
             break;
         case TEntry::StNormal:
-            if (!msg->TabletActor || entry.KnownLeaderTablet == msg->TabletActor) {
+            if (!msg->Actor || entry.KnownLeader == msg->Actor || entry.KnownLeaderTablet == msg->Actor) {
                 ResolveRequest(tabletId, ctx);
                 entry.State = TEntry::StProblemResolve;
                 MoveEntryToUnresolved(tabletId, *entryHolder);
             } else {
                 // find in follower list
                 for (auto it = entry.KnownFollowers.begin(), end = entry.KnownFollowers.end(); it != end; ++it) {
-                    if (it->second == msg->TabletActor) {
+                    if (it->first == msg->Actor || it->second == msg->Actor) {
                         entry.KnownFollowers.erase(it);
                         ResolveRequest(tabletId, ctx);
                         entry.State = TEntry::StFollowerUpdate;
@@ -561,7 +561,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         case TEntry::StProblemPing:
         case TEntry::StFollowerUpdate:
             for (auto it = entry.KnownFollowers.begin(), end = entry.KnownFollowers.end(); it != end; ++it) {
-                if (it->second == msg->TabletActor) {
+                if (it->first == msg->Actor || it->second == msg->Actor) {
                     entry.KnownFollowers.erase(it);
                     break;
                 }

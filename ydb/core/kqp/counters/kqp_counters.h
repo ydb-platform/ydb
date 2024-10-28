@@ -409,6 +409,15 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
+    // Sink write counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWrites;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
+    NMonitoring::THistogramPtr WriteActorWritesSizeHistogram;
+    NMonitoring::THistogramPtr WriteActorWritesOperationsHistogram;
+    NMonitoring::THistogramPtr WriteActorWritesLatencyHistogram;
+
     // Scheduler signals
     ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerThrottled;
     ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerCapacity;
@@ -416,6 +425,8 @@ public:
     NMonitoring::THistogramPtr ComputeActorDelays;
     ::NMonitoring::TDynamicCounters::TCounterPtr ThrottledActorsSpuriousActivations;
     NMonitoring::THistogramPtr SchedulerDelays;
+    NMonitoring::TDynamicCounters::TCounterPtr SchedulerGroupsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr SchedulerValuesCount;
 
     // Sequences counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;

@@ -1,9 +1,8 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/library/yaml_config/yaml_config.h>
-
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/console_config.pb.h>

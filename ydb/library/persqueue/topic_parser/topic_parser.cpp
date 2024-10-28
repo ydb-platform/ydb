@@ -46,7 +46,7 @@ namespace {
 }
 
 void NormalizeAsFullPath(TString& path) {
-    if (!path.Empty() && !path.StartsWith("/")) {
+    if (!path.empty() && !path.StartsWith("/")) {
         path = TString("/") + path;
     }
 }
@@ -60,7 +60,7 @@ TString StripLeadSlash(const TString& path) {
 }
 
 TString NormalizeFullPath(const TString& fullPath) {
-    if (!fullPath.Empty() && !fullPath.StartsWith("/")) {
+    if (!fullPath.empty() && !fullPath.StartsWith("/")) {
         return TString("/") + fullPath;
     } else {
         return fullPath;

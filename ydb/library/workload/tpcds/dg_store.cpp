@@ -13,13 +13,15 @@ TTpcDSGeneratorStore::TTpcDSGeneratorStore(const TTpcdsWorkloadDataInitializerGe
     : TBulkDataGenerator(owner, STORE)
 {}
 
-void TTpcDSGeneratorStore::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorStore::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_STORE_TBL> storeList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_store(NULL, ctxs.front().GetStart() + i);
         storeList[i] = g_w_store;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_STORE_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_FIELD_KEY(writer, "s_store_sk", store_sk);
     CSV_WRITER_REGISTER_FIELD_STRING(writer, "s_store_id", store_id);

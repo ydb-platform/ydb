@@ -8,8 +8,9 @@ import itertools
 from importlib_resources import read_binary
 from google.protobuf import text_format
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
 from . import param_constants
@@ -25,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_unique_path_for_current_test(output_path, sub_folder):
-    test_name = yatest_common.context.test_name or ""
+    # TODO: remove yatest dependency from harness
+    try:
+        test_name = yatest.common.context.test_name
+    except AttributeError:
+        test_name = ""
     test_name = test_name.replace(':', '_')
 
     return os.path.join(output_path, test_name, sub_folder)
@@ -87,7 +92,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 }
 
         daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
-        self.__binary_path = None
 
     @property
     def cwd(self):
@@ -107,9 +111,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     @property
     def binary_path(self):
-        if self.__binary_path:
-            return self.__binary_path
-        return self.__configurator.binary_path
+        return self.__binary_path
 
     @property
     def command(self):
@@ -216,10 +218,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return 'localhost'
 
     @property
-    def hostname(self):
-        return kikimr_config.get_fqdn()
-
-    @property
     def port(self):
         return self.grpc_port
 
@@ -247,6 +245,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slots = {}
         self.__server = 'localhost'
         self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__storage_pool_id_allocator = itertools.count(1)
         self.__config_path = None
         self._slot_index_allocator = itertools.count(1)
@@ -276,15 +276,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
-        full_command = [self.__configurator.binary_path]
+        binary_path = self.__configurator.get_binary_path(0)
+        full_command = [binary_path]
         if connect_to_server:
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
 
         logger.debug("Executing command = {}".format(full_command))
         try:
-            return yatest_common.execute(full_command)
-        except yatest_common.ExecutionError as e:
+            return yatest.common.execute(full_command)
+        except yatest.common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
                 e=str(e),
@@ -314,6 +315,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         self.__initialy_prepared = True
         self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__instantiate_udfs_dir()
         self.__write_configs()
         for _ in self.__configurator.all_node_ids():
@@ -376,23 +379,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             tenant_affiliation=self.__configurator.yq_tenant,
+            binary_path=self.__configurator.get_binary_path(node_index),
             data_center=data_center,
         )
         return self._nodes[node_index]
 
-    def register_slots(self, database, count=1, encryption_key=None):
-        return [self.register_slot(database, encryption_key) for _ in range(count)]
+    def __register_slots(self, database, count=1, encryption_key=None):
+        return [self.__register_slot(database, encryption_key) for _ in range(count)]
 
     def register_and_start_slots(self, database, count=1, encryption_key=None):
-        slots = self.register_slots(database, count, encryption_key)
+        slots = self.__register_slots(database, count, encryption_key)
         for slot in slots:
             slot.start()
         return slots
 
-    def register_slot(self, tenant_affiliation=None, encryption_key=None):
-        return self._register_slot(tenant_affiliation, encryption_key)
-
-    def _register_slot(self, tenant_affiliation=None, encryption_key=None):
+    def __register_slot(self, tenant_affiliation=None, encryption_key=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
@@ -409,15 +410,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node_broker_port=node_broker_port,
             tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
             encryption_key=encryption_key,
+            binary_path=self.__configurator.get_binary_path(slot_index),
         )
         return self._slots[slot_index]
 
-    def unregister_slots(self, slots):
+    def __unregister_slots(self, slots):
         for i in slots:
             del self._slots[i.node_id]
 
     def unregister_and_stop_slots(self, slots):
-        self.unregister_slots(slots)
+        self.__unregister_slots(slots)
         for i in slots:
             i.stop()
 
@@ -519,7 +521,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
 
     def _bs_config_invoke(self, request):
-        timeout = yatest_common.plain_or_under_sanitizer(120, 240)
+        timeout = plain_or_under_sanitizer(120, 240)
         sleep = 5
         retries, success = timeout / sleep, False
         while retries > 0 and not success:
@@ -572,7 +574,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = yatest_common.plain_or_under_sanitizer(120, 240)
+        timeout_seconds = plain_or_under_sanitizer(120, 240)
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
@@ -609,6 +611,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         if self._can_update is None:
             choices = self.ssh_command('ls %s*' % param_constants.kikimr_binary_deploy_path, raise_on_error=True)
             choices = choices.split()
+            choices = [path.decode("utf-8", errors="replace") for path in choices]
             self.logger.error("Current available choices are: %s" % choices)
             self._can_update = True
             for version in self.versions:

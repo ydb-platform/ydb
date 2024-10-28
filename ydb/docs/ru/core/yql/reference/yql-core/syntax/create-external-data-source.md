@@ -1,5 +1,7 @@
 # CREATE EXTERNAL DATA SOURCE
 
+<!-- markdownlint-disable proper-names -->
+
 Вызов `CREATE EXTERNAL DATA SOURCE` создает [внешний источник данных](../../../concepts/datamodel/external_data_source.md).
 
 ```yql
@@ -116,8 +118,8 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 |Название системы|URL|
 |------|-------|
-|{{ objstorage-name }}|https://storage.yandexcloud.net/bucket/|
-|AWS S3|http://s3.amazonaws.com/bucket/|
+|{{ objstorage-name }}|`https://storage.yandexcloud.net/bucket/`|
+|AWS S3|`http://s3.amazonaws.com/bucket/`|
 
 ### Пример
 

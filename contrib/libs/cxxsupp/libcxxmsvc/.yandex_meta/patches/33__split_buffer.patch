@@ -1,0 +1,26 @@
+diff --git a/include/__split_buffer b/include/__split_buffer
+index 9565e16..dd789e8 100644
+--- a/include/__split_buffer
++++ b/include/__split_buffer
+@@ -107,6 +107,7 @@ public:
+     _LIBCPP_INLINE_VISIBILITY void pop_front() {__destruct_at_begin(__begin_+1);}
+     _LIBCPP_INLINE_VISIBILITY void pop_back() {__destruct_at_end(__end_-1);}
+ 
++    void __uninitialized_at_end(size_type __n);
+     void __construct_at_end(size_type __n);
+     void __construct_at_end(size_type __n, const_reference __x);
+     template <class _InputIter>
+@@ -197,6 +198,13 @@ __split_buffer<_Tp, _Allocator>::__invariants() const
+     return true;
+ }
+ 
++template <class _Tp, class _Allocator>
++void
++__split_buffer<_Tp, _Allocator>::__uninitialized_at_end(size_type __n)
++{
++    this->__end_ += __n;
++}
++
+ //  Default constructs __n objects starting at __end_
+ //  throws if construction throws
+ //  Precondition:  __n > 0

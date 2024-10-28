@@ -19,6 +19,7 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/providers/common/mkql
     ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/s3/expr_nodes
 )
 
 YQL_LAST_ABI_VERSION()

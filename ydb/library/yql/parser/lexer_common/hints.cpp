@@ -31,9 +31,10 @@ namespace {
 
 class TTokenProcessor {
 public:
-    TTokenProcessor(const TString& queryFile, TSQLHints& hints)
+    TTokenProcessor(const TString& queryFile, TSQLHints& hints, bool utf8Aware)
         : QueryFile(queryFile)
         , Hints(hints)
+        , Utf8Aware(utf8Aware)
     {}
 
     TPosition ExtractPosition(const TParsedToken& token) const {
@@ -57,7 +58,7 @@ public:
             // skip leading comments
             return;
         }
-        TVector<TSQLHint> currentHints = NDetail::ParseSqlHints(pos, token.Content);
+        TVector<TSQLHint> currentHints = NDetail::ParseSqlHints(pos, token.Content, Utf8Aware);
         if (currentHints.empty()) {
             // no hints here
             return;
@@ -70,12 +71,14 @@ private:
     TMaybe<TPosition> PrevNonCommentPos;
     const TString QueryFile;
     TSQLHints& Hints;
+    const bool Utf8Aware;
 };
 
 }
 
-bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName, const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors) {
-    TTokenProcessor tp(queryFile, hints);
+bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName,
+    const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware) {
+    TTokenProcessor tp(queryFile, hints, utf8Aware);
     return lexer.Tokenize(query, queryName, [&tp](TParsedToken&& token) { tp.ProcessToken(std::move(token)); }, issues, maxErrors);
 }
 

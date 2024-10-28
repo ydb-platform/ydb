@@ -6,6 +6,7 @@ from datetime import timedelta
 from os.path import basename, dirname, join
 
 from ydb.core.protos import msgbus_pb2
+from ydb.core.protos import compaction_pb2
 from ydb.core.protos import flat_scheme_op_pb2
 from ydb.tests.library.common.protobuf import AbstractProtobufBuilder, build_protobuf_if_necessary
 
@@ -24,7 +25,7 @@ class TPartitionConfig(AbstractProtobufBuilder):
 
     def __ensure_has_compaction_policy(self):
         if not self.protobuf.HasField('CompactionPolicy'):
-            self.protobuf.CompactionPolicy.CopyFrom(flat_scheme_op_pb2.TCompactionPolicy())
+            self.protobuf.CompactionPolicy.CopyFrom(compaction_pb2.TCompactionPolicy())
             # default values
             self.protobuf.CompactionPolicy.ReadAheadHiThreshold = 67108864
             self.protobuf.CompactionPolicy.ReadAheadLoThreshold = 16777216

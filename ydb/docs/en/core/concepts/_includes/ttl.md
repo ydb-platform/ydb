@@ -4,7 +4,7 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-{{ ydb-short-name }} lets you specify a table column (TTL column), whose values set the lifetime of items. TTL automatically deletes the item from your table once the specified number of seconds passes after the time set in the TTL column.
+{{ ydb-short-name }} allows you to specify a TTL column in both [row-oriented](../datamodel/table.md#row-oriented-tables) and [column-oriented](../datamodel/table.md#column-oriented-tables) tables. Values in TTL columns determine the table rows lifetime.
 
 {% note warning %}
 
@@ -72,7 +72,7 @@ Currently, you can manage TTL settings using:
 
 In the example below, the items of the `mytable` table will be deleted an hour after the time set in the `created_at` column:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -128,7 +128,7 @@ When setting up TTL using YQL, an `Interval` is created from a string literal in
 
 The example below shows how to use the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -180,7 +180,7 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 For a newly created table, you can pass TTL settings along with the table description:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -241,7 +241,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 ### Disabling TTL {#disable}
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - YQL
 
@@ -291,7 +291,7 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 The current TTL settings can be obtained from the table description:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - CLI
 

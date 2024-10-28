@@ -10,8 +10,12 @@ The following {{ ydb-short-name }} distributed storage operating modes are avail
 
 - `none`. There is no redundancy. Any hardware failure causes data to become unavailable or permanently lost. This mode is only recommended for development and functional testing.
 - `block-4-2`. [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) is applied with two blocks of redundancy added to the four blocks of source data. Storage nodes are placed in at least 8 failure domains (usually racks). A [storage pool](glossary.md#storage-pool) remains available if any two domains fail, continuing to record all 6 data parts in the remaining domains. This mode is recommended for clusters deployed within a single availability zone or data center.
+
+  ![block-4-2 topology](./_assets/block-4-2.drawio.png)
+
 - `mirror-3-dc`. Data is replicated to 3 availability zones using 3 failure domains (usually racks) within each zone. {{ ydb-short-name }} cluster remains available even if one availability zone completely fails; additionally, one failure domain in the remaining zones can fail at the same time. This mode is recommended for multi-datacenter clusters with high availability requirements.
-- `mirror-3-dc-3-nodes`. A simplified version of `mirror-3-dc`. This mode requires at least 3 servers with 3 disks each. Each server must be located in an independent data center to provide reasonable fault tolerance. System health in this mode is maintained if no more than one server fails. This mode is only recommended for functional testing or building prototypes.
+
+  ![mirror-3-dc topology](./_assets/mirror-3-dc.drawio.png)
 
 {% note info %}
 
@@ -38,13 +42,13 @@ The storage volume multiplier specified above only applies to the fault toleranc
 
 When creating a [storage group](glossary.md#storage-group), which is a basic allocation unit for storage management, {{ ydb-short-name }} selects [VDisks](glossary.md#vdisk) that are located on [PDisks](glossary.md#pdisk) from different fail domains. For `block-4-2` mode, a storage group should be distributed across at least 8 fail domains, while for `mirror-3-dc` mode, it should be distributed across 3 fail realms, with at least 3 fail domains in each realm.
 
-For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../deploy/configuration/config.md#domains-blob).
+For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/index.md#domains-blob).
 
 ### Reduced configurations {#reduced}
 
 If it is impossible to use the [recommended amount](#cluster-config) of hardware, you can divide servers within a single rack into two dummy fail domains. In this configuration, the failure of one rack results in the failure of two domains instead of just one. In such reduced configurations, {{ ydb-short-name }} will continue to operate if two domains fail. The minimum number of racks in a cluster is five for `block-4-2` mode and two per data center (e.g., six in total) for `mirror-3-dc` mode.
 
-The minimal fault-tolerant configuration of a {{ ydb-short-name }} cluster uses the `mirror-3-dc-3-nodes` operating mode, which requires only three servers. In this configuration, each server acts as both a fail domain and a fail realm, and the cluster can withstand the failure of only a single server.
+The minimal fault-tolerant configuration of a {{ ydb-short-name }} cluster uses the 3 nodes variant of `mirror-3-dc` operating mode, which requires only three servers with three disks each. In this configuration, each server acts as both a fail domain and a fail realm, and the cluster can withstand the failure of only a single server. Each server must be located in an independent data center to provide reasonable fault tolerance. **This mode is only recommended for functional testing or building prototypes.**
 
 ## Redundancy recovery {#rebuild}
 

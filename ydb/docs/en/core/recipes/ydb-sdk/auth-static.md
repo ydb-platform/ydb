@@ -1,3 +1,5 @@
+<!-- markdownlint-disable blanks-around-fences -->
+
 # Username and password based authentication
 
 {% include [work in progress message](_includes/addition.md) %}

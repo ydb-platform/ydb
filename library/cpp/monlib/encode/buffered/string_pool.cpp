@@ -1,5 +1,7 @@
 #include "string_pool.h"
 
+#include <util/generic/ylimits.h>
+
 namespace NMonitoring {
     ////////////////////////////////////////////////////////////////////////////////
     // TStringPoolBuilder

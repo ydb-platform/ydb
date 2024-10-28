@@ -4,7 +4,7 @@ Accessing a value from a row in the [section](../../../syntax/window.md#partitio
 
 ### Signature
 
-```
+```yql
 LEAD(T[,Int32])->T?
 LAG(T[,Int32])->T?
 ```

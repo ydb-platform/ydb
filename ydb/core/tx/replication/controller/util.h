@@ -37,7 +37,13 @@ inline auto DefaultRetryableErrors() {
 }
 
 inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::EStatus>& retryable) {
-    return status.IsTransportError() || Find(retryable, status.GetStatus()) != retryable.end();
+    switch (status.GetStatus()) {
+    case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+    case NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED:
+        return false;
+    default:
+        return status.IsTransportError() || Find(retryable, status.GetStatus()) != retryable.end();
+    }
 }
 
 inline bool IsRetryableError(const NYdb::TStatus status) {

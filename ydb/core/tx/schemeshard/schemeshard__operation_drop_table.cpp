@@ -531,8 +531,9 @@ public:
                     checks
                         .IsTableIndex()
                         .IsInsideTableIndexPath();
-                    // Not tmp index impl tables can be dropped only as part of drop index
-                    if (!NTableIndex::IsTmpImplTable(name)) {
+                    // Not build index impl tables can be dropped only as part of drop index
+                    // build index impl tables dropped multiple times during index construction
+                    if (!NTableIndex::IsBuildImplTable(name)) {
                         checks
                             .IsUnderDeleting()
                             .IsUnderTheSameOperation(OperationId.GetTxId());

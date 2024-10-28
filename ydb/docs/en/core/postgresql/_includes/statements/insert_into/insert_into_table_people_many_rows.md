@@ -1,3 +1,4 @@
+
 ```sql
 INSERT INTO people (name, lastname, age, country, state, city, birthday, sex)
 VALUES

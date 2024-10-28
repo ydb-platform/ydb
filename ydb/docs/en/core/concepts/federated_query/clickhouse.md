@@ -1,5 +1,7 @@
 # Working with ClickHouse databases
 
+<!-- markdownlint-disable blanks-around-lists -->
+
 This section describes the basic information about working with the external ClickHouse database [ClickHouse](https://clickhouse.com).
 
 To work with the external ClickHouse database, the following steps must be completed:
@@ -48,6 +50,20 @@ There are several limitations when working with ClickHouse clusters:
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
+
+    |{{ ydb-short-name }} Data Type|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Uint8`|
+    |`Int16`|
+    |`Uint16`|
+    |`Int32`|
+    |`Uint32`|
+    |`Int64`|
+    |`Uint64`|
+    |`Float`|
+    |`Double`|
 
 ## Supported data types
 

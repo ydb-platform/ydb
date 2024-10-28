@@ -1,5 +1,7 @@
 # Anonymous authentication
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [work in progress message](_includes/addition.md) %}
 
 Below are examples of the code for anonymous authentication in different {{ ydb-short-name }} SDKs.
@@ -10,6 +12,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   By default, anonymous authentication is used.
   You can explicitly enable anonymous authentication as follows:
+
   ```go
   package main
 
@@ -38,6 +41,7 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   By default, anonymous authentication is used.
   You can explicitly enable anonymous authentication as follows:
+
   ```go
   package main
 

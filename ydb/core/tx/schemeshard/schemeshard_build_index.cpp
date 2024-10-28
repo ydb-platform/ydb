@@ -32,6 +32,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TAct
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
@@ -42,7 +46,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
 
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     Y_ABORT_UNLESS(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
-    db.Table<Schema::IndexBuild>().Key(info.Id).Update(
+    auto persistedBuildIndex = db.Table<Schema::IndexBuild>().Key(info.Id);
+    persistedBuildIndex.Update(
         NIceDb::TUpdate<Schema::IndexBuild::Uid>(info.Uid),
         NIceDb::TUpdate<Schema::IndexBuild::DomainOwnerId>(info.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::IndexBuild::DomainLocalId>(info.DomainPathId.LocalPathId),
@@ -55,9 +60,28 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.Limits.MaxShards),
         NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.Limits.MaxRetries),
         NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind))
-
-        // TODO save info.ImplTableDescriptions
     );
+    // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.
+    // We have chosen TIndexCreationConfig's string representation as the serialization format.
+    if (bool hasSpecializedDescription = !std::holds_alternative<std::monostate>(info.SpecializedIndexDescription);
+        info.ImplTableDescriptions || hasSpecializedDescription
+    ) {
+        NKikimrSchemeOp::TIndexCreationConfig serializableRepresentation;
+
+        for (const auto& description : info.ImplTableDescriptions) {
+            *serializableRepresentation.AddIndexImplTableDescriptions() = description;
+        }
+
+        std::visit([&]<typename T>(const T& specializedDescription) {
+            if constexpr (std::is_same_v<T, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>) {
+                *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() = specializedDescription;
+            }
+        }, info.SpecializedIndexDescription);
+
+        persistedBuildIndex.Update(
+            NIceDb::TUpdate<Schema::IndexBuild::CreationConfig>(serializableRepresentation.SerializeAsString())
+        );
+    }
 
     ui32 columnNo = 0;
     for (ui32 i = 0; i < info.IndexColumns.size(); ++i, ++columnNo) {

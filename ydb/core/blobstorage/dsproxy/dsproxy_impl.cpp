@@ -19,6 +19,7 @@ namespace NKikimr {
         , EnableVPatch(params.EnableVPatch)
         , SlowDiskThreshold(params.SlowDiskThreshold)
         , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
+        , MaxNumOfSlowDisks(params.MaxNumOfSlowDisks)
         , LongRequestThresholdMs(params.LongRequestThresholdMs)
     {}
 
@@ -33,6 +34,7 @@ namespace NKikimr {
         , EnableVPatch(params.EnableVPatch)
         , SlowDiskThreshold(params.SlowDiskThreshold)
         , PredictedDelayMultiplier(params.PredictedDelayMultiplier)
+        , MaxNumOfSlowDisks(params.MaxNumOfSlowDisks)
         , LongRequestThresholdMs(params.LongRequestThresholdMs)
     {}
 

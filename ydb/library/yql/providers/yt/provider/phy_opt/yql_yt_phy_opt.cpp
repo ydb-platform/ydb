@@ -20,7 +20,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TYtPhysicalOptProposalTransformer::name)
     AddHandler(0, &TCoMux::Match, HNDL(Mux));
     AddHandler(0, &TYtWriteTable::Match, HNDL(Write));
-    AddHandler(0, &TYtWriteTable::Match, HNDL(DqWrite));
+    if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+        AddHandler(0, &TYtWriteTable::Match, HNDL(DqWrite));
+    }
     AddHandler(0, Names({TCoLength::CallableName(), TCoHasItems::CallableName()}), HNDL(Length));
     AddHandler(0, &TCoSort::Match, HNDL(Sort<false>));
     AddHandler(0, &TCoTopSort::Match, HNDL(Sort<true>));
@@ -33,7 +35,13 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoOrderedLMap::Match, HNDL(LMap<TCoOrderedLMap>));
     AddHandler(0, &TCoEquiJoin::Match, HNDL(EquiJoin));
     AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkip));
-    AddHandler(0, &TYtWriteTable::Match, HNDL(Fill));
+    if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+        AddHandler(0, &TYtMaterialize::Match, HNDL(DqMaterialize));
+        AddHandler(0, &TYtMaterialize::Match, HNDL(Materialize));
+        AddHandler(0, &TYtWriteTable::Match, HNDL(FillToMaterialize));
+    } else {
+        AddHandler(0, &TYtWriteTable::Match, HNDL(Fill));
+    }
     AddHandler(0, &TResPull::Match, HNDL(ResPull));
     if (State_->Configuration->UseNewPredicateExtraction.Get().GetOrElse(DEFAULT_USE_NEW_PREDICATE_EXTRACTION)) {
         AddHandler(0, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(ExtractKeyRange));
@@ -42,8 +50,10 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
         AddHandler(0, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(ExtractKeyRangeLegacy));
     }
     AddHandler(0, &TCoExtendBase::Match, HNDL(Extend));
-    AddHandler(0, &TCoAssumeSorted::Match, HNDL(AssumeSorted));
-    AddHandler(0, &TYtMapReduce::Match, HNDL(AddTrivialMapperForNativeYtTypes));
+    AddHandler(0, &TCoAssumeSorted::Match, HNDL(AssumeConstraints));
+    AddHandler(0, &TCoAssumeConstraints::Match, HNDL(AssumeConstraints));
+    AddHandler(0, &TCoAssumeUnique::Match, HNDL(AssumeConstraints));
+    AddHandler(0, &TCoAssumeDistinct::Match, HNDL(AssumeConstraints));
     AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
@@ -74,10 +84,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
     AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
     AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
-    AddHandler(2, &TYtPublish::Match, HNDL(UnorderedPublishTarget));
     AddHandler(2, &TYtMap::Match, HNDL(PushDownYtMapOverSortedMerge));
-    AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
     AddHandler(2, &TYtMerge::Match, HNDL(ForceTransform));
+    AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
 #undef HNDL
 }
 

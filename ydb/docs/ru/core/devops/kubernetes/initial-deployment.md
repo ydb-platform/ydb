@@ -77,13 +77,7 @@ Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operat
 
 ## Подготовка рабочего окружения
 
-1. Склонируйте репозиторий с [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator):
-
-    ```bash
-    git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
-    ```
-
-2. Добавьте в Helm репозиторий для {{ ydb-short-name }}:
+1. Добавьте в Helm репозиторий для {{ ydb-short-name }}:
 
     Выполните команду:
 
@@ -100,7 +94,7 @@ Helm-чарт устанавливает [{{ ydb-short-name }} Kubernetes Operat
     "ydb" has been added to your repositories
     ```
 
-3. Обновите индекс чартов Helm:
+2. Обновите индекс чартов Helm:
 
     Выполните команду:
 
@@ -153,7 +147,7 @@ TEST SUITE: None
 - block-4-2
 
   ```bash
-  kubectl apply -f samples/storage-block-4-2.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-block-4-2.yaml
   ```
 
   Это создаст 8 узлов хранения {{ ydb-short-name }}, сохраняющих данные с использованием erasure coding. В этом случае используется лишь +50% дополнительного дискового пространства для обеспечения отказоустойчивости.
@@ -161,7 +155,7 @@ TEST SUITE: None
 - mirror-3-dc
 
   ```bash
-  kubectl apply -f samples/storage-mirror-3-dc.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-mirror-3dc.yaml
   ```
 
   Это создаст 9 узлов хранения {{ ydb-short-name }}, которые сохраняют данные с фактором репликации 3.
@@ -185,7 +179,7 @@ TEST SUITE: None
 Примените манифест для создания базы данных и динамических узлов:
 
 ```bash
-kubectl apply -f samples/database.yaml
+kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/database.yaml
 ```
 
 {% note info %}

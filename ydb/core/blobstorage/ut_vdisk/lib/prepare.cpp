@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/vdisk_services.h>
 #include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 
 #include <ydb/core/mon/sync_http_mon.h>

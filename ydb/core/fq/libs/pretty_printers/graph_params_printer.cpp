@@ -18,7 +18,7 @@ public:
     void PrintBytes(const TProtoStringType& value, ::google::protobuf::TextFormat::BaseTextGenerator* generator) const override {
         const TString program = PrettyPrintMkqlProgram(value, /*generator->GetCurrentIndentationSize()*/ 4); // TODO: use GetCurrentIndentationSize() when we have it.
         generator->PrintLiteral("\n");
-        generator->Print(program.Data(), program.Size());
+        generator->Print(program.data(), program.size());
     }
 
     void PrintString(const TProtoStringType& value, ::google::protobuf::TextFormat::BaseTextGenerator* generator) const override {

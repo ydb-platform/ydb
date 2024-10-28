@@ -19,6 +19,7 @@ Default configuration file location follows the same convention as {{ ydb-short-
 Certain command line options can be written in the configuration file instead of being specified directly in the `ydbops` invocation.
 
 ### Examples
+
 Calling the `ydbops restart` command without a profile:
 
 ```bash

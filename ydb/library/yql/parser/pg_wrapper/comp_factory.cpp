@@ -1249,6 +1249,15 @@ public:
         }
 
         FInfo.fn_expr = ArgsExprBuilder.Build(ProcDesc);
+
+        if (StructType) {
+            StructTypeDesc.reserve(StructType->GetMembersCount());
+            for (ui32 i = 0; i < StructType->GetMembersCount(); ++i) {
+                auto itemType = StructType->GetMemberType(i);
+                auto type = AS_TYPE(TPgType, itemType)->GetTypeId();
+                StructTypeDesc.emplace_back(NPg::LookupType(type));
+            }
+        }
     }
 
 private:
@@ -1268,6 +1277,7 @@ protected:
     const TVector<TType*> ArgTypes;
     const TStructType* StructType;
     TVector<NPg::TTypeDesc> ArgDesc;
+    TVector<NPg::TTypeDesc> StructTypeDesc;
 
     TPgArgsExprBuilder ArgsExprBuilder;
 };
@@ -1370,7 +1380,7 @@ private:
         public:
             TIterator(TMemoryUsageInfo* memInfo, const std::string_view& name, const TUnboxedValueVector& args,
                 const TVector<NPg::TTypeDesc>& argDesc, const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc,
-                const FmgrInfo* fInfo, const TStructType* structType, const THolderFactory& holderFactory)
+                const FmgrInfo* fInfo, const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
                 : TComputationValue<TIterator>(memInfo)
                 , Name(name)
                 , Args(args)
@@ -1379,6 +1389,7 @@ private:
                 , ProcDesc(procDesc)
                 , CallInfo(argDesc.size(), fInfo)
                 , StructType(structType)
+                , StructTypeDesc(structTypeDesc)
                 , HolderFactory(holderFactory)
             {
                 auto& callInfo = CallInfo.Ref();
@@ -1457,20 +1468,38 @@ private:
                     tuplestore_select_read_pointer(RSInfo.Ref().setResult, readPtr);
                     return CopyTuple(value);
                 } else {
-                    YQL_ENSURE(!StructType);
                     if (RSInfo.Ref().isDone == ExprEndResult) {
                         FinishAndFree();
                         return false;
                     }
 
-                    if (callInfo.isnull) {
-                        value = NUdf::TUnboxedValuePod();
+                    if (StructType) {
+                        YQL_ENSURE(!callInfo.isnull);
+                        auto tuple = DatumGetHeapTupleHeader(ret);
+                        YQL_ENSURE(HeapTupleHeaderGetNatts(tuple) == StructType->GetMembersCount());
+                        HeapTupleData tmptup;
+                        tmptup.t_len = HeapTupleHeaderGetDatumLength(tuple);
+                        ItemPointerSetInvalid(&(tmptup.t_self));
+                        tmptup.t_tableOid = InvalidOid;
+                        tmptup.t_data = tuple;
+
+                        NUdf::TUnboxedValue* itemsPtr;
+                        value = HolderFactory.CreateDirectArrayHolder(StructType->GetMembersCount(), itemsPtr);
+                        for (ui32 i = 0; i < StructType->GetMembersCount(); ++i) {
+                            bool isNull;
+                            auto datum = heap_getattr(&tmptup,i + 1,RSInfo.Ref().expectedDesc,&isNull);
+                            itemsPtr[StructIndicies[i]] = CloneTupleItem(i, isNull, datum);
+                        }
                     } else {
-                        if (RetTypeDesc.PassByValue) {
-                            value = ScalarDatumToPod(ret);
+                        if (callInfo.isnull) {
+                            value = NUdf::TUnboxedValuePod();
                         } else {
-                            auto cloned = datumCopy(ret, false, RetTypeDesc.TypeLen);
-                            value = PointerDatumToPod(cloned);
+                            if (RetTypeDesc.PassByValue) {
+                                value = ScalarDatumToPod(ret);
+                            } else {
+                                auto cloned = datumCopy(ret, false, RetTypeDesc.TypeLen);
+                                value = PointerDatumToPod(cloned);
+                            }
                         }
                     }
 
@@ -1513,24 +1542,28 @@ private:
                 return true;
             }
 
-            NUdf::TUnboxedValuePod CloneTupleItem(ui32 index) {
-                if (TupleSlot->tts_isnull[index]) {
+            NUdf::TUnboxedValuePod CloneTupleItem(ui32 index, bool isNull, Datum datum) {
+                if (isNull) {
                     return NUdf::TUnboxedValuePod();
                 } else {
-                    auto datum = TupleSlot->tts_values[index];
-                    if (RetTypeDesc.PassByValue) {
+                    const auto& desc = StructType ? StructTypeDesc[StructIndicies[index]] : RetTypeDesc;
+                    if (desc.PassByValue) {
                         return ScalarDatumToPod(datum);
-                    } else if (RetTypeDesc.TypeLen == -1) {
+                    } else if (desc.TypeLen == -1) {
                         const text* orig = (const text*)datum;
                         return PointerDatumToPod((Datum)MakeVar(GetVarBuf(orig)));
-                    } else if(RetTypeDesc.TypeLen == -2) {
+                    } else if(desc.TypeLen == -2) {
                         const char* orig = (const char*)datum;
                         return PointerDatumToPod((Datum)MakeCString(orig));
                     } else {
                         const char* orig = (const char*)datum;
-                        return PointerDatumToPod((Datum)MakeFixedString(orig, RetTypeDesc.TypeLen));
+                        return PointerDatumToPod((Datum)MakeFixedString(orig, desc.TypeLen));
                     }
                 }
+            }
+
+            NUdf::TUnboxedValuePod CloneTupleItem(ui32 index) {
+                return CloneTupleItem(index, TupleSlot->tts_isnull[index], TupleSlot->tts_values[index]);
             }
 
             void FinishAndFree() {
@@ -1552,6 +1585,7 @@ private:
             TExprContextHolder ExprContextHolder;
             TFunctionCallInfo CallInfo;
             const TStructType* StructType;
+            const TVector<NPg::TTypeDesc>& StructTypeDesc;
             const THolderFactory& HolderFactory;
             TReturnSetInfo RSInfo;
             bool IsFinished = false;
@@ -1562,7 +1596,7 @@ private:
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
             const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
             const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo,
-            const TStructType* structType, const THolderFactory& holderFactory)
+            const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
             , Name(name)
@@ -1572,13 +1606,14 @@ private:
             , ProcDesc(procDesc)
             , FInfo(fInfo)
             , StructType(structType)
+            , StructTypeDesc(structTypeDesc)
             , HolderFactory(holderFactory)
         {
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
-            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, ProcDesc, FInfo, StructType, CompCtx.HolderFactory);
+            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, ProcDesc, FInfo, StructType, StructTypeDesc, CompCtx.HolderFactory);
         }
 
         TComputationContext& CompCtx;
@@ -1589,6 +1624,7 @@ private:
         const NPg::TProcDesc& ProcDesc;
         const FmgrInfo* FInfo;
         const TStructType* StructType;
+        const TVector<NPg::TTypeDesc>& StructTypeDesc;
         const THolderFactory& HolderFactory;
     };
 
@@ -1607,7 +1643,7 @@ public:
             args.push_back(value);
         }
 
-        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, StructType, compCtx.HolderFactory);
+        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, StructType, StructTypeDesc, compCtx.HolderFactory);
     }
 };
 
@@ -3588,8 +3624,8 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
         Y_ENSURE(!callInfo->isnull);
 
         auto s = GetVarBuf(x);
-        ui32 len = s.Size();
-        f(TStringBuf(s.Data(), s.Size()));
+        ui32 len = s.size();
+        f(TStringBuf(s.data(), s.size()));
     }
 }
 
@@ -3677,8 +3713,8 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         const auto x = (const text*)PointerDatumFromPod(value);
         auto s = GetVarBuf(x);
         buf.Write(StringMarker);
-        buf.WriteVarI32(s.Size());
-        buf.WriteMany(s.Data(), s.Size());
+        buf.WriteVarI32(s.size());
+        buf.WriteMany(s.data(), s.size());
         break;
     }
     case CSTRINGOID: {
@@ -3692,8 +3728,8 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     default:
         buf.Write(StringMarker);
         PgValueToNativeBinaryImpl(value, type->GetTypeId(), true, [&buf](TStringBuf b) {
-            buf.WriteVarI32(b.Size());
-            buf.WriteMany(b.Data(), b.Size());
+            buf.WriteVarI32(b.size());
+            buf.WriteMany(b.data(), b.size());
         });
         break;
     }
@@ -3785,9 +3821,9 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
 
     TPAllocScope call;
     StringInfoData stringInfo;
-    stringInfo.data = (char*)binary.Data();
-    stringInfo.len = binary.Size();
-    stringInfo.maxlen = binary.Size();
+    stringInfo.data = (char*)binary.data();
+    stringInfo.len = binary.size();
+    stringInfo.maxlen = binary.size();
     stringInfo.cursor = 0;
 
     const auto& typeInfo = NPg::LookupType(pgTypeId);
@@ -4072,9 +4108,9 @@ void WriteSkiffPg(TPgType* type, const NUdf::TUnboxedValuePod& value, NCommon::T
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
         auto s = GetVarBuf(x);
-        ui32 len = s.Size();
+        ui32 len = s.size();
         buf.WriteMany((const char*)&len, sizeof(len));
-        buf.WriteMany(s.Data(), len);
+        buf.WriteMany(s.data(), len);
         break;
     }
     case CSTRINGOID: {
@@ -4086,9 +4122,9 @@ void WriteSkiffPg(TPgType* type, const NUdf::TUnboxedValuePod& value, NCommon::T
     }
     default:
         PgValueToNativeBinaryImpl(value, type->GetTypeId(), true, [&buf](TStringBuf b) {
-            ui32 len = b.Size();
+            ui32 len = b.size();
             buf.WriteMany((const char*)&len, sizeof(len));
-            buf.WriteMany(b.Data(), len);
+            buf.WriteMany(b.data(), len);
         });
     }
 }
@@ -4328,8 +4364,8 @@ void DoPGPack(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& va
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
         auto s = GetVarBuf(x);
-        NDetails::PackUInt32(s.Size(), buf);
-        buf.Append(s.Data(), s.Size());
+        NDetails::PackUInt32(s.size(), buf);
+        buf.Append(s.data(), s.size());
         break;
     }
     case CSTRINGOID: {
@@ -4341,8 +4377,8 @@ void DoPGPack(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& va
     }
     default:
         NYql::NCommon::PgValueToNativeBinaryImpl(value, type->GetTypeId(), stable, [&buf](TStringBuf b) {
-            NDetails::PackUInt32(b.Size(), buf);
-            buf.Append(b.Data(), b.Size());
+            NDetails::PackUInt32(b.size(), buf);
+            buf.Append(b.data(), b.size());
         });
     }
 }
@@ -5330,7 +5366,7 @@ public:
                 callInfo->nargs = 3;
                 callInfo->fncollation = DEFAULT_COLLATION_OID;
                 callInfo->isnull = false;
-                callInfo->args[0] = { (Datum)str.Data(), false };
+                callInfo->args[0] = { (Datum)str.data(), false };
                 callInfo->args[1] = { ObjectIdGetDatum(NMiniKQL::MakeTypeIOParam(*this)), false };
                 callInfo->args[2] = { Int32GetDatum(-1), false };
 
@@ -5372,7 +5408,7 @@ public:
             }
         };
         try {
-            datum = Receive(binary.Data(), binary.Size());
+            datum = Receive(binary.data(), binary.size());
             FmgrInfo finfo;
             InitFunc(OutFuncId, &finfo, 1, 1);
             LOCAL_FCINFO(callInfo, 1);
@@ -5491,7 +5527,7 @@ public:
             }
         };
         try {
-            datum = Receive(binary.Data(), binary.Size());
+            datum = Receive(binary.data(), binary.size());
             return {};
         } catch (const yexception& e) {
             TStringBuilder errMsg;
@@ -5546,7 +5582,7 @@ private:
         };
         try {
             if (isSourceBinary) {
-                datum = Receive(binary.Data(), binary.Size());
+                datum = Receive(binary.data(), binary.size());
             }
 
             if (IsArray()) {

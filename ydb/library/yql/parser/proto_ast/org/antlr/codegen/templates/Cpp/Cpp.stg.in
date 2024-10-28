@@ -278,7 +278,7 @@ headerFile( LEXER,
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include \<ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include \<ydb/library/yql/parser/proto_ast/antlr3/proto_ast_antlr3.h>
 
 /* =============================================================================
  * Standard antlr3 C++ runtime definitions

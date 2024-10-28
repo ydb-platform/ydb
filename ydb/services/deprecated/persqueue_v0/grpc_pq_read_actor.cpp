@@ -14,6 +14,8 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
+
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
 #include <util/string/strip.h>
@@ -655,6 +657,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     Session = session;
     ProtocolVersion = init.GetProtocolVersion();
     CommitsDisabled = init.GetCommitsDisabled();
+    UserAgent = init.GetVersion();
 
     if (ProtocolVersion >= NPersQueue::TReadRequest::ReadParamsInInit) {
         ReadSettingsInited = true;
@@ -835,6 +838,14 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
     }
 }
 
+void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", "pqv0")
+        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("user_agent", V1::CleanupCounterValueString(UserAgent))
+        ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
+}
 
 void TReadSessionActor::SetupCounters()
 {
@@ -864,6 +875,8 @@ void TReadSessionActor::SetupCounters()
     if (ProtocolVersion < NPersQueue::TReadRequest::Batching) {
         ++(*SessionsWithOldBatchingVersion);
     }
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 
@@ -1525,7 +1538,10 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
 
     Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
     i64 diff = formedResponse->Response.ByteSize();
-    const bool hasMessages = RemoveEmptyMessages(*formedResponse->Response.MutableBatchedData());
+
+    BytesReadByUserAgent->Add(diff);
+
+    const bool hasMessages = HasMessages(formedResponse->Response.GetBatchedData());
     if (hasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign read id " << ReadIdToResponse << " to read request " << formedResponse->Guid);
         formedResponse->Response.MutableBatchedData()->SetCookie(ReadIdToResponse);
@@ -1758,26 +1774,15 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
     }
 }
 
-bool TReadSessionActor::RemoveEmptyMessages(TReadResponse::TBatchedData& data) {
-    bool hasNonEmptyMessages = false;
-    auto isMessageEmpty = [&](TReadResponse::TBatchedData::TMessageData& message) -> bool {
-        if (message.GetData().empty()) {
-            return true;
-        } else {
-            hasNonEmptyMessages = true;
-            return false;
+bool TReadSessionActor::HasMessages(const TReadResponse::TBatchedData& data) {
+    for (const auto& partData : data.GetPartitionData()) {
+        for (const auto& batch : partData.GetBatch()) {
+            if (batch.MessageDataSize() > 0) {
+                return true;
+            }
         }
-    };
-    auto batchRemover = [&](TReadResponse::TBatchedData::TBatch& batch) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(batch.MutableMessageData(), isMessageEmpty);
-        return batch.MessageDataSize() == 0;
-    };
-    auto partitionDataRemover = [&](TReadResponse::TBatchedData::TPartitionData& partition) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(partition.MutableBatch(), batchRemover);
-        return partition.BatchSize() == 0;
-    };
-    NProtoBuf::RemoveRepeatedFieldItemIf(data.MutablePartitionData(), partitionDataRemover);
-    return hasNonEmptyMessages;
+    }
+    return false;
 }
 
 
@@ -2137,6 +2142,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue; //TODO - no such chunks must be on prod
         }
+
+        if (!proto.has_codec()) {
+            proto.set_codec(NPersQueueCommon::RAW);
+        }
+
         TString sourceId = "";
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {

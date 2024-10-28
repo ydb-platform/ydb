@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/storage/granule.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 namespace NKikimr::NOlap::NReader::NSysView::NAbstract {

@@ -32,32 +32,24 @@ namespace NYql::NDq {
  *
  * This class is templated by std::bitset with the largest number of joins we can process
  * or std::bitset<64>, which has a more efficient implementation of enumerating subsets of set.
+ * 
+ * Also, it has a bool ProcessCycles template parameter, which makes algorithm consider all edges
+ * between csg-cmp. It makes dphyp slower, but without it we can miss a condition in case of cycles
  */
 template <typename TNodeSet>
 class TDPHypSolver {
 public:
     TDPHypSolver(
         TJoinHypergraph<TNodeSet>& graph,
-        IProviderContext& ctx,
-        const TCardinalityHints& hints,
-        const TJoinAlgoHints& joinHints
+        IProviderContext& ctx
     ) 
         : Graph_(graph) 
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
-    {
-        for (const auto& h : hints.Hints) {
-            TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
-            CardHintsTable_[hintSet] = h;
-        }
-        for (const auto& h : joinHints.Hints) {
-            TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
-            JoinAlgoHintsTable_[hintSet] = h;
-        }
-    }
+    {}
 
     // Run DPHyp algorithm and produce the join tree in CBO's internal representation
-    std::shared_ptr<TJoinOptimizerNodeInternal> Solve();
+    std::shared_ptr<TJoinOptimizerNodeInternal> Solve(const TOptimizerHints& hints);
 
     // Calculate the size of a dynamic programming table with a budget
     ui32 CountCC(ui32 budget);
@@ -69,7 +61,7 @@ private:
 
     void EnumerateCmpRec(const TNodeSet& s1, const TNodeSet& s2, const TNodeSet& x);
 
-    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge);
+    void EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge, const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge);
 
 private:
     // Create an exclusion set that contains all the nodes of the graph that are smaller or equal to
@@ -92,13 +84,13 @@ private:
         const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         EJoinKind joinKind,
+        bool leftAny,
+        bool rightAny,
         bool isCommutative,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+        const TVector<TJoinColumn>& leftJoinKeys,
+        const TVector<TJoinColumn>& rightJoinKeys,
         IProviderContext& ctx,
-        TCardinalityHints::TCardinalityHint* maybeHint,
+        TCardinalityHints::TCardinalityHint* maybeCardHint,
         TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
     );
 
@@ -109,14 +101,14 @@ private:
     TJoinHypergraph<TNodeSet>& Graph_;
     size_t NNodes_;
     IProviderContext& Pctx_;  // Provider specific contexts?
-    // FIXME: This is a temporary structure that needs to be extended to multiple providers.
+    // FIXME: This is a temporary structure that needs to be extended to multiple providers, also we need to remove virtual functions, they are really expensive.
     #ifndef NDEBUG
         THashMap<std::pair<TNodeSet, TNodeSet>, bool, pair_hash> CheckTable_;
     #endif
 private:
     THashMap<TNodeSet, std::shared_ptr<IBaseOptimizerNode>, std::hash<TNodeSet>> DpTable_;
-    THashMap<TNodeSet, TCardinalityHints::TCardinalityHint, std::hash<TNodeSet>> CardHintsTable_;
-    THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint, std::hash<TNodeSet>> JoinAlgoHintsTable_;
+    THashMap<TNodeSet, TCardinalityHints::TCardinalityHint*, std::hash<TNodeSet>> CardHintsTable_;
+    THashMap<TNodeSet, TJoinAlgoHints::TJoinAlgoHint*, std::hash<TNodeSet>> JoinAlgoHintsTable_;
 };
 
 /*
@@ -232,7 +224,17 @@ template<typename TNodeSet> TNodeSet TDPHypSolver<TNodeSet>::NextBitset(const TN
     return res;
 }
 
-template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::Solve() {
+template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSolver<TNodeSet>::Solve(const TOptimizerHints& hints) {
+    for (auto& h : hints.CardinalityHints->Hints) {
+        TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
+        CardHintsTable_[hintSet] = &h;
+    }
+
+    for (auto& h : hints.JoinAlgoHints->Hints) {
+        TNodeSet hintSet = Graph_.GetNodesByRelNames(h.JoinLabels);
+        JoinAlgoHintsTable_[hintSet] = &h;
+    }
+
     auto& nodes = Graph_.GetNodes();
 
     Y_ASSERT(nodes.size() == NNodes_);
@@ -242,7 +244,7 @@ template<typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypSo
         s[i] = 1;
         DpTable_[s] = nodes[i].RelationOptimizerNode;
         if (CardHintsTable_.contains(s)){
-            DpTable_[s]->Stats->Nrows = CardHintsTable_.at(s).ApplyHint(DpTable_[s]->Stats->Nrows);
+            DpTable_[s]->Stats.Nrows = CardHintsTable_.at(s)->ApplyHint(DpTable_[s]->Stats.Nrows);
         }
     }
 
@@ -326,7 +328,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsg(const TNodeSet
             s2[i] = 1;
 
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2)) {
-                EmitCsgCmp(s1, s2, edge);
+                EmitCsgCmp(s1, s2, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
 
             EnumerateCmpRec(s1, s2, x | MakeB(neighs, GetLowestSetBit(s2)));
@@ -355,7 +357,7 @@ template <typename TNodeSet> void TDPHypSolver<TNodeSet>::EnumerateCmpRec(const 
 
         if (DpTable_.contains(s2 | next)) {
             if (auto* edge = Graph_.FindEdgeBetween(s1, s2 | next)) {
-                EmitCsgCmp(s1, s2 | next, edge);
+                EmitCsgCmp(s1, s2 | next, edge, &Graph_.GetEdge(edge->ReversedEdgeId));
             }
         }
 
@@ -410,91 +412,94 @@ template <typename TNodeSet> std::shared_ptr<TJoinOptimizerNodeInternal> TDPHypS
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
     EJoinKind joinKind,
+    bool leftAny,
+    bool rightAny,
     bool isCommutative,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
-    const std::set<std::pair<TJoinColumn, TJoinColumn>>& reversedJoinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     IProviderContext& ctx,
-    TCardinalityHints::TCardinalityHint* maybeHint,
-    TJoinAlgoHints::TJoinAlgoHint* maybeJoinHint
+    TCardinalityHints::TCardinalityHint* maybeCardHint,
+    TJoinAlgoHints::TJoinAlgoHint* maybeJoinAlgoHint
 ) {
+    if (maybeJoinAlgoHint) {
+        maybeJoinAlgoHint->Applied = true;
+        auto stats = ctx.ComputeJoinStats(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, maybeJoinAlgoHint->Algo, joinKind, maybeCardHint);
+        return MakeJoinInternal(std::move(stats), left, right, leftJoinKeys, rightJoinKeys, joinKind, maybeJoinAlgoHint->Algo, leftAny, rightAny);
+    }
+
+    TOptimizerStatistics bestJoinStats;
     double bestCost = std::numeric_limits<double>::infinity();
-    EJoinAlgoType bestAlgo{};
+    EJoinAlgoType bestAlgo = EJoinAlgoType::Undefined;
     bool bestJoinIsReversed = false;
 
     for (auto joinAlgo : AllJoinAlgos) {
-        if (ctx.IsJoinApplicable(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
-            auto cost = ctx.ComputeJoinStats(*left->Stats, *right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint).Cost;
-            if (maybeJoinHint) {
-                if (joinAlgo == maybeJoinHint->JoinHint) {
-                    cost = -1;
-                }
-            }
-            if (cost < bestCost) {
-                bestCost = cost;
+        if (ctx.IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind)){
+            auto stats = ctx.ComputeJoinStats(left->Stats, right->Stats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeCardHint);
+            if (stats.Cost < bestCost) {
+                bestCost = stats.Cost;
                 bestAlgo = joinAlgo;
+                bestJoinStats = std::move(stats);
                 bestJoinIsReversed = false;
             }
         }
 
         if (isCommutative) {
-            if (ctx.IsJoinApplicable(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
-                auto cost = ctx.ComputeJoinStats(*right->Stats, *left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeHint).Cost;
-                if (maybeJoinHint) {
-                    if (joinAlgo == maybeJoinHint->JoinHint) {
-                        cost = -1;
-                    }
-                }
-                if (cost < bestCost) {
-                    bestCost = cost;
+            if (ctx.IsJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, joinAlgo, joinKind)){
+                auto stats = ctx.ComputeJoinStats(right->Stats, left->Stats,  rightJoinKeys, leftJoinKeys, joinAlgo, joinKind, maybeCardHint);
+                if (stats.Cost < bestCost) {
+                    bestCost = stats.Cost;
                     bestAlgo = joinAlgo;
+                    bestJoinStats = std::move(stats);
                     bestJoinIsReversed = true;
                 }
             }
         }
     }
 
-    Y_ENSURE(bestCost != std::numeric_limits<double>::infinity(), "No join was chosen!");
+    Y_ENSURE(bestAlgo != EJoinAlgoType::Undefined, "No join was chosen!");
 
     if (bestJoinIsReversed) {
-        return MakeJoinInternal(right, left, reversedJoinConditions, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, ctx, maybeHint);
+        return MakeJoinInternal(std::move(bestJoinStats), right, left, rightJoinKeys, leftJoinKeys, joinKind, bestAlgo, rightAny, leftAny);
     }
     
-    return MakeJoinInternal(left, right, joinConditions, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, ctx, maybeHint);
+    return MakeJoinInternal(std::move(bestJoinStats), left, right, leftJoinKeys, rightJoinKeys, joinKind, bestAlgo, leftAny, rightAny);
 }
 
 /* 
  * Emit a single CSG + CMP pair
  */
-template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeSet& s1, const TNodeSet& s2, const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge) {
+template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(
+    const TNodeSet& s1, 
+    const TNodeSet& s2, 
+    const typename TJoinHypergraph<TNodeSet>::TEdge* csgCmpEdge,
+    const typename TJoinHypergraph<TNodeSet>::TEdge* reversedCsgCmpEdge
+) {
     // Here we actually build the join and choose and compare the
     // new plan to what's in the dpTable, if it there
 
     Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
     Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
 
-    const auto* reversedEdge = &Graph_.GetEdge(csgCmpEdge->ReversedEdgeId);
     auto leftNodes = DpTable_[s1];
     auto rightNodes = DpTable_[s2];
     
     if (csgCmpEdge->IsReversed) {
-        std::swap(csgCmpEdge, reversedEdge);
+        std::swap(csgCmpEdge, reversedCsgCmpEdge);
         std::swap(leftNodes, rightNodes);
     }
 
     TNodeSet joined = s1 | s2;
 
-    auto maybeCardHint = CardHintsTable_.contains(joined) ? & CardHintsTable_[joined] : nullptr;
-    auto maybeJoinAlgoHint = JoinAlgoHintsTable_.contains(joined) ? & JoinAlgoHintsTable_[joined] : nullptr;
+    auto maybeCardHint = CardHintsTable_.contains(joined) ? CardHintsTable_[joined] : nullptr;
+    auto maybeJoinAlgoHint = JoinAlgoHintsTable_.contains(joined) ? JoinAlgoHintsTable_[joined] : nullptr;
 
     auto bestJoin = PickBestJoin(
         leftNodes,
         rightNodes,
         csgCmpEdge->JoinKind,
+        csgCmpEdge->LeftAny,
+        csgCmpEdge->RightAny,
         csgCmpEdge->IsCommutative,
-        csgCmpEdge->JoinConditions,
-        reversedEdge->JoinConditions,
         csgCmpEdge->LeftJoinKeys,
         csgCmpEdge->RightJoinKeys,
         Pctx_,
@@ -502,14 +507,14 @@ template<typename TNodeSet> void TDPHypSolver<TNodeSet>::EmitCsgCmp(const TNodeS
         maybeJoinAlgoHint
     );
 
-    if (!DpTable_.contains(joined) || bestJoin->Stats->Cost < DpTable_[joined]->Stats->Cost) {
+    if (!DpTable_.contains(joined) || bestJoin->Stats.Cost < DpTable_[joined]->Stats.Cost) {
         DpTable_[joined] = bestJoin;
     }
 
     #ifndef NDEBUG
         auto pair = std::make_pair(s1, s2);
         Y_ENSURE (!CheckTable_.contains(pair), "Check table already contains pair S1|S2");
-        CheckTable_[ std::pair<TNodeSet,TNodeSet>(s1, s2) ] = true;
+        CheckTable_[pair] = true;
     #endif
 }
 

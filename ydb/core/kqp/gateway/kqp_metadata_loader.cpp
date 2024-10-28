@@ -122,14 +122,7 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
 }
 
 TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
-    TString typeName;
-    if (typeInfoMod.TypeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
-        YQL_ENSURE(NScheme::TryGetTypeName(typeInfoMod.TypeInfo.GetTypeId(), typeName));
-    } else {
-        YQL_ENSURE(typeInfoMod.TypeInfo.GetPgTypeDesc(), "no pg type descriptor");
-        typeName = NPg::PgTypeNameFromTypeDesc(typeInfoMod.TypeInfo.GetPgTypeDesc(), typeInfoMod.TypeMod);
-    }
-    return typeName;
+    return NScheme::TypeName(typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
 
 TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
@@ -156,10 +149,14 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         switch (entry.Kind) {
             case EKind::KindTable:
                 tableMeta->Kind = NYql::EKikimrTableKind::Datashard;
+                tableMeta->TableType = NYql::ETableType::Table;
+                tableMeta->StoreType = NYql::EStoreType::Row;
                 break;
 
             case EKind::KindColumnTable:
                 tableMeta->Kind = NYql::EKikimrTableKind::Olap;
+                tableMeta->TableType = NYql::ETableType::Table;
+                tableMeta->StoreType = NYql::EStoreType::Column;
                 break;
 
             default:
@@ -175,6 +172,13 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         tableMeta->QueryName = queryName;
     }
 
+    THashMap<TString, NYql::TKikimrPathId> sequences;
+
+    for (const auto& sequenceDesc : entry.Sequences) {
+        sequences[sequenceDesc.GetName()] = 
+            NYql::TKikimrPathId(sequenceDesc.GetPathId().GetOwnerId(), sequenceDesc.GetPathId().GetLocalId());
+    }
+
     std::map<ui32, TString, std::less<ui32>> keyColumns;
     std::map<ui32, TString, std::less<ui32>> columnOrder;
     for (auto& pair : entry.Columns) {
@@ -182,16 +186,23 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         auto notNull = entry.NotNullColumns.contains(columnDesc.Name);
         const TString typeName = GetTypeName(NScheme::TTypeInfoMod{columnDesc.PType, columnDesc.PTypeMod});
         auto defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
-        if (columnDesc.IsDefaultFromSequence())
+        NYql::TKikimrPathId defaultFromSequencePathId = {};
+        
+        if (columnDesc.IsDefaultFromSequence()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE;
-        else if (columnDesc.IsDefaultFromLiteral())
+            auto sequenceIt = sequences.find(columnDesc.DefaultFromSequence);
+            YQL_ENSURE(sequenceIt != sequences.end());
+            defaultFromSequencePathId = sequenceIt->second;
+        } else if (columnDesc.IsDefaultFromLiteral()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
-
+        }
+        
         tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
                 columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod,
                 columnDesc.DefaultFromSequence,
+                defaultFromSequencePathId,
                 defaultKind,
                 columnDesc.DefaultFromLiteral,
                 columnDesc.IsBuildInProgress
@@ -302,7 +313,7 @@ TTableMetadataResult GetViewMetadataResult(
   metadata->SchemaVersion = description.GetVersion();
   metadata->Kind = NYql::EKikimrTableKind::View;
   metadata->Attributes = schemeEntry.Attributes;
-  metadata->ViewPersistedData = {description.GetQueryText()};
+  metadata->ViewPersistedData = {description.GetQueryText(), description.GetCapturedContext()};
 
   return builtResult;
 }
@@ -842,6 +853,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
+                            if (!externalDataSourceMetadata.Success()) {
+                                promise.SetValue(externalDataSourceMetadata);
+                                return;
+                            }
+
                             NExternalSource::IExternalSource::TPtr externalSource;
                             if (settings.ExternalSourceFactory) {
                                 externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);

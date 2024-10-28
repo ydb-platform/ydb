@@ -86,7 +86,7 @@ runs:
           https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
           -d '{"state":"pending","description":"The check has been started","context":"build_${{inputs.build_preset}}"}'
 
-        if [[ "${{inputs.run_tests}}" == "true" ]];then
+        if [[ "${{inputs.run_tests}}" == "true" ]]; then
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
@@ -101,7 +101,9 @@ runs:
       shell: bash
       run: |
         set -x
-
+        
+        echo "$(pwd)/ydb/ci/scripts" >> $GITHUB_PATH
+        
         export TMP_DIR=$(pwd)/tmp
         rm -rf $TMP_DIR
         mkdir -p $TMP_DIR
@@ -120,7 +122,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners
+        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser
 
         if [ ${{ inputs.testman_token }} ]; then
           TESTMO_PROXY_ADDR=127.0.0.1:8888
@@ -133,7 +135,7 @@ runs:
             --cert-key "$TMP_DIR/key.pem" \
             --target-timeout 3,60 \
             --max-request-time 200 \
-            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy.log 2>&1 &
+            "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy_log.txt 2>&1 &
             
           TESTMO_PROXY_PID=$!
           echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
@@ -143,18 +145,25 @@ runs:
           echo "NODE_TLS_REJECT_UNAUTHORIZED=0" >> $GITHUB_ENV
         fi
 
+    - name: Setup cache
+      shell: bash
+      run: |
+        export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
+        echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
+
     - name: ya build and test
       id: build
       shell: bash
       run: |
-        set -x
+        set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         ORIGINAL_HEAD=$(git rev-parse HEAD)
         
         if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare.log"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare.log"
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
           ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
@@ -187,6 +196,7 @@ runs:
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
+        IS_TEST_RESULT_IGNORED=0
         
         case "$BUILD_PRESET" in
           debug)
@@ -198,7 +208,7 @@ runs:
           release)  
             params+=(--build "release")
             ;;
-          release-clang14)
+          release-clang14)  # TODO: remove after removing from workflow 
             params+=(--build "release")
             params+=(--target-platform="CLANG14-LINUX-X86_64")
             params+=(-DLLD_VERSION=16)
@@ -207,35 +217,37 @@ runs:
           release-asan)
             params+=(
               --build "release" --sanitize="address"
-              -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
-              -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
-              -DDEBUGINFO_LINES_ONLY
             )
             if [ $TEST_RETRY_COUNT -z ]; then
               TEST_RETRY_COUNT=1
             fi
+            IS_TEST_RESULT_IGNORED=1
             ;;
           *)
             echo "Invalid preset: $BUILD_PRESET"
             exit 1
             ;;
         esac
+        
+        echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ $TEST_RETRY_COUNT -z ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
@@ -253,7 +265,7 @@ runs:
 
         if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
           params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password "${{ inputs.bazel_remote_password }}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
         fi
 
@@ -294,8 +306,8 @@ runs:
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
-        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.log"
-        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.log"
+        YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
+        YA_MAKE_OUTPUT_URL="$PUBLIC_DIR_URL/ya_make_output.txt"
         echo "20 [Ya make output]($YA_MAKE_OUTPUT_URL)" >> $SUMMARY_LINKS
 
         BUILD_FAILED=0
@@ -337,6 +349,7 @@ runs:
           CURRENT_PUBLIC_DIR_RELATIVE=try_$RETRY
           # Can be used in tests in which you want to publish the results in s3 for each retry separately
           export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
+          export CURRENT_PUBLIC_DIR_URL=$PUBLIC_DIR_URL/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
 
           if [ ${{ inputs.testman_token }} ]; then
@@ -345,7 +358,7 @@ runs:
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-link --name build --url "$TESTMO_RUN_URL" --resources $CURRENT_PUBLIC_DIR/testmo.json
             TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:resources:add-field --name git-sha --type string --value "${GITHUB_SHA:0:7}" --resources $CURRENT_PUBLIC_DIR/testmo.json
             TESTMO_RUN_ID=$(
-              TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
+              TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:create --instance "https://$TESTMO_PROXY_ADDR" --project-id ${{ inputs.testman_project_id }} \
                 --name "$TESTMO_RUN_NAME" --source "$TESTMO_SOURCE" --resources $CURRENT_PUBLIC_DIR/testmo.json \
                 --tags "$TESTMO_BRANCH_TAG" --tags "$TESTMO_EXTRA_TAG"
             )
@@ -371,12 +384,12 @@ runs:
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
-          set +ex
+          set +e
           (./ya make $YA_MAKE_TARGET "${params[@]}" \
-            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.log"  \
+            $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
-          set -ex
+          set -e
           RC=`cat exit_code`
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
@@ -386,11 +399,21 @@ runs:
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
+          # generate test_bloat
+          ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
+
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            # sed is to remove richness (tags like '[[rst]]')
+            (( \
+              cat $CURRENT_REPORT \
+              | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type = "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
+              | sed 's/\[\[[^]]*]\]//g' \
+            ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
+            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
             break
           fi
 
@@ -399,7 +422,7 @@ runs:
           gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
 
           # postprocess junit report
-          .github/scripts/tests/transform-ya-junit.py -i \
+          .github/scripts/tests/transform_ya_junit.py -i \
             -m .github/config/muted_ya.txt \
             --ya_out "$YA_MAKE_OUT_DIR" \
             --public_dir "$PUBLIC_DIR" \
@@ -434,12 +457,13 @@ runs:
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
+              --is_test_result_ignored $IS_TEST_RESULT_IGNORED \
               --comment_color_file summary_color.txt \
               --comment_text_file summary_text.txt \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
           fi
 
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -459,11 +483,11 @@ runs:
             # archive unitest reports (transformed)
             tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
             
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:submit-thread \
+            TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:submit-thread \
               --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
               --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
 
-            TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID || true
+            TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id $TESTMO_RUN_ID || true
             echo "runid=" >> $GITHUB_OUTPUT
           fi
 
@@ -500,7 +524,7 @@ runs:
       shell: bash
       run: |
         if [ ${{ steps.build.outputs.runid }} ]; then
-          TESTMO_TOKEN=${{ inputs.testman_token }} testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }} || true
+          TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:complete --instance "https://$TESTMO_PROXY_ADDR" --run-id ${{ steps.build.outputs.runid }} || true
         fi
         if [ ${{ inputs.testman_token }} ]; then
           kill $TESTMO_PROXY_PID
@@ -513,7 +537,7 @@ runs:
         set -x
         if [ true = ${{ inputs.run_tests }} ]; then
           teststatus=$(cat statusrep.txt)
-          if [[ $teststatus == "success" ]];then
+          if [[ $teststatus == "success" ]]; then
             testmessage="The check has been completed successfully"
           else
             testmessage="The check has been failed"
@@ -522,7 +546,7 @@ runs:
               https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
           
-          if [[ $teststatus != "success" ]];then
+          if [[ $teststatus != "success" ]]; then
             echo "status=failed" >> $GITHUB_OUTPUT
           fi
         fi
@@ -531,8 +555,48 @@ runs:
       if: inputs.run_tests
       shell: bash
       run: |
-        .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+        if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
+          .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+        fi
 
+    - name: show diff mute_ya.txt
+      if: inputs.build_preset == 'relwithdebinfo' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target')
+      shell: bash
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        ORIGINAL_HEAD=$(git rev-parse HEAD)
+        get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
+        file_to_check=.github/config/muted_ya.txt
+        check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`
+        if [[ ${check_result} == *"not changed" ]];then
+            echo file ${file_to_check} NOT changed
+        else
+            echo file ${file_to_check} changed
+            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${GITHUB_REF_NAME}"
+            FILE_PATH=$PUBLIC_DIR/mute_info/2_new_muted_tests.txt
+            SEPARATOR=""
+            if [ -f "$FILE_PATH" ]; then
+              LINE_COUNT=$(wc -l < "$FILE_PATH")
+              if [ "$LINE_COUNT" -gt 0 ]; then
+                SEPARATOR=', '
+                MESSAGE="Muted new $LINE_COUNT [tests](${PUBLIC_DIR_URL}/mute_info/2_new_muted_tests.txt)"
+              fi
+            fi
+            FILE_PATH=$PUBLIC_DIR/mute_info/3_unmuted_tests.txt
+            if [ -f "$FILE_PATH" ]; then
+              LINE_COUNT_unmute=$(wc -l < "$FILE_PATH")
+              if [ "$LINE_COUNT_unmute" -gt 0 ]; then
+                MESSAGE="${MESSAGE}${SEPARATOR}Unmuted $LINE_COUNT_unmute [tests](${PUBLIC_DIR_URL}/mute_info/3_unmuted_tests.txt)"
+              fi
+            fi
+            if [ -n "$MESSAGE" ]; then
+              printf "$MESSAGE" | .github/scripts/tests/comment-pr.py --color orange
+            fi
+          fi
+
+        
     - name: sync results to s3 and publish links
       if: always()
       shell: bash
@@ -541,7 +605,7 @@ runs:
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 
@@ -559,7 +623,6 @@ runs:
         export build_preset="${{ inputs.build_preset }}" 
         export commit_git_sha="$(git rev-parse HEAD)"
 
-        python3 -m pip install ydb ydb[yc]
         python3 .github/scripts/send_build_stats.py
 
     - name: show_build_size_diff
@@ -576,8 +639,6 @@ runs:
         export red_treshold=2097152 
         export commit_git_sha="$(git rev-parse HEAD)"
 
-        python3 -m pip install ydb ydb[yc] humanize
-
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`
         
@@ -585,7 +646,7 @@ runs:
         read -ra comment_arr <<< "$comment_raw"
 
         printf "$comment"
-        if [[ ${comment_raw} != "Error"* ]];then
+        if [[ ${comment_raw} != "Error"* ]]; then
           color=${comment_arr[0]}
           replace=$color";;;"
           comment=${comment_raw/$replace/""}

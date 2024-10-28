@@ -1,6 +1,6 @@
 # Overview of testing with load actors
 
-Testing system performance is an important stage of adding changes to the {{ ydb-short-name }} core. With [load testing]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Нагрузочное_тестирование){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Load_testing){% endif %}, you can:
+Testing system performance is an important stage of adding changes to the {{ ydb-short-name }} core. With [load testing](https://en.wikipedia.org/wiki/Load_testing), you can:
 
 * Determine the performance metrics and compare them to the values before the changes.
 * Test how the system runs under high or peak loads.
@@ -38,7 +38,7 @@ You can run load using the following tools:
 
 The use case described below shows how to create and run the KqpLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is automatically assigned a tag. The same tag will be assigned to the test result.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 
@@ -107,6 +107,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     ```
 
     `NodeId`: ID of the node to start the actor on. To specify multiple nodes, list them in separate lines:
+
     ```proto
     NodeId: 1
     NodeId: 2
@@ -115,6 +116,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
     Event: {
     ...
     ```
+
     `Event`: Actor configuration.
 
   2. Start the actor:
@@ -132,7 +134,7 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 You can view the test results using the Embedded UI. For a description of output parameters, see the documentation of the respective actor.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - Embedded UI
 

@@ -4,10 +4,6 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(15)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -23,9 +19,11 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/testlib/default
+    ydb/core/testlib
     ydb/core/tx
+    ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf/service/exception_policy
+    ydb/library/yql/sql/pg
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_result
 )

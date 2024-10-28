@@ -7,6 +7,7 @@ Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/comm
 * The `allowed_labels` and `selector_config` fields are added for granular overrides of settings
 
 This configuration is uploaded to the cluster, where it is reliably stored and delivered to each dynamic node upon startup. [Certain settings](#dynamic-kinds) are updated on the fly without restarting nodes. Using dynamic configuration, you can centrally solve the following tasks:
+
 * Switch logging settings for components for the entire cluster or specific groups of nodes;
 * Enable experimental features (feature flags) on specific databases;
 * Change actor system settings on individual nodes or groups of nodes;
@@ -79,7 +80,7 @@ allowed_labels: {}
 selector_config: []
 ```
 
-Detailed configuration parameters are described on the [{#T}](../../deploy/configuration/config.md) page.
+Detailed configuration parameters are described on the [{#T}](../../reference/configuration/index.md) page.
 
 By default, the cluster configuration is empty and has version 1. When applying a new configuration, the uploaded configuration's version is compared and automatically incremented by one.
 
@@ -104,7 +105,7 @@ All commands for working with configuration are described in the [{#T}](../../re
 1. The configuration file is uploaded by the user using a [grpc call](https://github.com/ydb-platform/ydb/blob/5251c9ace0a7617c25d50f1aa4d0f13e3d56f985/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.proto#L22) or [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) to the cluster.
 2. The file is checked for validity, basic constraints, version correctness, cluster name correctness, and the correctness of the configurations obtained after DSL transformation are verified.
 3. The configuration version in the file is incremented by one.
-4. The file is reliably stored in the cluster using the Console [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets).
+4. The file is reliably stored in the cluster using the Console [tablet](../../concepts/glossary.md#tablet).
 5. File updates are distributed across the cluster nodes.
 
 #### Configuration update from the cluster node's perspective

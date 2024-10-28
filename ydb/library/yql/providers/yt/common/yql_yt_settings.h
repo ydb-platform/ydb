@@ -89,6 +89,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> InferSchemaTableCountThreshold;
     NCommon::TConfSetting<NSize::TSize, false> DefaultCalcMemoryLimit;
     NCommon::TConfSetting<ui32, false> ParallelOperationsLimit;
+    NCommon::TConfSetting<ui32, false> LocalCalcLimit;
     NCommon::TConfSetting<EQueryCacheMode, false> QueryCacheMode;
     NCommon::TConfSetting<bool, false> QueryCacheIgnoreTableRevision;
     NCommon::TConfSetting<TString, false> QueryCacheSalt;
@@ -196,13 +197,15 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, true> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, true> NetworkProject;
     NCommon::TConfSetting<bool, true> _EnableYtPartitioning;
-    NCommon::TConfSetting<bool, true> _ForceJobSizeAdjuster;
+    NCommon::TConfSetting<bool, true> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, true> EnforceJobUtc;
     NCommon::TConfSetting<bool, true> UseRPCReaderInDQ;
     NCommon::TConfSetting<size_t, true> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
+    NCommon::TConfSetting<TSet<TString>, true> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> JobBlockInputSupportedDataTypes;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -252,6 +255,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> UseNativeYtTypes;
     NCommon::TConfSetting<bool, false> UseNativeDescSort;
     NCommon::TConfSetting<bool, false> UseIntermediateSchema;
+    NCommon::TConfSetting<bool, false> UseIntermediateStreams;
     NCommon::TConfSetting<bool, false> UseFlow;
     NCommon::TConfSetting<ui16, false> WideFlowLimit;
     NCommon::TConfSetting<bool, false> UseSystemColumns;
@@ -281,6 +285,8 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
+    NCommon::TConfSetting<bool, false> JobBlockInput;
+    NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
@@ -292,7 +298,7 @@ inline TString GetTablesTmpFolder(const TYtSettings& settings) {
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
-    TYtConfiguration();
+    TYtConfiguration(TTypeAnnotationContext& typeCtx);
     TYtConfiguration(const TYtConfiguration&) = delete;
 
     template <class TProtoConfig, typename TFilter>
@@ -333,7 +339,11 @@ public:
         TYtSettings::TConstPtr Snapshot;
     };
 
-    TYtVersionedConfiguration() = default;
+    TYtVersionedConfiguration(TTypeAnnotationContext& types)
+        : TYtConfiguration(types)
+    {
+    }
+    
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);

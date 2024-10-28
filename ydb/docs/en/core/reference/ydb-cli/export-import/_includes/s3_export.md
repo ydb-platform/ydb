@@ -6,6 +6,16 @@ The `export s3` command starts exporting data and information on the server side
 {{ ydb-cli }} [connection options] export s3 [options]
 ```
 
+{% note warning %}
+
+The export feature is available only for objects of the following types:
+
+- [Directory](../../../../concepts/datamodel/dir.md)
+- [Row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables)
+- [Secondary index](../../../../concepts/secondary_indexes.md)
+
+{% endnote %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 ## Command line parameters {#pars}
@@ -19,6 +29,7 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 ### List of exported items {#items}
 
 `--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
+
 - `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
 - `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items.
 

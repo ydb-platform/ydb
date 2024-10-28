@@ -1,0 +1,5 @@
+--- contrib/python/botocore/py3/botocore/compat.py	(index)
++++ contrib/python/botocore/py3/botocore/compat.py	(working tree)
+@@ -28,1 +28,1 @@ import shlex
+-from botocore.vendored import six
++import six

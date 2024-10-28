@@ -6,10 +6,10 @@
 
 ## Примеры
 
-``` yql
+```yql
 SELECT "Hello, world!";
 ```
 
-``` yql
+```yql
 SELECT 2 + 2;
 ```

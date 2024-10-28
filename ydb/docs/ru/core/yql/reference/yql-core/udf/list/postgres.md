@@ -1,5 +1,7 @@
 # PostgreSQL UDF
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 [YQL](../../index.md) предоставляет возможность доступа к [функциям](https://www.postgresql.org/docs/16/functions.html) и [типам данных](https://www.postgresql.org/docs/16/datatype.html) PostgreSQL.
 
 Имена PostgreSQL типов в YQL получаются добавлением префикса `Pg` к исходному имени типа.

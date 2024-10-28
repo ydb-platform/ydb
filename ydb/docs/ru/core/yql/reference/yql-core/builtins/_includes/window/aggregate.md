@@ -5,7 +5,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     SUM(int_column) OVER w1 AS running_total,
     SUM(int_column) OVER w2 AS total,

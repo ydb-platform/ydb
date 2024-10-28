@@ -1,0 +1,353 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b72a977bcabcebb1599cb0a79d665a2
+BELONGS ya.make
+    License text:
+         * Copyright Marco Guazzone 2014
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/hyperexponential_distribution.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b8dc6e6cec8ce31d4939e9ed0a1dbb8
+BELONGS ya.make
+    License text:
+         * Copyright Thijs van den Berg 2014
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/non_central_chi_squared_distribution.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ce35bdc48274a02cf4ec2773a903c47
+BELONGS ya.make
+    License text:
+         * Copyright Jens Maurer 2006
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/detail/signed_unsigned_tools.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1ee6f833fe9b25524ebf6b687f10088c
+BELONGS ya.make
+    License text:
+         * Copyright John Maddock 2015
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/traits.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 228235344a4eeb283fe723053ea024fd
+BELONGS ya.make
+    License text:
+         * Copyright Jens Maurer 2000-2001
+         * Copyright Steven Watanabe 2010-2011
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/detail/int_float_pair.hpp [3:6]
+        include/boost/random/detail/operators.hpp [3:5]
+        include/boost/random/normal_distribution.hpp [3:6]
+        include/boost/random/random_device.hpp [3:6]
+        src/random_device.cpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2d88e144afca22b36e6ceefd1fc94687
+BELONGS ya.make
+    License text:
+         * Copyright Jens Maurer 2000-2001
+         * Copyright Steven Watanabe 2011
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/bernoulli_distribution.hpp [3:6]
+        include/boost/random/chi_squared_distribution.hpp [3:5]
+        include/boost/random/detail/generator_bits.hpp [3:5]
+        include/boost/random/detail/integer_log2.hpp [3:5]
+        include/boost/random/detail/large_arithmetic.hpp [3:5]
+        include/boost/random/detail/uniform_int_float.hpp [3:6]
+        include/boost/random/detail/vector_io.hpp [3:5]
+        include/boost/random/exponential_distribution.hpp [3:7]
+        include/boost/random/fisher_f_distribution.hpp [3:5]
+        include/boost/random/generate_canonical.hpp [3:5]
+        include/boost/random/geometric_distribution.hpp [3:6]
+        include/boost/random/independent_bits.hpp [3:5]
+        include/boost/random/linear_feedback_shift.hpp [3:6]
+        include/boost/random/lognormal_distribution.hpp [3:6]
+        include/boost/random/piecewise_constant_distribution.hpp [3:5]
+        include/boost/random/piecewise_linear_distribution.hpp [3:5]
+        include/boost/random/student_t_distribution.hpp [3:5]
+        include/boost/random/taus88.hpp [3:6]
+        include/boost/random/triangle_distribution.hpp [3:6]
+        include/boost/random/uniform_int_distribution.hpp [3:6]
+        include/boost/random/uniform_on_sphere.hpp [3:6]
+        include/boost/random/uniform_real_distribution.hpp [3:6]
+        include/boost/random/variate_generator.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3427176ad10ee62f28e3221dbf0804eb
+BELONGS ya.make
+    License text:
+         * Copyright Kostas Savvidis 2008-2019
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/mixmax.hpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 365adb3be0f210d54497c8792ef79936
+BELONGS ya.make
+    License text:
+         * Copyright Steven Watanabe 2009
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/detail/config.hpp [3:5]
+        include/boost/random/detail/disable_warnings.hpp [3:5]
+        include/boost/random/detail/enable_warnings.hpp [3:5]
+        include/boost/random/detail/seed.hpp [3:5]
+        include/boost/random/detail/seed_impl.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e4aae35b13808fc1419bbb3b0f24431
+BELONGS ya.make
+    License text:
+         * Copyright Steven Watanabe 2014
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/beta_distribution.hpp [3:5]
+        include/boost/random/detail/polynomial.hpp [3:5]
+        include/boost/random/laplace_distribution.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5cd4a0c580c53e0ce656cd3fe8597d92
+BELONGS ya.make
+    License text:
+         * Copyright Jens Maurer 2000
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/nondet_random.hpp [3:5]
+        include/boost/random/random_device.hpp [3:6]
+        src/random_device.cpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8894fc789975c842d2c95727c8460378
+BELONGS ya.make
+    License text:
+         * Copyright Jens Maurer 2002
+         * Copyright Steven Watanabe 2010
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/detail/ptr_helper.hpp [3:5]
+        include/boost/random/discard_block.hpp [3:6]
+        include/boost/random/gamma_distribution.hpp [3:6]
+        include/boost/random/linear_feedback_shift.hpp [3:6]
+        include/boost/random/poisson_distribution.hpp [3:6]
+        include/boost/random/ranlux.hpp [3:5]
+        include/boost/random/subtract_with_carry.hpp [3:5]
+        include/boost/random/variate_generator.hpp [3:6]
+        include/boost/random/xor_combine.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a6fd7216a1ac9930b2655802aed9e478
+BELONGS ya.make
+    License text:
+         * Copyright Steven Watanabe 2009-2011
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/discrete_distribution.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b67bb79ed713ed9deceda5f0a4a4c37a
+BELONGS ya.make
+    License text:
+         * Copyright Justinas Vygintas Daugmaudis 2010-2018
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/detail/gray_coded_qrng.hpp [3:5]
+        include/boost/random/detail/niederreiter_base2_table.hpp [3:5]
+        include/boost/random/detail/qrng_base.hpp [3:5]
+        include/boost/random/detail/sobol_table.hpp [3:5]
+        include/boost/random/faure.hpp [3:5]
+        include/boost/random/niederreiter_base2.hpp [3:5]
+        include/boost/random/sobol.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b79a0f43ba0efea8c1e8e8b615f4a4d3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/exponential_distribution.hpp [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cefbb022b3ae5f3ac530ca0a8d9e20c1
+BELONGS ya.make
+    License text:
+         * Copyright Steven Watanabe 2010
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/binomial_distribution.hpp [3:5]
+        include/boost/random/detail/auto_link.hpp [3:5]
+        include/boost/random/detail/generator_seed_seq.hpp [3:6]
+        include/boost/random/discard_block.hpp [3:6]
+        include/boost/random/extreme_value_distribution.hpp [3:5]
+        include/boost/random/gamma_distribution.hpp [3:6]
+        include/boost/random/mersenne_twister.hpp [3:6]
+        include/boost/random/negative_binomial_distribution.hpp [3:5]
+        include/boost/random/poisson_distribution.hpp [3:6]
+        include/boost/random/seed_seq.hpp [3:5]
+        include/boost/random/shuffle_order.hpp [3:6]
+        include/boost/random/weibull_distribution.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d33a0004c9e45491881f619b89c191f7
+BELONGS ya.make
+    License text:
+         * Copyright Sebastiano Vigna 2015.
+         * Copyright Matt Borland 2022.
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/splitmix64.hpp [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f54ebc6944a0fc1c23ca95f5e7187c55
+BELONGS ya.make
+    License text:
+         * Copyright Jens Maurer 2000-2001
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random.hpp [3:5]
+        include/boost/random/additive_combine.hpp [3:5]
+        include/boost/random/bernoulli_distribution.hpp [3:6]
+        include/boost/random/cauchy_distribution.hpp [3:5]
+        include/boost/random/detail/const_mod.hpp [3:5]
+        include/boost/random/detail/generator_seed_seq.hpp [3:6]
+        include/boost/random/detail/int_float_pair.hpp [3:6]
+        include/boost/random/detail/iterator_mixin.hpp [3:5]
+        include/boost/random/detail/uniform_int_float.hpp [3:6]
+        include/boost/random/exponential_distribution.hpp [3:7]
+        include/boost/random/geometric_distribution.hpp [3:6]
+        include/boost/random/inversive_congruential.hpp [3:5]
+        include/boost/random/lagged_fibonacci.hpp [3:5]
+        include/boost/random/linear_congruential.hpp [3:5]
+        include/boost/random/lognormal_distribution.hpp [3:6]
+        include/boost/random/mersenne_twister.hpp [3:6]
+        include/boost/random/normal_distribution.hpp [3:6]
+        include/boost/random/random_number_generator.hpp [3:5]
+        include/boost/random/shuffle_order.hpp [3:6]
+        include/boost/random/shuffle_output.hpp [3:5]
+        include/boost/random/taus88.hpp [3:6]
+        include/boost/random/triangle_distribution.hpp [3:6]
+        include/boost/random/uniform_01.hpp [3:5]
+        include/boost/random/uniform_int.hpp [3:5]
+        include/boost/random/uniform_int_distribution.hpp [3:6]
+        include/boost/random/uniform_on_sphere.hpp [3:6]
+        include/boost/random/uniform_real.hpp [3:5]
+        include/boost/random/uniform_real_distribution.hpp [3:6]
+        include/boost/random/uniform_smallint.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe2d021191f4241a23973a1bf2042d85
+BELONGS ya.make
+    License text:
+         * Copyright Sebastiano Vigna 2015.
+         * Copyright Matt Borland 2022.
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/random/splitmix64.hpp [2:5]

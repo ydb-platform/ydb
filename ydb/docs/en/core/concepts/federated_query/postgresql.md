@@ -30,6 +30,7 @@ To work with an external PostgreSQL database, you need to follow these steps:
 4. [Execute a query](#query) to the database.
 
 ## Query syntax {#query}
+
 The following SQL query format is used to work with PostgreSQL:
 
 ```yql
@@ -48,6 +49,16 @@ When working with PostgreSQL clusters, there are a number of limitations:
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
+
+    |{{ ydb-short-name }} Data Type|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Int16`|
+    |`Int32`|
+    |`Int64`|
+    |`Float`|
+    |`Double`|
 
 ## Supported data types
 

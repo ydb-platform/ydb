@@ -2105,7 +2105,7 @@ public:
                 return;
             }
 
-            if (serializedRow->Empty()) {
+            if (serializedRow->empty()) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
                 return;
             }

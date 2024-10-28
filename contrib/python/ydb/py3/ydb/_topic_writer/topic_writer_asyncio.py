@@ -28,6 +28,7 @@ from .. import (
     issues,
 )
 from .._errors import check_retriable_error
+from .._topic_common import common as topic_common
 from ..retries import RetrySettings
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
 from .._grpc.grpcwrapper.ydb_topic import (
@@ -231,8 +232,14 @@ class WriterAsyncIOReconnector:
         self._new_messages = asyncio.Queue()
         self._stop_reason = self._loop.create_future()
         self._background_tasks = [
-            asyncio.create_task(self._connection_loop(), name="connection_loop"),
-            asyncio.create_task(self._encode_loop(), name="encode_loop"),
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._connection_loop()),
+                task_name="connection_loop",
+            ),
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._encode_loop()),
+                task_name="encode_loop",
+            ),
         ]
 
         self._state_changed = asyncio.Event()
@@ -366,8 +373,14 @@ class WriterAsyncIOReconnector:
 
                 self._stream_connected.set()
 
-                send_loop = asyncio.create_task(self._send_loop(stream_writer), name="writer send loop")
-                receive_loop = asyncio.create_task(self._read_loop(stream_writer), name="writer receive loop")
+                send_loop = topic_common.wrap_set_name_for_asyncio_task(
+                    asyncio.create_task(self._send_loop(stream_writer)),
+                    task_name="writer send loop",
+                )
+                receive_loop = topic_common.wrap_set_name_for_asyncio_task(
+                    asyncio.create_task(self._read_loop(stream_writer)),
+                    task_name="writer receive loop",
+                )
 
                 tasks = [send_loop, receive_loop]
                 done, _ = await asyncio.wait([send_loop, receive_loop], return_when=asyncio.FIRST_COMPLETED)
@@ -653,7 +666,10 @@ class WriterAsyncIOStream:
 
         if self._update_token_interval is not None:
             self._update_token_event.set()
-            self._update_token_task = asyncio.create_task(self._update_token_loop(), name="update_token_loop")
+            self._update_token_task = topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._update_token_loop()),
+                task_name="update_token_loop",
+            )
 
     @staticmethod
     def _ensure_ok(message: WriterMessagesFromServerToClient):

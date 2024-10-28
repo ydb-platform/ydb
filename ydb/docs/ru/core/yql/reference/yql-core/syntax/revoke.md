@@ -17,26 +17,33 @@ REVOKE [GRANT OPTION FOR] {{permission_name} [, ...] | ALL [PRIVILEGES]} ON {pat
 {% include [x](_includes/permissions/permissions_list.md) %}
 
 ## Примеры
+
 * Отозвать право `ydb.generic.read` на таблицу `/shop_db/orders` у пользователя `user1`:
-  ```
+
+  ```yql
   REVOKE 'ydb.generic.read' ON `/shop_db/orders` FROM user1;
   ```
+
   Та же команда, с использованием ключевого слова
-  ```
+
+  ```yql
   REVOKE SELECT ON `/shop_db/orders` FROM user1;
   ```
 
 * Отозвать права `ydb.database.connect`, `ydb.generic.list` на корень базы `/shop_db` у пользователя `user2` и группы `group1`:
-  ```
+
+  ```yql
   REVOKE LIST, CONNECT ON `/shop_db` FROM user2, group1;
   ```
 
 * Отозвать право `ydb.generic.use` на таблицы `/shop_db/orders` и `/shop_db/sellers` у пользователей `user1@domain`, `user2@domain`:
-  ```
+
+  ```yql
   REVOKE 'ydb.generic.use' ON `/shop_db/orders`, `/shop_db/sellers` FROM `user1@domain`, `user2@domain`;
   ```
 
 * Отозвать все права на таблицу `/shop_db/sellers` для пользователя `user`:
-  ```
+
+  ```yql
   REVOKE ALL ON `/shop_db/sellers` FROM user;
   ```

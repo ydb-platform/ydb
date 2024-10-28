@@ -1,9 +1,9 @@
 #pragma once
-#include "stats.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 
+#include <ydb/library/formats/arrow/splitter/stats.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NArrow::NSplitter {

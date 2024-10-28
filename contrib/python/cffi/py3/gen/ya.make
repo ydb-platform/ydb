@@ -1,7 +1,5 @@
 PY3_PROGRAM(cffigen)
 
-DISABLE(PYTHON_SQLITE3)
-
 VERSION(Service-proxy-version)
 
 LICENSE(MIT)

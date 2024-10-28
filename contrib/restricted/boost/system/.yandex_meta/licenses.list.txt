@@ -1,0 +1,151 @@
+====================BSL-1.0====================
+## License
+
+Distributed under the
+[Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0. (See accompanying
+//  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification, and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0. (See accompanying
+// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+// https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2003, 2006
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2003, 2006, 2010
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2005.
+//  Use, modification, and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2006, 2007
+//  Copyright Christoper Kohlhoff 2007
+//  Copyright Peter Dimov 2017, 2018
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2006, 2007
+//  Copyright Christoper Kohlhoff 2007
+//  Copyright Peter Dimov 2017, 2018, 2021
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2006, 2007
+//  Copyright Christoper Kohlhoff 2007
+//  Copyright Peter Dimov 2017-2021
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2007
+
+
+====================COPYRIGHT====================
+// Copyright 2017, 2021, 2022 Peter Dimov.
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2018 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2018, 2020, 2021 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2018, 2021 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2018, 2022 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2018-2022 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2020 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0
+// http://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright 2021 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// Copyright 2023 Peter Dimov
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================COPYRIGHT====================
+// Copyright Beman Dawes 2002, 2006
+// Copyright (c) Microsoft Corporation 2014
+// Copyright 2018 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright Beman Dawes 2002, 2006
+// Copyright (c) Microsoft Corporation 2014
+// Copyright 2018, 2020 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright Beman Dawes 2006
+// Copyright Peter Dimov 2021
+// Distributed under the Boost Software License, Version 1.0.
+// https://www.boost.org/LICENSE_1_0.txt
+
+
+====================COPYRIGHT====================
+// Copyright Beman Dawes 2006, 2007
+// Copyright Christoper Kohlhoff 2007
+// Copyright Peter Dimov 2017, 2018, 2020

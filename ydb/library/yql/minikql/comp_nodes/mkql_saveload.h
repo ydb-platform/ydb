@@ -63,7 +63,7 @@ Y_FORCE_INLINE ui64 ReadUi64(TStringBuf& in) {
 
 Y_FORCE_INLINE std::string_view ReadString(TStringBuf& in) {
     const ui32 size = ReadUi32(in);
-    MKQL_ENSURE(in.Size() >= size, "Serialized state is corrupted");
+    MKQL_ENSURE(in.size() >= size, "Serialized state is corrupted");
     TStringBuf head = in.Head(size);
     in = in.Tail(size);
     return head;
@@ -190,7 +190,7 @@ public:
         for (size_t index = 0; index < count; ++index) {
             size_t itemSize = std::min(buf.size() - pos, MaxItemLen);
             NUdf::TStringValue str(itemSize);
-            std::memcpy(str.Data(), buf.Data() + pos, itemSize);
+            std::memcpy(str.Data(), buf.data() + pos, itemSize);
             items[index] = NUdf::TUnboxedValuePod(std::move(str));
             pos += itemSize;
         }
@@ -321,7 +321,7 @@ private:
         NUdf::TUnboxedValue str;
         while (listIt.Next(str)) {
             const TStringBuf strRef = str.AsStringRef();
-            result.AppendNoAlias(strRef.Data(), strRef.Size());
+            result.AppendNoAlias(strRef.data(), strRef.size());
         }
         return result;
     }
@@ -337,8 +337,8 @@ protected:
 class TNodeStateHelper {
 public:
     static void AddNodeState(TString& result, const TStringBuf& state) {
-        WriteUi64(result, state.Size());
-        result.AppendNoAlias(state.Data(), state.Size());
+        WriteUi64(result, state.size());
+        result.AppendNoAlias(state.data(), state.size());
     }
 };
 

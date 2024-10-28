@@ -60,7 +60,6 @@ SRCS(
     fd-safer-flag.c
     fd-safer.c
     fopen-safer.c
-    fseterr.c
     fstrcmp.c
     get-errno.c
     gethrxtime.c
@@ -121,7 +120,19 @@ SRCS(
     xtime.c
 )
 
-IF (OS_DARWIN)
+IF (NOT MUSL)
+    SRCS(
+        fseterr.c
+    )
+ENDIF()
+
+IF (MUSL)
+    SRCS(
+        error.c
+        obstack.c
+        obstack_printf.c
+    )
+ELSEIF (OS_DARWIN)
     SRCS(
         error.c
         fpending.c

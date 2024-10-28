@@ -111,11 +111,12 @@ class FloatKWargs(TypedDict):
 class StringKWargs(TypedDict):
     intervals: IntervalSet
     min_size: int
-    max_size: Optional[int]
+    max_size: int
 
 
 class BytesKWargs(TypedDict):
-    size: int
+    min_size: int
+    max_size: int
 
 
 class BooleanKWargs(TypedDict):
@@ -206,7 +207,7 @@ NASTY_FLOATS.extend([-x for x in NASTY_FLOATS])
 FLOAT_INIT_LOGIC_CACHE = LRUCache(4096)
 POOLED_KWARGS_CACHE = LRUCache(4096)
 
-DRAW_STRING_DEFAULT_MAX_SIZE = 10**10  # "arbitrarily large"
+COLLECTION_DEFAULT_MAX_SIZE = 10**10  # "arbitrarily large"
 
 
 class Example:
@@ -270,7 +271,7 @@ class Example:
         return self.owner.labels[self.owner.label_indices[self.index]]
 
     @property
-    def parent(self):
+    def parent(self) -> Optional[int]:
         """The index of the example that this one is nested directly within."""
         if self.index == 0:
             return None
@@ -297,13 +298,13 @@ class Example:
         return self.owner.ir_ends[self.index]
 
     @property
-    def depth(self):
+    def depth(self) -> int:
         """Depth of this example in the example tree. The top-level example has a
         depth of 0."""
         return self.owner.depths[self.index]
 
     @property
-    def trivial(self):
+    def trivial(self) -> bool:
         """An example is "trivial" if it only contains forced bytes and zero bytes.
         All examples start out as trivial, and then get marked non-trivial when
         we see a byte that is neither forced nor zero."""
@@ -351,6 +352,7 @@ class ExampleProperty:
         self.example_count = 0
         self.block_count = 0
         self.ir_node_count = 0
+        self.result: Any = None
 
     def run(self) -> Any:
         """Rerun the test case with this visitor and return the
@@ -424,7 +426,7 @@ def calculated_example_property(cls: Type[ExampleProperty]) -> Any:
     name = cls.__name__
     cache_name = "__" + name
 
-    def lazy_calculate(self: "Examples") -> IntList:
+    def lazy_calculate(self: "Examples") -> Any:
         result = getattr(self, cache_name, None)
         if result is None:
             result = cls(self).run()
@@ -464,7 +466,14 @@ class ExampleRecord:
     def freeze(self) -> None:
         self.__index_of_labels = None
 
-    def record_ir_draw(self, ir_type, value, *, kwargs, was_forced):
+    def record_ir_draw(
+        self,
+        ir_type: IRTypeName,
+        value: IRType,
+        *,
+        kwargs: IRKWargsType,
+        was_forced: bool,
+    ) -> None:
         self.trail.append(IR_NODE_RECORD)
         node = IRNode(
             ir_type=ir_type,
@@ -516,7 +525,7 @@ class Examples:
         self.__children: "Optional[List[Sequence[int]]]" = None
 
     class _starts_and_ends(ExampleProperty):
-        def begin(self):
+        def begin(self) -> None:
             self.starts = IntList.of_length(len(self.examples))
             self.ends = IntList.of_length(len(self.examples))
 
@@ -542,7 +551,7 @@ class Examples:
         return self.starts_and_ends[1]
 
     class _ir_starts_and_ends(ExampleProperty):
-        def begin(self):
+        def begin(self) -> None:
             self.starts = IntList.of_length(len(self.examples))
             self.ends = IntList.of_length(len(self.examples))
 
@@ -569,7 +578,7 @@ class Examples:
 
     class _discarded(ExampleProperty):
         def begin(self) -> None:
-            self.result: "Set[int]" = set()  # type: ignore  # IntList in parent class
+            self.result: "Set[int]" = set()
 
         def finish(self) -> FrozenSet[int]:
             return frozenset(self.result)
@@ -583,7 +592,7 @@ class Examples:
     class _trivial(ExampleProperty):
         def begin(self) -> None:
             self.nontrivial = IntList.of_length(len(self.examples))
-            self.result: "Set[int]" = set()  # type: ignore  # IntList in parent class
+            self.result: "Set[int]" = set()
 
         def block(self, i: int) -> None:
             if not self.examples.blocks.trivial(i):
@@ -609,7 +618,7 @@ class Examples:
     parentage: IntList = calculated_example_property(_parentage)
 
     class _depths(ExampleProperty):
-        def begin(self):
+        def begin(self) -> None:
             self.result = IntList.of_length(len(self.examples))
 
         def start_example(self, i: int, label_index: int) -> None:
@@ -618,10 +627,10 @@ class Examples:
     depths: IntList = calculated_example_property(_depths)
 
     class _ir_tree_nodes(ExampleProperty):
-        def begin(self):
+        def begin(self) -> None:
             self.result = []
 
-        def ir_node(self, ir_node):
+        def ir_node(self, ir_node: "IRNode") -> None:
             self.result.append(ir_node)
 
     ir_tree_nodes: "List[IRNode]" = calculated_example_property(_ir_tree_nodes)
@@ -787,7 +796,7 @@ class Blocks:
             prev = e
 
     @property
-    def last_block_length(self):
+    def last_block_length(self) -> int:
         return self.end(-1) - self.start(-1)
 
     def __len__(self) -> int:
@@ -868,7 +877,7 @@ class Blocks:
 
         return result
 
-    def __check_completion(self):
+    def __check_completion(self) -> None:
         """The list of blocks is complete if we have created every ``Block``
         object that we currently good and know that no more will be created.
 
@@ -898,7 +907,7 @@ class Blocks:
 class _Overrun:
     status = Status.OVERRUN
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Overrun"
 
 
@@ -1036,7 +1045,7 @@ class IRNode:
             return self.value == (minimal_char * self.kwargs["min_size"])
         if self.ir_type == "bytes":
             # smallest size and all-zero value.
-            return len(self.value) == self.kwargs["size"] and not any(self.value)
+            return len(self.value) == self.kwargs["min_size"] and not any(self.value)
 
         raise NotImplementedError(f"unhandled ir_type {self.ir_type}")
 
@@ -1051,7 +1060,7 @@ class IRNode:
             and self.was_forced == other.was_forced
         )
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(
             (
                 self.ir_type,
@@ -1061,7 +1070,7 @@ class IRNode:
             )
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         # repr to avoid "BytesWarning: str() on a bytes instance" for bytes nodes
         forced_marker = " [forced]" if self.was_forced else ""
         return f"{self.ir_type} {self.value!r}{forced_marker} {self.kwargs!r}"
@@ -1095,7 +1104,9 @@ def ir_value_permitted(value, ir_type, kwargs):
             return False
         return all(ord(c) in kwargs["intervals"] for c in value)
     elif ir_type == "bytes":
-        return len(value) == kwargs["size"]
+        if len(value) < kwargs["min_size"]:
+            return False
+        return kwargs["max_size"] is None or len(value) <= kwargs["max_size"]
     elif ir_type == "boolean":
         if kwargs["p"] <= 2 ** (-64):
             return value is False
@@ -1314,7 +1325,7 @@ class PrimitiveProvider(abc.ABC):
         intervals: IntervalSet,
         *,
         min_size: int = 0,
-        max_size: Optional[int] = None,
+        max_size: int = COLLECTION_DEFAULT_MAX_SIZE,
         forced: Optional[str] = None,
         fake_forced: bool = False,
     ) -> str:
@@ -1322,7 +1333,12 @@ class PrimitiveProvider(abc.ABC):
 
     @abc.abstractmethod
     def draw_bytes(
-        self, size: int, *, forced: Optional[bytes] = None, fake_forced: bool = False
+        self,
+        min_size: int = 0,
+        max_size: int = COLLECTION_DEFAULT_MAX_SIZE,
+        *,
+        forced: Optional[bytes] = None,
+        fake_forced: bool = False,
     ) -> bytes:
         raise NotImplementedError
 
@@ -1606,14 +1622,10 @@ class HypothesisProvider(PrimitiveProvider):
         intervals: IntervalSet,
         *,
         min_size: int = 0,
-        max_size: Optional[int] = None,
+        max_size: int = COLLECTION_DEFAULT_MAX_SIZE,
         forced: Optional[str] = None,
         fake_forced: bool = False,
     ) -> str:
-        if max_size is None:
-            max_size = DRAW_STRING_DEFAULT_MAX_SIZE
-
-        assert forced is None or min_size <= len(forced) <= max_size
         assert self._cd is not None
 
         average_size = min(
@@ -1663,17 +1675,40 @@ class HypothesisProvider(PrimitiveProvider):
         return "".join(chars)
 
     def draw_bytes(
-        self, size: int, *, forced: Optional[bytes] = None, fake_forced: bool = False
+        self,
+        min_size: int = 0,
+        max_size: int = COLLECTION_DEFAULT_MAX_SIZE,
+        *,
+        forced: Optional[bytes] = None,
+        fake_forced: bool = False,
     ) -> bytes:
-        forced_i = None
-        if forced is not None:
-            forced_i = int_from_bytes(forced)
-            size = len(forced)
-
         assert self._cd is not None
-        return self._cd.draw_bits(
-            8 * size, forced=forced_i, fake_forced=fake_forced
-        ).to_bytes(size, "big")
+
+        buf = bytearray()
+        average_size = min(
+            max(min_size * 2, min_size + 5),
+            0.5 * (min_size + max_size),
+        )
+        elements = many(
+            self._cd,
+            min_size=min_size,
+            max_size=max_size,
+            average_size=average_size,
+            forced=None if forced is None else len(forced),
+            fake_forced=fake_forced,
+            observe=False,
+        )
+        while elements.more():
+            forced_i: Optional[int] = None
+            if forced is not None:
+                # implicit conversion from bytes to int by indexing here
+                forced_i = forced[elements.count - 1]
+
+            buf += self._cd.draw_bits(
+                8, forced=forced_i, fake_forced=fake_forced
+            ).to_bytes(1, "big")
+
+        return bytes(buf)
 
     def _draw_float(
         self,
@@ -1884,8 +1919,7 @@ class HypothesisProvider(PrimitiveProvider):
                 "writeup - and good luck!"
             )
 
-        def permitted(f):
-            assert isinstance(f, float)
+        def permitted(f: float) -> bool:
             if math.isnan(f):
                 return allow_nan
             if 0 < abs(f) < smallest_nonzero_magnitude:
@@ -2053,7 +2087,7 @@ class ConjectureData:
         self._node_index = 0
         self.start_example(TOP_LABEL)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "ConjectureData(%s, %d bytes%s)" % (
             self.status.name,
             len(self.buffer),
@@ -2216,12 +2250,13 @@ class ConjectureData:
         intervals: IntervalSet,
         *,
         min_size: int = 0,
-        max_size: Optional[int] = None,
+        max_size: int = COLLECTION_DEFAULT_MAX_SIZE,
         forced: Optional[str] = None,
         fake_forced: bool = False,
         observe: bool = True,
     ) -> str:
-        assert forced is None or min_size <= len(forced)
+        assert forced is None or min_size <= len(forced) <= max_size
+        assert min_size >= 0
 
         kwargs: StringKWargs = self._pooled_kwargs(
             "string",
@@ -2255,17 +2290,19 @@ class ConjectureData:
 
     def draw_bytes(
         self,
-        # TODO move to min_size and max_size here.
-        size: int,
+        min_size: int = 0,
+        max_size: int = COLLECTION_DEFAULT_MAX_SIZE,
         *,
         forced: Optional[bytes] = None,
         fake_forced: bool = False,
         observe: bool = True,
     ) -> bytes:
-        assert forced is None or len(forced) == size
-        assert size >= 0
+        assert forced is None or min_size <= len(forced) <= max_size
+        assert min_size >= 0
 
-        kwargs: BytesKWargs = self._pooled_kwargs("bytes", {"size": size})
+        kwargs: BytesKWargs = self._pooled_kwargs(
+            "bytes", {"min_size": min_size, "max_size": max_size}
+        )
 
         if self.ir_tree_nodes is not None and observe:
             node_value = self._pop_ir_tree_node("bytes", kwargs, forced=forced)

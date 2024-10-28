@@ -573,7 +573,6 @@ bool TSolomonExporter::ReadSensors(
     // Read last value.
     auto readOptions = options;
     readOptions.Times.emplace_back(std::vector<int>{Registry_->IndexOf(Window_.back().first)}, TInstant::Zero());
-    readOptions.ConvertCountersToRateGauge = false;
     readOptions.EnableHistogramCompat = true;
 
     readOptions.SummaryPolicy |= Config_->GetSummaryPolicy();

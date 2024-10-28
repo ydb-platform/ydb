@@ -275,12 +275,13 @@ namespace NKikimr {
     {
         TEvVStatusResult() = default;
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated,
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated, bool isReadOnly,
                 ui64 incarnationGuid)
         {
             Record.SetStatus(status);
             Record.SetJoinedGroup(joinedGroup);
             Record.SetReplicated(replicated);
+            Record.SetIsReadOnly(isReadOnly);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (status == NKikimrProto::OK) {
                 Record.SetIncarnationGuid(incarnationGuid);

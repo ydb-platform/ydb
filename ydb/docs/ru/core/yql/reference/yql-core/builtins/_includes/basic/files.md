@@ -8,7 +8,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 FilePath(String)->String
 FileContent(String)->String
 ```
@@ -17,7 +17,7 @@ FileContent(String)->String
 
 ### Примеры
 
-``` yql
+```yql
 SELECT "Content of "
   || FilePath("my_file.txt")
   || ":\n"
@@ -29,7 +29,7 @@ SELECT "Content of "
 
 ### Сигнатура
 
-```
+```yql
 FolderPath(String)->String
 ```
 
@@ -39,7 +39,7 @@ FolderPath(String)->String
 
 ### Примеры
 
-``` yql
+```yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
 PRAGMA File("foo/2.txt", "http://url/to/somewhere/else");
 PRAGMA File("bar/3.txt", "http://url/to/some/other/place");
@@ -50,13 +50,13 @@ SELECT FolderPath("foo"); -- в директории по возвращённо
 
 ## ParseFile
 
-Получить из приложенного текстового файла список значений. Может использоваться в сочетании с [IN](../../../syntax/expressions.md#in) и прикладыванием файла по URL{% if oss != true %} <span style="color:gray;">(инструкции по прикладыванию файлов для {% if feature_webui %}[веб-интерфейса](../../../interfaces/web.md#attach) и {% endif %} [клиента](../../../interfaces/cli.md#attach))</span>{% endif %}.
+Получить из приложенного текстового файла список значений. Может использоваться в сочетании с [IN](../../../syntax/expressions.md#in) и прикладыванием файла по URL{% if oss != true %} (инструкции по прикладыванию файлов для {% if feature_webui %}[веб-интерфейса](../../../interfaces/web.md#attach) и {% endif %} [клиента](../../../interfaces/cli.md#attach)){% endif %}.
 
-Поддерживается только один формат файла — по одному значению на строку.{% if feature_udf_noncpp and oss != true %} Для чего-то более сложного прямо сейчас придется написать небольшую UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md). {% endif %}
+Поддерживается только один формат файла — по одному значению на строку.{% if feature_udf_noncpp and oss != true %} Для чего-то более сложного прямо сейчас придется написать небольшую UDF на [Python](../../../udf/python.md) или [JavaScript](../../../udf/javascript.md).{% endif %}
 
 ### Сигнатура
 
-```
+```yql
 ParseFile(String, String)->List<T>
 ```
 
@@ -65,7 +65,7 @@ ParseFile(String, String)->List<T>
 1. Тип ячейки списка: поддерживаются только строки и числовые типы;
 2. Имя приложенного файла.
 
-{% note info "Примечание" %}
+{% note info %}
 
 Возвращаемое значение - ленивый список. Для многократного использования его нужно обернуть в функцию [ListCollect](../../list.md#listcollect)
 
@@ -73,10 +73,11 @@ ParseFile(String, String)->List<T>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListLength(ParseFile("String", "my_file.txt"));
 ```
-``` yql
+
+```yql
 SELECT * FROM my_table
-WHERE int_column IN ParseFile("Int64", "my_file.txt"));
+WHERE int_column IN ParseFile("Int64", "my_file.txt");
 ```

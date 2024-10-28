@@ -8,14 +8,14 @@
 
 ## Список функций
 
-* ```Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::Match(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool```
-* ```Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::Capture(pattern:String) -> (string:String?) -> String?```
-* ```Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
+* `Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::Match(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool`
+* `Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>`
+* `Hyperscan::Capture(pattern:String) -> (string:String?) -> String?`
+* `Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?`
 
 ## Синтаксис вызова {#syntax}
 

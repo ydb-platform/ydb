@@ -89,11 +89,15 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
             for(ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                 memberIndices[TString(structType->GetMemberName(i))] = i;
             }
-
-            for(auto& name: txResult.GetColumnHints()) {
-                auto it = memberIndices.find(name);
+            NYql::TColumnOrder order;
+            for (auto& name: txResult.GetColumnHints()) {
+                order.AddColumn(name);
+            }
+            for (auto& [name, phy_name]: order) {
+                auto it = memberIndices.find(phy_name);
                 YQL_ENSURE(it != memberIndices.end(), "undetermined column name: " << name);
                 result.ColumnOrder.push_back(it->second);
+                result.ColumnHints.push_back(name);
             }
         }
     }

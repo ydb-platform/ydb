@@ -1,9 +1,9 @@
-#include "yt/yt/library/profiling/solomon/registry.h"
 #include <gtest/gtest.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
 
 #include <yt/yt/library/profiling/solomon/exporter.h>
+#include <yt/yt/library/profiling/solomon/registry.h>
 
 namespace NYT::NProfiling {
 namespace {

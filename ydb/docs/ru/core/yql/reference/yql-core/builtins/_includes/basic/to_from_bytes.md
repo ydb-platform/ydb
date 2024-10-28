@@ -4,7 +4,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 ToBytes(T)->String
 ToBytes(T?)->String?
 
@@ -14,7 +14,7 @@ FromBytes(String?, Type<T>)->T?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     ToBytes(123), -- "\u0001\u0000\u0000\u0000"
     FromBytes(

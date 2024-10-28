@@ -5,6 +5,8 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 namespace NKikimr::NConsole {
 
 struct Schema : NIceDb::Schema {

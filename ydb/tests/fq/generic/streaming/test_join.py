@@ -11,17 +11,23 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
+from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter import OneTimeWaiter
+from ydb.library.yql.providers.generic.connector.api.common.data_source_pb2 import EDataSourceKind
+
+import conftest
+
 DEBUG = 0
 
 
-def ResequenceId(messages):
+def ResequenceId(messages, field="id"):
     res = []
     i = 1
     for pair in messages:
         rpair = []
         for it in pair:
             src = json.loads(it)
-            src["id"] = i
+            if field in src:
+                src[field] = i
             rpair += [json.dumps(src)]
         res += [tuple(rpair)]
         i += 1
@@ -128,6 +134,7 @@ TESTCASES = [
                 ('{"id":9,"user":3}', '{"id":9,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":2,"user":2}', '{"id":2,"user_id":2,"lookup":"ydb20"}'),
                 ('{"id":1,"user":1}', '{"id":1,"user_id":1,"lookup":"ydb10"}'),
+                ('{"id":10,"user":null}', '{"id":10,"user_id":null,"lookup":null}'),
                 ('{"id":4,"user":3}', '{"id":4,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":5,"user":3}', '{"id":5,"user_id":3,"lookup":"ydb30"}'),
                 ('{"id":6,"user":1}', '{"id":6,"user_id":1,"lookup":"ydb10"}'),
@@ -280,11 +287,11 @@ TESTCASES = [
 
             $enriched = select e.id as id,
                             e.user as user_id,
-                            u.id as uid
+                            eu.id as uid
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.`users` as u
-                on(e.user = u.id)
+                left join {streamlookup} ydb_conn_{table_name}.`users` as eu
+                on(e.user = eu.id)
             ;
 
             insert into myyds.`{output_topic}`
@@ -309,7 +316,104 @@ TESTCASES = [
             ),
         ],
     ),
+    # 6
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            yb STRING,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.db as u
+                on(e.yb = u.b AND e.za = u.a )
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101}',
+                ),
+                (
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":null,"yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":null,"yc":114,"zd":115}',
+                ),
+            ]
+        ),
+    ),
+    # 7
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            yb STRING,
+                            yc Int32,
+                            zd Int32,
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, e, f, za, yb, yc, zd
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.db as u
+                on(e.za = u.a AND e.yb = u.b)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"yb":"2","yc":100,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"e":5,"f":6,"za":1,"yb":"2","yc":100,"zd":101}',
+                ),
+                (
+                    '{"id":2,"za":7,"yb":"8","yc":106,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"e":11,"f":12,"za":7,"yb":"8","yc":106,"zd":107}',
+                ),
+                (
+                    '{"id":3,"za":2,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":2,"yb":"1","yc":114,"zd":115}',
+                ),
+                (
+                    '{"id":3,"za":null,"yb":"1","yc":114,"zd":115}',
+                    '{"a":null,"b":null,"c":null,"d":null,"e":null,"f":null,"za":null,"yb":"1","yc":114,"zd":115}',
+                ),
+            ]
+        ),
+    ),
 ]
+
+
+one_time_waiter = OneTimeWaiter(
+    data_source_kind=EDataSourceKind.YDB,
+    docker_compose_file_path=conftest.docker_compose_file_path,
+    expected_tables=["simple_table", "join_table", "dummy_table"],
+)
 
 
 class TestJoinStreaming(TestYdsBase):
@@ -329,6 +433,7 @@ class TestJoinStreaming(TestYdsBase):
             name=ydb_conn_name,
             database_id='local',
         )
+        one_time_waiter.wait()
 
         sql = R'''
             $input = SELECT * FROM myyds.`{input_topic}`;
@@ -404,6 +509,8 @@ class TestJoinStreaming(TestYdsBase):
             streamlookup=R'/*+ streamlookup() */' if streamlookup else '',
         )
 
+        one_time_waiter.wait()
+
         query_id = fq_client.create_query(
             f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
         ).result.query_id
@@ -424,6 +531,19 @@ class TestJoinStreaming(TestYdsBase):
         read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
         messages_ctr = Counter(map(freeze, map(json.loads, map(itemgetter(1), messages))))
         assert read_data_ctr == messages_ctr
+
+        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
+            for component in ["Lookup", "LookupSrc"]:
+                componentSensors = sensors.find_sensors(
+                    labels={"operation": query_id, "component": component},
+                    key_label="sensor",
+                )
+                for k in componentSensors:
+                    print(
+                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
+                        file=sys.stderr,
+                    )
 
         fq_client.abort_query(query_id)
         fq_client.wait_query(query_id)

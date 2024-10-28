@@ -79,7 +79,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, TOperationContext& context);
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 
-    ISubOperation::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState) const;
+    ISubOperation::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState, TOperationContext& context) const;
     TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
     void AddPart(ISubOperation::TPtr part);
 

@@ -17,7 +17,7 @@ public:
 
 class TCommandImportFromS3 : public TYdbOperationCommand,
                            public TCommandWithAwsCredentials,
-                           public TCommandWithFormat {
+                           public TCommandWithOutput {
 public:
     TCommandImportFromS3();
     void Config(TConfig& config) override;
@@ -38,6 +38,7 @@ private:
     TString Description;
     ui32 NumberOfRetries = 10;
     bool UseVirtualAddressing = true;
+    bool NoACL = true;
 };
 
 class TCommandImportFromFile : public TClientCommandTree {
@@ -46,7 +47,7 @@ public:
 };
 
 class TCommandImportFileBase : public TYdbCommand,
-    public TCommandWithPath, public TCommandWithFormat {
+    public TCommandWithPath, public TCommandWithInput {
 public:
     TCommandImportFileBase(const TString& cmd, const TString& cmdDescription)
       : TYdbCommand(cmd, {}, cmdDescription)

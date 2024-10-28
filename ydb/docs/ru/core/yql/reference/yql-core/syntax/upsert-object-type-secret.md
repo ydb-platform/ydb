@@ -2,17 +2,18 @@
 
 {% note warning %}
 
-Текущий систаксис работы с секретами является временным, в будущих релизах {{ydb-full-name}} он будет изменен.
+Текущий систаксис работы с секретами является временным, в будущих релизах {{ ydb-full-name }} он будет изменен.
 
 {% endnote %}
-
 
 Для изменения содержимого [секрета](../../../concepts/datamodel/secrets.md) используется следующий SQL-запрос:
 
 ```yql
 UPSERT OBJECT `secret_name` (TYPE SECRET) WITH value=`secret_value`;
 ```
+
 Где:
+
 * `secret_name` - имя секрета.
 * `secret_value` - содержимое секрета.
 

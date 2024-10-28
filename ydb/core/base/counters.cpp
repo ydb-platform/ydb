@@ -40,6 +40,7 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("pqproxy|readSession"),
          TString("pqproxy|schemecache"),
          TString("pqproxy|mirrorWriteTimeLag"),
+         TString("pqproxy|userAgents"),
          TString("datastreams"),
     }};
 

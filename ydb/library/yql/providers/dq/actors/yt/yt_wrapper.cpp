@@ -6,6 +6,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/yson/node/node_io.h>
 

@@ -9,7 +9,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callable
 ```
 
@@ -17,16 +17,16 @@ Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callab
 
 ### Примеры
 
-```
+```yql
 $IsoParser = Udf(DateTime2::ParseIso8601);
 SELECT $IsoParser("2022-01-01");
 ```
 
-```
+```yql
 SELECT Udf(Unicode::IsUtf)("2022-01-01")
 ```
 
-```
+```yql
 $config = @@{
     "name":"MessageFoo",
     "meta": "..."

@@ -26,7 +26,7 @@ Given {{ ydb-short-name }} follows the approach of separated storage and compute
 
 #### Database node {#database-node}
 
-**Database nodes** (also known as **tenant nodes** or **compute nodes**) serve user queries addressed to a specific logical [database](#database). Their state is only in memory and can be recovered from the [Distributed Storage](#distributed-storage). All database nodes of a given [{{ ydb-short-name }} cluster](cluster/index.md) can be considered its compute layer. Thus, adding database nodes and allocating extra CPU and RAM to them are the main ways to increase the database's compute resources.
+**Database nodes** (also known as **tenant nodes** or **compute nodes**) serve user queries addressed to a specific logical [database](#database). Their state is only in memory and can be recovered from the [Distributed Storage](#distributed-storage). All database nodes of a given [{{ ydb-short-name }} cluster](topology.md) can be considered its compute layer. Thus, adding database nodes and allocating extra CPU and RAM to them are the main ways to increase the database's compute resources.
 
 The main role of database nodes is to run various [tablets](#tablet) and [actors](#actor), as well as accept incoming requests via various endpoints.
 
@@ -181,7 +181,23 @@ A **consumer** is an entity that reads messages from a topic.
 
 ### Change data capture {#cdc}
 
-**Change data capture** or **CDC** is a mechanism that allows subscribing to a stream of changes to a given [table](#table). Technically, it is implemented on top of [topics](#topic). It is described in more detail in a separate article [{#T}](cdc.md).
+**Change data capture** or **CDC** is a mechanism that allows subscribing to a **stream of changes** to a given [table](#table). Technically, it is implemented on top of [topics](#topic). It is described in more detail in a separate article [{#T}](cdc.md).
+
+#### Changefeed {#changefeed}
+
+**Changefeed** or **stream of changes** is an ordered list of changes in a given [table](#table) published via a [topic](#topic).
+
+### Asynchronous replication instance {#async-replication-instance}
+
+**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.) It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.
+
+#### Replicated object {#replicated-object}
+
+**Replicated object** is an object, for example, a table, that is asynchronously replicated to the target database.
+
+#### Replica object {#replica-object}
+
+**Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#async-replication-instance). Replica objects are typically read-only.
 
 ### YQL {#yql}
 
@@ -208,6 +224,10 @@ A **secret** is a sensitive piece of metadata that requires special handling. Fo
 ### Folder {#folder}
 
 Like in filesystems, a **folder** or **directory** is a container for other entities. In the case of {{ ydb-short-name }}, these entities can be [tables](#table) (including [external tables](#external-table)), [topics](#topic), other folders, etc.
+
+### Query optimizer {#optimizer}
+
+[**Query optimizer**](https://en.wikipedia.org/wiki/Query_optimization) is a {{ ydb-short-name }} component that takes a logical plan as input and produces the most efficient physical plan with the lowest estimated resource consumption among the alternatives. The {{ ydb-short-name }} query optimizer is described in the [{#T}](optimizer.md) section.
 
 ## Advanced terminology {#advanced-terminology}
 
@@ -308,7 +328,7 @@ A **shared cache** is an [actor](#actor) that stores data pages recently accesse
 
 ### Memory controller {#memory-controller}
 
-A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../deploy/configuration/config.md#memory-controller).
+A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/index.md#memory-controller).
 
 ### Tablet types {#tablet-types}
 

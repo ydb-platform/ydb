@@ -142,10 +142,11 @@ class Platform(object):
         self.is_power9le = self.arch == 'power9le'
         self.is_powerpc = self.is_power8le or self.is_power9le
 
+        self.is_wasm32 = self.arch == 'wasm32'
         self.is_wasm64 = self.arch == 'wasm64'
-        self.is_wasm = self.is_wasm64
+        self.is_wasm = self.is_wasm32 or self.is_wasm64
 
-        self.is_32_bit = self.is_x86 or self.is_armv5te or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32
+        self.is_32_bit = self.is_x86 or self.is_armv5te or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa or self.is_tc32 or self.is_wasm32
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
@@ -230,6 +231,7 @@ class Platform(object):
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
+            (self.is_wasm32, 'ARCH_WASM32'),
             (self.is_wasm64, 'ARCH_WASM64'),
             (self.is_32_bit, 'ARCH_TYPE_32'),
             (self.is_64_bit, 'ARCH_TYPE_64'),
@@ -1240,6 +1242,7 @@ class GnuToolchain(Toolchain):
                     (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
                     (target.is_android and target.is_armv8, 'aarch64-linux-android'),
 
+                    (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
                     (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
                 ])
 
@@ -1524,10 +1527,6 @@ class GnuCompiler(Compiler):
                 '-fwasm-exceptions',
             ]
 
-        self.debug_info_flags = ['-g']
-        if self.target.is_linux:
-            self.debug_info_flags.append('-ggnu-pubnames')
-
         self.cross_suffix = '' if is_positive('FORCE_NO_PIC') else '.pic'
 
         self.optimize = None
@@ -1601,8 +1600,6 @@ class GnuCompiler(Compiler):
         super(GnuCompiler, self).print_compiler()
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
-        emit('C_COMPILER_OLD', '${quo:C_COMPILER_OLD_UNQUOTED}')
         emit('OPTIMIZE', self.optimize)
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('_C_FLAGS', self.c_flags)
@@ -1616,7 +1613,6 @@ class GnuCompiler(Compiler):
         emit('CXX_COMPILER_OLD', '${quo:CXX_COMPILER_OLD_UNQUOTED}')
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
-        emit('DEBUG_INFO_FLAGS', self.debug_info_flags)
 
         if self.build.is_coverage:
             emit('_IS_COVERAGE', 'yes')
@@ -2128,7 +2124,6 @@ class MSVCCompiler(MSVC, Compiler):
         emit('CXX_COMPILER_UNQUOTED', '"{}"'.format(self.tc.cxx_compiler))
         emit('CXX_COMPILER_OLD_UNQUOTED', self.tc.cxx_compiler)
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
-        emit('C_COMPILER_OLD_UNQUOTED', self.tc.c_compiler)
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
         append('C_DEFINES', defines)
@@ -2172,11 +2167,7 @@ class MSVCLinker(MSVC, Linker):
         linker_lib = self.tc.lib
 
         emit('_MSVC_LIB', '"{}"'.format(linker_lib))
-        emit('_MSVC_LIB_OLD_UNQUOTED', linker_lib)
-        emit('_MSVC_LIB_OLD', '${quo:_MSVC_LIB_OLD_UNQUOTED}')
         emit('_MSVC_LINK', '"{}"'.format(linker))
-        emit('_MSVC_LINK_OLD_UNQUOTED', linker)
-        emit('_MSVC_LINK_OLD', '${quo:_MSVC_LINK_OLD_UNQUOTED}')
 
         if self.build.is_release:
             emit('LINK_EXE_FLAGS_PER_TYPE', '$LINK_EXE_FLAGS_RELEASE')
@@ -2422,6 +2413,13 @@ class Cuda(object):
         emit('NVCC_ENV', '${env:_NVCC_ENV}')
         emit('_NVCC_ENV', 'PATH=$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin')
 
+        if self.cuda_version.value.startswith('10.'):
+            emit('NVCC_STD_VER', '17')
+        elif self.cuda_version.value.startswith('11.'):
+            emit('NVCC_STD_VER', '17')
+        else:
+            emit('NVCC_STD_VER', '20')
+
     def print_macros(self):
         mtime = ' '
         custom_pid = ' '
@@ -2450,7 +2448,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True

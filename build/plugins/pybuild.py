@@ -183,62 +183,9 @@ def add_python_lint_checks(unit, py_ver, files):
     if files and no_lint_value not in ("none", "none_internal"):
         resolved_files = get_resolved_files()
         if resolved_files:
-            flake8_cfg = 'build/config/tests/flake8/flake8.conf'
-            migrations_cfg = 'build/rules/flake8/migrations.yaml'
-            resource = "build/external_resources/flake8_py{}".format(py_ver)
-            lint_name = "py2_flake8" if py_ver == 2 else "flake8"
-            params = [lint_name, "tools/flake8_linter/flake8_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            params += [
-                "FILE_PROCESSING_TIME",
-                unit.get("FLAKE8_FILE_PROCESSING_TIME") or DEFAULT_FLAKE8_FILE_PROCESSING_TIME,
-            ]
-
-            extra_params = []
-            if unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
-                extra_params.append("DISABLE_FLAKE8_MIGRATIONS=yes")
-                config_files = [flake8_cfg, '']
-            else:
-                config_files = [flake8_cfg, migrations_cfg]
-            params += ["CONFIGS"] + config_files
-
-            if extra_params:
-                params += ["EXTRA_PARAMS"] + extra_params
-            unit.on_add_linter_check(params)
-
-    # ruff related stuff
-    if unit.get('STYLE_RUFF_VALUE') == 'yes':
-        if no_lint_value in ("none", "none_internal"):
-            ymake.report_configure_error(
-                'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
-            )
-
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            resource = "build/external_resources/ruff"
-            params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            configs = [
-                rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit),
-                'build/config/tests/ruff/ruff.toml',
-            ] + get_ruff_configs(unit)
-            params += ['CONFIGS'] + configs
-            unit.on_add_linter_check(params)
-
-    if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            black_cfg = unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'build/config/tests/py_style/config.toml'
-            params = ['black', 'tools/black_linter/black_linter']
-            params += ['FILES'] + resolved_files
-            params += ['CONFIGS', black_cfg]
-            params += [
-                "FILE_PROCESSING_TIME",
-                unit.get("BLACK_FILE_PROCESSING_TIME") or DEFAULT_BLACK_FILE_PROCESSING_TIME,
-            ]
-            unit.on_add_linter_check(params)
+            # repeated PY_SRCS, TEST_SCRS+PY_SRCS
+            collected = json.loads(unit.get('PY_LINTER_FILES')) if unit.get('PY_LINTER_FILES') else []
+            unit.set(['PY_LINTER_FILES', json.dumps(resolved_files + collected)])
 
 
 def is_py3(unit):

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -19,10 +20,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
-
-    if (importInfo->UserSID) {
-        record.SetOwner(*importInfo->UserSID);
-    }
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
@@ -64,6 +61,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             }
             default: break;
         }
+    }
+
+    if (importInfo->UserSID) {
+        record.SetOwner(*importInfo->UserSID);
+    }
+    FillOwner(record, item.Permissions);
+
+    if (!FillACL(modifyScheme, item.Permissions, error)) {
+        return nullptr;
     }
 
     return propose;

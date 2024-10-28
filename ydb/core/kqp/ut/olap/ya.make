@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    delete_ut.cpp
     kqp_olap_stats_ut.cpp
     GLOBAL kqp_olap_ut.cpp
     sys_view_ut.cpp
@@ -26,6 +27,7 @@ SRCS(
     sparsed_ut.cpp
     tiering_ut.cpp
     decimal_ut.cpp
+    compression_ut.cpp
 )
 
 PEERDIR(

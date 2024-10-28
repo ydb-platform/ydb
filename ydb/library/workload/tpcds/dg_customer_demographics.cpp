@@ -12,12 +12,14 @@ TTpcDSGeneratorCustomerDemographics::TTpcDSGeneratorCustomerDemographics(const T
     : TBulkDataGenerator(owner, CUSTOMER_DEMOGRAPHICS)
 {}
 
-void TTpcDSGeneratorCustomerDemographics::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorCustomerDemographics::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_CUSTOMER_DEMOGRAPHICS_TBL> customerDemoList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_customer_demographics(&customerDemoList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_CUSTOMER_DEMOGRAPHICS_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, cd_demo_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, cd_gender);

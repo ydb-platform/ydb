@@ -3,7 +3,7 @@
 Итератор по дереву целевого кластера, с возможностью накопить состояние, обычно список путей к таблицам.
 Для потомков каждого узла вызываются пользовательские функции, где можно накопить состояние; выбрать атрибуты и узлы для дальнейшего обхода.
 
-Указывается как функция `WalkFolders` в [FROM](./from.md).
+Указывается как функция `WalkFolders` в [FROM](../../select/from.md).
 
 Возвращает одну колонку `State` с таким же типом, как и у `InitialState`.
 
@@ -29,25 +29,30 @@
 
     Сигнатура: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), List<String>, Int32) -> Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>`
 
-    Реализация по-умолчанию:
+    Реализация по умолчанию:
+
     ```yql
     -- резловим каждую ссылку, запрашивая те же атрибуты, которые запросили у их предка
     ($nodes, $state, $rootAttrList, $level) -> {
             $linksToVisit = ListMap($nodes, ($node) -> (($node.Path, $rootAttrList)));
             return ($linksToVisit, $state);
-        }```
+        }
+    ```
 
 6. **DiveHandler** - лямбда, которая вызывается после `ResolveHandler`, принимает список директорий-потомков текущей директории, текущее состояние, список запрошенных атрибутов для директории-предка, текущую глубину обхода. Возвращает `Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>` - тапл из списка директорий, которые нужно посетить (после обработки текущей директории) с запрашиваемыми мета-атрибутами и следующее состояние. Полученные пути ставятся в очередь на обход.
 
     Сигнатура: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), List<String>, Int32) -> Tuple<List<Tuple<String,String>>, TypeOf(InitialState)>`
 
-    Реализация по-умолчанию:
+    Реализация по умолчанию:
+
     ```yql
     -- посещаем каждую поддиректорию, запрашивая те же атрибуты, которые запросили у их предка
         ($nodes, $state, $rootAttrList, $level) -> {
             $nodesToDive = ListMap($nodes, ($node) -> (($node.Path, $rootAttrList)));
             return ($nodesToDive, $state);
-        }```
+        }
+    ```
+
 7. **PostHandler** - лямбда, которая вызывается после `DiveHandler`, принимает список потомков текущей директории после разрешения ссылок, текущее состояние, текущую глубину обхода.
 
     Сигнатура: `(List<Struct<'Path':String, 'Type':String, 'Attributes':Yson>>, TypeOf(InitialState), Int32) -> TypeOf(InitialState)`
@@ -80,7 +85,7 @@
 
 Собрать рекурсивно пути всех таблиц начиная из `initial_folder`:
 
-``` yql
+```yql
 $postHandler = ($nodes, $state, $level) -> {
     $tables = ListFilter($nodes, ($x)->($x.Type = "table"));
     return ListExtend($state, ListExtract($tables, "Path"));
@@ -144,7 +149,6 @@ $postHandler = ($nodes, $state, $_) -> {
 SELECT
     State
 FROM WalkFolders(`initial_folder`, $diveHandler AS DiveHandler, $postHandler AS PostHandler);
-
 ```
 
 Собрать рекурсивно пути всех сломанных (пути назначения не существует) ссылок из `initial_folder`.
@@ -224,6 +228,6 @@ $initialState = (0ul, ListCreate(String));
 $walkFoldersRes = SELECT * FROM WalkFolders(`initial_folder`, $initialState, $diveHandler AS DiveHandler, $postHandler AS PostHandler);
 
 $_, $paths = Unwrap($walkFoldersRes);
-select $paths;
+SELECT $paths;
 ```
 

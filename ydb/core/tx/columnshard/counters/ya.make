@@ -13,6 +13,7 @@ SRCS(
     req_tracer.cpp
     scan.cpp
     splitter.cpp
+    portions.cpp
 )
 
 PEERDIR(
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/tx/columnshard/counters/aggregation
     ydb/core/tx/columnshard/counters/common
     ydb/core/base
+    ydb/library/actors/core
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)

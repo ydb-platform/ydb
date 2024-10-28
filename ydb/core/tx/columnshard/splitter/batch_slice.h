@@ -3,8 +3,8 @@
 #include "column_info.h"
 #include "blob_info.h"
 #include <ydb/core/formats/arrow/splitter/scheme_info.h>
-#include <ydb/core/formats/arrow/splitter/stats.h>
-#include <ydb/core/formats/arrow/splitter/similar_packer.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
+#include <ydb/library/formats/arrow/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>

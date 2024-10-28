@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
@@ -480,7 +481,7 @@ private:
             }
         }
         nextDescription.Hash = nextHash;
-        if (!nextDescription.Hash->Empty()) {
+        if (!nextDescription.Hash->empty()) {
             YQL_CLOG(INFO, ProviderYt) << "Using publish hash \"" << HexEncode(*nextDescription.Hash) << "\" for table " << cluster << "." << path << "#" << commitEpoch;
         }
 
@@ -742,7 +743,7 @@ private:
                 NYT::TNode spec;
                 rowSpec.FillCodecNode(spec[YqlRowSpecAttribute]);
                 outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
-                type = rowSpec.GetTypeNode();
+                type = NCommon::TypeToYsonNode(rowSpec.GetExtendedType(ctx));
             }
 
             // These settings will be passed to YT peephole callback from DQ

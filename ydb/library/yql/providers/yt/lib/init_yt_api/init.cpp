@@ -34,7 +34,6 @@ public:
         if (NYT::TConfig::Get()->Prefix.empty()) {
             NYT::TConfig::Get()->Prefix = "//";
         }
-        NYT::TConfig::Get()->UseAsyncTxPinger = true;
         NYT::TConfig::Get()->AsyncHttpClientThreads = 2;
         NYT::TConfig::Get()->AsyncTxPingerPoolThreads = 2;
         YQL_CLOG(DEBUG, ProviderYt) << "Using YT global prefix: " << NYT::TConfig::Get()->Prefix;

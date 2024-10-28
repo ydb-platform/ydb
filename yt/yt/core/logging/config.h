@@ -82,6 +82,7 @@ public:
     TString FileName;
     bool UseTimestampSuffix;
     bool EnableCompression;
+    bool EnableNoReuse;
     ECompressionMethod CompressionMethod;
     int CompressionLevel;
 
@@ -159,8 +160,12 @@ public:
 
     std::vector<TRuleConfigPtr> Rules;
     THashMap<TString, NYTree::IMapNodePtr> Writers;
-    std::vector<TString> SuppressedMessages;
     THashMap<TString, i64> CategoryRateLimits;
+
+    //! Messages with these prefixes will not be logged regardless of the configured levels.
+    std::vector<TString> SuppressedMessages;
+    //! Overrides levels of messages with a matching prefix .
+    THashMap<TString, ELogLevel> MessageLevelOverrides;
 
     TDuration RequestSuppressionTimeout;
 
@@ -214,8 +219,10 @@ public:
     std::optional<int> LowBacklogWatermark;
 
     std::optional<std::vector<TRuleConfigPtr>> Rules;
-    std::optional<std::vector<TString>> SuppressedMessages;
     std::optional<THashMap<TString, i64>> CategoryRateLimits;
+
+    std::optional<std::vector<TString>> SuppressedMessages;
+    THashMap<TString, ELogLevel> MessageLevelOverrides;
 
     std::optional<TDuration> RequestSuppressionTimeout;
 

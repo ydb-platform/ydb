@@ -106,7 +106,6 @@ public:
     }
 
     void Bootstrap() override {
-        ClusterInfo.SetVersion(Viewer->GetCapabilityVersion("/viewer/cluster"));
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
         PDisksResponse = RequestBSControllerPDisks();
@@ -343,8 +342,10 @@ private:
     }
 
     void InitSystemWhiteboardRequest(NKikimrWhiteboard::TEvSystemStateRequest* request) {
-        //request->AddFieldsRequired(-1);
-        Y_UNUSED(request);
+        request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
     }
 
     void InitTabletWhiteboardRequest(NKikimrWhiteboard::TEvTabletStateRequest* request) {
@@ -366,7 +367,7 @@ private:
                 NodeBatches.emplace(nodeId, batch);
                 ++WhiteboardStateRequestsInFlight;
             }
-            if (batch.HasStaticNodes && TabletViewerResponse.count(nodeId) == 0) {
+            if (Tablets && batch.HasStaticNodes && TabletViewerResponse.count(nodeId) == 0) {
                 auto viewerRequest = std::make_unique<TEvViewer::TEvViewerRequest>();
                 InitTabletWhiteboardRequest(viewerRequest->Record.MutableTabletRequest());
                 viewerRequest->Record.SetTimeout(Timeout / 2);
@@ -393,7 +394,7 @@ private:
                     SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request));
                     ++WhiteboardStateRequestsInFlight;
                 }
-                if (node->Static) {
+                if (Tablets && node->Static) {
                     if (TabletStateResponse.count(nodeId) == 0) {
                         auto request = std::make_unique<TEvWhiteboard::TEvTabletStateRequest>();
                         TabletStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
@@ -463,14 +464,22 @@ private:
             }
         }
 
+        struct TMemoryStats {
+            ui64 Total = 0;
+            ui64 Limit = 0;
+        };
+
+        std::unordered_set<TString> hostPassed;
+        std::unordered_map<TString, TMemoryStats> memoryStats;
+
         for (TNode& node : NodeData) {
             const NKikimrWhiteboard::TSystemStateInfo& systemState = node.SystemState;
             (*ClusterInfo.MutableMapDataCenters())[node.DataCenter]++;
-            if (systemState.HasNumberOfCpus()) {
+            if (hostPassed.insert(systemState.GetHost()).second) {
                 ClusterInfo.SetNumberOfCpus(ClusterInfo.GetNumberOfCpus() + systemState.GetNumberOfCpus());
-            }
-            if (systemState.LoadAverageSize() > 0) {
-                ClusterInfo.SetLoadAverage(ClusterInfo.GetLoadAverage() + systemState.GetLoadAverage(0));
+                if (systemState.LoadAverageSize() > 0) {
+                    ClusterInfo.SetLoadAverage(ClusterInfo.GetLoadAverage() + systemState.GetLoadAverage(0));
+                }
             }
             if (systemState.HasVersion()) {
                 (*ClusterInfo.MutableMapVersions())[systemState.GetVersion()]++;
@@ -478,12 +487,65 @@ private:
             if (systemState.HasClusterName() && !ClusterInfo.GetName()) {
                 ClusterInfo.SetName(systemState.GetClusterName());
             }
-            ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
             ClusterInfo.SetMemoryUsed(ClusterInfo.GetMemoryUsed() + systemState.GetMemoryUsed());
+            if (systemState.HasMemoryStats()) {
+                TMemoryStats& stats = memoryStats[systemState.GetHost()];
+                if (systemState.GetMemoryLimit() > 0) {
+                    stats.Limit += systemState.GetMemoryLimit();
+                } else {
+                    stats.Total = systemState.GetMemoryStats().GetMemTotal();
+                }
+            } else {
+                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
+            }
             if (!node.Disconnected && node.SystemState.HasSystemState()) {
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);
             }
             (*ClusterInfo.MutableMapNodeStates())[NKikimrWhiteboard::EFlag_Name(node.SystemState.GetSystemState())]++;
+            for (const TString& role : node.SystemState.GetRoles()) {
+                (*ClusterInfo.MutableMapNodeRoles())[role]++;
+            }
+            for (const auto& poolStat : systemState.GetPoolStats()) {
+                TString poolName = poolStat.GetName();
+                NKikimrWhiteboard::TSystemStateInfo_TPoolStats* targetPoolStat = nullptr;
+                for (NKikimrWhiteboard::TSystemStateInfo_TPoolStats& ps : *ClusterInfo.MutablePoolStats()) {
+                    if (ps.GetName() == poolName) {
+                        targetPoolStat = &ps;
+                        break;
+                    }
+                }
+                if (targetPoolStat == nullptr) {
+                    targetPoolStat = ClusterInfo.AddPoolStats();
+                    targetPoolStat->SetName(poolName);
+                }
+                double poolUsage = targetPoolStat->GetUsage() * targetPoolStat->GetThreads();
+                ui32 usageThreads = poolStat.GetLimit() ? poolStat.GetLimit() : poolStat.GetThreads();
+                poolUsage += poolStat.GetUsage() * usageThreads;
+                ui32 poolThreads = targetPoolStat->GetThreads() + poolStat.GetThreads();
+                if (poolThreads != 0) {
+                    double threadUsage = poolUsage / poolThreads;
+                    targetPoolStat->SetUsage(threadUsage);
+                    targetPoolStat->SetThreads(poolThreads);
+                }
+                if (systemState.GetCoresTotal() == 0) {
+                    ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + poolStat.GetUsage() * usageThreads);
+                    if (poolStat.GetName() != "IO") {
+                        ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + poolStat.GetThreads());
+                    }
+                }
+            }
+            if (systemState.GetCoresTotal() != 0) {
+                ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + systemState.GetCoresUsed());
+                ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + systemState.GetCoresTotal());
+            }
+        }
+
+        for (const auto& memStats : memoryStats) {
+            if (memStats.second.Total > 0) {
+                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + memStats.second.Total);
+            } else {
+                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + memStats.second.Limit);
+            }
         }
 
         for (auto& [tabletId, tabletState] : mergedTabletState) {
@@ -733,6 +795,7 @@ private:
     }
 
     void ReplyAndPassAway() override {
+        ClusterInfo.SetVersion(Viewer->GetCapabilityVersion("/viewer/cluster"));
         for (const auto& problem : Problems) {
             ClusterInfo.AddProblems(problem);
         }

@@ -1,6 +1,6 @@
 # Дополнительные параметры (WITH)
 
-Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке ```WITH```:
+Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке `WITH`:
 
 ```yql
 CREATE TABLE table_name (...)
@@ -29,19 +29,58 @@ WITH (
 );
 ```
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
-Также в блоке `WITH` можно задать TTL (Time to Live) — время жизни строки. [TTL](../../../../concepts/ttl.md) автоматически удаляет из строковой таблицы строки, когда проходит указанное количество секунд от времени, записанного в TTL-колонку. TTL можно задать при создании таблицы, а можно добавить позже через `ALTER TABLE`. Код ниже создаст строковую таблицу таблицу с TTL:
+Колоночная таблица создаётся путём указанием параметра `STORE = COLUMN` в блоке `WITH`:
+
 ```yql
-CREATE TABLE my_table (
-    id Uint64,
-    title Utf8,
-    expire_at Timestamp,
-    PRIMARY KEY (id)
-)
-WITH (
-    TTL = Interval("PT0S") ON expire_at
-);
-```
+ CREATE TABLE table_name (
+    a Uint64 NOT NULL,
+    b Timestamp NOT NULL,
+    c Float,
+    PRIMARY KEY (a, b)
+  )
+  PARTITION BY HASH(b)
+  WITH (
+    STORE = COLUMN
+  );
+
+Свойства и возможности колоночных таблиц описаны в статье [{#T}](../../../../concepts/datamodel/table.md), а специфика их создания через YQL описана на странице [{#T}](./index.md). Также в блоке `WITH` можно задать TTL (Time to Live) — время жизни строки для строковых и колоночных таблиц. [TTL](../../../../concepts/ttl.md) автоматически удаляет строки, когда проходит указанное количество секунд от времени, записанного в TTL-колонку. TTL можно задать при создании строковой и колоночной таблицы или добавить позже командой `ALTER TABLE` только в строковую таблицу.
+
+Пример создания строковой и колоночной таблицы с TTL:
+
+{% list tabs %}
+
+- Создание строковой таблицы с TTL
+
+    ```yql
+    CREATE TABLE my_table (
+        id Uint64,
+        title Utf8,
+        expire_at Timestamp,
+        PRIMARY KEY (id)
+    )
+    WITH (
+        TTL = Interval("PT0S") ON expire_at
+    );
+    ```
+
+- Создание колоночной таблицы с TTL
+
+    ```yql
+    CREATE TABLE table_name (
+        a Uint64 NOT NULL,
+        b Timestamp NOT NULL,
+        c Float,
+        PRIMARY KEY (a, b)
+    )
+    PARTITION BY HASH(b)
+    WITH (
+        STORE = COLUMN,
+        TTL = Interval("PT0S") ON b
+    );
+    ```
+
+{% endlist %}
 
 {% endif %}

@@ -83,6 +83,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   The user can affect the logic of repeat queries using the context and the idempotence flag, while the {{ ydb-short-name }} Go SDK interprets errors returned by `op`.
 
   Example of the code that uses the `db.Table().Do(ctx, op)` function:
+
   ```golang
   err := db.Table().Do(ctx, func(ctx context.Context, s table.Session) (err error) {
     desc, err = s.DescribeTableOptions(ctx)
@@ -103,6 +104,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   The user can affect the logic of repeat queries using the context and the idempotence flag, while the {{ ydb-short-name }} Go SDK interprets errors returned by `op`.
 
   Example of the code that uses the `db.Table().DoTx(ctx, op)` function:
+
   ```golang
   err := db.Table().DoTx(ctx, func(ctx context.Context, tx table.TransactionActor) error {
     _, err := tx.Execute(ctx,
@@ -128,6 +130,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   The standard `database/sql` package uses the internal logic of repeats based on the errors a specific driver implementation returns.
   For example, the `database/sql` [code](https://github.com/golang/go/tree/master/src/database/sql) frequently shows the three-attempt repeats policy:
+
   - Two attempts at a present connection or new one (if the `database/sql` connection pool is empty).
   - One attempt at a new connection.
 
@@ -265,6 +268,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
   * `idempotent(boolean idempotent)`: Indicates idempotence of operations. Idempotent operations will be retried for a broader range of errors. Disabled by default.
 
   The `SessionRetryContext` class provides two methods to run operations with retries.
+
   * `CompletableFuture<Status> supplyStatus`: Executing the operation that returns the status. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Status>> fn`
   * `CompletableFuture<Result<T>> supplyResult`: Executing the operation that returns data. As an argument, it accepts the lambda `Function<Session, CompletableFuture<Result<T>>> fn`
 

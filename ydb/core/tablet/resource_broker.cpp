@@ -1423,7 +1423,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue = config.AddQueues();
     queue->SetName("queue_cdc_initial_scan");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(4);
+    queue->MutableLimit()->SetCpu(2);
 
     queue = config.AddQueues();
     queue->SetName("queue_statistics_scan");

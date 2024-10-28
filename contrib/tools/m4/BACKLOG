@@ -1,0 +1,60 @@
+# Summary of pending email for GNU m4 1.4.
+# Last updated: Saturday, November 05, 1994.
+
+rmail/announce
+ 1. 15 Sep 94 <pinard@IRO.UMontreal.CA> Release: GNU m4 1.3
+ 2. 29 Oct 94 <pinard@IRO.UMontreal.CA> Prerelease: GNU m4 1.3.1
+
+rmail/changeword
+ 1. 02 Sep 94 <pinard> Re: Prerelease: GNU m4 1.2.3
+ 2. 05 Sep 94 <Pete.Chown@dale.dircon.co.uk> Re: Prerelease: GNU m4 1.2.3
+
+rmail/configuration
+ 1. 03 Nov 94 <Fredrik_Lundh@ivab.se> Re: m4 1.3 on DEC OSF/1 3.0
+ 2. 05 Nov 94 <pinard> Re: m4 1.3 on DEC OSF/1 3.0
+
+rmail/documentation
+ 1. 05 Jun 92 <berstel@mipsmath.math.uqam.ca> Re: M4
+ 2. 10 Nov 92 <tchrist@convex.COM> Re: Is anyone using m4?
+ 3. 25 May 94 <schwab@issan.informatik.uni-dortmund.de> Autoconf 1.11: minor bu
+ 4. 27 Jul 94 <pinard@IRO.UMontreal.CA> Re: 0.95: Spacing details
+ 5. 28 Jul 94 <pinard@IRO.UMontreal.CA> Re: 0.95: Spacing details
+ 6. 31 Aug 94 <kb@cs.umb.edu> Re: Frozen file documentation to proofread
+
+rmail/floating-point
+ 1. 27 Oct 94 <johnm@vlibs.com> Re: enhancement to m4 eval()
+ 2. 25 Oct 94 <johnm@vlibs.com> enhancement to m4
+ 3. 27 Oct 94 <pinard> Re: enhancement to m4
+ 4. 27 Oct 94 <johnm@vlibs.com> Re: enhancement to m4 eval()
+ 5. 27 Oct 94 <pinard> Re: enhancement to m4 eval()
+ 6. 27 Oct 94 <johnm@vlibs.com> Re: enhancement to m4 eval()
+ 7. 28 Oct 94 <pinard> Re: enhancement to m4 eval()
+ 8. 28 Oct 94 <pinard> Re: enhancement to m4 eval()
+ 9. 28 Oct 94 <feeley@IRO.UMontreal.CA> Re: enhancement to m4 eval()
+10. 28 Oct 94 <pinard> Re: enhancement to m4 eval()
+11. 28 Oct 94 <johnm@vlibs.com> Re: enhancement to m4 eval()
+12. 28 Oct 94 <johnm@vlibs.com> Re: enhancement to m4 eval()
+13. 28 Oct 94 <pinard@IRO.UMontreal.CA> Re: enhancement to m4 eval()
+
+rmail/format-rewrite
+ 1. 25 Jun 94 <tmcconne@sedona.intel.com> Re: Prerelease: GNU m4 1.1.3
+
+rmail/named-formals
+ 1. 30 Sep 94 <djm@va.pubnix.com> m4 macros with named formal parameters
+
+rmail/purify
+ 1. 06 Dec 93 <vern@horse.ee.lbl.gov> m4 1.1.1 "make realclean"
+
+rmail/speed
+ 1. 29 Aug 94 <pinard> Re: diversions and freezing
+ 2. 05 Sep 94 <djm@va.pubnix.com> slowness
+ 3. 04 Oct 94 <pinard> Autoconf, m4, and dnl's.
+
+Copyright (C) 2000, 2006, 2009-2014, 2016 Free Software Foundation, Inc.
+
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with no Front-Cover Texts, and with no Back-Cover
+Texts.  A copy of the license is included in the ``GNU Free
+Documentation License'' file as part of this distribution.

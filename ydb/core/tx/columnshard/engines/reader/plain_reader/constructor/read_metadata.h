@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 

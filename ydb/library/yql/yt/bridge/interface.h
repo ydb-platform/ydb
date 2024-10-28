@@ -42,6 +42,9 @@ struct TBridgeYqlPluginOptions
     // convenient; get rid of this ASAP.
     using TLogBackendHolder = void;
     TLogBackendHolder* LogBackend = nullptr;
+
+    const char* Libraries = nullptr;
+    size_t LibrariesLength = 0;
 };
 
 // Opaque type representing a YQL plugin.

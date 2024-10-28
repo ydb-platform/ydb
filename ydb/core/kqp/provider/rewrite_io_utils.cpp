@@ -1,6 +1,7 @@
 #include "rewrite_io_utils.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
+#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -16,16 +17,17 @@ using namespace NNodes;
 constexpr const char* QueryGraphNodeSignature = "SavedQueryGraph";
 
 TExprNode::TPtr CompileViewQuery(
-    const TString& query,
     TExprContext& ctx,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
-    IModuleResolver::TPtr moduleResolver
+    IModuleResolver::TPtr moduleResolver,
+    const TViewPersistedData& viewData
 ) {
     auto translationSettings = settingsBuilder.Build(ctx);
     translationSettings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    NSQLTranslation::Deserialize(viewData.CapturedContext, translationSettings);
 
     TAstParseResult queryAst;
-    queryAst = NSQLTranslation::SqlToYql(query, translationSettings);
+    queryAst = NSQLTranslation::SqlToYql(viewData.QueryText, translationSettings);
 
     ctx.IssueManager.AddIssues(queryAst.Issues);
     if (!queryAst.IsOk()) {
@@ -116,9 +118,9 @@ TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
 TExprNode::TPtr RewriteReadFromView(
     const TExprNode::TPtr& node,
     TExprContext& ctx,
-    const TString& query,
     NKikimr::NKqp::TKqpTranslationSettingsBuilder& settingsBuilder,
-    IModuleResolver::TPtr moduleResolver
+    IModuleResolver::TPtr moduleResolver,
+    const TViewPersistedData& viewData
 ) {
     YQL_PROFILE_FUNC(DEBUG);
 
@@ -127,7 +129,7 @@ TExprNode::TPtr RewriteReadFromView(
 
     TExprNode::TPtr queryGraph = FindSavedQueryGraph(readNode.Ptr());
     if (!queryGraph) {
-        queryGraph = CompileViewQuery(query, ctx, settingsBuilder, moduleResolver);
+        queryGraph = CompileViewQuery(ctx, settingsBuilder, moduleResolver, viewData);
         if (!queryGraph) {
             ctx.AddError(TIssue(ctx.GetPosition(readNode.Pos()),
                          "The query stored in the view cannot be compiled."));

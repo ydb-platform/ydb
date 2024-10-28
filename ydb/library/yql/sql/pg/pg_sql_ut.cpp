@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             );
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             VALUES ('a', 1, null),('b', null, -3.4);
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -785,7 +785,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             CREATE CAST (foo AS bar) WITH FUNCTION bar(foo);
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -864,7 +864,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             );
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -967,7 +967,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
             );
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());
@@ -1082,7 +1082,7 @@ Y_UNIT_TEST_SUITE(PgExtensions) {
                 FUNCTION    1   foo_hash(foo);
         )";
 
-        h.Write(sql.Data(), sql.Size());
+        h.Write(sql.data(), sql.size());
         desc.Name = "MyExt";
         desc.InstallName = "$libdir/MyExt";
         desc.SqlPaths.push_back(h.Name());

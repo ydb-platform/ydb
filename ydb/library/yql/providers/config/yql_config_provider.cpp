@@ -749,7 +749,19 @@ namespace {
                     return false;
                 }
             }
-            else if (name == "DqEngine") {
+            else if (name == "UdfIgnoreCase" || name == "UdfStrictCase") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                if (!Types.UdfIndex) {
+                    ctx.AddError(TIssue(pos, "UdfIndex is not available"));
+                    return false;
+                }
+
+                Types.UdfIndex->SetCaseSentiveSearch(name == "UdfStrictCase");
+            } else if (name == "DqEngine") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
                     return false;
@@ -1040,11 +1052,16 @@ namespace {
             }
 
             TUserDataBlock block;
-            block.Type = EUserDataType::URL;
-            block.Data = url;
-            if (token) {
-                block.UrlToken = token;
+            if (Types.QContext.CanRead()) {
+                block.Type = EUserDataType::RAW_INLINE_DATA;
+            } else {
+                block.Type = EUserDataType::URL;
+                block.Data = url;
+                if (token) {
+                    block.UrlToken = token;
+                }
             }
+
             Types.UserDataStorage->AddUserDataBlock(key, block);
             return true;
         }

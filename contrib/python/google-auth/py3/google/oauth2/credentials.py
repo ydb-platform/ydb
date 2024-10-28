@@ -50,6 +50,9 @@ _LOGGER = logging.getLogger(__name__)
 # The Google OAuth 2.0 token endpoint. Used for authorized user credentials.
 _GOOGLE_OAUTH2_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 
+# The Google OAuth 2.0 token info endpoint. Used for getting token info JSON from access tokens.
+_GOOGLE_OAUTH2_TOKEN_INFO_ENDPOINT = "https://oauth2.googleapis.com/tokeninfo"
+
 
 class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaProject):
     """Credentials using OAuth 2.0 access and refresh tokens.
@@ -151,6 +154,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         self._trust_boundary = trust_boundary
         self._universe_domain = universe_domain or credentials.DEFAULT_UNIVERSE_DOMAIN
         self._account = account or ""
+        self._cred_file_path = None
 
     def __getstate__(self):
         """A __getstate__ method must exist for the __setstate__ to be called
@@ -189,6 +193,7 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         self._universe_domain = (
             d.get("_universe_domain") or credentials.DEFAULT_UNIVERSE_DOMAIN
         )
+        self._cred_file_path = d.get("_cred_file_path")
         # The refresh_handler setter should be used to repopulate this.
         self._refresh_handler = None
         self._refresh_worker = None
@@ -278,35 +283,12 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         """str: The user account associated with the credential. If the account is unknown an empty string is returned."""
         return self._account
 
-    @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
-    def with_quota_project(self, quota_project_id):
-
-        return self.__class__(
+    def _make_copy(self):
+        cred = self.__class__(
             self.token,
             refresh_token=self.refresh_token,
             id_token=self.id_token,
             token_uri=self.token_uri,
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            scopes=self.scopes,
-            default_scopes=self.default_scopes,
-            granted_scopes=self.granted_scopes,
-            quota_project_id=quota_project_id,
-            rapt_token=self.rapt_token,
-            enable_reauth_refresh=self._enable_reauth_refresh,
-            trust_boundary=self._trust_boundary,
-            universe_domain=self._universe_domain,
-            account=self._account,
-        )
-
-    @_helpers.copy_docstring(credentials.CredentialsWithTokenUri)
-    def with_token_uri(self, token_uri):
-
-        return self.__class__(
-            self.token,
-            refresh_token=self.refresh_token,
-            id_token=self.id_token,
-            token_uri=token_uri,
             client_id=self.client_id,
             client_secret=self.client_secret,
             scopes=self.scopes,
@@ -319,6 +301,32 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
             universe_domain=self._universe_domain,
             account=self._account,
         )
+        cred._cred_file_path = self._cred_file_path
+        return cred
+
+    @_helpers.copy_docstring(credentials.Credentials)
+    def get_cred_info(self):
+        if self._cred_file_path:
+            cred_info = {
+                "credential_source": self._cred_file_path,
+                "credential_type": "user credentials",
+            }
+            if self.account:
+                cred_info["principal"] = self.account
+            return cred_info
+        return None
+
+    @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
+    def with_quota_project(self, quota_project_id):
+        cred = self._make_copy()
+        cred._quota_project_id = quota_project_id
+        return cred
+
+    @_helpers.copy_docstring(credentials.CredentialsWithTokenUri)
+    def with_token_uri(self, token_uri):
+        cred = self._make_copy()
+        cred._token_uri = token_uri
+        return cred
 
     def with_account(self, account):
         """Returns a copy of these credentials with a modified account.
@@ -329,45 +337,15 @@ class Credentials(credentials.ReadOnlyScoped, credentials.CredentialsWithQuotaPr
         Returns:
             google.oauth2.credentials.Credentials: A new credentials instance.
         """
-
-        return self.__class__(
-            self.token,
-            refresh_token=self.refresh_token,
-            id_token=self.id_token,
-            token_uri=self._token_uri,
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            scopes=self.scopes,
-            default_scopes=self.default_scopes,
-            granted_scopes=self.granted_scopes,
-            quota_project_id=self.quota_project_id,
-            rapt_token=self.rapt_token,
-            enable_reauth_refresh=self._enable_reauth_refresh,
-            trust_boundary=self._trust_boundary,
-            universe_domain=self._universe_domain,
-            account=account,
-        )
+        cred = self._make_copy()
+        cred._account = account
+        return cred
 
     @_helpers.copy_docstring(credentials.CredentialsWithUniverseDomain)
     def with_universe_domain(self, universe_domain):
-
-        return self.__class__(
-            self.token,
-            refresh_token=self.refresh_token,
-            id_token=self.id_token,
-            token_uri=self._token_uri,
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            scopes=self.scopes,
-            default_scopes=self.default_scopes,
-            granted_scopes=self.granted_scopes,
-            quota_project_id=self.quota_project_id,
-            rapt_token=self.rapt_token,
-            enable_reauth_refresh=self._enable_reauth_refresh,
-            trust_boundary=self._trust_boundary,
-            universe_domain=universe_domain,
-            account=self._account,
-        )
+        cred = self._make_copy()
+        cred._universe_domain = universe_domain
+        return cred
 
     def _metric_header_for_usage(self):
         return metrics.CRED_TYPE_USER

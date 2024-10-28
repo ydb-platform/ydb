@@ -7,12 +7,16 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 ```
 
 An action is any modification to the table, as described below:
+
 * [Renaming the table](rename.md).
 * Managing [columns](columns.md) of row and column tables.
 * Adding or removing a [changefeed](changefeed.md).
 * Managing a [secondary index](secondary_index.md).
 * Managing [column groups](family.md) of a row table.
+
 {% if backend_name == "YDB" %}
+
 * Modifying [additional table](set.md) parameters.
+
 {% endif %}
 

@@ -83,7 +83,9 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     if (DataShard.GetState() == TShardState::WaitScheme) {
         txc.DB.NoMoreReadsForTx();
         DataShard.SetPersistState(TShardState::Ready, txc);
-        DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
+        // We could perform snapshot reads after becoming ready
+        // Make sure older versions restore mediator state in that case
+        DataShard.PersistUnprotectedReadsEnabled(txc);
         DataShard.SendRegistrationRequestTimeCast(ctx);
     }
 

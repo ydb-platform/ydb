@@ -1,4 +1,5 @@
 # KNN
+
 ## Введение
 
 [Поиск ближайшего соседа](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN) - это задача оптимизации, заключающаяся в нахождении ближайшей точки (или набора точек) в заданном наборе данных к заданной точке запроса. Близость может быть определена в терминах метрики расстояния или сходства.
@@ -121,7 +122,7 @@ Knn::EuclideanDistance(String{Flags:AutoMap}, String{Flags:AutoMap})->Float?
 
 Пример:
 
-```
+```text
 Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: Knn, function: CosineDistance, error: Arguments should have same tags, but 'FloatVector' is not equal to 'Uint8Vector'
 ```
 
@@ -130,6 +131,7 @@ Error: Failed to find UDF function: Knn.CosineDistance, reason: Error: Module: K
 ## Примеры точного поиска
 
 {% if backend_name == "YDB" %}
+
 ### Создание таблицы
 
 ```yql
@@ -149,7 +151,9 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"));
 ```
+
 {% else %}
+
 ### Декларация данных
 
 ```yql
@@ -163,11 +167,13 @@ $facts = AsList(
     ),
 );
 ```
+
 {% endif %}
 
 ### Точный поиск K ближайших векторов
 
 {% if backend_name == "YDB" %}
+
 ```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -177,7 +183,9 @@ WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+
 {% else %}
+
 ```yql
 $K = 10;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -187,11 +195,13 @@ WHERE user="Williams"
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbedding)
 LIMIT $K;
 ```
+
 {% endif %}
 
 ### Точный поиск векторов, находящихся в радиусе R
 
 {% if backend_name == "YDB" %}
+
 ```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -199,7 +209,9 @@ $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 SELECT * FROM Facts
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
+
 {% else %}
+
 ```yql
 $R = 0.1f;
 $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
@@ -207,6 +219,7 @@ $TargetEmbedding = Knn::ToBinaryStringFloat([1.2f, 2.3f, 3.4f, 4.5f]);
 SELECT * FROM AS_TABLE($facts)
 WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 ```
+
 {% endif %}
 
 ## Примеры приближенного поиска
@@ -215,6 +228,7 @@ WHERE Knn::CosineDistance(embedding, $TargetEmbedding) < $R;
 Это позволяет сначала делать грубый предварительный поиск по колонке `embedding_bit`, а затем уточнять результаты по основной колонке с векторами `embedding`.
 
 {% if backend_name == "YDB" %}
+
 ### Создание таблицы
 
 ```yql
@@ -235,7 +249,9 @@ $vector = [1.f, 2.f, 3.f, 4.f];
 UPSERT INTO Facts (id, user, fact, embedding, embedding_bit)
 VALUES (123, "Williams", "Full name is John Williams", Untag(Knn::ToBinaryStringFloat($vector), "FloatVector"), Untag(Knn::ToBinaryStringBit($vector), "BitVector"));
 ```
+
 {% else %}
+
 ### Декларация данных
 
 ```yql
@@ -250,6 +266,7 @@ $facts = AsList(
     ),
 );
 ```
+
 {% endif %}
 
 ### Скалярное квантование
@@ -275,11 +292,13 @@ SELECT ListMap($FloatList, $MapInt8);
 ### Приближенный поиск K ближайших векторов: битовое квантование
 
 Алгоритм приближенного поиска:
+
 * производится приближенный поиск с использованием битового квантования;
 * получается приближенный список векторов;
 * в этом списке производим поиск без использования квантования.
 
 {% if backend_name == "YDB" %}
+
 ```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
@@ -295,7 +314,9 @@ WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
+
 {% else %}
+
 ```yql
 $K = 10;
 $Target = [1.2f, 2.3f, 3.4f, 4.5f];
@@ -311,4 +332,5 @@ WHERE id IN $Ids
 ORDER BY Knn::CosineDistance(embedding, $TargetEmbeddingFloat)
 LIMIT $K;
 ```
+
 {% endif %}

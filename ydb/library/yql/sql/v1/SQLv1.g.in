@@ -73,6 +73,8 @@ sql_stmt_core:
   | create_resource_pool_classifier_stmt
   | alter_resource_pool_classifier_stmt
   | drop_resource_pool_classifier_stmt
+  | backup_stmt
+  | restore_stmt
 ;
 
 expr:
@@ -600,7 +602,7 @@ alter_external_data_source_action:
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
 create_view_stmt: CREATE VIEW object_ref
-    with_table_settings
+    create_object_features?
     AS select_stmt
 ;
 
@@ -628,7 +630,7 @@ drop_object_stmt: DROP OBJECT (IF EXISTS)? object_ref
 ;
 drop_object_features: WITH object_features;
 
-object_feature_value: id_or_type | bind_parameter | STRING_VALUE;
+object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
 object_feature_kv: an_id_or_type EQUALS object_feature_value;
 object_feature_flag: an_id_or_type;
 object_feature: object_feature_kv | object_feature_flag;
@@ -651,18 +653,32 @@ create_table_entry:
   | an_id_schema
 ;
 
-create_backup_collection_stmt: CREATE backup_collection WITH LPAREN backup_collection_settings RPAREN;
-alter_backup_collection_stmt: ALTER backup_collection alter_backup_collection_actions;
+create_backup_collection_stmt: CREATE backup_collection create_backup_collection_entries? WITH LPAREN backup_collection_settings RPAREN;
+alter_backup_collection_stmt: ALTER backup_collection (alter_backup_collection_actions | alter_backup_collection_entries);
 drop_backup_collection_stmt: DROP backup_collection;
+
+create_backup_collection_entries: DATABASE | create_backup_collection_entries_many;
+create_backup_collection_entries_many: LPAREN table_list RPAREN;
+table_list: TABLE an_id_table (COMMA TABLE an_id_table)*;
 
 alter_backup_collection_actions: alter_backup_collection_action (COMMA alter_backup_collection_action)*;
 alter_backup_collection_action:
     alter_table_set_table_setting_compat
   | alter_table_reset_table_setting
 ;
+alter_backup_collection_entries: alter_backup_collection_entry (COMMA alter_backup_collection_entry)*;
+alter_backup_collection_entry:
+    ADD DATABASE
+  | DROP DATABASE
+  | ADD TABLE an_id_table
+  | DROP TABLE an_id_table
+;
 backup_collection: BACKUP COLLECTION object_ref;
 backup_collection_settings: backup_collection_settings_entry (COMMA backup_collection_settings_entry)*;
 backup_collection_settings_entry: an_id EQUALS table_setting_value;
+
+backup_stmt: BACKUP object_ref (INCREMENTAL)?;
+restore_stmt: RESTORE object_ref (AT STRING_VALUE)?;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -750,11 +766,11 @@ local_index: LOCAL;
 
 index_subtype: an_id;
 
-with_index_settings: WITH LPAREN index_setting_entry (COMMA index_setting_entry)* COMMA? RPAREN; 
+with_index_settings: WITH LPAREN index_setting_entry (COMMA index_setting_entry)* COMMA? RPAREN;
 index_setting_entry: an_id EQUALS index_setting_value;
 index_setting_value:
       id_or_type
-    | STRING_VALUE      
+    | STRING_VALUE
     | integer
     | bool_value
 ;
@@ -782,7 +798,10 @@ table_setting_value:
 family_entry: FAMILY an_id family_settings;
 family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;
 family_settings_entry: an_id EQUALS family_setting_value;
-family_setting_value: STRING_VALUE;
+family_setting_value:
+        STRING_VALUE
+      | integer
+;
 
 split_boundaries:
       LPAREN literal_value_list (COMMA literal_value_list)* RPAREN
@@ -886,10 +905,10 @@ define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_c
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
 for_stmt: EVALUATE? PARALLEL? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
-table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
+table_ref: (cluster_expr DOT)? COMMAT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
 
 table_key: id_table_or_type (VIEW view_name)?;
-table_arg: AT? named_expr (VIEW view_name)?;
+table_arg: COMMAT? named_expr (VIEW view_name)?;
 table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
 table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
@@ -898,7 +917,7 @@ table_hint:
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;
-simple_table_ref_core: object_ref | AT? bind_parameter;
+simple_table_ref_core: object_ref | COMMAT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
@@ -1139,9 +1158,9 @@ cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);
 
 id_or_type: id | type_id;
 opt_id_prefix_or_type: (an_id_or_type DOT)?;
-id_or_at: AT? an_id_or_type;
+id_or_at: COMMAT? an_id_or_type;
 id_table_or_type: an_id_table | type_id;
-id_table_or_at: AT? id_table_or_type;
+id_table_or_at: COMMAT? id_table_or_type;
 
 keyword:
     keyword_compat
@@ -1238,6 +1257,7 @@ keyword_as_compat:
   | ARRAY
   | ASC
   | ASYNC
+  | AT
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
@@ -1313,6 +1333,7 @@ keyword_as_compat:
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENTAL
   | INDEX
   | INDEXED
   | INHERITS
@@ -1386,6 +1407,7 @@ keyword_as_compat:
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTORE
   | RESTRICT
   // | RESULT
   | REVERT
@@ -1453,6 +1475,7 @@ keyword_compat: (
   | ARRAY
   | ASC
   | ASYNC
+  | AT
   | ATTACH
   | ATTRIBUTES
   | AUTOINCREMENT
@@ -1528,6 +1551,7 @@ keyword_compat: (
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENTAL
   | INDEX
   | INDEXED
   | INHERITS
@@ -1601,6 +1625,7 @@ keyword_compat: (
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTORE
   | RESTRICT
   | RESULT
   | REVERT
@@ -1699,7 +1724,6 @@ MINUS:         '-';
 TILDA:         '~';
 ASTERISK:      '*';
 SLASH:         '/';
-BACKSLASH:     '\\';
 PERCENT:       '%';
 SEMICOLON:     ';';
 DOT:           '.';
@@ -1708,12 +1732,9 @@ LPAREN:        '(';
 RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
-AT:            '@';
-DOUBLE_AT:     '@@';
+COMMAT:        '@';
+DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
-QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
-QUOTE_SINGLE:  '\'';
-BACKTICK:      '`';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
 CARET:         '^';
@@ -1721,6 +1742,11 @@ NAMESPACE:     '::';
 ARROW:         '->';
 RBRACE_SQUARE: ']';
 LBRACE_SQUARE: '['; // pair ]
+
+fragment BACKSLASH:     '\\';
+fragment QUOTE_DOUBLE:  '"';
+fragment QUOTE_SINGLE:  '\'';
+fragment BACKTICK:      '`';
 
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');
@@ -1766,6 +1792,7 @@ ASC: A S C;
 ASSUME: A S S U M E;
 ASYMMETRIC: A S Y M M E T R I C;
 ASYNC: A S Y N C;
+AT: A T;
 ATTACH: A T T A C H;
 ATTRIBUTES: A T T R I B U T E S;
 AUTOINCREMENT: A U T O I N C R E M E N T;
@@ -1870,6 +1897,7 @@ ILIKE: I L I K E;
 IMMEDIATE: I M M E D I A T E;
 IMPORT: I M P O R T;
 IN: I N;
+INCREMENTAL: I N C R E M E N T A L;
 INDEX: I N D E X;
 INDEXED: I N D E X E D;
 INHERITS: I N H E R I T S;
@@ -1958,6 +1986,7 @@ REPLICATION: R E P L I C A T I O N;
 RESET: R E S E T;
 RESOURCE: R E S O U R C E;
 RESPECT: R E S P E C T;
+RESTORE: R E S T O R E;
 RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
 RETURN: R E T U R N;
@@ -2044,7 +2073,7 @@ fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
 
 fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
-fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
+fragment STRING_MULTILINE: (DOUBLE_COMMAT .* DOUBLE_COMMAT)+ COMMAT?;
 
 STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J | P (T | B | V)?)?);
 

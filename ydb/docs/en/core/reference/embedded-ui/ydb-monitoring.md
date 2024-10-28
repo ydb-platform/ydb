@@ -70,7 +70,7 @@ To open the [node page](#node_page), click the host name.
 
 The page is available at:
 
-```
+```text
 http://<endpoint>:8765/monitoring/node/<node-id>/
 ```
 

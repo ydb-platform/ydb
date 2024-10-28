@@ -5,11 +5,12 @@ import concurrent.futures
 import gzip
 import typing
 from asyncio import Task
-from collections import deque
+from collections import OrderedDict
 from typing import Optional, Set, Dict, Union, Callable
 
 import ydb
 from .. import _apis, issues
+from .._topic_common import common as topic_common
 from .._utilities import AtomicCounter
 from ..aio import Driver
 from ..issues import Error as YdbError, _process_response
@@ -87,7 +88,8 @@ class PublicAsyncIOReader:
 
     def __del__(self):
         if not self._closed:
-            self._loop.create_task(self.close(flush=False), name="close reader")
+            task = self._loop.create_task(self.close(flush=False))
+            topic_common.wrap_set_name_for_asyncio_task(task, task_name="close reader")
 
     async def wait_message(self):
         """
@@ -97,6 +99,7 @@ class PublicAsyncIOReader:
 
     async def receive_batch(
         self,
+        max_messages: typing.Union[int, None] = None,
     ) -> typing.Union[datatypes.PublicBatch, None]:
         """
         Get one messages batch from reader.
@@ -105,7 +108,9 @@ class PublicAsyncIOReader:
         use asyncio.wait_for for wait with timeout.
         """
         await self._reconnector.wait_message()
-        return self._reconnector.receive_batch_nowait()
+        return self._reconnector.receive_batch_nowait(
+            max_messages=max_messages,
+        )
 
     async def receive_message(self) -> typing.Optional[datatypes.PublicMessage]:
         """
@@ -212,8 +217,10 @@ class ReaderReconnector:
             await self._state_changed.wait()
             self._state_changed.clear()
 
-    def receive_batch_nowait(self):
-        return self._stream_reader.receive_batch_nowait()
+    def receive_batch_nowait(self, max_messages: Optional[int] = None):
+        return self._stream_reader.receive_batch_nowait(
+            max_messages=max_messages,
+        )
 
     def receive_message_nowait(self):
         return self._stream_reader.receive_message_nowait()
@@ -264,7 +271,7 @@ class ReaderStream:
 
     _state_changed: asyncio.Event
     _closed: bool
-    _message_batches: typing.Deque[datatypes.PublicBatch]
+    _message_batches: typing.Dict[int, datatypes.PublicBatch]  # keys are partition session ID
     _first_error: asyncio.Future[YdbError]
 
     _update_token_interval: Union[int, float]
@@ -296,7 +303,7 @@ class ReaderStream:
         self._closed = False
         self._first_error = asyncio.get_running_loop().create_future()
         self._batches_to_decode = asyncio.Queue()
-        self._message_batches = deque()
+        self._message_batches = OrderedDict()
 
         self._update_token_interval = settings.update_token_interval
         self._get_token_function = get_token_function
@@ -337,12 +344,30 @@ class ReaderStream:
 
         self._update_token_event.set()
 
-        self._background_tasks.add(asyncio.create_task(self._read_messages_loop(), name="read_messages_loop"))
-        self._background_tasks.add(asyncio.create_task(self._decode_batches_loop(), name="decode_batches"))
-        if self._get_token_function:
-            self._background_tasks.add(asyncio.create_task(self._update_token_loop(), name="update_token_loop"))
         self._background_tasks.add(
-            asyncio.create_task(self._handle_background_errors(), name="handle_background_errors")
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._read_messages_loop()),
+                task_name="read_messages_loop",
+            ),
+        )
+        self._background_tasks.add(
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._decode_batches_loop()),
+                task_name="decode_batches",
+            ),
+        )
+        if self._get_token_function:
+            self._background_tasks.add(
+                topic_common.wrap_set_name_for_asyncio_task(
+                    asyncio.create_task(self._update_token_loop()),
+                    task_name="update_token_loop",
+                ),
+            )
+        self._background_tasks.add(
+            topic_common.wrap_set_name_for_asyncio_task(
+                asyncio.create_task(self._handle_background_errors()),
+                task_name="handle_background_errors",
+            ),
         )
 
     async def wait_error(self):
@@ -359,29 +384,46 @@ class ReaderStream:
             await self._state_changed.wait()
             self._state_changed.clear()
 
-    def receive_batch_nowait(self):
+    def _get_first_batch(self) -> typing.Tuple[int, datatypes.PublicBatch]:
+        partition_session_id, batch = self._message_batches.popitem(last=False)
+        return partition_session_id, batch
+
+    def receive_batch_nowait(self, max_messages: Optional[int] = None):
         if self._get_first_error():
             raise self._get_first_error()
 
         if not self._message_batches:
             return None
 
-        batch = self._message_batches.popleft()
-        self._buffer_release_bytes(batch._bytes_size)
-        return batch
+        part_sess_id, batch = self._get_first_batch()
+
+        if max_messages is None or len(batch.messages) <= max_messages:
+            self._buffer_release_bytes(batch._bytes_size)
+            return batch
+
+        cutted_batch = batch._pop_batch(message_count=max_messages)
+
+        self._message_batches[part_sess_id] = batch
+        self._buffer_release_bytes(cutted_batch._bytes_size)
+
+        return cutted_batch
 
     def receive_message_nowait(self):
         if self._get_first_error():
             raise self._get_first_error()
 
-        try:
-            batch = self._message_batches[0]
-            message = batch.pop_message()
-        except IndexError:
+        if not self._message_batches:
             return None
 
-        if batch.empty():
-            self.receive_batch_nowait()
+        part_sess_id, batch = self._get_first_batch()
+
+        message, msgs_left = batch._pop()
+
+        if not msgs_left:
+            self._buffer_release_bytes(batch._bytes_size)
+        else:
+            # TODO: we should somehow release bytes from single message as well
+            self._message_batches[part_sess_id] = batch
 
         return message
 
@@ -605,8 +647,16 @@ class ReaderStream:
         while True:
             batch = await self._batches_to_decode.get()
             await self._decode_batch_inplace(batch)
-            self._message_batches.append(batch)
+            self._add_batch_to_queue(batch)
             self._state_changed.set()
+
+    def _add_batch_to_queue(self, batch: datatypes.PublicBatch):
+        part_sess_id = batch._partition_session.id
+        if part_sess_id in self._message_batches:
+            self._message_batches[part_sess_id]._extend(batch)
+            return
+
+        self._message_batches[part_sess_id] = batch
 
     async def _decode_batch_inplace(self, batch):
         if batch._codec == Codec.CODEC_RAW:

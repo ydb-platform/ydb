@@ -362,6 +362,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             case NKikimrSchemeOp::EPathType::EPathTypeReplication:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
+            case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection:
                 Y_ABORT("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();

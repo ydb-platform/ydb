@@ -148,6 +148,11 @@ void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
     return Meta_->WriteSchema(this, consumer);
 }
 
+bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
+{
+    return Meta_->CompareStructs(this, &rhs);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TYsonStruct::InitializeRefCounted()

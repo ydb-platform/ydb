@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/mind/bscontroller/self_heal.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/mind/bscontroller/impl.h>
@@ -33,7 +33,7 @@ public:
 
     void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {
         Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK,
-            VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()), true, true, 1));
+            VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID()), true, true, false, 1));
     }
 
     STRICT_STFUNC(StateFunc,

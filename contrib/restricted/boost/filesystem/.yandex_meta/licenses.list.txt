@@ -1,0 +1,175 @@
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+ *          http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+* Submit your patches as [pull requests](https://github.com/boostorg/filesystem/compare) against **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt
+
+
+====================BSL-1.0====================
+//  Distributed under the Boost Software License, Version 1.0.
+//  See http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification, and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy
+//  at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt
+// or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+// Distributed under the Boost Software License, Version 1.0.
+// (See http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+
+====================COPYRIGHT====================
+ *             Copyright Andrey Semashev 2021.
+ * Distributed under the Boost Software License, Version 1.0.
+ *    (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2024 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2001 Dietmar Kuehl
+//  Copyright 2002-2009, 2014 Beman Dawes
+//  Copyright 2021-2022 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2002-2005 Beman Dawes
+//  Use, modification, and distribution is subject to the Boost Software
+//  License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy
+
+
+====================COPYRIGHT====================
+//  Copyright 2002-2009, 2014 Beman Dawes
+//  Copyright 2001 Dietmar Kuehl
+//  Copyright 2018-2024 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2002-2009, 2014 Beman Dawes
+//  Copyright 2001 Dietmar Kuehl
+//  Copyright 2019, 2022-2024 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2002-2009, 2014 Beman Dawes
+//  Copyright 2019 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2009 Beman Dawes
+//  Copyright 2022 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2020 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2021 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright 2021-2024 Andrey Semashev
+
+
+====================COPYRIGHT====================
+//  Copyright Andrey Semashev 2023
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2002
+//  Copyright Andrey Semashev 2021-2023
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2002-2009
+//  Copyright Jan Langer 2002
+//  Copyright Dietmar Kuehl 2001
+//  Copyright Vladimir Prus 2002
+//  Copyright Andrey Semashev 2019, 2022
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2002-2009
+//  Copyright Jan Langer 2002
+//  Copyright Dietmar Kuehl 2001
+//  Copyright Vladimir Prus 2002
+//  Copyright Andrey Semashev 2020-2024
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2003
+//  Copyright Andrey Semashev 2019
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2003
+//  Copyright Andrey Semashev 2021-2023
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2008
+//  Copyright Andrey Semashev 2021-2024
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2008, 2009
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2009
+//  Copyright Andrey Semashev 2022-2024
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2010
+
+
+====================COPYRIGHT====================
+//  Copyright Beman Dawes 2010
+//  Copyright Andrey Semashev 2020, 2024
+
+
+====================COPYRIGHT====================
+//  Copyright Vladimir Prus 2002
+//  Copyright Beman Dawes 2002-2005, 2009
+//  Copyright Andrey Semashev 2021-2024
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2001 Ronald Garcia, Indiana University (garcia@osl.iu.edu)
+// Andrew Lumsdaine, Indiana University (lums@osl.iu.edu).
+
+
+====================COPYRIGHT====================
+// Copyright Vladimir Prus 2004.
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt

@@ -6,16 +6,16 @@
 
 ## Примеры
 
-``` yql
+```yql
 SELECT STREAM key FROM my_stream;
 ```
 
-``` yql
+```yql
 SELECT STREAM * FROM
   (SELECT STREAM value FROM my_stream);
 ```
 
-``` yql
+```yql
 $stream_name = "my_" || "stream";
 SELECT STREAM * FROM $stream_name;
 ```
@@ -26,7 +26,7 @@ SELECT STREAM * FROM $stream_name;
 
 ### Примеры
 
-``` yql
+```yql
 SELECT STREAM key FROM my_stream
 WHERE value > 0;
 ```
@@ -39,7 +39,7 @@ WHERE value > 0;
 
 ### Примеры
 
-``` yql
+```yql
 SELECT STREAM x FROM my_stream_1
 UNION ALL
 SELECT STREAM y FROM my_stream_2

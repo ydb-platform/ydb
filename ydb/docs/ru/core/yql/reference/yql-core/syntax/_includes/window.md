@@ -10,15 +10,19 @@
 
 Общий синтаксис вызова оконной функции имеет вид
 
-```
+```yql
 function_name([expression [, expression ...]]) OVER (window_definition)
+```
+
 или
+
+```yql
 function_name([expression [, expression ...]]) OVER window_name
 ```
 
-Здесь `window_name` (_имя окна_) – произвольный идентификатор, уникальный в рамках запроса, `expression` – произвольное выражение не содержащее вызова оконных функций.
+Здесь `window_name` (*имя окна*) – произвольный идентификатор, уникальный в рамках запроса, `expression` – произвольное выражение не содержащее вызова оконных функций.
 
-В запросе каждому имени окна должно быть сопоставлено _определение окна_ (`window_definition`):
+В запросе каждому имени окна должно быть сопоставлено *определение окна* (`window_definition`):
 
 ```yql
 SELECT
@@ -36,7 +40,7 @@ WINDOW
 
 Здесь `window_definition` записывается в виде
 
-```
+```antlr
 [ PARTITION BY (expression AS column_identifier | column_identifier) [, ...] ]
 [ ORDER BY expression [ASC | DESC] ]
 [ frame_definition ]
@@ -63,7 +67,7 @@ WINDOW
 
 ### Разбиение {#partition}
 
-Указание `PARTITION BY` группирует строки исходной таблицы в _разделы_, которые затем обрабатываются независимо друг от друга.
+Указание `PARTITION BY` группирует строки исходной таблицы в *разделы*, которые затем обрабатываются независимо друг от друга.
 Если `PARTITION BY` не указан, то все строки исходной таблицы попадают в один раздел. Указание `ORDER BY` определяет порядок строк в разделе.
 В `PARTITION BY`, как и в [GROUP BY](../group_by.md) можно использовать алиасы и [SessionWindow](../group_by.md#session-window).
 
@@ -108,7 +112,7 @@ WINDOW w AS (
 );
 ```
 
-``` yql
+```yql
 SELECT
     -- AVG (как и все агрегатные функции, используемые в качестве оконных)
     -- вычисляется на рамке окна
@@ -122,7 +126,7 @@ WINDOW w AS (
 );
 ```
 
-``` yql
+```yql
 SELECT
     -- LAG не зависит от положения рамки окна
     LAG(my_column, 2) OVER w AS row_before_previous_one

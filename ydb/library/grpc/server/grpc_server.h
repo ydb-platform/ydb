@@ -108,6 +108,8 @@ struct TServerOptions {
     //! Logger which will be used to write logs about requests handling (iff appropriate log level is enabled).
     DECLARE_FIELD(Logger, TLoggerPtr, nullptr);
 
+    DECLARE_FIELD(EndpointId, TString, "");
+
 #undef DECLARE_FIELD
 };
 
@@ -133,8 +135,7 @@ public:
     virtual ~ICancelableContext() = default;
 
 private:
-    template<class T>
-    friend class TGrpcServiceBase;
+    friend class TGrpcServiceProtectiable;
 
     // Shard assigned by RegisterRequestCtx. This field is not thread-safe
     // because RegisterRequestCtx may only be called once for a single service,
@@ -204,15 +205,15 @@ public:
      * service to inspect server options and initialize accordingly.
      */
     virtual void SetServerOptions(const TServerOptions& options) = 0;
+
+    virtual TString GetEndpointId() const = 0;
 };
 
-template<typename T>
-class TGrpcServiceBase: public IGRpcService {
+class TGrpcServiceProtectiable: public IGRpcService {
 public:
     class TShutdownGuard {
-        using TOwner = TGrpcServiceBase<T>;
-        friend class TGrpcServiceBase<T>;
-
+        using TOwner = TGrpcServiceProtectiable;
+        friend class TGrpcServiceProtectiable;
     public:
         TShutdownGuard()
             : Owner(nullptr)
@@ -261,21 +262,18 @@ public:
     };
 
 public:
-    using TCurrentGRpcService = T;
-
-    void StopService() noexcept override {
-        AtomicSet(ShuttingDown_, 1);
-
-        for (auto& shard : Shards_) {
-            with_lock(shard.Lock_) {
-                // Send TryCansel to event (can be send after finishing).
-                // Actual dtors will be called from grpc thread, so deadlock impossible
-                for (auto* request : shard.Requests_) {
-                    request->Shutdown();
-                }
-            }
-        }
+    void SetGlobalLimiterHandle(TGlobalLimiter* limiter) override {
+        Limiter_ = limiter;
     }
+
+    void StopService() noexcept override;
+    size_t RequestsInProgress() const override;
+
+    bool RegisterRequestCtx(ICancelableContext* req);
+    void DeregisterRequestCtx(ICancelableContext* req);
+
+    virtual bool IncRequest();
+    virtual void DecRequest();
 
     TShutdownGuard ProtectShutdown() noexcept {
         AtomicIncrement(GuardCount_);
@@ -291,22 +289,15 @@ public:
         return AtomicGet(GuardCount_) > 0;
     }
 
-    size_t RequestsInProgress() const override {
-        size_t c = 0;
-        for (auto& shard : Shards_) {
-            with_lock(shard.Lock_) {
-                c += shard.Requests_.size();
-            }
-        }
-        return c;
-    }
-
     void SetServerOptions(const TServerOptions& options) override {
         SslServer_ = bool(options.SslData);
         NeedAuth_ = options.UseAuth;
+        EndpointId_ = options.EndpointId;
     }
 
-    void SetGlobalLimiterHandle(TGlobalLimiter* /*limiter*/) override {}
+    TString GetEndpointId() const override {
+        return EndpointId_;
+    }
 
     //! Check if the server is going to shut down.
     bool IsShuttingDown() const {
@@ -321,47 +312,13 @@ public:
         return NeedAuth_;
     }
 
-    bool RegisterRequestCtx(ICancelableContext* req) {
-        if (Y_LIKELY(req->ShardIndex == size_t(-1))) {
-            req->ShardIndex = NextShard_.fetch_add(1, std::memory_order_relaxed) % Shards_.size();
-        }
-
-        auto& shard = Shards_[req->ShardIndex];
-        with_lock(shard.Lock_) {
-            if (IsShuttingDown()) {
-                return false;
-            }
-
-            auto r = shard.Requests_.emplace(req);
-            Y_ABORT_UNLESS(r.second, "Ctx already registered");
-        }
-
-        return true;
-    }
-
-    void DeregisterRequestCtx(ICancelableContext* req) {
-        Y_ABORT_UNLESS(req->ShardIndex != size_t(-1), "Ctx does not have an assigned shard index");
-
-        auto& shard = Shards_[req->ShardIndex];
-        with_lock(shard.Lock_) {
-            Y_ABORT_UNLESS(shard.Requests_.erase(req), "Ctx is not registered");
-        }
-    }
-
-protected:
-    using TGrpcAsyncService = typename TCurrentGRpcService::AsyncService;
-    TGrpcAsyncService Service_;
-
-    TGrpcAsyncService* GetService() override {
-        return &Service_;
-    }
-
 private:
     TAtomic ShuttingDown_ = 0;
     TAtomic GuardCount_ = 0;
 
     bool SslServer_ = false;
     bool NeedAuth_ = false;
+    TString EndpointId_;
 
     struct TShard {
         TAdaptiveLock Lock_;
@@ -371,6 +328,22 @@ private:
     // Note: benchmarks showed 4 shards is enough to scale to ~30 threads
     TVector<TShard> Shards_{ size_t(4) };
     std::atomic<size_t> NextShard_{ 0 };
+
+    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
+};
+
+template<typename T>
+class TGrpcServiceBase: public TGrpcServiceProtectiable {
+public:
+    using TCurrentGRpcService = T;
+protected:
+    using TGrpcAsyncService = typename TCurrentGRpcService::AsyncService;
+
+    TGrpcAsyncService Service_;
+
+    TGrpcAsyncService* GetService() override {
+        return &Service_;
+    }
 };
 
 class TGRpcServer {

@@ -1,4 +1,4 @@
-/* Copyright (C) 1991, 1994-2002, 2005, 2008-2013 Free Software Foundation,
+/* Copyright (C) 1991, 1994-2002, 2005, 2008-2016 Free Software Foundation,
    Inc.
    This file is part of the GNU C Library.
 
@@ -35,7 +35,7 @@
 #endif /* _LIBC */
 
 #ifdef _LIBC
-# include <bits/libc-lock.h>
+# error #include <bits/libc-lock.h>
 #else /* !_LIBC */
 # include "glthread/lock.h"
 # include "glthread/tls.h"
@@ -44,11 +44,7 @@
 # define __libc_key_t gl_tls_key_t
 # define __libc_getspecific(NAME) gl_tls_get ((NAME))
 # define __libc_setspecific(NAME, POINTER) gl_tls_set ((NAME), (POINTER))
-#if defined(_MSC_VER)
-# define __snprintf _snprintf
-#else
 # define __snprintf snprintf
-#endif
 #endif /* _LIBC */
 
 #ifdef _LIBC

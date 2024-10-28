@@ -126,32 +126,10 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
     case arrow::Type::LIST: { // TODO: is ok?
         return false;
     }
-    case arrow::Type::STRUCT: { // TODO: is ok?
-        auto& structType = *resType.mutable_struct_type();
-        for (const auto& field : type.fields()) {
-            auto& member = *structType.add_members();
-            auto& memberType = *member.mutable_type();
-            if (!ArrowToYdbType(memberType, *field->type(), config)) {
-                return false;
-            }
-            member.mutable_name()->assign(field->name().data(), field->name().size());
-        }
-        return true;
-    }
+    case arrow::Type::STRUCT:
     case arrow::Type::SPARSE_UNION:
-    case arrow::Type::DENSE_UNION: { // TODO: is ok?
-        auto& variant = *resType.mutable_variant_type()->mutable_struct_items();
-        for (const auto& field : type.fields()) {
-            auto& member = *variant.add_members();
-            if (!ArrowToYdbType(*member.mutable_type(), *field->type(), config)) {
-                return false;
-            }
-            if (field->name().empty()) {
-                return false;
-            }
-            member.mutable_name()->assign(field->name().data(), field->name().size());
-        }
-        return true;
+    case arrow::Type::DENSE_UNION: {
+        return false;
     }
     case arrow::Type::DICTIONARY: // TODO: is representable?
         return false;
@@ -206,14 +184,14 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     .Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open csv/tsv file, check format and compression params: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't open csv/tsv file, check format and compression parameters: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression params: " << tableRes.ToString();
+        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression parameters: " << tableRes.ToString();
     }
 
     return table->fields();
@@ -224,19 +202,19 @@ std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::
     builder.properties(parquet::ArrowReaderProperties(false));
     auto openStatus = builder.Open(std::move(file));
     if (!openStatus.ok()) {
-        return TStringBuilder{} << "couldn't open parquet file, check format params: " << openStatus.ToString();
+        return TStringBuilder{} << "couldn't open parquet file, check format parameters: " << openStatus.ToString();
     }
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     auto readerStatus = builder.Build(&reader);
     if (!readerStatus.ok()) {
-        return TStringBuilder{} << "couldn't read parquet file, check format params: " << readerStatus.ToString();
+        return TStringBuilder{} << "couldn't read parquet file, check format parameters: " << readerStatus.ToString();
     }
 
     std::shared_ptr<arrow::Schema> schema;
     auto schemaRes = reader->GetSchema(&schema);
     if (!schemaRes.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format params: " << schemaRes.ToString();
+        return TStringBuilder{} << "couldn't parse parquet file, check format parameters: " << schemaRes.ToString();
     }
 
     return schema->fields();
@@ -257,14 +235,14 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     ).Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open json file, check format and compression params: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << "couldn't open json file, check format and compression parameters: " << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression params: " << tableRes.ToString()};
+        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression parameters: " << tableRes.ToString()};
     }
 
     return table->fields();
@@ -325,14 +303,15 @@ public:
         auto& arrowFields = std::get<ArrowFields>(mbArrowFields);
         std::vector<Ydb::Column> ydbFields;
         for (const auto& field : arrowFields) {
-            ydbFields.emplace_back();
-            auto& ydbField = ydbFields.back();
-            if (!ArrowToYdbType(*ydbField.mutable_type(), *field->type(), file.Config)) {
-                ctx.Send(RequesterId_, MakeErrorSchema(file.Path, NFq::TIssuesIds::UNSUPPORTED, TStringBuilder{} << "couldn't convert arrow type to ydb: " << field->ToString()));
-                RequesterId_ = {};
-                return;
+            Ydb::Column column;
+            if (!ArrowToYdbType(*column.mutable_type(), *field->type(), file.Config)) {
+                continue;
             }
-            ydbField.mutable_name()->assign(field->name());
+            if (field->name().empty()) {
+                continue;
+            }
+            column.mutable_name()->assign(field->name());
+            ydbFields.push_back(column);
         }
 
         ctx.Send(RequesterId_, new TEvInferredFileSchema(file.Path, std::move(ydbFields)));

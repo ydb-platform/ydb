@@ -31,6 +31,7 @@
   В случае, если из пользовательской функции вернулась ошибка, {{ ydb-short-name }} Go SDK пытается идентифицировать эту ошибку и в зависимости от нее выполняет повторные попытки.
 
   Пример кода, использующего функцию `retry.Retry`:
+
   ```golang
   package main
 
@@ -61,6 +62,7 @@
                   return err
               }
               fmt.Println(whoAmI)
+              return nil
           },
           retry.WithIdempotent(true),
       )
@@ -80,6 +82,7 @@
   Пользователь может влиять на логику выполнения повторных запросов через контекст и признак идемпотентности, а {{ ydb-short-name }} Go SDK интерпретирует возвращаемые из `op` ошибки.
 
   Пример кода, использующего функцию `db.Table().Do(ctx, op)`:
+
   ```golang
   err := db.Table().Do(ctx, func(ctx context.Context, s table.Session) (err error) {
       desc, err = s.DescribeTableOptions(ctx)
@@ -100,6 +103,7 @@
   Пользователь может влиять на логику выполнения повторных запросов через контекст и признак идемпотентности, а {{ ydb-short-name }} Go SDK интерпретирует возвращаемые из `op` ошибки.
 
   Пример кода, использующего функцию `db.Table().DoTx(ctx, op)`:
+
   ```golang
   err := db.Table().DoTx(ctx, func(ctx context.Context, tx table.TransactionActor) error {
       _, err := tx.Execute(ctx,

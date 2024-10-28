@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "grpc_request_proxy.h"
 #include "cancelation/cancelation.h"
 #include "cancelation/cancelation_event.h"
 #include "rpc_common/rpc_common.h"
@@ -62,10 +61,6 @@ public:
 
     const typename TRequest::TRequest* GetProtoRequest() const {
         return TRequest::GetProtoRequest(Request_);
-    }
-
-    typename TRequest::TRequest* GetProtoRequestMut() {
-        return TRequest::GetProtoRequestMut(Request_);
     }
 
     Ydb::Operations::OperationParams::OperationMode GetOperationMode() const {

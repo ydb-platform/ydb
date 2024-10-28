@@ -39,7 +39,7 @@ static inline TFingerprint FarmFingerprint(const void* buf, size_t len)
 
 static inline TFingerprint FarmFingerprint(TStringBuf buf)
 {
-    return FarmFingerprint(buf.Data(), buf.Size());
+    return FarmFingerprint(buf.data(), buf.size());
 }
 
 static inline TFingerprint FarmFingerprint(ui64 first, ui64 second)

@@ -80,6 +80,4 @@ using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 
-void ProtoYdbTypeFromTypeInfo(Ydb::Type* type, const NScheme::TTypeInfo typeInfo);
-
 }

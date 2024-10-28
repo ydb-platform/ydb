@@ -47,7 +47,12 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    config.Opts->AddLongOption("scheme", "S3 endpoint scheme")
+    auto colors = NColorizer::AutoColors(Cout);
+    config.Opts->AddLongOption("scheme", TStringBuilder()
+            << "S3 endpoint scheme - "
+            << colors.BoldColor() << "http" << colors.OldColor()
+            << " or "
+            << colors.BoldColor() << "https" << colors.OldColor())
         .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
 
     config.Opts->AddLongOption("bucket", "S3 bucket")
@@ -92,8 +97,16 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    config.Opts->AddLongOption("use-virtual-addressing", "S3 bucket virtual addressing")
+    config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder() 
+            << "Sets bucket URL style. Value "
+            << colors.BoldColor() << "true" << colors.OldColor()
+            << " means use Virtual-Hosted-Style URL, "
+            << colors.BoldColor() << "false" << colors.OldColor()
+            << " - Path-Style URL.")
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
+
+    config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
+        .RequiredArgument("BOOL").StoreTrue(&NoACL).DefaultValue("false");
 
     AddDeprecatedJsonOption(config);
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
@@ -102,7 +115,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
 void TCommandImportFromS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");
@@ -135,6 +148,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
     }
 
     settings.NumberOfRetries(NumberOfRetries);
+    settings.NoACL(NoACL);
 #if defined(_win32_)
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});
@@ -159,7 +173,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
                 token = listResult.NextToken;
                 for (TStringBuf key : listResult.Keys) {
                     if (key.ChopSuffix(NDump::SCHEME_FILE_NAME)) {
-                        TString destination = item.Destination + key.substr(item.Source.Size());
+                        TString destination = item.Destination + key.substr(item.Source.size());
                         settings.AppendItem({TString(key), std::move(destination)});
                     }
                 }
@@ -308,22 +322,20 @@ int TCommandImportFromCsv::Run(TConfig& config) {
 void TCommandImportFromJson::Config(TConfig& config) {
     TCommandImportFileBase::Config(config);
 
-    AddInputFormats(config, {
-        EDataFormat::JsonUnicode,
-        EDataFormat::JsonBase64
-    });
+    AddLegacyJsonInputFormats(config);
 }
 
 void TCommandImportFromJson::Parse(TConfig& config) {
     TCommandImportFileBase::Parse(config);
 
-    ParseFormats();
+    ParseInputFormats();
 }
 
 int TCommandImportFromJson::Run(TConfig& config) {
     TImportFileSettings settings;
     settings.OperationTimeout(OperationTimeout);
-    settings.Format(InputFormat);
+    settings.Format(EDataFormat::Json);
+    settings.BinaryStringsEncoding(InputBinaryStringEncoding);
     settings.MaxInFlightRequests(MaxInFlightRequests);
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);

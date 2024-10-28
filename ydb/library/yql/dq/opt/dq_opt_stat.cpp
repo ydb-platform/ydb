@@ -30,6 +30,17 @@ namespace {
         return attributeName;
     }
 
+    TString ExtractAlias(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            auto substr = attributeName.substr(0, idx);
+            if (auto idx2 = substr.find_last_of('.'); idx != TString::npos) {
+                substr = substr.substr(idx2+1);
+            }
+            return substr;
+        }
+        return TString();
+    }
+
     TVector<TString> InferLabels(std::shared_ptr<TOptimizerStatistics>& stats, TCoAtomList joinColumns) {
         if(stats->Labels) {
             return *stats->Labels;
@@ -261,14 +272,18 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
     rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
 
-    TVector<TString> leftJoinKeys;
-    TVector<TString> rightJoinKeys;
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
 
     for (size_t i=0; i<join.LeftKeysColumnNames().Size(); i++) {
-        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.LeftKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue());
+        leftJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
     for (size_t i=0; i<join.RightKeysColumnNames().Size(); i++) {
-        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.RightKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue());
+        rightJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
@@ -312,14 +327,18 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
     rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
 
-    TVector<TString> leftJoinKeys;
-    TVector<TString> rightJoinKeys;
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
 
     for (size_t i=0; i<join.LeftKeysColumnNames().Size(); i++) {
-        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.LeftKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue());
+        leftJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
     for (size_t i=0; i<join.RightKeysColumnNames().Size(); i++) {
-        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.RightKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue());
+        rightJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
@@ -600,7 +619,13 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnno
             if (!inputStats) {
                 return;
             }
-
+            
+            // We have a special case of Olap tables, where statistics is computed before lambda, but
+            // is finalized after visiting labda (which may contain a filter)
+            if (typeCtx->GetStats(input.Get())){
+                inputStats = typeCtx->GetStats(input.Get());
+            }
+            
             typeCtx->SetStats( lambda.Args().Arg(0).Raw(), inputStats );
         }
     }

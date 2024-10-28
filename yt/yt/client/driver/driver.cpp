@@ -292,6 +292,7 @@ public:
         REGISTER_ALL(TGetJobInputCommand,                  "get_job_input",                   Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobInputPathsCommand,             "get_job_input_paths",             Null,       Structured, false, true );
         REGISTER_ALL(TGetJobStderrCommand,                 "get_job_stderr",                  Null,       Binary,     false, true );
+        REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Structured, false, true );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
         REGISTER_ALL(TListOperationsCommand,               "list_operations",                 Null,       Structured, false, false);
@@ -395,9 +396,9 @@ public:
             REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
             REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
-            REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",    Null,    Structured, true, false);
-            REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",   Null,    Null,       true, false);
-            REGISTER_ALL(TParticipantWriteTableCommand,           "participant_write_table",            Tabular, Structured, true, true );
+            REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",      Null,    Structured, true, false);
+            REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",     Null,    Null,       true, false);
+            REGISTER_ALL(TWriteTableFragmentCommand,               "distributed_write_table_partition",    Tabular, Structured, true, true );
         }
 
 #undef REGISTER
@@ -548,8 +549,7 @@ private:
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            // TODO(babenko): switch to std::string
-            traceContext->AddTag("user", TString(request.AuthenticatedUser));
+            traceContext->AddTag("user", request.AuthenticatedUser);
             traceContext->AddTag("request_id", request.Id);
         });
 

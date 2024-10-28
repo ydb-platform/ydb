@@ -17,6 +17,7 @@ where
 - `<auth_mode_value>` is the authentication parameter value for the selected mode.
 
 For example:
+
 ```bash
 YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." \
 python3 ydb-python-sdk/examples/basic_example_v1/ -e grpcs://ydb.example.com:2135 -d /path/db )

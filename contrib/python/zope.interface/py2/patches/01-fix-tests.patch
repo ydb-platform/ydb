@@ -1,0 +1,704 @@
+--- contrib/python/zope.interface/py2/zope/interface/common/tests/basemapping.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/common/tests/basemapping.py	(working tree)
+@@ -15,7 +15,7 @@
+ """
+ from operator import __getitem__
+ 
+-def testIReadMapping(self, inst, state, absent):
++def _testIReadMapping(self, inst, state, absent):
+     for key in state:
+         self.assertEqual(inst[key], state[key])
+         self.assertEqual(inst.get(key, None), state[key])
+@@ -28,39 +28,39 @@ def testIReadMapping(self, inst, state, absent):
+         self.assertRaises(KeyError, __getitem__, inst, key)
+ 
+ 
+-def test_keys(self, inst, state):
++def _test_keys(self, inst, state):
+     # Return the keys of the mapping object
+     inst_keys = list(inst.keys()); inst_keys.sort()
+     state_keys = list(state.keys()) ; state_keys.sort()
+     self.assertEqual(inst_keys, state_keys)
+ 
+-def test_iter(self, inst, state):
++def _test_iter(self, inst, state):
+     # Return the keys of the mapping object
+     inst_keys = list(inst); inst_keys.sort()
+     state_keys = list(state.keys()) ; state_keys.sort()
+     self.assertEqual(inst_keys, state_keys)
+ 
+-def test_values(self, inst, state):
++def _test_values(self, inst, state):
+     # Return the values of the mapping object
+     inst_values = list(inst.values()); inst_values.sort()
+     state_values = list(state.values()) ; state_values.sort()
+     self.assertEqual(inst_values, state_values)
+ 
+-def test_items(self, inst, state):
++def _test_items(self, inst, state):
+     # Return the items of the mapping object
+     inst_items = list(inst.items()); inst_items.sort()
+     state_items = list(state.items()) ; state_items.sort()
+     self.assertEqual(inst_items, state_items)
+ 
+-def test___len__(self, inst, state):
++def _test___len__(self, inst, state):
+     # Return the number of items
+     self.assertEqual(len(inst), len(state))
+ 
+-def testIEnumerableMapping(self, inst, state):
+-    test_keys(self, inst, state)
+-    test_items(self, inst, state)
+-    test_values(self, inst, state)
+-    test___len__(self, inst, state)
++def _testIEnumerableMapping(self, inst, state):
++    _test_keys(self, inst, state)
++    _test_items(self, inst, state)
++    _test_values(self, inst, state)
++    _test___len__(self, inst, state)
+ 
+ 
+ class BaseTestIReadMapping(object):
+@@ -68,7 +68,7 @@ class BaseTestIReadMapping(object):
+         inst = self._IReadMapping__sample()
+         state = self._IReadMapping__stateDict()
+         absent = self._IReadMapping__absentKeys()
+-        testIReadMapping(self, inst, state, absent)
++        _testIReadMapping(self, inst, state, absent)
+ 
+ 
+ class BaseTestIEnumerableMapping(BaseTestIReadMapping):
+@@ -77,25 +77,25 @@ class BaseTestIEnumerableMapping(BaseTestIReadMapping):
+         # Return the keys of the mapping object
+         inst = self._IEnumerableMapping__sample()
+         state = self._IEnumerableMapping__stateDict()
+-        test_keys(self, inst, state)
++        _test_keys(self, inst, state)
+ 
+     def test_values(self):
+         # Return the values of the mapping object
+         inst = self._IEnumerableMapping__sample()
+         state = self._IEnumerableMapping__stateDict()
+-        test_values(self, inst, state)
++        _test_values(self, inst, state)
+ 
+     def test_items(self):
+         # Return the items of the mapping object
+         inst = self._IEnumerableMapping__sample()
+         state = self._IEnumerableMapping__stateDict()
+-        test_items(self, inst, state)
++        _test_items(self, inst, state)
+ 
+     def test___len__(self):
+         # Return the number of items
+         inst = self._IEnumerableMapping__sample()
+         state = self._IEnumerableMapping__stateDict()
+-        test___len__(self, inst, state)
++        _test___len__(self, inst, state)
+ 
+     def _IReadMapping__stateDict(self):
+         return self._IEnumerableMapping__stateDict()
+--- contrib/python/zope.interface/py2/zope/interface/tests/__init__.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/__init__.py	(working tree)
+@@ -23,7 +23,7 @@ class OptimizationTestMixin(object):
+         # get the Python object from that.
+         raise NotImplementedError
+ 
+-    def test_optimizations(self):
++    def _test_optimizations(self):
+         used = self._getTargetClass()
+         fallback = self._getFallbackClass()
+ 
+--- contrib/python/zope.interface/py2/zope/interface/tests/dummy.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/dummy.py	(working tree)
+@@ -14,7 +14,7 @@
+ """ Dummy Module
+ """
+ from zope.interface import moduleProvides
+-from zope.interface.tests.idummy import IDummyModule
++from .idummy import IDummyModule
+ 
+ moduleProvides(IDummyModule)
+ 
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_adapter.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_adapter.py	(working tree)
+@@ -15,7 +15,7 @@
+ """
+ import unittest
+ 
+-from zope.interface.tests import OptimizationTestMixin
++from __tests__.tests import OptimizationTestMixin
+ 
+ # pylint:disable=inherit-non-class,protected-access,too-many-lines
+ # pylint:disable=attribute-defined-outside-init,blacklisted-name
+@@ -1640,7 +1640,7 @@ class AdapterLookupBaseTests(unittest.TestCase):
+         # but after https://github.com/zopefoundation/zope.interface/issues/200
+         # they get propagated.
+         from zope.interface.interface import InterfaceClass
+-        from zope.interface.tests import MissingSomeAttrs
++        from __tests__.tests import MissingSomeAttrs
+ 
+         IFoo = InterfaceClass('IFoo')
+         registry = self._makeRegistry()
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_advice.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_advice.py	(working tree)
+@@ -35,7 +35,7 @@ from zope.interface._compat import _skip_under_py3k
+ class FrameInfoTest(unittest.TestCase):
+ 
+     def test_w_module(self):
+-        from zope.interface.tests import advisory_testing
++        from . import advisory_testing
+         (kind, module,
+          f_locals, f_globals) = advisory_testing.moduleLevelFrameInfo
+         self.assertEqual(kind, "module")
+@@ -44,7 +44,7 @@ class FrameInfoTest(unittest.TestCase):
+ 
+     @_skip_under_py3k
+     def test_w_ClassicClass(self):
+-        from zope.interface.tests import advisory_testing
++        from . import advisory_testing
+         (kind,
+          module,
+          f_locals,
+@@ -57,7 +57,7 @@ class FrameInfoTest(unittest.TestCase):
+             self.assertTrue(d is advisory_testing.my_globals)
+ 
+     def test_w_NewStyleClass(self):
+-        from zope.interface.tests import advisory_testing
++        from . import advisory_testing
+         (kind,
+          module,
+          f_locals,
+@@ -95,7 +95,7 @@ class AdviceTests(unittest.TestCase):
+ 
+     @_skip_under_py3k
+     def test_order(self):
+-        from zope.interface.tests.advisory_testing import ping
++        from .advisory_testing import ping
+         log = []
+         class Foo(object):
+             ping(log, 1)
+@@ -111,7 +111,7 @@ class AdviceTests(unittest.TestCase):
+ 
+     @_skip_under_py3k
+     def test_single_explicit_meta(self):
+-        from zope.interface.tests.advisory_testing import ping
++        from .advisory_testing import ping
+ 
+         class Metaclass(type):
+             pass
+@@ -126,7 +126,7 @@ class AdviceTests(unittest.TestCase):
+ 
+     @_skip_under_py3k
+     def test_mixed_metas(self):
+-        from zope.interface.tests.advisory_testing import ping
++        from .advisory_testing import ping
+ 
+         class Metaclass1(type):
+             pass
+@@ -160,7 +160,7 @@ class AdviceTests(unittest.TestCase):
+ 
+     @_skip_under_py3k
+     def test_meta_no_bases(self):
+-        from zope.interface.tests.advisory_testing import ping
++        from .advisory_testing import ping
+         from types import ClassType
+         class Thing:
+             ping([], 1)
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_declarations.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_declarations.py	(working tree)
+@@ -17,9 +17,9 @@ import unittest
+ 
+ from zope.interface._compat import _skip_under_py3k
+ from zope.interface._compat import PYTHON3
+-from zope.interface.tests import OptimizationTestMixin
+-from zope.interface.tests import MissingSomeAttrs
+-from zope.interface.tests.test_interface import NameAndModuleComparisonTestsMixin
++from __tests__.tests import OptimizationTestMixin
++from __tests__.tests import MissingSomeAttrs
++from __tests__.tests.test_interface import NameAndModuleComparisonTestsMixin
+ 
+ # pylint:disable=inherit-non-class,too-many-lines,protected-access
+ # pylint:disable=blacklisted-name,attribute-defined-outside-init
+@@ -297,7 +297,7 @@ class DeclarationTests(EmptyDeclarationTests):
+         # the other way).
+         from zope.interface import Interface
+         from zope.interface.interface import InterfaceClass
+-        from zope.interface.tests.test_ro import C3Setting
++        from __tests__.tests.test_ro import C3Setting
+         from zope.interface import ro
+ 
+         IBase = InterfaceClass('IBase')
+@@ -319,7 +319,7 @@ class DeclarationTests(EmptyDeclarationTests):
+         from zope.interface import Interface
+         from zope.interface import implementedBy
+         from zope.interface import implementer
+-        from zope.interface.tests.test_ro import C3Setting
++        from __tests__.tests.test_ro import C3Setting
+         from zope.interface import ro
+ 
+         class IBase(Interface):
+@@ -647,7 +647,7 @@ class Test_implementedByFallback(unittest.TestCase):
+         foo.__name__ = 'foo'
+         spec = self._callFUT(foo)
+         self.assertEqual(spec.__name__,
+-                         'zope.interface.tests.test_declarations.foo')
++                         '__tests__.tests.test_declarations.foo')
+         self.assertIs(spec.inherit, foo)
+         self.assertIs(foo.__implemented__, spec)
+         self.assertIs(foo.__providedBy__, objectSpecificationDescriptor) # pylint:disable=no-member
+@@ -659,7 +659,7 @@ class Test_implementedByFallback(unittest.TestCase):
+             __implemented__ = None
+         spec = self._callFUT(Foo)
+         self.assertEqual(spec.__name__,
+-                         'zope.interface.tests.test_declarations.Foo')
++                         '__tests__.tests.test_declarations.Foo')
+         self.assertIs(spec.inherit, Foo)
+         self.assertIs(Foo.__implemented__, spec)
+         self.assertIsInstance(Foo.__providedBy__, ClassProvides) # pylint:disable=no-member
+@@ -997,7 +997,7 @@ class Test_classImplements(_ImplementsTestMixin, unittest.TestCase):
+         from zope.interface import Interface
+         from zope.interface import implementedBy
+         from zope.interface import ro
+-        from zope.interface.tests.test_ro import C3Setting
++        from __tests__.tests.test_ro import C3Setting
+ 
+         class Foo(object):
+             pass
+@@ -1123,7 +1123,7 @@ class Test_implementer(Test_classImplements):
+         returned = decorator(foo)
+         self.assertTrue(returned is foo)
+         spec = foo.__implemented__ # pylint:disable=no-member
+-        self.assertEqual(spec.__name__, 'zope.interface.tests.test_declarations.?')
++        self.assertEqual(spec.__name__, '__tests__.tests.test_declarations.?')
+         self.assertIsNone(spec.inherit,)
+         self.assertIs(foo.__implemented__, spec) # pylint:disable=no-member
+ 
+@@ -1415,17 +1415,17 @@ class TestProvidesClassRepr(unittest.TestCase):
+     def test__repr__module_provides_typical_use(self):
+         # as created through a ``moduleProvides()`` statement
+         # in a module body
+-        from zope.interface.tests import dummy
++        from __tests__.tests import dummy
+         provides = dummy.__provides__ # pylint:disable=no-member
+         self.assertEqual(
+             repr(provides),
+-            "directlyProvides(sys.modules['zope.interface.tests.dummy'], IDummyModule)"
++            "directlyProvides(sys.modules['__tests__.tests.dummy'], IDummyModule)"
+         )
+ 
+     def test__repr__module_after_pickle(self):
+         # It doesn't matter, these objects can't be pickled.
+         import pickle
+-        from zope.interface.tests import dummy
++        from __tests__.tests import dummy
+         provides = dummy.__provides__ # pylint:disable=no-member
+         for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+             with self.assertRaises(pickle.PicklingError):
+@@ -1433,7 +1433,7 @@ class TestProvidesClassRepr(unittest.TestCase):
+ 
+     def test__repr__directlyProvides_module(self):
+         import sys
+-        from zope.interface.tests import dummy
++        from __tests__.tests import dummy
+         from zope.interface.declarations import directlyProvides
+         from zope.interface.declarations import alsoProvides
+         from zope.interface.interface import InterfaceClass
+@@ -1450,7 +1450,7 @@ class TestProvidesClassRepr(unittest.TestCase):
+ 
+         self.assertEqual(
+             repr(provides),
+-            "directlyProvides(sys.modules['zope.interface.tests.dummy'], IFoo)"
++            "directlyProvides(sys.modules['__tests__.tests.dummy'], IFoo)"
+         )
+ 
+         alsoProvides(dummy, IBar)
+@@ -1458,7 +1458,7 @@ class TestProvidesClassRepr(unittest.TestCase):
+ 
+         self.assertEqual(
+             repr(provides),
+-            "directlyProvides(sys.modules['zope.interface.tests.dummy'], IFoo, IBar)"
++            "directlyProvides(sys.modules['__tests__.tests.dummy'], IFoo, IBar)"
+         )
+ 
+         # If we make this module also provide IFoo and IBar, then the repr
+@@ -1471,8 +1471,8 @@ class TestProvidesClassRepr(unittest.TestCase):
+         self.assertIs(my_module.__provides__, provides)
+         self.assertEqual(
+             repr(provides),
+-            "directlyProvides(('zope.interface.tests.dummy', "
+-            "'zope.interface.tests.test_declarations'), "
++            "directlyProvides(('__tests__.tests.dummy', "
++            "'__tests__.tests.test_declarations'), "
+             "IFoo, IBar)"
+         )
+ 
+@@ -2103,7 +2103,7 @@ class Test_moduleProvides(unittest.TestCase):
+         from zope.interface.declarations import moduleProvides
+         from zope.interface.interface import InterfaceClass
+         IFoo = InterfaceClass("IFoo")
+-        globs = {'__name__': 'zope.interface.tests.foo',
++        globs = {'__name__': '__tests__.tests.tests.foo',
+                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
+         locs = {}
+         CODE = "\n".join([
+@@ -2118,7 +2118,7 @@ class Test_moduleProvides(unittest.TestCase):
+         from zope.interface.declarations import moduleProvides
+         from zope.interface.interface import InterfaceClass
+         IFoo = InterfaceClass("IFoo")
+-        globs = {'__name__': 'zope.interface.tests.foo',
++        globs = {'__name__': '__tests__.tests.tests.foo',
+                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
+         locs = {}
+         CODE = "\n".join([
+@@ -2132,7 +2132,7 @@ class Test_moduleProvides(unittest.TestCase):
+         from zope.interface.declarations import moduleProvides
+         from zope.interface.interface import InterfaceClass
+         IFoo = InterfaceClass("IFoo")
+-        globs = {'__name__': 'zope.interface.tests.foo',
++        globs = {'__name__': '__tests__.tests.tests.foo',
+                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
+         CODE = "\n".join([
+             'moduleProvides(IFoo)',
+@@ -2145,7 +2145,7 @@ class Test_moduleProvides(unittest.TestCase):
+         from zope.interface.declarations import moduleProvides
+         from zope.interface.interface import InterfaceClass
+         IFoo = InterfaceClass("IFoo")
+-        globs = {'__name__': 'zope.interface.tests.foo',
++        globs = {'__name__': '__tests__.tests.tests.foo',
+                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
+ 
+         CODE = "\n".join([
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_exceptions.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_exceptions.py	(working tree)
+@@ -36,7 +36,7 @@ class DoesNotImplementTests(unittest.TestCase):
+         self.assertEqual(
+             str(dni),
+             "An object has failed to implement interface "
+-            "zope.interface.tests.test_exceptions.IDummy: "
++            "__tests__.tests.test_exceptions.IDummy: "
+             "Does not declaratively implement the interface."
+         )
+ 
+@@ -45,7 +45,7 @@ class DoesNotImplementTests(unittest.TestCase):
+         self.assertEqual(
+             str(dni),
+             "The object 'candidate' has failed to implement interface "
+-            "zope.interface.tests.test_exceptions.IDummy: "
++            "__tests__.tests.test_exceptions.IDummy: "
+             "Does not declaratively implement the interface."
+         )
+ 
+@@ -65,7 +65,7 @@ class BrokenImplementationTests(unittest.TestCase):
+         self.assertEqual(
+             str(dni),
+             'An object has failed to implement interface '
+-            'zope.interface.tests.test_exceptions.IDummy: '
++            '__tests__.tests.test_exceptions.IDummy: '
+             "The 'missing' attribute was not provided.")
+ 
+     def test___str__w_candidate(self):
+@@ -73,7 +73,7 @@ class BrokenImplementationTests(unittest.TestCase):
+         self.assertEqual(
+             str(dni),
+             'The object \'candidate\' has failed to implement interface '
+-            'zope.interface.tests.test_exceptions.IDummy: '
++            '__tests__.tests.test_exceptions.IDummy: '
+             "The 'missing' attribute was not provided.")
+ 
+ 
+@@ -161,7 +161,7 @@ class MultipleInvalidTests(unittest.TestCase):
+         self.assertEqual(
+             str(dni),
+             "The object 'target' has failed to implement interface "
+-            "zope.interface.tests.test_exceptions.IDummy:\n"
++            "__tests__.tests.test_exceptions.IDummy:\n"
+             "    The contract of 'aMethod' is violated because I said so\n"
+             "    Regular exception"
+         )
+@@ -177,7 +177,7 @@ class MultipleInvalidTests(unittest.TestCase):
+         dni = self._makeOne(excs)
+         self.assertEqual(
+             repr(dni),
+-            "MultipleInvalid(<InterfaceClass zope.interface.tests.test_exceptions.IDummy>,"
++            "MultipleInvalid(<InterfaceClass __tests__.tests.test_exceptions.IDummy>,"
+             " 'target',"
+             " (BrokenMethodImplementation('aMethod', 'I said so'),"
+             " Exception('Regular', 'exception')))"
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_interface.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_interface.py	(working tree)
+@@ -24,9 +24,9 @@
+ import unittest
+ 
+ from zope.interface._compat import _skip_under_py3k
+-from zope.interface.tests import MissingSomeAttrs
+-from zope.interface.tests import OptimizationTestMixin
+-from zope.interface.tests import CleanUp
++from __tests__.tests import MissingSomeAttrs
++from __tests__.tests import OptimizationTestMixin
++from __tests__.tests import CleanUp
+ 
+ _marker = object()
+ 
+@@ -1036,7 +1036,7 @@ class InterfaceClassTests(unittest.TestCase):
+         iface = self._makeOne('HashMe')
+         self.assertEqual(hash(iface),
+                          hash((('HashMe',
+-                                'zope.interface.tests.test_interface'))))
++                                '__tests__.tests.test_interface'))))
+ 
+     def test___hash___missing_required_attrs(self):
+         class Derived(self._getTargetClass()):
+@@ -1076,8 +1076,8 @@ class InterfaceClassTests(unittest.TestCase):
+ 
+     def test_comparison_with_same_named_instance_in_other_module(self):
+ 
+-        one = self._makeOne('IName', __module__='zope.interface.tests.one')
+-        other = self._makeOne('IName', __module__='zope.interface.tests.other')
++        one = self._makeOne('IName', __module__='__tests__.tests.one')
++        other = self._makeOne('IName', __module__='__tests__.tests.other')
+ 
+         self.assertTrue(one < other)
+         self.assertFalse(other < one)
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_odd_declarations.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_odd_declarations.py	(working tree)
+@@ -18,7 +18,7 @@ classic ExtensionClass classes and instances.
+ """
+ import unittest
+ 
+-from zope.interface.tests import odd
++from . import odd
+ from zope.interface import Interface
+ from zope.interface import implementer
+ from zope.interface import directlyProvides
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_ro.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_ro.py	(working tree)
+@@ -190,197 +190,6 @@ class C3Setting(object):
+         from zope.interface import ro
+         setattr(ro.C3, self._setting.__name__, self._setting)
+ 
+-class Test_c3_ro(Test_ro):
+-
+-    def setUp(self):
+-        Test_ro.setUp(self)
+-        from zope.testing.loggingsupport import InstalledHandler
+-        self.log_handler = handler = InstalledHandler('zope.interface.ro')
+-        self.addCleanup(handler.uninstall)
+-
+-    def _callFUT(self, ob, **kwargs):
+-        from zope.interface.ro import ro
+-        return ro(ob, **kwargs)
+-
+-    def test_complex_diamond(self, base=object):
+-        # https://github.com/zopefoundation/zope.interface/issues/21
+-        O = base
+-        class F(O):
+-            pass
+-        class E(O):
+-            pass
+-        class D(O):
+-            pass
+-        class C(D, F):
+-            pass
+-        class B(D, E):
+-            pass
+-        class A(B, C):
+-            pass
+-
+-        if hasattr(A, 'mro'):
+-            self.assertEqual(A.mro(), self._callFUT(A))
+-
+-        return A
+-
+-    def test_complex_diamond_interface(self):
+-        from zope.interface import Interface
+-
+-        IA = self.test_complex_diamond(Interface)
+-
+-        self.assertEqual(
+-            [x.__name__ for x in IA.__iro__],
+-            ['A', 'B', 'C', 'D', 'E', 'F', 'Interface']
+-        )
+-
+-    def test_complex_diamond_use_legacy_argument(self):
+-        from zope.interface import Interface
+-
+-        A = self.test_complex_diamond(Interface)
+-        legacy_A_iro = self._callFUT(A, use_legacy_ro=True)
+-        self.assertNotEqual(A.__iro__, legacy_A_iro)
+-
+-        # And logging happened as a side-effect.
+-        self._check_handler_complex_diamond()
+-
+-    def test_complex_diamond_compare_legacy_argument(self):
+-        from zope.interface import Interface
+-
+-        A = self.test_complex_diamond(Interface)
+-        computed_A_iro = self._callFUT(A, log_changed_ro=True)
+-        # It matches, of course, but we did log a warning.
+-        self.assertEqual(tuple(computed_A_iro), A.__iro__)
+-        self._check_handler_complex_diamond()
+-
+-    def _check_handler_complex_diamond(self):
+-        handler = self.log_handler
+-        self.assertEqual(1, len(handler.records))
+-        record = handler.records[0]
+-
+-        self.assertEqual('\n'.join(l.rstrip() for l in record.getMessage().splitlines()), """\
+-Object <InterfaceClass zope.interface.tests.test_ro.A> has different legacy and C3 MROs:
+-  Legacy RO (len=7)                 C3 RO (len=7; inconsistent=no)
+-  ==================================================================
+-    zope.interface.tests.test_ro.A    zope.interface.tests.test_ro.A
+-    zope.interface.tests.test_ro.B    zope.interface.tests.test_ro.B
+-  - zope.interface.tests.test_ro.E
+-    zope.interface.tests.test_ro.C    zope.interface.tests.test_ro.C
+-    zope.interface.tests.test_ro.D    zope.interface.tests.test_ro.D
+-                                    + zope.interface.tests.test_ro.E
+-    zope.interface.tests.test_ro.F    zope.interface.tests.test_ro.F
+-    zope.interface.Interface          zope.interface.Interface""")
+-
+-    def test_ExtendedPathIndex_implement_thing_implementedby_super(self):
+-        # See https://github.com/zopefoundation/zope.interface/pull/182#issuecomment-598754056
+-        from zope.interface import ro
+-        # pylint:disable=inherit-non-class
+-        class _Based(object):
+-            __bases__ = ()
+-
+-            def __init__(self, name, bases=(), attrs=None):
+-                self.__name__ = name
+-                self.__bases__ = bases
+-
+-            def __repr__(self):
+-                return self.__name__
+-
+-        Interface = _Based('Interface', (), {})
+-
+-        class IPluggableIndex(Interface):
+-            pass
+-
+-        class ILimitedResultIndex(IPluggableIndex):
+-            pass
+-
+-        class IQueryIndex(IPluggableIndex):
+-            pass
+-
+-        class IPathIndex(Interface):
+-            pass
+-
+-        # A parent class who implements two distinct interfaces whose
+-        # only common ancestor is Interface. An easy case.
+-        # @implementer(IPathIndex, IQueryIndex)
+-        # class PathIndex(object):
+-        #     pass
+-        obj = _Based('object')
+-        PathIndex = _Based('PathIndex', (IPathIndex, IQueryIndex, obj))
+-
+-        # Child class that tries to put an interface the parent declares
+-        # later ahead of the parent.
+-        # @implementer(ILimitedResultIndex, IQueryIndex)
+-        # class ExtendedPathIndex(PathIndex):
+-        #     pass
+-        ExtendedPathIndex = _Based('ExtendedPathIndex',
+-                                   (ILimitedResultIndex, IQueryIndex, PathIndex))
+-
+-        # We were able to resolve it, and in exactly the same way as
+-        # the legacy RO did, even though it is inconsistent.
+-        result = self._callFUT(ExtendedPathIndex, log_changed_ro=True, strict=False)
+-        self.assertEqual(result, [
+-            ExtendedPathIndex,
+-            ILimitedResultIndex,
+-            PathIndex,
+-            IPathIndex,
+-            IQueryIndex,
+-            IPluggableIndex,
+-            Interface,
+-            obj])
+-
+-        record, = self.log_handler.records
+-        self.assertIn('used the legacy', record.getMessage())
+-
+-        with self.assertRaises(ro.InconsistentResolutionOrderError):
+-            self._callFUT(ExtendedPathIndex, strict=True)
+-
+-    def test_OSError_IOError(self):
+-        if OSError is not IOError:
+-            # Python 2
+-            self.skipTest("Requires Python 3 IOError == OSError")
+-        from zope.interface.common import interfaces
+-        from zope.interface import providedBy
+-
+-        self.assertEqual(
+-            list(providedBy(OSError()).flattened()),
+-            [
+-                interfaces.IOSError,
+-                interfaces.IIOError,
+-                interfaces.IEnvironmentError,
+-                interfaces.IStandardError,
+-                interfaces.IException,
+-                interfaces.Interface,
+-            ])
+-
+-    def test_non_orderable(self):
+-        import warnings
+-        from zope.interface import ro
+-        try:
+-            # If we've already warned, we must reset that state.
+-            del ro.__warningregistry__
+-        except AttributeError:
+-            pass
+-
+-        with warnings.catch_warnings():
+-            warnings.simplefilter('error')
+-            with C3Setting(ro.C3.WARN_BAD_IRO, True), C3Setting(ro.C3.STRICT_IRO, False):
+-                with self.assertRaises(ro.InconsistentResolutionOrderWarning):
+-                    super(Test_c3_ro, self).test_non_orderable()
+-
+-        IOErr, _ = self._make_IOErr()
+-        with self.assertRaises(ro.InconsistentResolutionOrderError):
+-            self._callFUT(IOErr, strict=True)
+-
+-        with C3Setting(ro.C3.TRACK_BAD_IRO, True), C3Setting(ro.C3.STRICT_IRO, False):
+-            with warnings.catch_warnings():
+-                warnings.simplefilter('ignore')
+-                self._callFUT(IOErr)
+-            self.assertIn(IOErr, ro.C3.BAD_IROS)
+-
+-        iro = self._callFUT(IOErr, strict=False)
+-        legacy_iro = self._callFUT(IOErr, use_legacy_ro=True, strict=False)
+-        self.assertEqual(iro, legacy_iro)
+-
+-
+ class TestC3(unittest.TestCase):
+     def _makeOne(self, C, strict=False, base_mros=None):
+         from zope.interface.ro import C3
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_sorting.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_sorting.py	(working tree)
+@@ -41,7 +41,7 @@ class Test(unittest.TestCase):
+     def test_w_equal_names(self):
+         # interfaces with equal names but different modules should sort by
+         # module name
+-        from zope.interface.tests.m1 import I1 as m1_I1
++        from .m1 import I1 as m1_I1
+         l = [I1, m1_I1]
+         l.sort()
+         self.assertEqual(l, [m1_I1, I1])
+--- contrib/python/zope.interface/py2/zope/interface/tests/test_verify.py	(index)
++++ contrib/python/zope.interface/py2/zope/interface/tests/test_verify.py	(working tree)
+@@ -614,14 +614,14 @@ class Test_verifyObject(Test_verifyClass):
+                           self._callFUT, ICurrent, Current)
+ 
+     def test_module_hit(self):
+-        from zope.interface.tests.idummy import IDummyModule
+-        from zope.interface.tests import dummy
++        from .idummy import IDummyModule
++        from . import dummy
+ 
+         self._callFUT(IDummyModule, dummy)
+ 
+     def test_module_miss(self):
+         from zope.interface import Interface
+-        from zope.interface.tests import dummy
++        from . import dummy
+         from zope.interface.exceptions import DoesNotImplement
+ 
+         # same name, different object

@@ -79,6 +79,9 @@ namespace NKikimr {
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
+                WriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
+                    WriteActorTableNavigate = TComponentTracingLevels::TQueryProcessor::Detailed,
+
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };
     };

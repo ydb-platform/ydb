@@ -1240,7 +1240,7 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         auto seq = tx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
         seq->SetName(name);
     }
-    
+
     desc->SetUniformPartitionsCount(opts.Shards_);
 
     if (!opts.EnableOutOfOrder_)
@@ -1771,6 +1771,10 @@ ui64 AsyncAlterAddStream(
     if (streamDesc.AwsRegion) {
         desc.MutableStreamDescription()->SetAwsRegion(*streamDesc.AwsRegion);
     }
+    if (streamDesc.TopicAutoPartitioning) {
+        desc.SetTopicAutoPartitioning(true);
+        desc.SetMaxPartitionCount(1000);
+    }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
@@ -1881,20 +1885,11 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
     WaitTxNotification(server, sender, txId);
 }
 
-NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount, ui64 minRows) {
-    NKikimrTxDataShard::TEvPeriodicTableStats stats;
-    bool captured = false;
+void WaitTableStatsImpl(TTestActorRuntime& runtime, 
+    std::function<void(typename TEvDataShard::TEvPeriodicTableStats::TPtr&)> observerFunc,
+    bool& captured) {
 
-    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](auto& ev) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetDatashardId() == tabletId) {
-            Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
-            if (record.GetTableStats().GetPartCount() >= minPartCount && record.GetTableStats().GetRowCount() >= minRows) {
-                stats = record;
-                captured = true;
-            }
-        }
-    });
+    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>(observerFunc);
 
     for (int i = 0; i < 5 && !captured; ++i) {
         TDispatchOptions options;
@@ -1905,7 +1900,56 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
     observer.Remove();
 
     UNIT_ASSERT(captured);
+}
 
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minRowReads, ui64 minRangeReadRows) {
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observerFunc = [&](auto& ev) {
+        const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
+        Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
+
+        if (!record.GetFollowerId())
+            return;
+
+        if (record.GetDatashardId() != tabletId)
+            return;
+        
+        if (record.GetTableStats().GetRowReads() < minRowReads || record.GetTableStats().GetRangeReadRows() < minRangeReadRows)
+            return;
+
+        stats = record;
+        captured = true;
+    };
+
+    WaitTableStatsImpl(runtime, observerFunc, captured);
+    return stats;
+}
+
+
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount, ui64 minRows) {
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observerFunc = [&](auto& ev) {
+        const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
+        Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
+
+        if (record.GetFollowerId())
+            return;
+
+        if (record.GetDatashardId() != tabletId)
+            return;
+        
+        if (record.GetTableStats().GetPartCount() < minPartCount || record.GetTableStats().GetRowCount() < minRows)
+            return;
+
+        stats = record;
+        captured = true;
+    };
+
+    WaitTableStatsImpl(runtime, observerFunc, captured);
     return stats;
 }
 
@@ -1975,7 +2019,7 @@ void ExecSQL(Tests::TServer::TPtr server,
     auto request = MakeSQLRequest(sql, dml);
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-    auto& response = ev->Get()->Record.GetRef();
+    auto& response = ev->Get()->Record;
     auto& issues = response.GetResponse().GetQueryIssues();
     UNIT_ASSERT_VALUES_EQUAL_C(response.GetYdbStatus(),
                                code,
@@ -2011,7 +2055,7 @@ void AddValueToCells(ui64 value, const TString& columnType, TVector<TCell>& cell
         cells.emplace_back(TCell(stringValues.back().c_str(), stringValues.back().size()));
     } else {
         Y_ABORT("Unsupported column type");
-    }  
+    }
 }
 
 
@@ -2076,7 +2120,7 @@ NKikimrDataEvents::TEvWriteResult Write(TTestActorRuntime& runtime, TActorId sen
 
     auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
     auto resultRecord = ev->Get()->Record;
-    
+
     if (expectedStatus == NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED) {
         switch (txMode) {
             case NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE:
@@ -2227,7 +2271,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         auto status = NKikimr::NDataShard::NEvWrite::TConvertor::GetStatus(record.GetStatus());
 
         auto evResult = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, status);
-        
+
         if (status == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED) {
             evResult->SetPrepared(record.GetMinStep(), record.GetMaxStep(), {});
             evResult->Record.MutableDomainCoordinators()->CopyFrom(record.GetDomainCoordinators());
@@ -2488,6 +2532,10 @@ namespace {
                 PrintPrimitive(out, parser);
                 break;
 
+            case NYdb::TTypeParser::ETypeKind::Pg:
+                PrintPg(out, parser);
+                break;
+
             default:
                 Y_ABORT("Unhandled");
             }
@@ -2516,6 +2564,15 @@ namespace {
             }
 
             #undef PRINT_PRIMITIVE
+        }
+
+        static void PrintPg(TStringBuilder& out, const NYdb::TValueParser& parser) {
+            auto pg = parser.GetPg();
+            if (pg.IsNull()) {
+                out << "(pg null)";
+            } else {
+                out << pg.Content_.Quote();
+            }
         }
 
     private:

@@ -1,0 +1,78 @@
+diff --git a/include/mutex b/include/mutex
+index 536cf9c..1093f55 100644
+--- a/include/mutex
++++ b/include/mutex
+@@ -198,6 +198,10 @@ template<class Callable, class ...Args>
+ #endif
+ #include <version>
+ 
++#if !defined(_LIBCPP_HAS_NO_THREADS) && !defined(_LIBCPP_CXX03_LANG)
++#include <atomic>
++#endif
++
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+ #  pragma GCC system_header
+ #endif
+@@ -581,7 +585,11 @@ struct _LIBCPP_TEMPLATE_VIS once_flag
+ #endif
+ 
+ private:
++#if defined(_LIBCPP_ABI_MICROSOFT)
++    atomic<_State_type> __state_;
++#else
+     _State_type __state_;
++#endif
+ 
+ #ifndef _LIBCPP_CXX03_LANG
+     template<class _Callable, class... _Args>
+@@ -651,8 +659,13 @@ __call_once_proxy(void* __vp)
+     (*__p)();
+ }
+ 
++#ifdef _LIBCPP_ABI_MICROSOFT
++_LIBCPP_FUNC_VIS void __call_once(volatile atomic<once_flag::_State_type>&, void*,
++                                  void (*)(void*));
++#else
+ _LIBCPP_FUNC_VIS void __call_once(volatile once_flag::_State_type&, void*,
+                                   void (*)(void*));
++#endif
+ 
+ #ifndef _LIBCPP_CXX03_LANG
+ 
+@@ -661,7 +674,11 @@ inline _LIBCPP_INLINE_VISIBILITY
+ void
+ call_once(once_flag& __flag, _Callable&& __func, _Args&&... __args)
+ {
++#if defined(_LIBCPP_ABI_MICROSOFT)
++    if (__flag.__state_.load(memory_order_acquire) != ~once_flag::_State_type(0))
++#else
+     if (__libcpp_acquire_load(&__flag.__state_) != ~once_flag::_State_type(0))
++#endif
+     {
+         typedef tuple<_Callable&&, _Args&&...> _Gp;
+         _Gp __f(_VSTD::forward<_Callable>(__func), _VSTD::forward<_Args>(__args)...);
+@@ -677,7 +694,11 @@ inline _LIBCPP_INLINE_VISIBILITY
+ void
+ call_once(once_flag& __flag, _Callable& __func)
+ {
++#if defined(_LIBCPP_ABI_MICROSOFT)
++    if (__flag.__state_.load(memory_order_acquire) != ~once_flag::_State_type(0))
++#else
+     if (__libcpp_acquire_load(&__flag.__state_) != ~once_flag::_State_type(0))
++#endif
+     {
+         __call_once_param<_Callable> __p(__func);
+         __call_once(__flag.__state_, &__p, &__call_once_proxy<_Callable>);
+@@ -689,7 +710,11 @@ inline _LIBCPP_INLINE_VISIBILITY
+ void
+ call_once(once_flag& __flag, const _Callable& __func)
+ {
+-    if (__libcpp_acquire_load(&__flag.__state_) != ~once_flag::_State_type(0))
++#if defined(_LIBCPP_ABI_MICROSOFT)
++    if (__flag.__state_.load(memory_order_relaxed) != ~once_flag::_State_type(0))
++#else
++    if (__flag.__state_ != ~once_flag::_State_type(0))
++#endif
+     {
+         __call_once_param<const _Callable> __p(__func);
+         __call_once(__flag.__state_, &__p, &__call_once_proxy<const _Callable>);

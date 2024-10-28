@@ -8,4 +8,3 @@ Directly after `SELECT`, it is possible to add [SQL hints](../lexer.md#sql-hints
 * `distinct` - indicates completely unique values including null: `NULL IS DISTINCT FROM NULL` -> `FALSE`.
 * Multiple sets of columns can be specified in several hints for a single projection.
 * If the hint contains a column that is not in the projection, it will be ignored.
-

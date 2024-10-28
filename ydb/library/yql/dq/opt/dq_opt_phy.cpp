@@ -393,31 +393,30 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, IOptimiz
         .Done();
 }
 
-template <typename TMembersFilter>
-TExprBase DqPushMembersFilterToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+template <typename TInputBaseCallable>
+TExprBase DqPushInputBaseCallableToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TMembersFilter>().Input().template Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TInputBaseCallable>() || !TDqCnUnionAll::Match(&node.Ref().Head())) {
         return node;
     }
 
-    auto filter = node.Cast<TMembersFilter>();
-    auto dqUnion = filter.Input().template Cast<TDqCnUnionAll>();
+    auto dqUnion = TDqCnUnionAll(node.Ref().HeadPtr());
 
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
     }
 
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
-        return TExprBase(ctx.ChangeChild(*node.Raw(), TMembersFilter::idx_Input, std::move(connToPushableStage)));
+        return TExprBase(ctx.ChangeChild(node.Ref(), 0, std::move(connToPushableStage)));
     }
 
-    auto lambda = Build<TCoLambda>(ctx, filter.Pos())
+    auto lambda = Build<TCoLambda>(ctx, node.Pos())
             .Args({"stream"})
-            .template Body<TMembersFilter>()
-                .Input("stream")
-                .Members(filter.Members())
-                .Build()
+            .Body<TExprApplier>()
+                .Apply(node)
+                .With(TExprBase(node.Ref().HeadPtr()), "stream")
+            .Build()
             .Done();
 
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
@@ -696,13 +695,25 @@ void DqPushLambdasToStagesUnionAll(std::vector<std::pair<TDqCnUnionAll, TCoLambd
 TExprBase DqPushSkipNullMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    return DqPushMembersFilterToStage<TCoSkipNullMembers>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
+    return DqPushInputBaseCallableToStage<TCoSkipNullMembers>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
 }
 
 TExprBase DqPushExtractMembersToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    return DqPushMembersFilterToStage<TCoExtractMembers>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
+    return DqPushInputBaseCallableToStage<TCoExtractMembers>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
+}
+
+TExprBase DqPushAssumeDistinctToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    return DqPushInputBaseCallableToStage<TCoAssumeDistinct>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
+}
+
+TExprBase DqPushAssumeUniqueToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    return DqPushInputBaseCallableToStage<TCoAssumeUnique>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
 }
 
 TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
@@ -2733,6 +2744,17 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
         return node;
     }
 
+    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+
+    YQL_ENSURE(typeAnn);
+    typeAnn = GetSeqItemType(typeAnn);
+    if (typeAnn->GetKind() != ETypeAnnotationKind::List &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Flow &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Stream)
+    {
+        return node;
+    }
+
     auto takeLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"list_stream"})
         .Body<TCoMap>()
@@ -3047,14 +3069,20 @@ TMaybeNode<TExprBase> DqUnorderedOverStageInput(TExprBase node, TExprContext& ct
         return node;
     }
 
+    bool withConnections = false;
     for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
         if (inputsToOptimize.Test(i)) {
             if (auto conn = stage.Inputs().Item(i).Maybe<TDqConnection>()) {
                 if (!IsSingleConsumerConnection(conn.Cast(), parentsMap, allowStageMultiUsage)) {
                     return node;
                 }
+                withConnections = true;
             }
         }
+    }
+    // Stage input section may be reused multiple times
+    if (withConnections && !IsSingleConsumer(stage.Inputs(), parentsMap)) {
+        return node;
     }
 
     TExprNode::TPtr newStageLambda;

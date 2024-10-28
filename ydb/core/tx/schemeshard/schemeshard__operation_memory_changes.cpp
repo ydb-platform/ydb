@@ -108,6 +108,10 @@ void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
 }
 
+void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right

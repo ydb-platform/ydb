@@ -10,7 +10,7 @@
 #include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.h>
 #include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>
-#include <ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include <ydb/library/yql/parser/proto_ast/antlr3/proto_ast_antlr3.h>
 
 #include <google/protobuf/message.h>
 
@@ -64,7 +64,7 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     #if defined(_tsan_enabled_)
         TGuard<TMutex> guard(SanitizerJsonPathTranslationMutex);
     #endif
-        NProtoAST::TProtoASTBuilder<NALP::JsonPathParser, NALP::JsonPathLexer> builder(path, "JsonPath", &arena);
+        NProtoAST::TProtoASTBuilder3<NALP::JsonPathParser, NALP::JsonPathLexer> builder(path, "JsonPath", &arena);
         TParseErrorsCollector collector(issues, maxParseErrors);
         rawAst = builder.BuildAST(collector);
     }

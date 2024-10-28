@@ -8,7 +8,7 @@
 
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/formats/arrow/transformer/abstract.h>
+#include <ydb/library/formats/arrow/transformer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -24,7 +24,7 @@ class Schema;
 }   // namespace arrow
 
 namespace NKikimr::NOlap {
-
+class TPortionInfo;
 namespace NIndexes::NMax {
 class TIndexMeta;
 }
@@ -106,22 +106,44 @@ public:
 struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
+    friend class TPortionInfo;
 
     class TNameInfo {
     private:
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY(ui32, ColumnId, 0);
-
+        YDB_READONLY(ui32, ColumnIdx, 0);
     public:
-        TNameInfo(const TString& name, const ui32 columnId)
+        TNameInfo(const TString& name, const ui32 columnId, const ui32 columnIdx)
             : Name(name)
             , ColumnId(columnId)
+            , ColumnIdx(columnIdx)
         {
 
         }
 
-        bool operator<(const TNameInfo& item) const {
-            return Name < item.Name;
+        static std::vector<TNameInfo> BuildColumnNames(const TColumns& columns) {
+            std::vector<TNameInfo> result;
+            for (auto&& i : columns) {
+                result.emplace_back(TNameInfo(i.second.Name, i.first, 0));
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.ColumnId < r.ColumnId;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            ui32 idx = 0;
+            for (auto&& i : result) {
+                i.ColumnIdx = idx++;
+            }
+            {
+                const auto pred = [](const TNameInfo& l, const TNameInfo& r) {
+                    return l.Name < r.Name;
+                };
+                std::sort(result.begin(), result.end(), pred);
+            }
+            return result;
         }
     };
 
@@ -142,7 +164,37 @@ private:
     std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
         const ui32 columnId, const THashMap<ui32, NTable::TColumn>& columns, const std::shared_ptr<IStoragesManager>& operators) const;
 
+    const TString& GetIndexStorageId(const ui32 indexId) const {
+        auto it = Indexes.find(indexId);
+        AFL_VERIFY(it != Indexes.end());
+        return it->second->GetStorageId();
+    }
+
+    const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+            return specialTier;
+        } else {
+            return GetColumnFeaturesVerified(columnId).GetOperator()->GetStorageId();
+        }
+    }
+
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
+        auto it = Indexes.find(entityId);
+        if (it != Indexes.end()) {
+            return it->second->GetStorageId();
+        }
+        return GetColumnStorageId(entityId, specialTier);
+    }
+
+    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
+
 public:
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
+    std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
+        AFL_VERIFY(columnIndex < ColumnFeatures.size());
+        return ColumnFeatures[columnIndex]->GetPKColumnIndex();
+    }
+
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
@@ -174,8 +226,6 @@ public:
         }
     }
 
-    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
-
     bool GetSchemeNeedActualization() const {
         return SchemeNeedActualization;
     }
@@ -196,28 +246,6 @@ public:
         return Indexes;
     }
 
-    const TString& GetIndexStorageId(const ui32 indexId) const {
-        auto it = Indexes.find(indexId);
-        AFL_VERIFY(it != Indexes.end());
-        return it->second->GetStorageId();
-    }
-
-    const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
-        if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
-            return specialTier;
-        } else {
-            return GetColumnFeaturesVerified(columnId).GetOperator()->GetStorageId();
-        }
-    }
-
-    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
-        auto it = Indexes.find(entityId);
-        if (it != Indexes.end()) {
-            return it->second->GetStorageId();
-        }
-        return GetColumnStorageId(entityId, specialTier);
-    }
-
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("
@@ -230,9 +258,6 @@ public:
         return sb;
     }
 
-    void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
-
-public:
     static TIndexInfo BuildDefault() {
         TIndexInfo result("dummy");
         return result;
@@ -241,10 +266,7 @@ public:
     static TIndexInfo BuildDefault(
         const std::shared_ptr<IStoragesManager>& operators, const TColumns& columns, const std::vector<TString>& pkNames) {
         TIndexInfo result = BuildDefault();
-        for (auto&& i : columns) {
-            result.ColumnNames.emplace_back(i.second.Name, i.first);
-        }
-        std::sort(result.ColumnNames.begin(), result.ColumnNames.end());
+        result.ColumnNames = TNameInfo::BuildColumnNames(columns);
         for (auto&& i : pkNames) {
             const ui32 columnId = result.GetColumnIdVerified(i);
             result.PKColumnIds.emplace_back(columnId);
@@ -284,7 +306,7 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId) const;
-    virtual std::shared_ptr<TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const override;
+    virtual const std::shared_ptr<TColumnLoader>& GetColumnLoaderOptional(const ui32 columnId) const override;
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
         auto f = GetColumnFieldOptional(columnId);
         if (!f) {
@@ -355,6 +377,7 @@ public:
         return result;
     }
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
+    std::optional<ui32> GetColumnIndexOptional(const std::string& name) const;
 
     /// Returns a name of the column located by id.
     TString GetColumnName(const ui32 id, bool required = true) const;
@@ -363,6 +386,10 @@ public:
     std::vector<TString> GetColumnNames(const std::vector<ui32>& ids) const;
     std::vector<std::string> GetColumnSTLNames(const std::vector<ui32>& ids) const;
     const std::vector<ui32>& GetColumnIds(const bool withSpecial = true) const;
+    ui32 GetColumnIdByIndexVerified(const ui32 index) const {
+        AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
+        return SchemaColumnIdsWithSpecials[index];
+    }
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;

@@ -4,7 +4,7 @@
 
 Выполните команду по следующему образцу:
 
-``` bash
+```bash
 <auth_mode_var>="<auth_mode_value>" \
 python3 ydb-python-sdk/examples/basic_example_v1/ -e <endpoint> -d <database>
 ```
@@ -17,7 +17,8 @@ python3 ydb-python-sdk/examples/basic_example_v1/ -e <endpoint> -d <database>
 - `<auth_mode_value>` - значение параметра аутентификации для выбранного режима.
 
 Например:
-``` bash
+
+```bash
 YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." \
 python3 ydb-python-sdk/examples/basic_example_v1/ -e grpcs://ydb.example.com:2135 -d /path/db )
 ```

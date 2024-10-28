@@ -6,7 +6,7 @@
 
 {% endif %}
 
-Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" %}для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц{% else %}на таблице{% endif %}:
+Конструкция `INDEX` используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} {% if backend_name == "YDB" and oss == true %}для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц{% else %}на таблице{% endif %}:
 
 ```yql
 CREATE TABLE table_name (
@@ -20,10 +20,11 @@ CREATE TABLE table_name (
 
 * **index_name** — уникальное имя индекса, по которому будет возможно обращение к данным.
 * **SYNC/ASYNC** — синхронная или асинхронная запись в индекс, если не указано — синхронная.
+* **UNIQUE** — создаёт индекс с гарантией уникальности для вставляемых значений.
 * **index_columns** — имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе.
 * **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 ## Примеры создания таблиц со вторичным индексом {#secondary-index-tables-example}
 
@@ -39,6 +40,7 @@ CREATE TABLE table_name (
       d Date,
       INDEX idx_d GLOBAL ON (d),
       INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
+      INDEX idx_bc GLOBAL UNIQUE SYNC ON (b, c),
       PRIMARY KEY (a)
   )
   ```

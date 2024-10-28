@@ -238,7 +238,7 @@ message TTableServiceConfig {
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
-    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false];
+    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = true];
     reserved 36; //optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     reserved 37; //optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     reserved 38; // optional bool EnableKqpImmediateEffects = 38 [default = true];
@@ -282,10 +282,10 @@ message TTableServiceConfig {
 
     optional uint64 ExtractPredicateRangesLimit = 54 [default = 10000];
 
-    optional bool EnableOlapSink = 55 [default = false];
+    optional bool EnableOlapSink = 55 [default = true];
 
     optional bool EnablePerStatementQueryExecution = 56 [default = false];
-    optional bool EnableCreateTableAs = 57 [default = false];
+    optional bool EnableCreateTableAs = 57 [default = true];
 
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
@@ -322,5 +322,29 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = false];
+    optional bool EnableHtapTx = 71 [default = true];
+
+    message TWriteActorSettings {
+        optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
+        optional uint64 MemoryLimitPerMessageBytes = 2 [ default = 67108864 ];
+        optional uint64 MaxBatchesPerMessage = 3 [ default = 1000 ];
+
+        optional uint64 StartRetryDelayMs = 4 [ default = 1000 ];
+        optional uint64 MaxRetryDelayMs = 5 [ default = 10000 ];
+        optional double UnsertaintyRatio = 6 [ default = 0.5 ];
+        optional double Multiplier = 7 [ default = 2.0 ];
+
+        optional uint64 MaxWriteAttempts = 8 [ default = 100 ];
+        optional uint64 MaxResolveAttempts = 9 [ default = 5 ];
+    }
+
+    optional TWriteActorSettings WriteActorSettings = 72;
+
+    enum EBlockTrackingMode {
+        BLOCK_TRACKING_NONE      = 0;
+        BLOCK_TRACKING_SERIALIZE = 1;
+        BLOCK_TRACKING_DEEP_COPY = 2;
+    }
+
+    optional EBlockTrackingMode BlockTrackingMode = 73 [ default = BLOCK_TRACKING_SERIALIZE ];
 };

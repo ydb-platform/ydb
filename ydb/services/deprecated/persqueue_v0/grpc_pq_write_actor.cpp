@@ -10,6 +10,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/services/lib/sharding/sharding.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <util/string/hex.h>
@@ -256,6 +257,16 @@ void TWriteSessionActor::InitAfterDiscovery(const TActorContext& ctx) {
 }
 
 
+void TWriteSessionActor::SetupBytesWrittenByUserAgentCounter() {
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", "pqv0")
+        ->GetSubgroup("topic", FullConverter->GetFederationPath())
+        ->GetSubgroup("user_agent", V1::CleanupCounterValueString(UserAgent))
+        ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
+}
+
+
 void TWriteSessionActor::SetupCounters()
 {
     if (SessionsCreated) {
@@ -286,6 +297,8 @@ void TWriteSessionActor::SetupCounters()
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter();
 }
 
 
@@ -307,6 +320,8 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter();
 }
 
 
@@ -351,6 +366,8 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         return;
     }
     PQInfo = entry.PQGroupInfo;
+    Y_ABORT_UNLESS(PQInfo->PartitionChooser);
+    Y_ABORT_UNLESS(PQInfo->PartitionGraph);
     Config = std::move(PQInfo->Description);
     //const TString topicName = description.GetName();
 
@@ -457,7 +474,7 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, FullConverter, SourceId, preferedPartition));
+    PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID, Config, PQInfo->PartitionChooser, PQInfo->PartitionGraph, FullConverter, SourceId, preferedPartition));
 }
 
 void TWriteSessionActor::Handle(NPQ::TEvPartitionChooser::TEvChooseResult::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -848,6 +865,8 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
     BytesInflightTotal_ += diff;
     BytesInflight.Inc(diff);
     BytesInflightTotal.Inc(diff);
+
+    BytesWrittenByUserAgent->Add(diff);
 
     if (BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
         Y_ABORT_UNLESS(NextRequestInited);

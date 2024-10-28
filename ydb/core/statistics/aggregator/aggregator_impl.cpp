@@ -511,7 +511,11 @@ void TStatisticsAggregator::InitializeStatisticsTable() {
     if (!EnableColumnStatistics) {
         return;
     }
-    Register(CreateStatisticsTableCreator(std::make_unique<TEvStatistics::TEvStatTableCreationResponse>()));
+    if (!Database) {
+        return;
+    }
+    Register(CreateStatisticsTableCreator(
+        std::make_unique<TEvStatistics::TEvStatTableCreationResponse>(), Database));
 }
 
 void TStatisticsAggregator::Navigate() {
@@ -598,7 +602,7 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
         data.push_back(strSketch);
     }
 
-    Register(CreateSaveStatisticsQuery(SelfId(),
+    Register(CreateSaveStatisticsQuery(SelfId(), Database,
         TraversalPathId, EStatType::COUNT_MIN_SKETCH, std::move(columnTags), std::move(data)));
 }
 
@@ -610,7 +614,7 @@ void TStatisticsAggregator::DeleteStatisticsFromTable() {
 
     PendingDeleteStatistics = false;
 
-    Register(CreateDeleteStatisticsQuery(SelfId(), TraversalPathId));
+    Register(CreateDeleteStatisticsQuery(SelfId(), Database, TraversalPathId));
 }
 
 void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {

@@ -3,7 +3,7 @@ LIBRARY()
 PEERDIR(
     ydb/core/base
     ydb/core/protos
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/tx/replication/ydb_proxy
     ydb/public/sdk/cpp/client/ydb_topic
     library/cpp/testing/unittest

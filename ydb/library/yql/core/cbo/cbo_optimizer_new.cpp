@@ -6,6 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 
 const TString& ToString(NYql::EJoinKind);
@@ -70,23 +71,30 @@ void TRelOptimizerNode::Print(std::stringstream& stream, int ntabs) {
     for (int i = 0; i < ntabs; i++){
         stream << "    ";
     }
-    stream << *Stats << "\n";
+    stream << Stats << "\n";
 }
 
-TJoinOptimizerNode::TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left, const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions, const EJoinKind joinType, const EJoinAlgoType joinAlgo, bool nonReorderable) :
-    IBaseOptimizerNode(JoinNodeType),
-    LeftArg(left),
-    RightArg(right),
-    JoinConditions(joinConditions),
-    JoinType(joinType),
-    JoinAlgo(joinAlgo) {
-        IsReorderable = !nonReorderable;
-        for (auto [l,r] : joinConditions ) {
-            LeftJoinKeys.push_back(l.AttributeName);
-            RightJoinKeys.push_back(r.AttributeName);
-        }
-    }
+TJoinOptimizerNode::TJoinOptimizerNode(
+    const std::shared_ptr<IBaseOptimizerNode>& left, 
+    const std::shared_ptr<IBaseOptimizerNode>& right,
+    TVector<TJoinColumn> leftKeys,
+    TVector<TJoinColumn> rightKeys,
+    const EJoinKind joinType, 
+    const EJoinAlgoType joinAlgo, 
+    bool leftAny,
+    bool rightAny, 
+    bool nonReorderable
+)   : IBaseOptimizerNode(JoinNodeType)
+    , LeftArg(left)
+    , RightArg(right)
+    , LeftJoinKeys(leftKeys)
+    , RightJoinKeys(rightKeys)
+    , JoinType(joinType)
+    , JoinAlgo(joinAlgo)
+    , LeftAny(leftAny)
+    , RightAny(rightAny)
+    , IsReorderable(!nonReorderable)
+{}
 
 TVector<TString> TJoinOptimizerNode::Labels() {
     auto res = LeftArg->Labels();
@@ -100,33 +108,41 @@ void TJoinOptimizerNode::Print(std::stringstream& stream, int ntabs) {
         stream << "    ";
     }
 
-    stream << "Join: (" << ToString(JoinType) << "," << ToString(JoinAlgo) << ") ";
+    stream << "Join: (" << ToString(JoinType) << "," << ToString(JoinAlgo);
+    if (LeftAny) {
+        stream << ",LeftAny";
+    }
+    if (RightAny) {
+        stream << ",RightAny";
+    }
+    stream << ") ";
 
-    for (auto c : JoinConditions){
-        stream << c.first.RelName << "." << c.first.AttributeName
-            << "=" << c.second.RelName << "."
-            << c.second.AttributeName << ",";
+    for (size_t i=0; i<LeftJoinKeys.size(); i++){
+        stream << LeftJoinKeys[i].RelName << "." << LeftJoinKeys[i].AttributeName
+            << "=" << RightJoinKeys[i].RelName << "."
+            << RightJoinKeys[i].AttributeName << ",";
     }
     stream << "\n";
 
-    if (Stats) {
-        for (int i = 0; i < ntabs; i++){
-            stream << "    ";
-        }
-        stream << *Stats << "\n";
+
+    for (int i = 0; i < ntabs; i++){
+        stream << "    ";
     }
+    stream << Stats << "\n";
+    
 
     LeftArg->Print(stream, ntabs+1);
     RightArg->Print(stream, ntabs+1);
 }
 
-bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKeys) {
+bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joinKeys) {
     if (!stats.KeyColumns) {
         return false;
     }
 
     for(size_t i = 0; i < stats.KeyColumns->Data.size(); i++){
-        if (std::find(joinKeys.begin(), joinKeys.end(), stats.KeyColumns->Data[i]) == joinKeys.end()) {
+        if (std::find_if(joinKeys.begin(), joinKeys.end(), 
+        [&] (const TJoinColumn& c) { return c.AttributeName == stats.KeyColumns->Data[i];}) == joinKeys.end()) {
             return false;
         }
     }
@@ -135,15 +151,13 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TString>& joinKey
 
 bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind joinKind) {
 
     Y_UNUSED(left);
     Y_UNUSED(right);
-    Y_UNUSED(joinConditions);
     Y_UNUSED(leftJoinKeys);
     Y_UNUSED(rightJoinKeys);
     Y_UNUSED(joinKind);
@@ -164,30 +178,12 @@ double TBaseProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftSta
  *
  * The build is on the right side, so we make the build side a bit more expensive than the probe
 */
-TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
-    const TOptimizerStatistics& leftStats,
-    const TOptimizerStatistics& rightStats,
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-    EJoinAlgoType joinAlgo,
-    EJoinKind joinKind,
-    TCardinalityHints::TCardinalityHint* maybeHint) const
-{
-    TVector<TString> leftJoinKeys;
-    TVector<TString> rightJoinKeys;
-
-    for (auto c : joinConditions) {
-        leftJoinKeys.emplace_back(c.first.AttributeName);
-        rightJoinKeys.emplace_back(c.second.AttributeName);
-    }
-
-    return ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
-}
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
-    const TVector<TString>& leftJoinKeys,
-    const TVector<TString>& rightJoinKeys,
+    const TVector<TJoinColumn>& leftJoinKeys,
+    const TVector<TJoinColumn>& rightJoinKeys,
     EJoinAlgoType joinAlgo,
     EJoinKind joinKind,
     TCardinalityHints::TCardinalityHint* maybeHint) const
@@ -247,9 +243,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         std::optional<double> lhsUniqueVals;
         std::optional<double> rhsUniqueVals;
         if (leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-            auto lhs = leftJoinKeys[0];
+            auto lhs = leftJoinKeys[0].AttributeName;
             lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
-            auto rhs = rightJoinKeys[0];
+            auto rhs = rightJoinKeys[0].AttributeName;
             rightStats.ColumnStatistics->Data[rhs];
             rhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
         }
@@ -285,81 +281,28 @@ const TBaseProviderContext& TBaseProviderContext::Instance() {
     return staticContext;
 }
 
-TCardinalityHints::TCardinalityHints(const TString& json) {
-    auto jsonValue = NJson::TJsonValue();
-    NJson::ReadJsonTree(json, &jsonValue, true);
+TVector<TString> TOptimizerHints::GetUnappliedString() {
+    TVector<TString> res;
 
-    for (auto s : jsonValue.GetArraySafe()) {
-        auto h = s.GetMapSafe();
-
-        TCardinalityHints::TCardinalityHint hint;
-
-        for (auto t : h.at("labels").GetArraySafe()) {
-            hint.JoinLabels.push_back(t.GetStringSafe());
+    for (const auto& hint: JoinAlgoHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
         }
-
-        auto op = h.at("op").GetStringSafe();
-        hint.Operation = HintOpMap.at(op);
-
-        hint.Value = h.at("value").GetDoubleSafe();
-        Hints.push_back(hint);
-    }
-}
-
-std::shared_ptr<IBaseOptimizerNode> MakeJoinTreeFromJson(const NJson::TJsonValue& jsonTree) {
-    if (jsonTree.IsArray()) {
-        auto children = jsonTree.GetArraySafe();
-        Y_ENSURE(children.size() == 2, Sprintf("Expected 2 inputs for JoinOrder hints, got: %ld", children.size()));
-        
-        auto joinNode = TJoinOptimizerNode(
-            MakeJoinTreeFromJson(children[0]),
-            MakeJoinTreeFromJson(children[1]),
-            {},
-            EJoinKind::Cross, // just a stub
-            EJoinAlgoType::Undefined,
-            true
-        );
-        return std::make_shared<TJoinOptimizerNode>(std::move(joinNode));
     }
 
-    Y_ENSURE(
-        jsonTree.IsString(),
-        Sprintf("A relation must be a string for JoinOrder hints! Got %s, expected a string.", jsonTree.GetStringRobust().c_str())
-    );
-    return std::make_shared<TRelOptimizerNode>(jsonTree.GetStringSafe(), nullptr);
-}
-
-TJoinOrderHints::TJoinOrderHints(const TString& json) {
-    const static TString PARSING_FORMAT_ERROR = 
-        R"(Join order hints parsing failed. The example of the format: [ ["A", "B"], ["B", "C"] ])";
-
-    NJson::TJsonValue jsonTree;
-    NJson::ReadJsonTree(json, &jsonTree, true);
-
-    Y_ENSURE(jsonTree.IsArray(), PARSING_FORMAT_ERROR);
-    for (const auto& hintTreeJson: jsonTree.GetArray()) {
-        HintTrees.push_back(MakeJoinTreeFromJson(hintTreeJson));
-    }
-}
-
-TJoinAlgoHints::TJoinAlgoHints(const TString& json) {
-    auto jsonValue = NJson::TJsonValue();
-    NJson::ReadJsonTree(json, &jsonValue, true);
-
-    for (auto s : jsonValue.GetArraySafe()) {
-        auto h = s.GetMapSafe();
-
-        TJoinAlgoHints::TJoinAlgoHint hint;
-
-        for (auto t : h.at("labels").GetArraySafe()) {
-            hint.JoinLabels.push_back(t.GetStringSafe());
+    for (const auto& hint: JoinOrderHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
         }
-
-        auto algo = h.at("algo").GetStringSafe();
-        hint.JoinHint = FromString<EJoinAlgoType>(algo);
-
-        Hints.push_back(hint);
     }
+
+    for (const auto& hint: CardinalityHints->Hints) {
+        if (!hint.Applied) {
+            res.push_back(hint.StringRepr);
+        }
+    }
+
+    return res;
 }
 
 } // namespace NYql

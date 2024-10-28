@@ -4911,7 +4911,7 @@ namespace {
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (hoppingOutputColumn->Content().Empty()) {
+                    if (hoppingOutputColumn->Content().empty()) {
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(hoppingOutputColumn->Pos()),
                             TStringBuilder() << "Hopping output column name can not be empty"));
                         return IGraphTransformer::TStatus::Error;
@@ -4961,7 +4961,7 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (sessionOutputColumn->Content().Empty()) {
+                if (sessionOutputColumn->Content().empty()) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(sessionOutputColumn->Pos()),
                         TStringBuilder() << "Session output column name can not be empty"));
                     return IGraphTransformer::TStatus::Error;
@@ -5668,7 +5668,11 @@ namespace {
                 }
             }
 
-            input->SetTypeAnn(retType);
+            if (originalType && originalType->GetKind() != NYql::ETypeAnnotationKind::Null) {
+                input->SetTypeAnn(originalType);
+            } else {
+                input->SetTypeAnn(retType);
+            }
         } else if (name == "min" || name == "max") {
             auto itemType = input->Child(overState ? 2 : 1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const TTypeAnnotationNode* retType;

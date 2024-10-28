@@ -19,7 +19,7 @@ SELECT
 FROM my_table;
 ```
 
-## AggregateTransform... {#aggregatetransform}
+## AggregateTransformInput {#aggregatetransform}
 
 `AggregateTransformInput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of input items is performed before starting aggregation.
 
@@ -38,6 +38,8 @@ SELECT ListAggregate([1,2,3], $f); -- 6
 SELECT ListAggregate(["1","2","3"], $g); -- 6
 SELECT ListAggregate([1,2,3], $h); -- 12
 ```
+
+## AggregateTransformOutput {#aggregatetransformoutput}
 
 `AggregateTransformOutput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of the result is performed after ending aggregation.
 

@@ -1,6 +1,7 @@
 #include "service.h"
 #include "http_request.h"
 
+#include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/database/database.h>
 
@@ -15,12 +16,15 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
+
+#include <util/datetime/cputimer.h>
 
 namespace NKikimr {
 namespace NStat {
@@ -102,8 +106,7 @@ struct TAggregationStatistics {
                     ? &Nodes[i] : nullptr;
             }
         }
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Child node with the specified id was not found");
+        SA_LOG_E("Child node with the specified id was not found");
         return nullptr;
     }
 };
@@ -207,17 +210,16 @@ public:
             hFunc(TEvStatistics::TEvAggregateStatisticsResponse, Handle);
 
             hFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(NMon::TEvHttpInfoRes, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                    "NStat::TStatService: unexpected event# " << ev->GetTypeRewrite() << " " << ev->ToString());
+                SA_LOG_CRIT("NStat::TStatService: unexpected event# " << ev->GetTypeRewrite() << " " << ev->ToString());
         }
     }
 
 private:
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Subscribed for config changes on node " << SelfId().NodeId());
+        SA_LOG_I("Subscribed for config changes on node " << SelfId().NodeId());
     }
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -237,8 +239,7 @@ private:
 
     bool IsNotCurrentRound(ui64 round) {
         if (round != AggregationStatistics.Round) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Event round " << round << " is different from the current " << AggregationStatistics.Round);
+            SA_LOG_D("Event round " << round << " is different from the current " << AggregationStatistics.Round);
             return true;
         }
         return false;
@@ -261,7 +262,7 @@ private:
 
         auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
         policy.RetryLimitCount = 2;
-        NTabletPipe::TClientConfig pipeConfig{policy};
+        NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
         pipeConfig.ForceLocal = true;
         localTablets.TabletsPipes[tabletId] = Register(NTabletPipe::CreateClient(SelfId(), tabletId, pipeConfig));
     }
@@ -284,7 +285,7 @@ private:
 
             for (auto& statistic : column.GetStatistics()) {
                 if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
-                    auto data = statistic.GetData().Data();
+                    auto data = statistic.GetData().data();
                     auto sketch = reinterpret_cast<const TCountMinSketch*>(data);
                     auto& current = AggregationStatistics.CountMinSketches[tag];
 
@@ -303,8 +304,7 @@ private:
         const auto& record = ev->Get()->Record;
         const auto tabletId = record.GetShardTabletId();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvStatisticsResponse TabletId: " << tabletId);
+        SA_LOG_D("Received TEvStatisticsResponse TabletId: " << tabletId);
 
         const auto round = ev->Cookie;
         if (IsNotCurrentRound(round)) {
@@ -332,8 +332,7 @@ private:
         const auto round = record.GetRound();
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateKeepAliveAck");
+            SA_LOG_D("Skip TEvAggregateKeepAliveAck");
             return;
         }
 
@@ -343,8 +342,7 @@ private:
     void Handle(TEvPrivate::TEvKeepAliveAckTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvKeepAliveAckTimeout");
+            SA_LOG_D("Skip TEvKeepAliveAckTimeout");
             return;
         }
 
@@ -359,8 +357,7 @@ private:
 
         // the parent node is unavailable
         // invalidate the subtree with the root in the current node
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Parent node " << AggregationStatistics.ParentNode.NodeId() << " is unavailable");
+        SA_LOG_I("Parent node " << AggregationStatistics.ParentNode.NodeId() << " is unavailable");
 
 
         ResetAggregationStatistics();
@@ -369,8 +366,7 @@ private:
     void Handle(TEvPrivate::TEvDispatchKeepAlive::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvDispatchKeepAlive");
+            SA_LOG_D("Skip TEvDispatchKeepAlive");
             return;
         }
 
@@ -384,8 +380,7 @@ private:
         const auto round = ev->Get()->Round;
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvKeepAliveTimeout");
+            SA_LOG_D("Skip TEvKeepAliveTimeout");
             return;
         }
 
@@ -393,8 +388,7 @@ private:
         auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
 
         if (node == nullptr) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvKeepAliveTimeout");
+            SA_LOG_D("Skip TEvKeepAliveTimeout");
             return;
         }
 
@@ -409,8 +403,7 @@ private:
 
         node->Status = TAggregationStatistics::TNode::EStatus::Unavailable;
         ++AggregationStatistics.PprocessedNodes;
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Node " << nodeId << " is unavailable");
+        SA_LOG_I("Node " << nodeId << " is unavailable");
 
         if (AggregationStatistics.IsCompleted()) {
             OnAggregateStatisticsFinished();
@@ -422,8 +415,7 @@ private:
         const auto round = record.GetRound();
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateKeepAlive");
+            SA_LOG_D("Skip TEvAggregateKeepAlive");
             return;
         }
 
@@ -431,8 +423,7 @@ private:
         auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
 
         if (node == nullptr) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateKeepAlive");
+            SA_LOG_D( "Skip TEvAggregateKeepAlive");
             return;
         }
 
@@ -444,15 +435,13 @@ private:
     }
 
     void Handle(TEvStatistics::TEvAggregateStatisticsResponse::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvAggregateStatisticsResponse SenderNodeId: " << ev->Sender.NodeId());
+        SA_LOG_D("Received TEvAggregateStatisticsResponse SenderNodeId: " << ev->Sender.NodeId());
 
         const auto& record = ev->Get()->Record;
         const auto round = record.GetRound();
 
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateStatisticsResponse");
+            SA_LOG_D("Skip TEvAggregateStatisticsResponse");
             return;
         }
 
@@ -460,8 +449,7 @@ private:
         auto node = AggregationStatistics.GetProcessingChildNode(nodeId);
 
         if (node == nullptr) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvAggregateStatisticsResponse");
+            SA_LOG_D("Skip TEvAggregateStatisticsResponse");
             return;
         }
 
@@ -501,8 +489,7 @@ private:
     }
 
     void SendAggregateStatisticsResponse() {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Send aggregate statistics response to node: " << AggregationStatistics.ParentNode.NodeId());
+        SA_LOG_D("Send aggregate statistics response to node: " << AggregationStatistics.ParentNode.NodeId());
 
         auto response = std::make_unique<TEvStatistics::TEvAggregateStatisticsResponse>();
         auto& record = response->Record;
@@ -521,7 +508,7 @@ private:
             auto data = it->second.Statistics->AsStringBuf();
             auto statistics = column->AddStatistics();
             statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-            statistics->SetData(data.Data(), data.Size());
+            statistics->SetData(data.data(), data.size());
         }
 
         auto failedTablets = record.MutableFailedTablets();
@@ -587,8 +574,7 @@ private:
         const auto& record = ev->Get()->Record;
         const auto round = record.GetRound();
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Received TEvAggregateStatistics from node: " << ev->Sender.NodeId()
+        SA_LOG_D("Received TEvAggregateStatistics from node: " << ev->Sender.NodeId()
             << ", Round: " << round << ", current Round: " << AggregationStatistics.Round);
 
         // reset previous state
@@ -662,13 +648,12 @@ private:
         request.StatType = ev->Get()->StatType;
         request.StatRequests.swap(ev->Get()->StatRequests);
 
-        if (!EnableStatistics) {
+        if (!EnableStatistics || IsStatisticsDisabledInSA) {
             ReplyFailed(requestId, true);
             return;
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Handle TEvStatistics::TEvGetStatistics, request id = " << requestId 
+        SA_LOG_D("Handle TEvStatistics::TEvGetStatistics, request id = " << requestId
             << ", ReplyToActorId = " << request.ReplyToActorId
             << ", StatRequests.size() = " << request.StatRequests.size());
 
@@ -685,7 +670,7 @@ private:
                 }
                 ui64 loadCookie = NextLoadQueryCookie++;
                 LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
-                Register(CreateLoadStatisticsQuery(SelfId(),
+                Register(CreateLoadStatisticsQuery(SelfId(), "",
                     req.PathId, request.StatType, *req.ColumnTag, loadCookie));
                 ++request.ReplyCounter;
                 ++reqIndex;
@@ -712,8 +697,7 @@ private:
 
         auto cookie = navigate->Cookie;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, request id = " << cookie);           
+        SA_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, request id = " << cookie);
 
         if (cookie == ResolveSACookie) {
             Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
@@ -729,7 +713,14 @@ private:
                 ConnectToSA();
                 SyncNode();
             } else {
-                ReplyAllFailed();
+                for (auto it = InFlight.begin(); it != InFlight.end();) {
+                    if (EStatType::COUNT_MIN_SKETCH == it->second.StatType) {
+                        ++it;
+                        continue;
+                    }
+                    ReplyFailed(it->first, false);
+                    it = InFlight.erase(it);
+                }
             }
             return;
         }
@@ -835,10 +826,11 @@ private:
     }
 
     void Handle(TEvStatistics::TEvPropagateStatistics::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvPropagateStatistics, node id = " << SelfId().NodeId());
+        SA_LOG_D("EvPropagateStatistics, node id = " << SelfId().NodeId());
 
         Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
+
+        IsStatisticsDisabledInSA = false;
 
         auto* record = ev->Get()->MutableRecord();
         for (const auto& entry : record->GetEntries()) {
@@ -918,21 +910,18 @@ private:
     void Handle(TEvPrivate::TEvStatisticsRequestTimeout::TPtr& ev) {
         const auto round = ev->Get()->Round;
         if (IsNotCurrentRound(round)) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Skip TEvStatisticsRequestTimeout");
+            SA_LOG_D("Skip TEvStatisticsRequestTimeout");
             return;
         }
 
         const auto tabletId = ev->Get()->TabletId;
         auto tabletPipe = AggregationStatistics.LocalTablets.TabletsPipes.find(tabletId);
         if (tabletPipe == AggregationStatistics.LocalTablets.TabletsPipes.end()) {
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "Tablet " << tabletId << " has already been processed");
+            SA_LOG_D("Tablet " << tabletId << " has already been processed");
             return;
         }
 
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-                "No result was received from the tablet " << tabletId);
+        SA_LOG_E("No result was received from the tablet " << tabletId);
 
         auto clientId = tabletPipe->second;
         OnTabletError(tabletId);
@@ -957,15 +946,13 @@ private:
         NTabletPipe::SendData(SelfId(), clientId, request.release(), round);
         Schedule(Settings.StatisticsRequestTimeout, new TEvPrivate::TEvStatisticsRequestTimeout(round, tabletId));
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "TEvStatisticsRequest send"
+        SA_LOG_D("TEvStatisticsRequest send"
             << ", client id = " << clientId
             << ", path = " << *path);
     }
 
     void OnTabletError(ui64 tabletId) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Tablet " << tabletId << " is not local.");
+        SA_LOG_D("Tablet " << tabletId << " is not local.");
 
         const auto error = NKikimrStat::TEvAggregateStatisticsResponse::TYPE_NON_LOCAL_TABLET;
         AggregationStatistics.FailedTablets.emplace_back(tabletId, 0, error);
@@ -983,8 +970,7 @@ private:
         const auto& clientId = ev->Get()->ClientId;
         const auto& tabletId = ev->Get()->TabletId;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvClientConnected"
+        SA_LOG_D("EvClientConnected"
             << ", node id = " << ev->Get()->ClientId.NodeId()
             << ", client id = " << clientId
             << ", server id = " << ev->Get()->ServerId
@@ -992,6 +978,7 @@ private:
             << ", status = " << ev->Get()->Status);
 
         if (clientId == SAPipeClientId) {
+            IsStatisticsDisabledInSA = false;
             if (ev->Get()->Status != NKikimrProto::OK) {
                 SAPipeClientId = TActorId();
                 ConnectToSA();
@@ -1012,22 +999,21 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Skip EvClientConnected");
+        SA_LOG_D("Skip EvClientConnected");
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         const auto& clientId = ev->Get()->ClientId;
         const auto& tabletId = ev->Get()->TabletId;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvClientDestroyed"
+        SA_LOG_D("EvClientDestroyed"
             << ", node id = " << ev->Get()->ClientId.NodeId()
             << ", client id = " << clientId
             << ", server id = " << ev->Get()->ServerId
             << ", tablet id = " << tabletId);
 
         if (clientId == SAPipeClientId) {
+            IsStatisticsDisabledInSA = false;
             SAPipeClientId = TActorId();
             ConnectToSA();
             SyncNode();
@@ -1042,23 +1028,29 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "Skip EvClientDestroyed");
+        SA_LOG_D("Skip EvClientDestroyed");
     }
 
     void Handle(TEvStatistics::TEvStatisticsIsDisabled::TPtr&) {
+        IsStatisticsDisabledInSA = true;
         ReplyAllFailed();
     }
 
     void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
         ui64 cookie = ev->Get()->Cookie;
-
         auto itLoadQuery = LoadQueriesInFlight.find(cookie);
         Y_ABORT_UNLESS(itLoadQuery != LoadQueriesInFlight.end());
         auto [requestId, requestIndex] = itLoadQuery->second;
 
+        SA_LOG_D("TEvLoadStatisticsQueryResponse, request id = " << requestId);
+
         auto itRequest = InFlight.find(requestId);
-        Y_ABORT_UNLESS(itRequest != InFlight.end());
+        if (InFlight.end() == itRequest) {
+            SA_LOG_E("TEvLoadStatisticsQueryResponse, request id = " << requestId
+                << ". Request not found in InFlight");
+            return;
+        }
+
         auto& request = itRequest->second;
 
         auto& response = request.StatResponses[requestIndex];
@@ -1068,7 +1060,7 @@ private:
             response.Success = true;
             auto& data = ev->Get()->Data;
             Y_ABORT_UNLESS(data);
-            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->Data(), data->Size()));
+            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->data(), data->size()));
         } else {
             response.Success = false;
         }
@@ -1085,8 +1077,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvRequestTimeout::TPtr& ev) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "EvRequestTimeout"
+        SA_LOG_D("EvRequestTimeout"
             << ", pipe client id = " << ev->Get()->PipeClientId
             << ", schemeshard count = " << ev->Get()->NeedSchemeShards.size());
 
@@ -1115,11 +1106,10 @@ private:
             return;
         }
         auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        NTabletPipe::TClientConfig pipeConfig{policy};
+        NTabletPipe::TClientConfig pipeConfig{.RetryPolicy = policy};
         SAPipeClientId = Register(NTabletPipe::CreateClient(SelfId(), StatisticsAggregatorId, pipeConfig));
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "ConnectToSA(), pipe client id = " << SAPipeClientId);
+        SA_LOG_D("ConnectToSA(), pipe client id = " << SAPipeClientId);
     }
 
     void SyncNode() {
@@ -1148,8 +1138,7 @@ private:
             Schedule(RequestTimeout, timeout.release());
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "SyncNode(), pipe client id = " << SAPipeClientId);
+        SA_LOG_D("SyncNode(), pipe client id = " << SAPipeClientId);
     }
 
     void ReplySuccess(ui64 requestId, bool eraseRequest) {
@@ -1159,8 +1148,7 @@ private:
         }
         auto& request = itRequest->second;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "ReplySuccess(), request id = " << requestId 
+        SA_LOG_D("ReplySuccess(), request id = " << requestId
             << ", ReplyToActorId = " << request.ReplyToActorId
             << ", StatRequests.size() = " << request.StatRequests.size());
 
@@ -1206,8 +1194,7 @@ private:
         }
         auto& request = itRequest->second;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "ReplyFailed(), request id = " << requestId);
+        SA_LOG_D("ReplyFailed(), request id = " << requestId);
 
         auto result = std::make_unique<TEvStatistics::TEvGetStatisticsResult>();
         result->Success = false;
@@ -1249,146 +1236,274 @@ private:
     void PrintStatServiceState(TStringStream& str) {
         HTML(str) {
             PRE() {
-                str << "---- StatisticsService ----" << Endl << Endl;
-                str << "StatisticsAggregatorId: " << StatisticsAggregatorId << Endl;
-                str << "SAPipeClientId: " << SAPipeClientId << Endl;
+            str << "---- StatisticsService ----" << Endl << Endl;
+            str << "StatisticsAggregatorId: " << StatisticsAggregatorId << Endl;
+            str << "SAPipeClientId: " << SAPipeClientId << Endl;
 
-                str << "InFlight: " << InFlight.size();
-                {
-                    ui32 simple{ 0 };
-                    ui32 countMin{ 0 };
-                    for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
-                        if (it->second.StatType == EStatType::SIMPLE) {
-                            ++simple;
-                        } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
-                            ++countMin;
-                        }
+            str << "InFlight: " << InFlight.size();
+            {
+                ui32 simple{ 0 };
+                ui32 countMin{ 0 };
+                for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
+                    if (it->second.StatType == EStatType::SIMPLE) {
+                        ++simple;
+                    } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
+                        ++countMin;
                     }
-                    str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
                 }
-                str << "NextRequestId: " << NextRequestId << Endl;
+                str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
+            }
+            str << "NextRequestId: " << NextRequestId << Endl;
 
-                str << "LoadQueriesInFlight: " << LoadQueriesInFlight.size() << Endl;
-                str << "NextLoadQueryCookie: " << NextLoadQueryCookie << Endl;
+            str << "LoadQueriesInFlight: " << LoadQueriesInFlight.size() << Endl;
+            str << "NextLoadQueryCookie: " << NextLoadQueryCookie << Endl;
 
-                str << "NeedSchemeShards: " << NeedSchemeShards.size() << Endl;
-                str << "Statistics: " << Statistics.size() << Endl;
+            str << "NeedSchemeShards: " << NeedSchemeShards.size() << Endl;
+            str << "Statistics: " << Statistics.size() << Endl;
 
-                str << "ResolveSAStage: ";
-                if (ResolveSAStage == RSA_INITIAL) {
-                    str << "RSA_INITIAL";
-                } else if (ResolveSAStage == RSA_IN_FLIGHT) {
-                    str << "RSA_IN_FLIGHT";
-                }
-                else {
-                    str << "RSA_FINISHED";
-                }
-                str << Endl;
+            str << "ResolveSAStage: ";
+            if (ResolveSAStage == RSA_INITIAL) {
+                str << "RSA_INITIAL";
+            } else if (ResolveSAStage == RSA_IN_FLIGHT) {
+                str << "RSA_IN_FLIGHT";
+            }
+            else {
+                str << "RSA_FINISHED";
+            }
+            str << Endl;
 
-                str << "AggregateKeepAlivePeriod: " << Settings.AggregateKeepAlivePeriod << Endl;
-                str << "AggregateKeepAliveTimeout: " << Settings.AggregateKeepAliveTimeout << Endl;
-                str << "AggregateKeepAliveAckTimeout: " << Settings.AggregateKeepAliveAckTimeout << Endl;
-                str << "StatisticsRequestTimeout: " << Settings.StatisticsRequestTimeout << Endl;
-                str << "MaxInFlightTabletRequests: " << Settings.MaxInFlightTabletRequests << Endl;
-                str << "FanOutFactor: " << Settings.FanOutFactor << Endl;
+            str << "AggregateKeepAlivePeriod: " << Settings.AggregateKeepAlivePeriod << Endl;
+            str << "AggregateKeepAliveTimeout: " << Settings.AggregateKeepAliveTimeout << Endl;
+            str << "AggregateKeepAliveAckTimeout: " << Settings.AggregateKeepAliveAckTimeout << Endl;
+            str << "StatisticsRequestTimeout: " << Settings.StatisticsRequestTimeout << Endl;
+            str << "MaxInFlightTabletRequests: " << Settings.MaxInFlightTabletRequests << Endl;
+            str << "FanOutFactor: " << Settings.FanOutFactor << Endl;
 
-                str << "---- AggregationStatistics ----" << Endl;
-                str << "Round: " << AggregationStatistics.Round << Endl;
-                str << "Cookie: " << AggregationStatistics.Cookie << Endl;
-                str << "PathId: " << AggregationStatistics.PathId.ToString() << Endl;
-                str << "LastAckHeartbeat: " << AggregationStatistics.LastAckHeartbeat << Endl;
-                str << "ParentNode: " << AggregationStatistics.ParentNode << Endl;
-                str << "PprocessedNodes: " << AggregationStatistics.PprocessedNodes << Endl;
-                str << "TotalStatisticsResponse: " << AggregationStatistics.TotalStatisticsResponse << Endl;
-                str << "Nodes: " << AggregationStatistics.Nodes.size() << Endl;
-                str << "CountMinSketches: " << AggregationStatistics.CountMinSketches.size() << Endl;
+            str << "---- AggregationStatistics ----" << Endl;
+            str << "Round: " << AggregationStatistics.Round << Endl;
+            str << "Cookie: " << AggregationStatistics.Cookie << Endl;
+            str << "PathId: " << AggregationStatistics.PathId.ToString() << Endl;
+            str << "LastAckHeartbeat: " << AggregationStatistics.LastAckHeartbeat << Endl;
+            str << "ParentNode: " << AggregationStatistics.ParentNode << Endl;
+            str << "PprocessedNodes: " << AggregationStatistics.PprocessedNodes << Endl;
+            str << "TotalStatisticsResponse: " << AggregationStatistics.TotalStatisticsResponse << Endl;
+            str << "Nodes: " << AggregationStatistics.Nodes.size() << Endl;
+            str << "CountMinSketches: " << AggregationStatistics.CountMinSketches.size() << Endl;
             }
         }
     }
 
-    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
-        auto& request = ev->Get()->Request;
-
-        auto method = request.GetMethod();
-        if (method == HTTP_METHOD_POST) {
-            if (!EnableColumnStatistics) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-                return;
-            }
-
-            auto& params = request.GetPostParams();
-            auto itAction = params.find("action");
-            if (itAction == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
-                return;
-            }
-            if (itAction->second != "analyze") {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
-                return;
-            }
-            auto itPath = params.find("path");
-            if (itPath == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
-                return;
-            }
-            Register(new THttpRequest(THttpRequest::EType::ANALYZE, itPath->second, ev->Sender));
-            return;
-
-        } else if (method == HTTP_METHOD_GET) {
-            auto& params = request.GetParams();
-            if (params.empty()) {
-                TStringStream str;
-                PrintStatServiceState(str);
-                Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
-                return;
-            }
-
-            if (!EnableColumnStatistics) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-                return;
-            }
-
-            auto itAction = params.find("action");
-            if (itAction == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'action' parameter is required"));
-                return;
-            }
-            if (itAction->second != "status") {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("Unknown 'action' parameter"));
-                return;
-            }
-            auto itPath = params.find("path");
-            if (itPath == params.end()) {
-                Send(ev->Sender, new NMon::TEvHttpInfoRes("'path' parameter is required"));
-                return;
-            }
-            Register(new THttpRequest(THttpRequest::EType::STATUS, itPath->second, ev->Sender));
-            return;
-        }
-
-        TStringStream str;
+    void AddPanel(IOutputStream& str, const TString& title, const std::function<void(IOutputStream&)>& bodyRender) {
         HTML(str) {
-            str << "<form method=\"post\" id=\"analyzePath\" name=\"analyzePath\" class=\"form-group\">" << Endl;
-            str << "<input type=\"hidden\" name=\"action\" value=\"analyze\"/>";
-            DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
+            DIV_CLASS("panel panel-default") {
+                DIV_CLASS("panel-heading") {
+                    H4_CLASS("panel-title") {
+                        str << title;
+                    }
+                }
+                DIV_CLASS("panel-body") {
+                    bodyRender(str);
+                }
             }
-            DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\"/>";
-            }
-            str << "</form>" << Endl;
-            str << "<form method=\"get\" id=\"pathStatus\" name=\"pathStatus\" class=\"form-group\">" << Endl;
-            str << "<input type=\"hidden\" name=\"action\" value=\"status\"/>";
-            DIV() {
-                str << "<input type=\"text\" class=\"form-control\" id=\"path\" name=\"path\"/>";
-            }
-            DIV() {
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Status\"/>";
-            }
-            str << "</form>" << Endl;
+        }
+    }
+
+    void PrintForm(TStringStream& str) {
+        HTML(str) {
+            AddPanel(str, "Analyze table", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+                            str << "<input type=\"hidden\" name=\"action\" value=\"analyze\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Analyze\"/>";
+                            }
+                        }
+                    }
+                }
+            });
+            AddPanel(str, "Get operation status", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+                        }
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "operation") {
+                                str << "OperationId";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='operation' name='operation' class='form-control' placeholder='operation id'>";
+                            }
+                            str << "<input type=\"hidden\" name=\"action\" value=\"status\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"GetStatus\"/>";
+                            }
+                        }
+                    }
+                }
+            });
+            AddPanel(str, "Probe count-min sketch", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "database") {
+                                str << "Database";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='database' name='database' class='form-control' placeholder='/full/database/path'>";
+                            }
+                        }
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+                        }
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "column") {
+                                str << "ColumnName";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='column' name='column' class='form-control' placeholder='column name'>";
+                            }
+                        }
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "cell") {
+                                str << "Value";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='cell' name='cell' class='form-control' placeholder='value'>";
+                            }
+
+                            str << "<input type=\"hidden\" name=\"action\" value=\"probe\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Probe\"/>";
+                            }
+                        }
+                    }
+                }
+            });
+
+            PrintStatServiceState(str);
+        }
+    }
+
+    void Handle(NMon::TEvHttpInfoRes::TPtr& ev) {
+        if (HttpRequestActorId != ev->Sender) {
+            return;
         }
 
-        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+        HttpRequestActorId = TActorId();
+
+        const auto* msg = ev->CastAsLocal<NMon::TEvHttpInfoRes>();
+        if (msg != nullptr) {
+            ReplyToMonitoring(msg->Answer);
+        }
+    }
+
+    void ReplyToMonitoring(const TString& description) {
+        TStringStream str;
+
+        if (!description.empty()) {
+            HTML(str) {
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12 alert alert-info") {
+                        str << description;
+                    }
+                }
+            }
+        }
+
+        PrintForm(str);
+        Send(MonitoringActorId, new NMon::TEvHttpInfoRes(str.Str()));
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+        if (!EnableColumnStatistics) {
+            Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
+            return;
+        }
+
+        HttpRequestActorId = TActorId();
+        MonitoringActorId = ev->Sender;
+
+        const auto& request = ev->Get()->Request;
+        const auto& params = request.GetParams();
+
+        auto getRequestParam = [&params](const TString& name){
+            auto it = params.find(name);
+            return it != params.end() ? it->second : TString();
+        };
+
+        const auto action = getRequestParam("action");
+        if (action.empty()) {
+            ReplyToMonitoring("");
+            return;
+        }
+
+        const auto path = getRequestParam("path");
+        if (path.empty()) {
+            ReplyToMonitoring("'Path' parameter is required");
+            return;
+        }
+
+        if (action == "analyze") {
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
+                { THttpRequest::EParamType::PATH, path }
+            }, SelfId()));
+        } else if (action == "status") {
+            const auto operationId = getRequestParam("operation");
+            if (operationId.empty()) {
+                ReplyToMonitoring("'OperationId' parameter is required");
+                return;
+            }
+
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::STATUS, {
+                { THttpRequest::EParamType::PATH, path },
+                { THttpRequest::EParamType::OPERATION_ID, operationId }
+            }, SelfId()));
+        } else if (action == "probe") {
+            const auto column = getRequestParam("column");
+            if (column.empty()) {
+                ReplyToMonitoring("'ColumnName' parameter is required");
+                return;
+            }
+
+            const auto cell = getRequestParam("cell");
+            if (cell.empty()) {
+                ReplyToMonitoring("'Value' parameter is required");
+                return;
+            }
+
+            const auto database = getRequestParam("database");
+            if (database.empty()) {
+                ReplyToMonitoring("'Database' parameter is required");
+                return;
+            }
+
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::COUNT_MIN_SKETCH_PROBE, {
+                { THttpRequest::EParamType::DATABASE, database },
+                { THttpRequest::EParamType::PATH, path },
+                { THttpRequest::EParamType::COLUMN_NAME, column },
+                { THttpRequest::EParamType::CELL_VALUE, cell }
+            }, SelfId()));
+        } else {
+            ReplyToMonitoring("Wrong 'action' parameter value");
+        }
     }
 
 private:
@@ -1397,6 +1512,7 @@ private:
 
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
+    bool IsStatisticsDisabledInSA = false;
 
     static constexpr size_t StatFanOut = 10;
 
@@ -1440,6 +1556,9 @@ private:
     EResolveSAStage ResolveSAStage = RSA_INITIAL;
 
     static constexpr TDuration RequestTimeout = TDuration::MilliSeconds(100);
+
+    TActorId HttpRequestActorId;
+    TActorId MonitoringActorId;
 };
 
 THolder<IActor> CreateStatService(const TStatServiceSettings& settings) {

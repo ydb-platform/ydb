@@ -1,0 +1,5 @@
+mark_as_sources:
+  - traitlets/tests/__init__.py
+  - traitlets/tests/utils.py
+mark_as_tests:
+  - traitlets/tests/test_traitlets.py

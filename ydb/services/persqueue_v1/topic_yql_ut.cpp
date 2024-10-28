@@ -23,30 +23,34 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         UNIT_ASSERT_VALUES_EQUAL(after + 1, before);
     }
 
-    Y_UNIT_TEST(CreateAndAlterTopicYqlBackCompatibility) {
+    Y_UNIT_TEST(CreateTopicYqlBackCompatibility) {
         NKikimrConfig::TFeatureFlags ff;
         ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
         NPersQueue::TTestServer server(settings);
+        {
+            const char *query = R"__(
+                CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
+                    CONSUMER c1
+                ) WITH (min_active_partitions = 2,
+                        partition_count_limit = 5,
+                        auto_partitioning_strategy = 'scale_up'
+                );
+            )__";
 
-        const char *query = R"__(
-            CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
-                CONSUMER c1
-            ) WITH (min_active_partitions = 2,
-                    partition_count_limit = 5
-            );
-        )__";
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
+                                                                                                .GetPersQueueGroup();
+            const auto& describeAfterCreate = pqGroup.GetPQTabletConfig();
+            Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
 
-        server.AnnoyingClient->RunYqlSchemeQuery(query);
-        auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
-                                                                                            .GetPersQueueGroup();
-        const auto& describeAfterCreate = pqGroup.GetPQTabletConfig();
-        Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMinPartitionCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMaxPartitionCount(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(describeAfterCreate.GetPartitionStrategy().GetPartitionStrategyType()), static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT));
+        }
 
-        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMinPartitionCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(describeAfterCreate.GetPartitionStrategy().GetMaxPartitionCount(), 5);
     }
 
     Y_UNIT_TEST(CreateAndAlterTopicYql) {
@@ -76,7 +80,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                     supported_codecs = 'RAW, GZIP',
                     partition_write_speed_bytes_per_second = 9000,
                     partition_write_burst_bytes = 100500,
-                    auto_partitioning_strategy = 'scale_up'
+                    auto_partitioning_strategy = 'up'
             );
         )__";
 

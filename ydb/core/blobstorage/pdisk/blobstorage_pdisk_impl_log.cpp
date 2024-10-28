@@ -21,6 +21,7 @@ public:
         , CommonLogger(commonLogger)
         , CompletionLogWrite(completionLogWrite)
     {
+        TCompletionAction::ShouldBeExecutedInCompletionThread = false;
         Orbit = std::move(completionLogWrite->Orbit);
     }
 
@@ -34,7 +35,7 @@ public:
 
     void Exec(TActorSystem *actorSystem) override {
         CommonLogger->FirstUncommitted = TFirstUncommitted(EndChunkIdx, EndSectorIdx);
-        
+
         SetUpCompletionLogWrite();
         CompletionLogWrite->Exec(actorSystem);
 
@@ -108,7 +109,7 @@ void TPDisk::InitLogChunksInfo() {
                     range.IsPresent = false;
                     Y_ABORT_UNLESS(it->CurrentUserCount > 0);
                     it->CurrentUserCount--;
-                    P_LOG(PRI_INFO, BPD01, "InitLogChunksInfo, chunk is dereferenced by owner", 
+                    P_LOG(PRI_INFO, BPD01, "InitLogChunksInfo, chunk is dereferenced by owner",
                         (ChunkIdx, it->ChunkIdx),
                         (LsnRange, TString(TStringBuilder() << "[" << range.FirstLsn << ", " << range.LastLsn << "]")),
                         (PresentNonces, TString(TStringBuilder() << "[" << it->FirstNonce << ", " << it->LastNonce << "]")),
@@ -707,8 +708,10 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 // Common log writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TPDisk::ProcessLogWriteQueueAndCommits() {
-    if (JointLogWrites.empty())
+    if (JointLogWrites.empty()) {
+        LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
         return;
+    }
 
     NHPTimer::STime now = HPNow();
     for (TLogWrite *logCommit : JointCommits) {
@@ -748,6 +751,7 @@ void TPDisk::ProcessLogWriteQueueAndCommits() {
                 double(logWrite->Cost) / 1000000.0, HPSecondsFloat(logWrite->Deadline),
                 logWrite->Owner, logWrite->IsFast, logWrite->PriorityClass);
     }
+    LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), JointCommits.size());
     TReqId reqId = JointLogWrites.back()->ReqId;
     auto write = MakeHolder<TCompletionLogWrite>(
         this, std::move(JointLogWrites), std::move(JointCommits), std::move(logChunksToCommit));
@@ -938,7 +942,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
     Y_ABORT_UNLESS(CommonLogger->NextChunks.empty());
 
-    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK, GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), nullptr));
+    evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK, GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), ""));
     Y_ABORT_UNLESS(evLog.Result.Get());
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }
@@ -997,7 +1001,7 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
         if (ChunkState[chunkIdx].CommitState == TChunkState::DATA_RESERVED) {
             Mon.UncommitedDataChunks->Dec();
             Mon.CommitedDataChunks->Inc();
-            P_LOG(PRI_INFO, BPD01, "Commit Data Chunk", 
+            P_LOG(PRI_INFO, BPD01, "Commit Data Chunk",
                 (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
                 (ChunkIdx, chunkIdx),
                 (OwnerId, (ui32)ChunkState[chunkIdx].OwnerId));
@@ -1309,7 +1313,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
 void TPDisk::InitiateReadSysLog(const TActorId &pDiskActor) {
     Y_VERIFY_S(PDiskThread.Running(), "expect PDiskThread to be running");
     Y_VERIFY_S(InitPhase == EInitPhase::Uninitialized, "expect InitPhase to be Uninitialized, but InitPhase# "
-            << InitPhase);
+            << InitPhase.load());
     ui32 formatSectorsSize = FormatSectorSize * ReplicationFactor;
     THolder<TEvReadFormatResult> evReadFormatResult(new TEvReadFormatResult(formatSectorsSize, UseHugePages));
     ui8 *formatSectors = evReadFormatResult->FormatSectors.Get();
@@ -1325,7 +1329,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
     if (evReadLogResult.Status != NKikimrProto::OK) {
         P_LOG(PRI_ERROR, BPD01, "Error on log read",
             (evReadLogResult, evReadLogResult.ToString()),
-            (InitPhase, InitPhase));
+            (InitPhase, InitPhase.load()));
         switch (InitPhase) {
             case EInitPhase::ReadingSysLog:
                 *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogReadError;
@@ -1505,7 +1509,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             return;
         }
         default:
-            Y_FAIL_S("Unexpected InitPhase# " << InitPhase);
+            Y_FAIL_S("Unexpected InitPhase# " << InitPhase.load());
     }
 }
 

@@ -27,7 +27,7 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
 }
 
 void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
-    const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
+    const NKikimrMiniKQL::TValue& value, const TColumnOrder* fieldsOrder,
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
     switch (type.GetKind()) {
@@ -203,13 +203,13 @@ void WriteValueToYson(const TStringStream& stream, NResult::TYsonResultWriter& w
             };
 
             if (fieldsOrder) {
-                YQL_ENSURE(fieldsOrder->size() == structType.MemberSize());
+                YQL_ENSURE(fieldsOrder->Size() == structType.MemberSize());
                 TMap<TString, size_t> memberIndices;
                 for (size_t i = 0; i < structType.MemberSize(); ++i) {
                     memberIndices[structType.GetMember(i).GetName()] = i;
                 }
                 for (auto& field : *fieldsOrder) {
-                    auto* memberIndex = memberIndices.FindPtr(field);
+                    auto* memberIndex = memberIndices.FindPtr(field.PhysicalName);
                     YQL_ENSURE(memberIndex);
 
                     writeMember(*memberIndex);
@@ -330,103 +330,14 @@ Y_FORCE_INLINE bool ExportStructTypeToKikimrProto(const TStructExprType* type, T
 } // namespace
 
 void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result,
-    const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
+    const TColumnOrder& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
 {
     truncated = false;
     NResult::TYsonResultWriter resultWriter(writer);
-    WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.empty() ? nullptr : &columnHints,
+    WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.Size() == 0 ? nullptr : &columnHints,
         fillSettings, truncated, true);
 }
 
-bool IsRawKikimrResult(const NKikimrMiniKQL::TResult& result) {
-    auto& type = result.GetType();
-    if (type.GetKind() != NKikimrMiniKQL::ETypeKind::Struct) {
-        return true;
-    }
-
-    auto& structType = type.GetStruct();
-    if (structType.MemberSize() != 2) {
-        return true;
-    }
-
-    return structType.GetMember(0).GetName() != "Data" || structType.GetMember(1).GetName() != "Truncated";
-}
-
-NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& result, const TVector<TString>& columnHints,
-    const IDataProvider::TFillSettings& fillSettings, google::protobuf::Arena* arena)
-{
-    NKikimrMiniKQL::TResult* packedResult = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(arena);
-    auto* packedType = packedResult->MutableType();
-    packedType->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-    auto* dataMember = packedType->MutableStruct()->AddMember();
-    dataMember->SetName("Data");
-    auto* truncatedMember = packedType->MutableStruct()->AddMember();
-    truncatedMember->SetName("Truncated");
-    truncatedMember->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    truncatedMember->MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<bool>::Id);
-
-    auto* packedValue = packedResult->MutableValue();
-    auto* dataValue = packedValue->AddStruct();
-    auto* dataType = dataMember->MutableType();
-    auto* truncatedValue = packedValue->AddStruct();
-
-    bool truncated = false;
-    TColumnOrder order(columnHints);
-    if (result.GetType().GetKind() == NKikimrMiniKQL::ETypeKind::List) {
-        const auto& itemType = result.GetType().GetList().GetItem();
-
-        TMap<TString, size_t> memberIndices;
-        if (itemType.GetKind() == NKikimrMiniKQL::ETypeKind::Struct && !columnHints.empty()) {
-            const auto& structType = itemType.GetStruct();
-
-            for (size_t i = 0; i < structType.MemberSize(); ++i) {
-                memberIndices[structType.GetMember(i).GetName()] = i;
-            }
-
-            dataType->SetKind(NKikimrMiniKQL::ETypeKind::List);
-            auto* newItem = dataType->MutableList()->MutableItem();
-            newItem->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-            auto* newStructType = newItem->MutableStruct();
-            for (auto& [column, gen_col] : order) {
-                auto* memberIndex = memberIndices.FindPtr(gen_col);
-                YQL_ENSURE(memberIndex);
-
-                (*newStructType->AddMember() = structType.GetMember(*memberIndex)).SetName(column);
-            }
-        } else {
-            *dataType = result.GetType();
-        }
-
-        ui64 rowsWritten = 0;
-        ui64 bytesWritten = 0;
-        for (auto& item : result.GetValue().GetList()) {
-            if (ResultsOverflow(rowsWritten, bytesWritten, fillSettings)) {
-                truncated = true;
-                break;
-            }
-            if (!memberIndices.empty()) {
-                auto* newStruct = dataValue->AddList();
-                for (auto& [column, gen_column] : order) {
-                    auto* memberIndex = memberIndices.FindPtr(gen_column);
-                    YQL_ENSURE(memberIndex);
-
-                    *newStruct->AddStruct() = item.GetStruct(*memberIndex);
-                }
-            } else {
-                *dataValue->AddList() = item;
-            }
-
-            bytesWritten += item.ByteSize();
-            ++rowsWritten;
-        }
-    } else {
-        dataType->CopyFrom(result.GetType());
-        dataValue->CopyFrom(result.GetValue());
-    }
-
-    truncatedValue->SetBool(truncated);
-    return packedResult;
-}
 
 const TTypeAnnotationNode* ParseTypeFromKikimrProto(const NKikimrMiniKQL::TType& type, TExprContext& ctx) {
     switch (type.GetKind()) {

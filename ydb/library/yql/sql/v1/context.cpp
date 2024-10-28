@@ -263,7 +263,7 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
     if (Settings.AssumeYdbOnClusterWithSlash && clusterPtr->StartsWith('/')) {
         return false;
     }
-    return !Settings.DynamicClusterProvider.Empty();
+    return !Settings.DynamicClusterProvider.empty();
 }
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {

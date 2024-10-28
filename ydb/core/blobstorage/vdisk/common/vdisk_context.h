@@ -12,9 +12,11 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/ptr.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
+    namespace NPDisk {
+        struct TEvChunkReadResult;
+    }
     class TCostModel;
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -80,18 +82,12 @@ namespace NKikimr {
         TOutOfSpaceState OutOfSpaceState;
         // Global stat about huge heap fragmentation
         THugeHeapFragmentation HugeHeapFragmentation;
-        // Tracks PDisk errors
-        TPDiskErrorState PDiskErrorState;
         friend class TDskSpaceTrackerActor;
 
         NMonGroup::TCostGroup CostMonGroup;
 
     public:
         TLogger Logger;
-
-        TPDiskErrorState::EState GetPDiskErrorState() const {
-            return PDiskErrorState.GetState();
-        }
 
     public:
         TVDiskContext(
@@ -137,14 +133,11 @@ namespace NKikimr {
                 case NKikimrProto::CORRUPTED:
                 case NKikimrProto::OUT_OF_SPACE: {
                     // Device is out of order
-                    PDiskErrorState.Set(ev.Status, ev.StatusFlags);
-                    auto newState = PDiskErrorState.GetState();
                     LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
                             VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Recoverable error from PDisk: %s newState# %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data(),
-                                TPDiskErrorState::StateToString(newState)));
-                    actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(newState));
+                                "CheckPDiskResponse: Recoverable error from PDisk: %s",
+                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+                    actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(ev.Status, ev.StatusFlags, ev.ErrorReason));
                     return false;
                 }
                 default:
@@ -155,17 +148,7 @@ namespace NKikimr {
             }
         }
 
-        template <class TActorSystemOrCtx>
-        bool CheckPDiskResponseReadable(const TActorSystemOrCtx &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message = {}) {
-            if (!ev.Data.IsReadable()) {
-                LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                        VDISKP(VDiskLogPrefix,
-                            "CheckPDiskResponseReadable: not readable chunk from PDisk: %s",
-                            FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
-                return false;
-            }
-            return true;
-        }
+        bool CheckPDiskResponseReadable(const TActorContext &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message = {});
 
         TOutOfSpaceState &GetOutOfSpaceState() {
             return OutOfSpaceState;

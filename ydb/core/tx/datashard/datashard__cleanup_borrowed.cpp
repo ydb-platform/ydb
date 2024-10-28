@@ -28,12 +28,14 @@ public:
     { }
 
     void Bootstrap(const TActorContext& ctx) {
-        NTabletPipe::TClientConfig config({
-            .RetryLimitCount = 5,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(100)
-        });
-        config.CheckAliveness = true;
+        NTabletPipe::TClientConfig config{
+            .CheckAliveness = true,
+            .RetryPolicy = {
+                .RetryLimitCount = 5,
+                .MinRetryTime = TDuration::MilliSeconds(10),
+                .MaxRetryTime = TDuration::MilliSeconds(100),
+            },
+        };
 
         for (const auto& kv : BorrowedParts) {
             for (const ui64 tabletId : kv.second) {
@@ -253,11 +255,8 @@ private:
     bool DryRun = true;
 };
 
-ITransaction* TDataShard::CreateTxMonitoringCleanupBorrowedParts(
-        TDataShard* self,
-        NMon::TEvRemoteHttpInfo::TPtr ev)
-{
-    return new TTxMonitoringCleanupBorrowedParts(self, ev);
+void TDataShard::HandleMonCleanupBorrowedParts(NMon::TEvRemoteHttpInfo::TPtr& ev) {
+    Execute(new TTxMonitoringCleanupBorrowedParts(this, ev));
 }
 
 }

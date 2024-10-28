@@ -20,11 +20,11 @@ TEvTx* CreateRequest(ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx) {
     return ev;
 }
 
-void DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
-    DoRequest(setup.GetRuntime(), txId, scheme);
+ui64 DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+    return DoRequest(setup.GetRuntime(), txId, scheme);
 }
 
-void DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
+ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme) {
     Sleep(TDuration::Seconds(1));
 
     Cerr << "ALTER_SCHEME: " << scheme << Endl << Flush;
@@ -54,20 +54,26 @@ void DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp:
         "Unexpected status " << NKikimrScheme::EStatus_Name(e->Record.GetStatus()) << " " << e->Record.GetReason());
 
     Sleep(TDuration::Seconds(1));
+
+    return e->Record.GetTxId();
 }
 
-void SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary) {
-    SplitPartition(setup.GetRuntime(), txId, partition, boundary);
+ui64 SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary) {
+    return SplitPartition(setup.GetRuntime(), txId, partition, boundary);
 }
 
-void SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary) {
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary) {
+    return SplitPartition(runtime, txId, TEST_TOPIC, partition, boundary);
+}
+
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
-    scheme.SetName(TEST_TOPIC);
+    scheme.SetName(topic);
     auto* split = scheme.AddSplit();
     split->SetPartition(partition);
     split->SetSplitBoundary(boundary);
 
-    DoRequest(runtime, txId, scheme);
+    return DoRequest(runtime, txId, scheme);
 }
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight) {
@@ -90,7 +96,8 @@ TTopicSdkTestSetup CreateSetup() {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
     ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
-    //ff.SetEnableTopicServiceTx(true);
+    ff.SetEnableTopicServiceTx(true);
+    ff.SetEnableTopicAutopartitioningForCDC(true);
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);
@@ -514,7 +521,7 @@ template<SdkVersion Sdk>
 void TTestReadSession<Sdk>::Close() {
     Run();
     Cerr << ">>>>> " << Impl->Name << " Closing reading session " << Endl << Flush;
-    Session->Close();
+    Session->Close(TDuration::Seconds(5));
     Session.reset();
 }
 

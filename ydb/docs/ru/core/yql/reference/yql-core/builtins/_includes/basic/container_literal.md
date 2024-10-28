@@ -15,7 +15,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 $name = "computed " || "member name";
 SELECT
   (1, 2, "3") AS `tuple`,

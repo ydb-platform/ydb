@@ -6,15 +6,12 @@
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
 class IDbWrapper;
-
-/// Use one table for inserted and committed blobs:
-/// !Commited => {PlanStep, WriteTxId} are {0, WriteId}
-///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
 
 class TInsertTableAccessor {
 protected:
@@ -29,6 +26,10 @@ protected:
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
+    TPathInfo& RegisterPathInfo(const ui64 pathId) {
+        return Summary.RegisterPathInfo(pathId);
+    }
+
     void ErasePath(const ui64 pathId) {
         Summary.ErasePath(pathId);
     }
@@ -68,7 +69,7 @@ public:
             AddBlobLink(data.GetBlobRange().BlobId);
         }
         const ui64 pathId = data.GetPathId();
-        return Summary.GetPathInfo(pathId).AddCommitted(std::move(data), load);
+        return Summary.GetPathInfoVerified(pathId).AddCommitted(std::move(data), load);
     }
     bool HasPathIdData(const ui64 pathId) const {
         return Summary.HasPathIdData(pathId);
@@ -76,7 +77,7 @@ public:
     const THashMap<TInsertWriteId, TInsertedData>& GetAborted() const {
         return Summary.GetAborted();
     }
-    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const {
+    const TInsertedContainer& GetInserted() const {
         return Summary.GetInserted();
     }
     const TInsertionSummary::TCounters& GetCountersPrepared() const {
@@ -102,6 +103,7 @@ public:
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(
         IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
+    TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data);
     void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
     void MarkAsNotAbortable(const TInsertWriteId writeId) {
         Summary.MarkAsNotAbortable(writeId);

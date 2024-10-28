@@ -8,7 +8,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     WeakField(my_column, String, "no value"),
     WeakField(my_table.other_column, Int64)

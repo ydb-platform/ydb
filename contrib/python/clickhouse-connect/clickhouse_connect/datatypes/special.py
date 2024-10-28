@@ -3,6 +3,7 @@ from uuid import UUID as PYUUID
 
 from clickhouse_connect.datatypes.base import TypeDef, ClickHouseType, ArrayType, UnsupportedType
 from clickhouse_connect.datatypes.registry import get_from_name
+from clickhouse_connect.driver.common import first_value
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
@@ -37,7 +38,7 @@ class UUID(ClickHouseType):
 
     # pylint: disable=too-many-branches
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         empty = empty_uuid_b
         if isinstance(first, str) or self.write_format(ctx) == 'string':
             for v in column:
@@ -92,8 +93,8 @@ class SimpleAggregateFunction(ClickHouseType):
     def _data_size(self, sample: Sequence) -> int:
         return self.element_type.data_size(sample)
 
-    def read_column_prefix(self, source: ByteSource):
-        return self.element_type.read_column_prefix(source)
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
+        return self.element_type.read_column_prefix(source, ctx)
 
     def write_column_prefix(self, dest: bytearray):
         self.element_type.write_column_prefix(dest)

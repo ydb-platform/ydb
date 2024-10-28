@@ -352,7 +352,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                         config.MeteringMode);
     Config.SetLocalDC(true);
 
-    NPersQueue::TTopicNamesConverterFactory factory(true, "/Root/PQ", "dc1");
+    NPersQueue::TTopicNamesConverterFactory factory(Ctx->Runtime->GetAppData(0).PQConfig.GetTopicsAreFirstClassCitizen(), "/Root/PQ", "dc1");
     TopicConverter = factory.MakeTopicConverter(Config);
     TActorId quoterId;
     if (Ctx->Runtime->GetAppData(0).PQConfig.GetQuotingConfig().GetEnableQuoting()) {
@@ -575,7 +575,7 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 
         auto& range = event->Record.GetCmdDeleteRange(index).GetRange();
         TString key = range.GetFrom();
-        UNIT_ASSERT(key.Size() > (1 + 10 + 1)); // type + partition + mark + consumer
+        UNIT_ASSERT(key.size() > (1 + 10 + 1)); // type + partition + mark + consumer
 
         if (deleteRange.Partition.Defined()) {
             auto partition = FromString<ui32>(key.substr(1, 10));
@@ -882,7 +882,7 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
                                                       bool immediate,
                                                       ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -988,8 +988,7 @@ void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
     auto event = MakeHolder<TEvPQ::TEvChangePartitionConfig>(TopicConverter, MakeConfig(config.Version,
                                                                                         config.Consumers,
                                                                                         1,
-                                                                                        config.MeteringMode),
-                                                                            NKikimrPQ::TBootstrapConfig());
+                                                                                        config.MeteringMode));
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1324,6 +1323,8 @@ public:
     void ExpectNoBatchCompletion();
     void WaitBatchCompletion(ui64 userActsCount);
     void ResetBatchCompletion();
+
+    void NonConflictingActsBatchOkTest();
 };
 
 ui64 TPartitionTxTestHelper::MakeAndSendNormalOffsetCommit(ui64 client, ui64 offset) {
@@ -1370,6 +1371,11 @@ void TPartitionTxTestHelper::SendWriteInfoResponseImpl(const TActorId& supportiv
     auto iter = this->WriteInfoData.find(supportiveId);
     Y_ABORT_UNLESS(!iter.IsEnd());
     reply->SrcIdInfo = iter->second;
+    reply->BytesWrittenTotal = 1;
+    reply->BytesWrittenGrpc = 1;
+    reply->BytesWrittenUncompressed = 1;
+    reply->MessagesWrittenTotal = 1;
+    reply->MessagesWrittenGrpc = 1;
     SendEvent(reply, supportiveId, partitionId);
 }
 
@@ -1606,7 +1612,7 @@ ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected)
 ui64 TPartitionTxTestHelper::MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected) {
     auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, 0);
 
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());
     auto* body = event->Record.MutableData();
@@ -2549,7 +2555,7 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOrder, TPartitionTxTestHelper)
     WaitCommitDone(tx2);
 }
 
-Y_UNIT_TEST_F(NonConflictingActsBatchOk, TPartitionTxTestHelper) {
+void TPartitionTxTestHelper::NonConflictingActsBatchOkTest() {
     TTxBatchingTestParams params {.WriterSessions{"src3", "src4"}};
     Init(std::move(params));
     ResetBatchCompletion();
@@ -2591,6 +2597,14 @@ Y_UNIT_TEST_F(NonConflictingActsBatchOk, TPartitionTxTestHelper) {
     WaitImmediateTxComplete(immTx1, true);
     WaitImmediateTxComplete(immTx2, true);
     WaitCommitDone(tx3);
+}
+Y_UNIT_TEST_F(TestNonConflictingActsBatchOk, TPartitionTxTestHelper) {
+    NonConflictingActsBatchOkTest();
+}
+
+Y_UNIT_TEST_F(TestTxBatchInFederation, TPartitionTxTestHelper) {
+    Ctx->Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
+    NonConflictingActsBatchOkTest();
 }
 
 Y_UNIT_TEST_F(ConflictingActsInSeveralBatches, TPartitionTxTestHelper) {
@@ -3124,6 +3138,8 @@ Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
     EmulateKVTablet();
     WaitImmediateTxComplete(immTx2, true);
 }
+
+
 
 Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
     auto* actor = CreatePartition({

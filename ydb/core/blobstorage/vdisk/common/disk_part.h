@@ -131,11 +131,7 @@ namespace NKikimr {
         }
 
         ui64 Hash() const {
-            ui64 x = 0;
-            x |= (ui64)ChunkIdx;
-            x <<= 32u;
-            x |= (ui64)Offset;
-            return x;
+            return MultiHash(ChunkIdx, Offset);
         }
 
         inline bool operator <(const TDiskPart &x) const {

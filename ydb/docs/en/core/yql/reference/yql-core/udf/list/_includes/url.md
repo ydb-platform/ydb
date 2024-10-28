@@ -101,12 +101,15 @@ Get a component of the URL.
 * `Url::GetCGIParam(String?, String) -> String?` -- The second parameter is the name of the intended CGI parameter.
 * `Url::GetDomain(String?, Uint8) -> String?` -- The second parameter is the required domain level.
 * `Url::GetTLD(String{Flags:AutoMap}) -> String`
-* `Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool` -- Registered on http://www.iana.org/
+* `Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool` -- Registered on [iana.org](http://www.iana.org/).
 * `Url::IsWellKnownTLD(String{Flags:AutoMap}) -> Bool` -- Belongs to a small whitelist of com, net, org, ru, and so on.
 * `Url::GetDomainLevel(String{Flags:AutoMap}) -> Uint64`
 * `Url::GetSignificantDomain(String{Flags:AutoMap}, [List<String>?]) -> String`
+
   Returns a second-level domain in most cases and a third-level domain for the hostnames like: `***.XXX.YY`, where `XXX` is com, net, org, co, gov, or edu. You can redefine this list using an optional second argument
+
 * `Url::GetOwner(String{Flags:AutoMap}) -> String`
+
   Returns the domain that's most likely owned by an individual or organization. Unlike `Url::GetSignificantDomain`, it uses a special whitelist. Besides the `***.co.uk` domains, it can return a third-level domain used by free hosting sites and blogs (for example: something.livejournal.com)
 
 ### Examples
@@ -119,15 +122,19 @@ SELECT Url::GetDomain("http://www.ydb.tech", 2); -- "ydb.tech"
 ## Cut... {#cut}
 
 * `Url::CutScheme(String?) -> String?`
+
   Returns the passed URL without the schema (`http://`, `https://`, etc.).
 
 * `Url::CutWWW(String?) -> String?`
+
   Returns the passed domain without the "www." prefix (if any).
 
 * `Url::CutWWW2(String?) -> String?`
+
   Returns the passed domain without the prefixes like "www.", "www2.", "wwww777." (if any).
 
 * `Url::CutQueryStringA­ndFragment(String{Flags:AutoMap}) -> String`
+
   Returns a copy of the passed URL, stripping out all the CGI parameters and fragments ("?foo=bar" and/or "#baz").
 
 ### Examples

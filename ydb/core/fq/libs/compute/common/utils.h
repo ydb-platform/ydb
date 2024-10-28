@@ -81,6 +81,7 @@ private:
     const TCompressor Compressor;
     std::unique_ptr<IPlanStatProcessor> Processor;
     bool ShowQueryTimeline = false;
+    ui64 MaxQueryTimelineSize = 0;
 };
 
 TString GetStatViewName(const ::NFq::TRunActorParams& params);

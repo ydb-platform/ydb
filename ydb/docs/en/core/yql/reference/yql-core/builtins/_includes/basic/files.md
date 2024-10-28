@@ -57,6 +57,6 @@ SELECT ListLength(ParseFile("String", "my_file.txt"));
 
 ```yql
 SELECT * FROM my_table
-WHERE int_column IN ParseFile("Int64", "my_file.txt"));
+WHERE int_column IN ParseFile("Int64", "my_file.txt");
 ```
 

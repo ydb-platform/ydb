@@ -66,9 +66,6 @@ protected:
         return std::forward<TSettingsType>(settings);
     }
 
-    NScripting::TExplainYqlResult ExplainQuery(TClientCommand::TConfig& config, const TString& queryText,
-        NScripting::ExplainYqlRequestMode mode);
-
     TString OperationTimeout;
 };
 

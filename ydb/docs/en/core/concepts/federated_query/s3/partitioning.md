@@ -86,7 +86,7 @@ In the `partitioned_by` parameter, the columns of the data schema by which the d
 
 For example, `PARTITIONED_BY=['year', 'month']` defines the directory structure
 
-```
+```text
 year=2021
     month=01
     month=02
@@ -97,7 +97,7 @@ year=2022
 
 And `partitioned_by=['month', 'year']` defines another directory structure
 
-```
+```text
 month=01
     year=2021
     year=2022

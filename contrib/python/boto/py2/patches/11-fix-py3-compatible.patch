@@ -1,0 +1,51 @@
+commit 0dc5e5daf52d205285ba09c67743e5b710f4dfc7
+merge: 20bf5810595e13f742f8398fc46b2d6db3ab1d97 8966d3e8ae4112abb24ad7e5ea28e43ece66b29c
+author: inkoit
+date: 2020-01-09T10:29:26+03:00
+revision: 6197593
+
+    Fix py3 compatibility in boto2
+    
+    Делаем как здесь: http://python-future.org/compatible_idioms.html#http-module
+    Чтобы не делать как здесь: https://a.yandex-team.ru/review/1077328/details
+    
+    REVIEW: 1079152
+
+--- contrib/python/boto/py2/boto/s3/resumable_download_handler.py	(20bf5810595e13f742f8398fc46b2d6db3ab1d97)
++++ contrib/python/boto/py2/boto/s3/resumable_download_handler.py	(0dc5e5daf52d205285ba09c67743e5b710f4dfc7)
+@@ -19,7 +19,7 @@
+ # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ # IN THE SOFTWARE.
+ import errno
+-import httplib
++import http.client
+ import os
+ import re
+ import socket
+@@ -92,7 +92,7 @@ class ResumableDownloadHandler(object):
+ 
+     MIN_ETAG_LEN = 5
+ 
+-    RETRYABLE_EXCEPTIONS = (httplib.HTTPException, IOError, socket.error,
++    RETRYABLE_EXCEPTIONS = (http.client.HTTPException, IOError, socket.error,
+                             socket.gaierror)
+ 
+     def __init__(self, tracker_file_name=None, num_retries=None):
+@@ -290,7 +290,7 @@ class ResumableDownloadHandler(object):
+                 if debug >= 1:
+                     print('Caught exception (%s)' % e.__repr__())
+                 if isinstance(e, IOError) and e.errno == errno.EPIPE:
+-                    # Broken pipe error causes httplib to immediately
++                    # Broken pipe error causes http.client to immediately
+                     # close the socket (http://bugs.python.org/issue5542),
+                     # so we need to close and reopen the key before resuming
+                     # the download.
+@@ -341,7 +341,7 @@ class ResumableDownloadHandler(object):
+             # which we can safely ignore.
+             try:
+                 key.close()
+-            except httplib.IncompleteRead:
++            except http.client.IncompleteRead:
+                 pass
+ 
+             sleep_time_secs = 2**progress_less_iterations

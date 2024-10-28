@@ -3,7 +3,7 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
-#include <ydb/core/formats/arrow/hash/xx_hash.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <util/generic/map.h>
 
 namespace NKikimr::NMiniKQL {

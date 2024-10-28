@@ -531,7 +531,7 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
         Sorted = nullptr;
         Unique = nullptr;
         Distinct = nullptr;
-        YQL_CLOG(WARN, ProviderDq) << " Error '" << error << "' on parse constraints node: " << ConstraintsNode.AsString();
+        YQL_CLOG(WARN, ProviderYt) << " Error '" << error << "' on parse constraints node: " << ConstraintsNode.AsString();
     }
 }
 
@@ -1490,6 +1490,7 @@ bool TYqlRowSpecInfo::ClearSortness(TExprContext& ctx, size_t fromMember) {
         SortedByTypes.erase(SortedByTypes.begin() + fromMember, SortedByTypes.end());
         SortDirections.erase(SortDirections.begin() + fromMember, SortDirections.end());
         UniqueKeys = false;
+        ParseConstraintsNode(ctx);
         ConstraintsNode.Clear();
         Sorted = MakeSortConstraint(ctx);
         return true;

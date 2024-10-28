@@ -8,7 +8,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 CurrentOperationId()->String
 CurrentOperationSharedId()->String
 CurrentAuthenticatedUser()->String
@@ -20,7 +20,7 @@ CurrentAuthenticatedUser()->String
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     CurrentOperationId(),
     CurrentOperationSharedId(),

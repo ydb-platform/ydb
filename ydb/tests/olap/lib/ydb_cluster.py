@@ -13,13 +13,37 @@ LOGGER = logging.getLogger()
 
 
 class YdbCluster:
+    class MonitoringUrl:
+        def __init__(self, url: str, caption: str = 'link') -> None:
+            self.url = url
+            if self.url.find('://') < 0:
+                self.url = f'https://{self.url}'
+            self.caption = caption
+
     _ydb_driver = None
     _results_driver = None
     _cluster_info = None
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
     tables_path = get_external_param('tables-path', 'olap_yatests')
-    monitoring_cluster = get_external_param('monitoring_cluster', 'olap_testing_vla')
+    _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
+
+    @classmethod
+    def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:
+        def _process_url(url: str) -> YdbCluster.MonitoringUrl:
+            spl = url.split('::', 2)
+            if len(spl) == 1:
+                return YdbCluster.MonitoringUrl(spl[0])
+            return YdbCluster.MonitoringUrl(spl[1], spl[0])
+        if cls._monitoring_urls is None:
+            cls._monitoring_urls = [
+                _process_url(url)
+                for url in get_external_param('monitoring_urls', (
+                    'monitoring.yandex-team.ru/projects/kikimr/dashboards/mone0310v4dbc6kui89v?'
+                    'p.cluster=olap_testing_vla&p.database=/{database}&from={start_time}&to={end_time}')
+                    ).split(',')
+            ]
+        return cls._monitoring_urls
 
     @classmethod
     def _get_service_url(cls):
@@ -29,7 +53,7 @@ class YdbCluster:
         return f'http://{host}:{port}'
 
     @classmethod
-    def _get_cluster_nodes(cls, path=None):
+    def get_cluster_nodes(cls, path=None):
         try:
             url = f'{cls._get_service_url()}/viewer/json/nodes?'
             if path is not None:
@@ -52,11 +76,9 @@ class YdbCluster:
             version = ''
             cluster_name = ''
             nodes_wilcard = ''
-            max_start_time = 0
-            nodes, node_count = cls._get_cluster_nodes()
+            nodes, node_count = cls.get_cluster_nodes()
             for node in nodes:
                 n = node.get('SystemState', {})
-                max_start_time = max(max_start_time, int(n.get('StartTime', 0)))
                 cluster_name = n.get('ClusterName', cluster_name)
                 version = n.get('Version', version)
                 for tenant in n.get('Tenants', []):
@@ -68,8 +90,6 @@ class YdbCluster:
                 'version': version,
                 'name': cluster_name,
                 'nodes_wilcard': nodes_wilcard,
-                'service_url': cls._get_service_url(),
-                'max_start_time': max_start_time,
             }
         return deepcopy(cls._cluster_info)
 
@@ -170,7 +190,10 @@ class YdbCluster:
                 start_time = int(ss.get('StartTime', int(time()) * 1000)) / 1000
                 uptime = int(time()) - start_time
                 r = ss.get('Roles', [])
-                role = r[0] if len(r) > 0 else role
+                for role_candidate in ['Storage', 'Tenant']:
+                    if role_candidate in r:
+                        role = role_candidate
+                        break
                 if uptime < 15:
                     error = f'Node {name} too yong: {uptime}'
             except BaseException as ex:
@@ -181,7 +204,7 @@ class YdbCluster:
 
         errors = []
         try:
-            nodes, node_count = cls._get_cluster_nodes()
+            nodes, node_count = cls.get_cluster_nodes()
             if node_count == 0:
                 errors.append('nodes_count == 0')
             if len(nodes) < node_count:
@@ -213,7 +236,7 @@ class YdbCluster:
                 for path in balanced_paths:
                     paths_to_balance += cls._get_tables(path)
             for p in paths_to_balance:
-                table_nodes, _ = cls._get_cluster_nodes(p)
+                table_nodes, _ = cls.get_cluster_nodes(p)
                 min = None
                 max = None
                 for tn in table_nodes:

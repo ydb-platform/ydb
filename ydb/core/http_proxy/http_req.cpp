@@ -553,7 +553,7 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = ""
+                        .FolderID = HttpContext.FolderId
                     };
 
                     auto authRequestProxy = MakeHolder<NSQS::THttpProxyAuthRequestProxy>(
@@ -1148,10 +1148,15 @@ namespace NKikimr::NHttpProxy {
             SourceAddress = address;
         }
 
-        DatabasePath = Request->URL;
+        DatabasePath = Request->URL.Before('?');
         if (DatabasePath == "/") {
            DatabasePath = "";
         }
+        auto params = TCgiParameters(Request->URL.After('?'));
+        if (auto it = params.Find("folderId"); it != params.end()) {
+            FolderId = it->second;
+        }
+
         //TODO: find out databaseId
         ParseHeaders(Request->Headers);
     }

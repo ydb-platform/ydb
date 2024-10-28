@@ -1,5 +1,5 @@
 /* vasprintf and asprintf with out-of-memory checking.
-   Copyright (C) 1999, 2002-2004, 2006-2013 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2002-2004, 2006-2016 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -53,10 +53,7 @@ xstrcat (size_t argcount, va_list args)
      vasprintf().  */
   if (totalsize == SIZE_MAX || totalsize > INT_MAX)
     {
-#if (defined _MSC_VER) && (_MSC_VER < 1800)
-#else
       errno = EOVERFLOW;
-#endif
       return NULL;
     }
 
@@ -74,10 +71,6 @@ xstrcat (size_t argcount, va_list args)
 
   return result;
 }
-
-#if defined(_MSC_VER)
-int vasprintf(char **resultp, const char *format, va_list args);
-#endif
 
 char *
 xvasprintf (const char *format, va_list args)

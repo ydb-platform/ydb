@@ -47,8 +47,6 @@ struct TLogChunkItem {
 };
 
 class TLogReader : public TLogReaderBase {
-    static constexpr ui32 BufferSizeSectors = 105;
-
     struct TSectorData;
     class TDoubleBuffer;
 
@@ -72,6 +70,7 @@ class TLogReader : public TLogReaderBase {
     THolder<TEvReadLogResult> Result;
     TLogChunkInfo *ChunkInfo;
 
+    const ui32 BufferSizeSectors;
     THolder<TDoubleBuffer> Sector;
 
     THolder<TMap<ui32, TChunkState>> ChunkOwnerMap;

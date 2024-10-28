@@ -104,7 +104,6 @@ struct TConfig
     TDuration PingTimeout;
     TDuration PingInterval;
 
-    bool UseAsyncTxPinger;
     int AsyncHttpClientThreads;
     int AsyncTxPingerPoolThreads;
 

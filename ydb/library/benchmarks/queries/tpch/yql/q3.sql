@@ -10,7 +10,7 @@ select
 from
     {{customer}}
 where
-    c_mktsegment = 'MACHINERY'
+    c_mktsegment = 'BUILDING'
 );
 
 $o = (
@@ -25,7 +25,7 @@ left semi join
 on
     c.c_custkey = o.o_custkey
 where
-    o_orderdate < Date('1995-03-08')
+    o_orderdate < Date('1995-03-15')
 );
 
 $join2 = (
@@ -42,7 +42,7 @@ join
 on
     l.l_orderkey = o.o_orderkey
 where
-    l_shipdate > Date('1995-03-08')
+    l_shipdate > Date('1995-03-15')
 );
 
 select

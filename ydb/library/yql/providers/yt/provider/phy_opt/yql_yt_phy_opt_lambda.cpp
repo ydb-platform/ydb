@@ -6,7 +6,16 @@ using namespace NNodes;
 
 TCoLambda TYtPhysicalOptProposalTransformer::MakeJobLambdaNoArg(TExprBase content, TExprContext& ctx) const {
     if (State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
-        content = Build<TCoToFlow>(ctx, content.Pos()).Input(content).Done();
+        content = Build<TCoToFlow>(ctx, content.Pos())
+                        .Input(content)
+                        .FreeArgs()
+                            .Add<TCoDependsOn>()
+                                .Input<TCoString>()
+                                    .Literal().Build(State_->FlowDependsOnId++)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Done();
     } else {
         content = Build<TCoToStream>(ctx, content.Pos()).Input(content).Done();
     }

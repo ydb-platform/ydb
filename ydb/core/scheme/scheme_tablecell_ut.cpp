@@ -86,11 +86,11 @@ Y_UNIT_TEST_SUITE(Scheme) {
         cells.push_back(TCell((const char*)&floatVal, sizeof(floatVal)));
         types.push_back(TTypeInfo(NTypeIds::Float));
         cells.push_back(TCell());
-        types.push_back(TTypeInfo(NTypeIds::Decimal));
+        types.push_back(TTypeInfo(NScheme::TDecimalType::Default()));
         cells.push_back(TCell((const char*)&intVal, sizeof(ui64)));
         types.push_back(TTypeInfo(NTypeIds::Uint64));
         cells.push_back(TCell());
-        types.push_back(TTypeInfo(NTypeIds::Decimal));
+        types.push_back(TTypeInfo(NScheme::TDecimalType::Default()));
         cells.push_back(TCell());
         types.push_back(TTypeInfo(NTypeIds::Uint8));
         cells.push_back(TCell(bigStrVal, sizeof(bigStrVal)));
@@ -312,13 +312,10 @@ Y_UNIT_TEST_SUITE(Scheme) {
     /**
      * CompareOrder test for cell1 < cell2 < cell3 given a type id
      */
-    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId typeId) {
+    void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeInfo type) {
         TCell nullCell;
 
-        NScheme::TTypeIdOrder typeIdDescending(typeId, NScheme::EOrder::Descending);
-
-        NScheme::TTypeInfo type(typeId);
-        NScheme::TTypeInfoOrder typeDescending(typeIdDescending);
+        NScheme::TTypeInfoOrder typeDescending(type, NScheme::EOrder::Descending);
 
         // NULL is always equal to itself, both ascending and descending
         UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, type), 0);
@@ -383,7 +380,20 @@ Y_UNIT_TEST_SUITE(Scheme) {
             TCell((const char*)&decVal1, sizeof(decVal1)),
             TCell((const char*)&decVal2, sizeof(decVal2)),
             TCell((const char*)&decVal3, sizeof(decVal3)),
-            NScheme::NTypeIds::Decimal);
+            NScheme::TDecimalType::Default());
+
+        DoTestCompareOrder(
+            TCell((const char*)&decVal1, sizeof(decVal1)),
+            TCell((const char*)&decVal2, sizeof(decVal2)),
+            TCell((const char*)&decVal3, sizeof(decVal3)),
+            NScheme::TDecimalType(20, 10));
+
+        DoTestCompareOrder(
+            TCell((const char*)&decVal1, sizeof(decVal1)),
+            TCell((const char*)&decVal2, sizeof(decVal2)),
+            TCell((const char*)&decVal3, sizeof(decVal3)),
+            NScheme::TDecimalType(35, 20));
+
     }
 
     Y_UNIT_TEST(YqlTypesMustBeDefined) {
@@ -391,7 +401,9 @@ Y_UNIT_TEST_SUITE(Scheme) {
 
         TArrayRef<const NScheme::TTypeId> yqlIds(NScheme::NTypeIds::YqlIds);
         for (NScheme::TTypeId typeId : yqlIds) {
-            NScheme::TTypeInfo typeInfo(typeId);
+            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Decimal ? 
+                NScheme::TTypeInfo(NScheme::TDecimalType::Default()) : 
+                NScheme::TTypeInfo(typeId);
             switch (typeId) {
             case NScheme::NTypeIds::Int8:
                 GetValueHash(typeInfo, TCell(charArr, sizeof(i8)));

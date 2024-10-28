@@ -64,15 +64,15 @@ public:
             getCounterBlock("streaming", "Session"));
     }
 
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override {
-        Limiter = limiter;
+    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter*) override {
+        // nothing
     }
 
-    bool IncRequest() {
+    bool IncRequest() override {
         return true;
     }
 
-    void DecRequest() {
+    void DecRequest() override {
         // nothing
     }
 
@@ -81,7 +81,6 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> const Counters;
 
     grpc::ServerCompletionQueue* CQ = nullptr;
-    NYdbGrpc::TGlobalLimiter* Limiter = nullptr;
 };
 
 template<class TImplActor>

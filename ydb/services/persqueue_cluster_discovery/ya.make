@@ -24,6 +24,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    cluster_ordering
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

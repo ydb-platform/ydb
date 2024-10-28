@@ -131,7 +131,7 @@ public:
         RequestsLatency_ += TInstant::Now() - RunningRequests_[requestId].StartTime;
         RunningRequests_.erase(requestId);
 
-        const auto& response = ev->Get()->Result.Response->Get()->Record.GetRef();
+        const auto& response = ev->Get()->Result.Response->Get()->Record;
         const auto status = response.GetYdbStatus();
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -179,7 +179,7 @@ private:
 
             MaxInFlight_ = std::max(MaxInFlight_, RunningRequests_.size());
             if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
-                Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+                Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
             }
 
             RequestId_++;
@@ -193,7 +193,7 @@ private:
         }
 
         if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final) {
-            Cout << TStringBuilder() << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
+            Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
         }
 
         FinalizePromise_->SetValue();
@@ -292,6 +292,113 @@ private:
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
 };
 
+class TSessionHolderActor : public NActors::TActorBootstrapped<TSessionHolderActor> {
+public:
+    TSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise)
+        : TargetNode_(request.TargetNode)
+        , TraceId_(request.Event->Record.GetTraceId())
+        , Request_(std::move(request.Event))
+        , OpenPromise_(openPromise)
+        , ClosePromise_(closePromise)
+    {}
+
+    void Bootstrap() {
+        Become(&TSessionHolderActor::StateFunc);
+        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(Request_));
+    }
+
+    void Handle(NKikimr::NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            FailAndPassAway(TStringBuilder() << "Failed to create session, " << response.GetYdbStatus() << ", reason: " << response.GetError() << "\n");
+            return;
+        }
+
+        SessionId_ = response.GetResponse().GetSessionId();
+        Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
+
+        PingSession();
+    }
+
+    void PingSession() {
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvPingSessionRequest>();
+        event->Record.SetTraceId(TraceId_);
+        event->Record.MutableRequest()->SetSessionId(SessionId_);
+        NActors::ActorIdToProto(SelfId(), event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+
+        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(event));
+    }
+
+    void Handle(NKikimr::NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response.GetIssues(), issues);
+            FailAndPassAway(TStringBuilder() << "Failed to ping session, " << response.GetStatus() << ", reason:\n" << issues.ToString() << "\n");
+            return;
+        }
+
+        if (!OpenPromise_.HasValue()) {
+            OpenPromise_.SetValue(SessionId_);
+        }
+
+        Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
+    }
+
+    void CloseSession() {
+        if (!SessionId_) {
+            FailAndPassAway("Failed to close session, creation is not finished");
+            return;
+        }
+
+        auto event = std::make_unique<NKikimr::NKqp::TEvKqp::TEvCloseSessionRequest>();
+        event->Record.SetTraceId(TraceId_);
+        event->Record.MutableRequest()->SetSessionId(SessionId_);
+
+        Send(NKikimr::NKqp::MakeKqpProxyID(TargetNode_), std::move(event));
+    }
+
+    void Handle(NKikimr::NKqp::TEvKqp::TEvCloseSessionResponse::TPtr& ev) {
+        const auto& response = ev->Get()->Record;
+        if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response.GetIssues(), issues);
+            FailAndPassAway(TStringBuilder() << "Failed to close session, " << response.GetStatus() << ", reason:\n" << issues.ToString() << "\n");
+            return;
+        }
+
+        ClosePromise_.SetValue();
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(NKikimr::NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+        hFunc(NKikimr::NKqp::TEvKqp::TEvPingSessionResponse, Handle);
+        hFunc(NKikimr::NKqp::TEvKqp::TEvCloseSessionResponse, Handle);
+        sFunc(NActors::TEvents::TEvWakeup, PingSession);
+        sFunc(NActors::TEvents::TEvPoison, CloseSession);
+    )
+
+private:
+    void FailAndPassAway(const TString& error) {
+        if (!OpenPromise_.HasValue()) {  
+            OpenPromise_.SetException(error);
+        }
+        ClosePromise_.SetException(error);
+        PassAway();
+    }
+
+private:
+    const ui32 TargetNode_;
+    const TString TraceId_;
+    const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
+
+    std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Request_;
+    NThreading::TPromise<TString> OpenPromise_;
+    NThreading::TPromise<void> ClosePromise_;
+    TString SessionId_;
+};
+
 }  // anonymous namespace
 
 NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback) {
@@ -304,6 +411,10 @@ NActors::IActor* CreateAsyncQueryRunnerActor(const TAsyncQueriesSettings& settin
 
 NActors::IActor* CreateResourcesWaiterActor(NThreading::TPromise<void> promise, i32 expectedNodeCount) {
     return new TResourcesWaiterActor(promise, expectedNodeCount);
+}
+
+NActors::IActor* CreateSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise) {
+    return new TSessionHolderActor(std::move(request), openPromise, closePromise);
 }
 
 }  // namespace NKqpRun

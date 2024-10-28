@@ -303,7 +303,11 @@ public:
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 4U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 5, 8, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TS3SourceSettings::idx_World), ctx)) {
             return TStatus::Error;
         }
 
@@ -335,7 +339,11 @@ public:
     }
 
     TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 7U, 8U, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 8, 9, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TS3ParseSettings::idx_World), ctx)) {
             return TStatus::Error;
         }
 
@@ -715,7 +723,7 @@ public:
                         return false;
                     }
 
-                    if (delimiter.Size() != 1) {
+                    if (delimiter.size() != 1) {
                         ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "csv_delimiter must be single character"));
                         return false;
                     }

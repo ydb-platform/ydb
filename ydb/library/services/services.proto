@@ -347,6 +347,7 @@ enum EServiceKikimr {
     DB_POOL = 1167;
     YTS = 1168;
     OBJECT_STORAGE_INFERENCINATOR = 1169;
+    FQ_ROW_DISPATCHER = 1170;
 
     // 1024 - 1099 is reserved for nbs
 
@@ -400,6 +401,8 @@ enum EServiceKikimr {
     GROUPED_MEMORY_LIMITER = 2700;
 
     DATA_INTEGRITY = 3000;
+
+    TX_PRIORITIES_QUEUE = 3100;
 };
 
 message TActivity {
@@ -1054,5 +1057,9 @@ message TActivity {
         BUILD_COLUMNS_SCAN_ACTOR = 645;
         SAMPLE_K_UPLOAD_ACTOR = 646;
         LOCAL_KMEANS_SCAN_ACTOR = 647;
+        INCREMENTAL_RESTORE_SCAN_ACTOR = 648;
+        CHANGE_SENDER_INCR_RESTORE_ACTOR_MAIN = 649;
+        RESHUFFLE_KMEANS_SCAN_ACTOR = 650;
+        FEATURE_FLAGS_CONFIGURATOR = 651;
     };
 };

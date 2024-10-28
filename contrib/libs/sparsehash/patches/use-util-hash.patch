@@ -1,0 +1,26 @@
+--- a/src/sparsehash/internal/sparseconfig.h
++++ b/src/sparsehash/internal/sparseconfig.h
+@@ -7,10 +7,12 @@
+ #define GOOGLE_NAMESPACE ::google
+ 
+ /* the location of the header defining hash functions */
+-#define HASH_FUN_H <functional>
++#ifndef HASH_FUN_H
++#define HASH_FUN_H <util/generic/hash.h>
++#endif
+ 
+ /* the namespace of the hash<> function */
+-#define HASH_NAMESPACE std
++#define HASH_NAMESPACE 
+ 
+ /* Define to 1 if you have the <inttypes.h> header file. */
+ #define HAVE_INTTYPES_H 1
+@@ -37,7 +39,7 @@
+ /* #undef HAVE___UINT16 */
+ 
+ /* The system-provided hash function including the namespace. */
+-#define SPARSEHASH_HASH HASH_NAMESPACE::hash
++#define SPARSEHASH_HASH HASH_NAMESPACE::THash
+ 
+ /* Stops putting the code inside the Google namespace */
+ #define _END_GOOGLE_NAMESPACE_ }

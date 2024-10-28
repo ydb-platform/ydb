@@ -157,10 +157,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Fetching);
             if (needSnapshots) {
                 acc.AddAssembleStep(*result, *SpecColumns, "SPEC", false);
-                result->AddStep(std::make_shared<TSnapshotFilter>());
             }
             if (!exclusiveSource) {
                 acc.AddAssembleStep(*result, *MergeColumns, "LAST_PK", false);
+            }
+            if (needSnapshots) {
+                result->AddStep(std::make_shared<TSnapshotFilter>());
             }
             if (needFilterDeletion) {
                 acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", false);

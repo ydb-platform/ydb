@@ -32,12 +32,12 @@ $config = [
 ];
 
 $ydb = new Ydb($config);
-
 ```
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
 To create tables, use the `session->createTable()` method:
+
 ```php
 protected function createTabels()
 {
@@ -147,7 +147,6 @@ protected function upsertSimple()
     print('Finished.');
 }
 ```
-
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 

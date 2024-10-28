@@ -202,7 +202,7 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
                     folderItems.reserve(nodeList.size());
                     for (const auto& node : nodeList) {
                         TStringBuilder path;
-                        if (!folder.Prefix.Empty()) {
+                        if (!folder.Prefix.empty()) {
                             path << folder.Prefix << "/";
                         }
                         path << node.AsString();

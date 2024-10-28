@@ -458,11 +458,11 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::PostingTable_ParentColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
@@ -500,7 +500,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
+        parentColumn->SetName(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
         parentColumn->SetType("Uint32");
         parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
     }
@@ -517,7 +517,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
     }
 
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentIdColumn);
+    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_ParentColumn);
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::LevelTable_IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
@@ -552,17 +552,13 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
     for (auto& column: baseTableDescr.GetColumns()) {
         auto& columnName = column.GetName();
         auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
-        const NScheme::IType* type = typeRegistry->GetType(typeName);
-        if (!type) {
-            auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-            if (!typeDesc) {
-                explain += TStringBuilder() << "Type '" << column.GetType() << "' specified for column '" << columnName << "' is not supported by storage";
-                return false;
-            }
-            columnTypes[columnName] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-        } else {
-            columnTypes[columnName] = NScheme::TTypeInfo(type->GetTypeId());
+
+        NScheme::TTypeInfo typeInfo;
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
+            return false; 
         }
+
+        columnTypes[columnName] = typeInfo;
     }
 
     return true;
@@ -586,31 +582,6 @@ bool IsCompatibleKeyTypes(
 {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
     Y_ABORT_UNLESS(typeRegistry);
-
-    for (const auto& item: baseTableColumnTypes) {
-        auto& columnName = item.first;
-        auto typeId = item.second.GetTypeId();
-
-        if (typeId == NScheme::NTypeIds::Pg) {
-            if (!item.second.GetPgTypeDesc()) {
-                explain += TStringBuilder() << "unknown pg type for column '" << columnName << "'";
-                return false;
-            }
-
-        } else {
-            auto typeSP = typeRegistry->GetType(typeId);
-            if (!typeSP) {
-                explain += TStringBuilder() << "unknown typeId '" << typeId << "' for column '" << columnName << "'";
-                return false;
-            }
-
-            if (!NScheme::NTypeIds::IsYqlType(typeId)) {
-                explain += TStringBuilder() << "Type '" << typeId << "' specified for column '" << columnName << "' is no longer supported";
-                return false;
-            }
-        }
-    }
-
 
     for (auto& keyName: implTableColumns.Keys) {
         Y_ABORT_UNLESS(baseTableColumnTypes.contains(keyName));

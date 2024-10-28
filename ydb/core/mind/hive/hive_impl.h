@@ -305,6 +305,7 @@ protected:
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
     ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
     ITransaction* CreateGenerateTestData(uint64_t seed);
+    ITransaction* CreateDeleteNode(TNodeId nodeId);
 
 public:
     TDomainsView DomainsView;

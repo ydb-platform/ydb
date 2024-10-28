@@ -41,6 +41,7 @@ public:
         TVector<TString> AllowedSIDs;
         TString RedirectMainPageTo;
         TString Certificate;
+        ui32 MaxRequestsPerSecond = 0;
     };
 
     virtual ~TMon() = default;

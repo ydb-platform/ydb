@@ -58,7 +58,7 @@ Similarly, in one line:
 
 Command output:
 
-```
+```text
 OK
 ```
 

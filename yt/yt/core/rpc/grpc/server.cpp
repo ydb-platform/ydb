@@ -779,7 +779,7 @@ private:
             std::optional<NGrpc::NProto::TSslCredentialsExt> sslCredentialsExtension;
 
             ParsePeerIdentity(authContext, &sslCredentialsExtension);
-            ParseIssuer(authContext, &sslCredentialsExtension);
+            ParseIssuerAndSerialNumber(authContext, &sslCredentialsExtension);
 
             return sslCredentialsExtension;
         }
@@ -803,7 +803,7 @@ private:
             (*sslCredentialsExtension)->set_peer_identity(TString(peerIdentityProperty->value, peerIdentityProperty->value_length));
         }
 
-        static void ParseIssuer(const TGrpcAuthContextPtr& authContext, std::optional<NGrpc::NProto::TSslCredentialsExt>* sslCredentialsExtension)
+        static void ParseIssuerAndSerialNumber(const TGrpcAuthContextPtr& authContext, std::optional<NGrpc::NProto::TSslCredentialsExt>* sslCredentialsExtension)
         {
             const char* peerIdentityPropertyName = grpc_auth_context_peer_identity_property_name(authContext.Unwrap());
             if (!peerIdentityPropertyName) {
@@ -816,15 +816,23 @@ private:
                 return;
             }
 
-            auto issuer = ParseIssuerFromX509(TStringBuf(pemCertProperty->value, pemCertProperty->value_length));
-            if (!issuer) {
+            auto pemCertX509 = ParsePemCertToX509(TStringBuf(pemCertProperty->value, pemCertProperty->value_length));
+            if (!pemCertX509) {
                 return;
             }
 
-            if (!sslCredentialsExtension->has_value()) {
-                sslCredentialsExtension->emplace();
+            if (auto issuer = ParseIssuerFromX509(pemCertX509)) {
+                if (!sslCredentialsExtension->has_value()) {
+                    sslCredentialsExtension->emplace();
+                }
+                (*sslCredentialsExtension)->set_issuer(std::move(*issuer));
             }
-            (*sslCredentialsExtension)->set_issuer(std::move(*issuer));
+            if (auto serialNumber = ParseSerialNumberFromX509(pemCertX509)) {
+                if (!sslCredentialsExtension->has_value()) {
+                    sslCredentialsExtension->emplace();
+                }
+                (*sslCredentialsExtension)->set_serial_number(std::move(*serialNumber));
+            }
         }
 
         void ParseTimeout()

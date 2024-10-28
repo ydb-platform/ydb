@@ -6,7 +6,7 @@
 
 ## Пример
 
-``` yql
+```yql
 $data = AsList(
     AsStruct(1u AS Key, "v1" AS Value),
     AsStruct(2u AS Key, "v2" AS Value),

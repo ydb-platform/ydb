@@ -7,7 +7,7 @@
 
 ### Сигнатура
 
-```
+```yql
 TryMember(struct:Struct<...>, key:String, default_value:T) -> T
 TryMember(struct:Struct<...>?, key:String, default_value:T) -> T?
 ```
@@ -26,7 +26,7 @@ TryMember(struct:Struct<...>?, key:String, default_value:T) -> T?
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1|>;
 SELECT
   TryMember(
@@ -47,7 +47,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ExpandStruct(struct:Struct<...>, value_1:T1 AS key_1:K, value_2:T2 AS key_2:K, ....) -> Struct<...>
 ```
 
@@ -58,7 +58,7 @@ ExpandStruct(struct:Struct<...>, value_1:T1 AS key_1:K, value_2:T2 AS key_2:K, .
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1|>;
 SELECT
   ExpandStruct(
@@ -76,7 +76,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 AddMember(struct:Struct<...>, new_key:String, new_value:T) -> Struct<...>
 ```
 
@@ -88,7 +88,7 @@ AddMember(struct:Struct<...>, new_key:String, new_value:T) -> Struct<...>
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1|>;
 SELECT
   AddMember(
@@ -104,7 +104,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 RemoveMember(struct:Struct<...>, key_to_delete:String) -> Struct<...>
 ```
 
@@ -115,7 +115,7 @@ RemoveMember(struct:Struct<...>, key_to_delete:String) -> Struct<...>
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2|>;
 SELECT
   RemoveMember(
@@ -132,7 +132,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ForceRemoveMember(struct:Struct<...>, key_to_delete:String) -> Struct<...>
 ```
 
@@ -143,7 +143,7 @@ ForceRemoveMember(struct:Struct<...>, key_to_delete:String) -> Struct<...>
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2|>;
 SELECT
   ForceRemoveMember(
@@ -160,7 +160,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ChooseMembers(struct:Struct<...>, list_of_keys:List<String>) -> Struct<...>
 ```
 
@@ -171,7 +171,7 @@ ChooseMembers(struct:Struct<...>, list_of_keys:List<String>) -> Struct<...>
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2, c:3|>;
 SELECT
   ChooseMembers(
@@ -188,7 +188,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 RemoveMembers(struct:Struct<...>, list_of_delete_keys:List<String>) -> Struct<...>
 ```
 
@@ -199,7 +199,7 @@ RemoveMembers(struct:Struct<...>, list_of_delete_keys:List<String>) -> Struct<..
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2, c:3|>;
 SELECT
   RemoveMembers(
@@ -216,7 +216,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ForceRemoveMembers(struct:Struct<...>, list_of_delete_keys:List<String>) -> Struct<...>
 ```
 
@@ -227,7 +227,7 @@ ForceRemoveMembers(struct:Struct<...>, list_of_delete_keys:List<String>) -> Stru
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2, c:3|>;
 SELECT
   ForceRemoveMembers(
@@ -244,7 +244,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 CombineMembers(struct1:Struct<...>, struct2:Struct<...>, .....) -> Struct<...>
 CombineMembers(struct1:Struct<...>?, struct2:Struct<...>?, .....) -> Struct<...>
 ```
@@ -253,7 +253,7 @@ CombineMembers(struct1:Struct<...>?, struct2:Struct<...>?, .....) -> Struct<...>
 
 ### Примеры
 
-``` yql
+```yql
 $struct1 = <|a:1, b:2|>;
 $struct2 = <|c:3|>;
 SELECT
@@ -271,7 +271,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 FlattenMembers(prefix_struct1:Tuple<String, Struct<...>>, prefix_struct2:Tuple<String, Struct<...>>, ...) -> Struct<...>
 ```
 
@@ -279,7 +279,7 @@ FlattenMembers(prefix_struct1:Tuple<String, Struct<...>>, prefix_struct2:Tuple<S
 
 ### Примеры
 
-``` yql
+```yql
 $struct1 = <|a:1, b:2|>;
 $struct2 = <|c:3|>;
 SELECT
@@ -295,7 +295,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 StructMembers(struct:Struct<...>) -> List<String>
 StructMembers(struct:Struct<...>?) -> List<String>
 StructMembers(NULL) -> []
@@ -304,7 +304,8 @@ StructMembers(NULL) -> []
 Аргумент: структура
 
 ### Примеры
-``` yql
+
+```yql
 $struct = <|a:1, b:2|>;
 SELECT
   StructMembers($struct) AS a, -- ['a', 'b']
@@ -316,7 +317,8 @@ SELECT
 Переименовывает поля в переданной структуре. При этом исходное поле можно переименовать в несколько новых. Все поля, не упомянутые в переименовании как исходные, переносятся в результирующую структуру. Если нет какого-то исходного поля в списке для переименования, выдается ошибка. Для опциональной структуры либо `NULL` таким же является и результат.
 
 ### Сигнатура
-```
+
+```yql
 RenameMembers(struct:Struct<...>, rename_rules:List<Tuple<String, String>>) -> Struct<...>
 ```
 
@@ -327,7 +329,7 @@ RenameMembers(struct:Struct<...>, rename_rules:List<Tuple<String, String>>) -> S
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2|>;
 SELECT
   RenameMembers($struct, [('a', 'c'), ('a', 'e')]); -- (b:2, c:1, e:1)
@@ -339,7 +341,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ForceRenameMembers(struct:Struct<...>, rename_rules:List<Tuple<String, String>>) -> Struct<...>
 ```
 
@@ -350,7 +352,7 @@ ForceRenameMembers(struct:Struct<...>, rename_rules:List<Tuple<String, String>>)
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2|>;
 SELECT
   ForceRenameMembers($struct, [('a', 'c'), ('d', 'e')]); -- (b:2, c:1)
@@ -362,7 +364,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 GatherMembers(struct:Struct<...>) -> List<Tuple<String,V>>
 GatherMembers(struct:Struct<...>?) -> List<Tuple<String,V>>?
 GatherMembers(NULL) -> []
@@ -372,7 +374,7 @@ GatherMembers(NULL) -> []
 
 ### Примеры
 
-``` yql
+```yql
 $struct = <|a:1, b:2|>;
 SELECT
   GatherMembers($struct), -- [('a', 1), ('b', 2)]
@@ -385,7 +387,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 SpreadMembers(list_of_tuples:List<Tuple<String, T>>, result_keys:List<String>) -> Struct<...>
 ```
 
@@ -396,7 +398,7 @@ SpreadMembers(list_of_tuples:List<Tuple<String, T>>, result_keys:List<String>) -
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   SpreadMembers([('a',1),('a',2)],['a','b']); -- (a: 2, b: null)
 ```
@@ -407,7 +409,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ForceSpreadMembers(list_of_tuples:List<Tuple<String, T>>, result_keys:List<String>) -> Struct<...>
 ```
 
@@ -418,7 +420,7 @@ ForceSpreadMembers(list_of_tuples:List<Tuple<String, T>>, result_keys:List<Strin
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   ForceSpreadMembers([('a',1),('a',2),('c',100)],['a','b']); -- (a: 2, b: null)
 ```
@@ -434,7 +436,7 @@ SELECT
 
 ### Сигнатуры
 
-```
+```yql
 StructUnion(left:Struct<...>, right:Struct<...>[, mergeLambda:(name:String, l:T1?, r:T2?)->T])->Struct<...>
 StructIntersection(left:Struct<...>, right:Struct<...>[, mergeLambda:(name:String, l:T1?, r:T2?)->T])->Struct<...>
 StructDifference(left:Struct<...>, right:Struct<...>)->Struct<...>
@@ -449,7 +451,7 @@ StructSymmetricDifference(left:Struct<...>, right:Struct<...>)->Struct<...>
 
 ### Примеры
 
-``` yql
+```yql
 $merge = ($name, $l, $r) -> {
     return ($l ?? 0) + ($r ?? 0);
 };

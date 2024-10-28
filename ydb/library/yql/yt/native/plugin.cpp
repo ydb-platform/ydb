@@ -35,7 +35,9 @@
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
+#include <ydb/library/yql/core/yql_library_compiler.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
+
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
@@ -301,10 +303,26 @@ public:
 
             FuncRegistry_->SetSystemModulePaths(systemModules);
 
-            NYql::NUserData::TUserData::UserDataToLibraries({}, Modules_);
-            auto userDataTable = GetYqlModuleResolver(ExprContext_, ModuleResolver_, {}, Clusters_, {});
+            TUserDataTable userDataTable;
+            LoadYqlDefaultMounts(userDataTable);
 
-            if (!userDataTable) {
+            const auto libraries = NYTree::ConvertTo<THashMap<TString, TString>>(options.Libraries);
+            TVector<NYql::NUserData::TUserData> userData;
+            userData.reserve(libraries.size());
+            for (const auto& [module, path] : libraries) {
+                userData.emplace_back(NYql::NUserData::EType::LIBRARY, NYql::NUserData::EDisposition::FILESYSTEM, path, path);
+                Modules_[to_lower(module)] = path;
+
+                auto& block = userDataTable[TUserDataKey::File(path)];
+                block.Data = path;
+                block.Type = EUserDataType::PATH;
+                block.Usage.Set(EUserDataBlockUsage::Library, true);
+            }
+
+            NYql::NUserData::TUserData::UserDataToLibraries(userData, Modules_);
+
+            TModulesTable modulesTable;
+            if (!CompileLibraries(userDataTable, ExprContext_, modulesTable, true)) {
                 TStringStream err;
                 ExprContext_.IssueManager
                     .GetIssues()
@@ -314,6 +332,7 @@ public:
                 exit(1);
             }
 
+            ModuleResolver_ = std::make_shared<NYql::TModuleResolver>(std::move(modulesTable), ExprContext_.NextUniqueId, Clusters_, THashSet<TString>{});
             OperationAttributes_ = options.OperationAttributes;
 
             TVector<NYql::TDataProviderInitializer> dataProvidersInit;

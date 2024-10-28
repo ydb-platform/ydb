@@ -40,16 +40,25 @@ bool IsWideRepresentation(const TTypeAnnotationNode* leftType, const TTypeAnnota
     return true;
 }
 
-const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& setting, TExprContext& ctx) {
-    if (!setting)
+const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, const TExprNode::TPtr& useFlowSetting, const TExprNode::TPtr& blockInputAppliedSetting, TExprContext& ctx) {
+    if (!useFlowSetting) {
         return ctx.MakeType<TStreamExprType>(itemType);
+    }
 
     if (const auto structType = dynamic_cast<const TStructExprType*>(itemType)) {
-        if (ui32 limit; structType && 2U == setting->ChildrenSize() && TryFromString<ui32>(setting->Tail().Content(), limit) && structType->GetSize() < limit && structType->GetSize() > 0U) {
+        if (ui32 limit; structType && 2U == useFlowSetting->ChildrenSize() && TryFromString<ui32>(useFlowSetting->Tail().Content(), limit) && structType->GetSize() < limit && structType->GetSize() > 0U) {
             TTypeAnnotationNode::TListType types;
             const auto& items = structType->GetItems();
             types.reserve(items.size());
+
             std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
+            if (blockInputAppliedSetting) {
+                std::transform(types.begin(), types.end(), types.begin(), [&](auto type) {
+                    return ctx.MakeType<TBlockExprType>(type);
+                });
+                types.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+            }
+
             return ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(types));
         }
     }
@@ -86,6 +95,7 @@ public:
         AddHandler({TYtDqWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<false>));
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
+        AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
     }
 
 private:
@@ -606,7 +616,7 @@ private:
             if (contentRowSpecs) {
                 size_t from = 0;
                 if (initialWrite) {
-                    ++nextDescription.WriteValidateCount;
+                    nextDescription.RowSpecSortReady = true;
                     if (nextDescription.IsReplaced) {
                         nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
                         if (auto contentNativeType = contentRowSpecs.front()->GetNativeYtType()) {
@@ -630,7 +640,7 @@ private:
                             << " setting cannot be used with a unsorted table"));
                         return TStatus::Error;
                     }
-                } else {
+                } else if (nextDescription.RowSpecSortReady) {
                     if (!nextDescription.MonotonicKeys) {
                         nextDescription.MonotonicKeys = monotonicKeys;
                     } else if (*nextDescription.MonotonicKeys != monotonicKeys) {
@@ -642,43 +652,50 @@ private:
                     }
                 }
 
-                const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
-                for (size_t s = from; s < contentRowSpecs.size(); ++s) {
-                    const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
-                    const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
-                    if (monotonicKeys) {
-                        if (breaksSorting) {
-                            ctx.AddError(TIssue(pos, TStringBuilder()
-                                << "Inserts with "
-                                << ToString(EYtSettingType::MonotonicKeys).Quote()
-                                << " setting must not change output table sorting"));
-                            return TStatus::Error;
-                        }
-                        nextDescription.RowSpec->UniqueKeys = uniqueKeys;
-                    }
-                    if (nextDescription.WriteValidateCount < 2) {
-                        TStringBuilder warning;
-                        if (breaksSorting) {
-                            warning << "Sort order of written data differs from the order of "
-                                << outTableInfo.Name.Quote() << " table content. Result table content will be ";
-                            if (nextDescription.RowSpec->IsSorted()) {
-                                warning << "ordered by ";
-                                for (size_t i: xrange(nextDescription.RowSpec->SortMembers.size())) {
-                                    if (i != 0) {
-                                        warning << ',';
-                                    }
-                                    warning << nextDescription.RowSpec->SortMembers[i] << '('
-                                        << (nextDescription.RowSpec->SortDirections[i] ? "asc" : "desc") << ")";
-                                }
-                            } else {
-                                warning << "unordered";
+                if (nextDescription.RowSpecSortReady) {
+                    const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
+                    for (size_t s = from; s < contentRowSpecs.size(); ++s) {
+                        const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
+                        const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
+                        if (monotonicKeys) {
+                            if (breaksSorting) {
+                                ctx.AddError(TIssue(pos, TStringBuilder()
+                                    << "Inserts with "
+                                    << ToString(EYtSettingType::MonotonicKeys).Quote()
+                                    << " setting must not change output table sorting"));
+                                return TStatus::Error;
                             }
-                        } else if (uniqueKeys && !nextDescription.RowSpec->UniqueKeys) {
-                            warning << "Result table content will have non unique keys";
+                            nextDescription.RowSpec->UniqueKeys = uniqueKeys;
+                        }
+                        ui32 mutationId = 0;
+                        if (auto setting = NYql::GetSetting(settings, EYtSettingType::MutationId)) {
+                            mutationId = FromString<ui32>(setting->Child(1)->Content());
                         }
 
-                        if (warning && !ctx.AddWarning(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_YT_SORT_ORDER_CHANGE, warning))) {
-                            return TStatus::Error;
+                        if (++nextDescription.WriteValidateCount[mutationId] < 2) {
+                            TStringBuilder warning;
+                            if (breaksSorting) {
+                                warning << "Sort order of written data differs from the order of "
+                                    << outTableInfo.Name.Quote() << " table content. Result table content will be ";
+                                if (nextDescription.RowSpec->IsSorted()) {
+                                    warning << "ordered by ";
+                                    for (size_t i: xrange(nextDescription.RowSpec->SortMembers.size())) {
+                                        if (i != 0) {
+                                            warning << ',';
+                                        }
+                                        warning << nextDescription.RowSpec->SortMembers[i] << '('
+                                            << (nextDescription.RowSpec->SortDirections[i] ? "asc" : "desc") << ")";
+                                    }
+                                } else {
+                                    warning << "unordered";
+                                }
+                            } else if (uniqueKeys && !nextDescription.RowSpec->UniqueKeys) {
+                                warning << "Result table content will have non unique keys";
+                            }
+
+                            if (warning && !ctx.AddWarning(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_YT_SORT_ORDER_CHANGE, warning))) {
+                                return TStatus::Error;
+                            }
                         }
                     }
                 }
@@ -933,6 +950,29 @@ private:
             return TStatus::Error;
         }
 
+        TStringBuf outGroup;
+        if (auto setting = NYql::GetSetting(copy.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+            outGroup = setting->Tail().Content();
+        }
+
+        TStringBuf inputColGroupSpec;
+        const auto& path = copy.Input().Item(0).Paths().Item(0);
+        if (auto table = path.Table().Maybe<TYtTable>()) {
+            if (auto tableDesc = State_->TablesData->FindTable(copy.DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
+                inputColGroupSpec = tableDesc->ColumnGroupSpec;
+            }
+        } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+            if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                inputColGroupSpec = setting->Tail().Content();
+            }
+        }
+
+        if (outGroup != inputColGroupSpec) {
+            ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
+                << "has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
+            return TStatus::Error;
+        }
+
         input->SetTypeAnn(MakeOutputOperationType(copy, ctx));
         return TStatus::Ok;
     }
@@ -950,7 +990,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::TransformColGroups | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
             return TStatus::Error;
         }
 
@@ -1030,7 +1070,9 @@ private:
             | EYtSettingType::JobCount
             | EYtSettingType::Flow
             | EYtSettingType::KeepSorted
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::BlockInputReady
+            | EYtSettingType::BlockInputApplied;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1054,9 +1096,11 @@ private:
 
         const auto inputItemType = GetInputItemType(map.Input(), ctx);
         const auto useFlow = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::Flow);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, ctx);
+        const auto blockInputApplied = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, blockInputApplied, ctx);
 
         auto& lambda = input->ChildRef(TYtMap::idx_Mapper);
+
         if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
             return TStatus::Error;
         }
@@ -1170,7 +1214,7 @@ private:
         }
 
         const auto useFlow = NYql::GetSetting(reduce.Settings().Ref(), EYtSettingType::Flow);
-        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, ctx);
+        const auto lambdaInputType = MakeInputType(inputItemType, useFlow, TExprNode::TPtr(), ctx);
 
         auto& lambda = input->ChildRef(TYtReduce::idx_Reducer);
         if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
@@ -1264,7 +1308,7 @@ private:
         auto& mapLambda = input->ChildRef(TYtMapReduce::idx_Mapper);
         TTypeAnnotationNode::TListType mapDirectOutputTypes;
         if (hasMapLambda) {
-            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, ctx);
+            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
 
             if (!UpdateLambdaAllArgumentsTypes(mapLambda, {mapLambdaInputType}, ctx)) {
                 return TStatus::Error;
@@ -1371,7 +1415,7 @@ private:
         }
 
         auto& reduceLambda = input->ChildRef(TYtMapReduce::idx_Reducer);
-        const auto reduceLambdaInputType = MakeInputType(itemType, useFlow, ctx);
+        const auto reduceLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
 
         if (!UpdateLambdaAllArgumentsTypes(reduceLambda, {reduceLambdaInputType}, ctx)) {
             return TStatus::Error;
@@ -2036,6 +2080,37 @@ private:
         input.Ptr()->SetTypeAnn(input.Ref().Head().GetTypeAnn());
         return TStatus::Ok;
     }
+
+    TStatus HandleMaterialize(TExprBase input, TExprContext& ctx) {
+        if (!EnsureArgsCount(input.Ref(), 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateOpBase(input.Ptr(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSeqOrOptionalType(*input.Ref().Child(TYtMaterialize::idx_Input), ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        const auto& itemType = GetSeqItemType(*input.Ref().Child(TYtMaterialize::idx_Input)->GetTypeAnn());
+        if (!EnsurePersistableType(input.Ref().Head().Pos(), itemType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // Basic Settings validation
+        if (!EnsureTuple(*input.Ref().Child(TYtMaterialize::idx_Settings), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingTypes{}, ctx)) {
+            return TStatus::Error;
+        }
+
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        return TStatus::Ok;
+    }
+
 private:
     const TYtState::TPtr State_;
 };

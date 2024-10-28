@@ -459,7 +459,7 @@ private:
                 break;
 
             case EState::READY:
-                QLOG_NOTICE_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
+                QLOG_INFO_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
                 ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, nullptr));
                 Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
@@ -672,7 +672,7 @@ private:
         QLOG_DEBUG_S("BSQ34", "Status# " << status
             << " VDiskId# " << VDiskId
             << " Cookie# " << cookie);
-        auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, 0);
+        auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(status, VDiskId, false, false, false, 0);
         ctx.Send(sender, response.release(), 0, cookie);
     }
 

@@ -320,6 +320,7 @@ cdef inline _decode_if_necessary(object ts):
     return ts
 
 
+@cython.cpow(True)
 cdef inline parse_timedelta_string(object ts):
     """
     Parse a regular format timedelta string. Return an int64_t (in ns)

@@ -112,7 +112,7 @@ TSharedRef SerializeProtoToRefWithEnvelope(
 {
     NYT::NProto::TSerializedMessageEnvelope envelope;
     if (codecId != NCompression::ECodec::None) {
-        envelope.set_codec(static_cast<int>(codecId));
+        envelope.set_codec(ToProto(codecId));
     }
 
     auto serializedMessage = SerializeProtoToRef(message, partial);
@@ -286,7 +286,7 @@ TSharedRef PushEnvelope(const TSharedRef& data)
 TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec)
 {
     NYT::NProto::TSerializedMessageEnvelope envelope;
-    envelope.set_codec(static_cast<int>(codec));
+    envelope.set_codec(ToProto(codec));
 
     TEnvelopeFixedHeader header;
     header.EnvelopeSize = CheckedCastToI32(envelope.ByteSizeLong());

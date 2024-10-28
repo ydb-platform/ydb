@@ -303,8 +303,8 @@ void ToProto(NNodeTrackerClient::NProto::TAddressMap* protoAddresses, const NNod
 {
     for (const auto& [networkName, networkAddress] : addresses) {
         auto* entry = protoAddresses->add_entries();
-        entry->set_network(NYT::ToProto<TProtobufString>(networkName));
-        entry->set_address(NYT::ToProto<TProtobufString>(networkAddress));
+        entry->set_network(NYT::ToProto(networkName));
+        entry->set_address(NYT::ToProto(networkAddress));
     }
 }
 
@@ -321,7 +321,7 @@ void ToProto(NNodeTrackerClient::NProto::TNodeAddressMap* proto, const NNodeTrac
 {
     for (const auto& [addressType, addresses] : nodeAddresses) {
         auto* entry = proto->add_entries();
-        entry->set_address_type(static_cast<int>(addressType));
+        entry->set_address_type(ToProto(addressType));
         ToProto(entry->mutable_addresses(), addresses);
     }
 }
@@ -345,19 +345,19 @@ void ToProto(NNodeTrackerClient::NProto::TNodeDescriptor* protoDescriptor, const
     ToProto(protoDescriptor->mutable_addresses(), descriptor.Addresses());
 
     if (auto host = descriptor.GetHost()) {
-        protoDescriptor->set_host(ToProto<TProtobufString>(*host));
+        protoDescriptor->set_host(ToProto(*host));
     } else {
         protoDescriptor->clear_host();
     }
 
     if (auto rack = descriptor.GetRack()) {
-        protoDescriptor->set_rack(ToProto<TProtobufString>(*rack));
+        protoDescriptor->set_rack(ToProto(*rack));
     } else {
         protoDescriptor->clear_rack();
     }
 
     if (auto dataCenter = descriptor.GetDataCenter()) {
-        protoDescriptor->set_data_center(ToProto<TProtobufString>(*dataCenter));
+        protoDescriptor->set_data_center(ToProto(*dataCenter));
     } else {
         protoDescriptor->clear_data_center();
     }
@@ -365,7 +365,7 @@ void ToProto(NNodeTrackerClient::NProto::TNodeDescriptor* protoDescriptor, const
     ToProto(protoDescriptor->mutable_tags(), descriptor.GetTags());
 
     if (auto lastHeartbeatTime = descriptor.GetLastSeenTime()) {
-        protoDescriptor->set_last_seen_time(ToProto<i64>(*lastHeartbeatTime));
+        protoDescriptor->set_last_seen_time(ToProto(*lastHeartbeatTime));
     } else {
         protoDescriptor->clear_last_seen_time();
     }
@@ -497,7 +497,7 @@ void TNodeDirectory::DumpTo(NProto::TNodeDirectory* destination)
     auto guard = ReaderGuard(SpinLock_);
     for (auto [id, descriptor] : IdToDescriptor_) {
         auto* item = destination->add_items();
-        item->set_node_id(ToProto<ui32>(id));
+        item->set_node_id(ToProto(id));
         ToProto(item->mutable_node_descriptor(), *descriptor);
     }
 }

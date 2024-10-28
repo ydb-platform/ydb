@@ -175,12 +175,15 @@ namespace boost { namespace locale { namespace conv { namespace impl {
                 return false;
             return true;
         }
-        std::string convert(const char* begin, const char* end) override
-        {
-            if(to_code_page_ == CP_UTF8 && from_code_page_ == CP_UTF8)
-                return utf_to_utf<char>(begin, end, how_);
 
-            std::string res;
+        template<typename Char>
+        std::basic_string<Char> convert(const char* begin, const char* end)
+        {
+            static_assert(sizeof(Char) == sizeof(char), "Not a narrow char type");
+            if(to_code_page_ == CP_UTF8 && from_code_page_ == CP_UTF8)
+                return utf_to_utf<Char>(begin, end, how_);
+
+            std::basic_string<Char> res;
 
             std::vector<wchar_t> tmp; // buffer for mb2w
             std::wstring tmps;        // buffer for utf_to_utf
@@ -202,15 +205,17 @@ namespace boost { namespace locale { namespace conv { namespace impl {
             }
 
             if(to_code_page_ == CP_UTF8)
-                return utf_to_utf<char>(wbegin, wend, how_);
+                return utf_to_utf<Char>(wbegin, wend, how_);
 
             std::vector<char> ctmp;
             wide_to_multibyte(to_code_page_, wbegin, wend, how_ == skip, ctmp);
             if(ctmp.empty())
                 return res;
-            res.assign(ctmp.data(), ctmp.size());
+            res.assign(reinterpret_cast<const Char*>(ctmp.data()), ctmp.size());
             return res;
         }
+
+        std::string convert(const char* begin, const char* end) override { return convert<char>(begin, end); }
 
     private:
         method_type how_;
@@ -224,21 +229,27 @@ namespace boost { namespace locale { namespace conv { namespace impl {
     template<typename CharType, int size = sizeof(CharType)>
     class wconv_from_utf;
 
-    template<>
-    class wconv_to_utf<char, 1> final : public detail::utf_encoder<char> {
+    template<typename CharType>
+    class wconv_to_utf<CharType, 1> final : public detail::utf_encoder<CharType> {
     public:
         bool open(const std::string& cs, method_type how) { return cvt.open("UTF-8", cs, how); }
-        std::string convert(const char* begin, const char* end) override { return cvt.convert(begin, end); }
+        std::basic_string<CharType> convert(const char* begin, const char* end) override
+        {
+            return cvt.convert<CharType>(begin, end);
+        }
 
     private:
         wconv_between cvt;
     };
 
-    template<>
-    class wconv_from_utf<char, 1> final : public detail::utf_decoder<char> {
+    template<typename CharType>
+    class wconv_from_utf<CharType, 1> final : public detail::utf_decoder<CharType> {
     public:
         bool open(const std::string& cs, method_type how) { return cvt.open(cs, "UTF-8", how); }
-        std::string convert(const char* begin, const char* end) override { return cvt.convert(begin, end); }
+        std::string convert(const CharType* begin, const CharType* end) override
+        {
+            return cvt.convert(reinterpret_cast<const char*>(begin), reinterpret_cast<const char*>(end));
+        }
 
     private:
         wconv_between cvt;

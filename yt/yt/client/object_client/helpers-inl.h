@@ -29,6 +29,11 @@ inline ui64 CounterFromId(TObjectId id)
     return result;
 }
 
+inline NHydra::TRevision RevisionFromId(TObjectId id)
+{
+    return NHydra::TRevision(CounterFromId(id));
+}
+
 inline ui32 EntropyFromId(TObjectId id)
 {
     return id.Parts32[0];
@@ -37,7 +42,7 @@ inline ui32 EntropyFromId(TObjectId id)
 inline NHydra::TVersion VersionFromId(TObjectId id)
 {
     YT_ASSERT(!IsSequoiaId(id));
-    return NHydra::TVersion::FromRevision(CounterFromId(id));
+    return NHydra::TVersion::FromRevision(RevisionFromId(id));
 }
 
 inline NTransactionClient::TTimestamp TimestampFromId(TObjectId id)

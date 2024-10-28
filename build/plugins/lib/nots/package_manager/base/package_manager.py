@@ -102,7 +102,7 @@ class BasePackageManager(object):
         pass
 
     @abstractmethod
-    def calc_node_modules_inouts(self, local_cli=False) -> tuple[list[str], list[str]]:
+    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
         pass
 
     @abstractmethod

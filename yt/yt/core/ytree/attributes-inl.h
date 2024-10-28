@@ -8,9 +8,13 @@
 // #include "serialize.h"
 #include "convert.h"
 
-namespace NYT::NYTree {
+#include <library/cpp/yt/error/error_attributes.h>
+
+namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+namespace NYTree {
 
 template <class T>
 T IAttributeDictionary::Get(TStringBuf key) const
@@ -86,4 +90,54 @@ void IAttributeDictionary::Set(const TString& key, const T& value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTree
+} // namespace NYTree
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TMergeDictionariesTraits<NYTree::IAttributeDictionary>
+{
+    static auto MakeIterableView(const NYTree::IAttributeDictionary& dict)
+    {
+        return dict.ListPairs();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO(arkady-e1ppa): Move this out eventually.
+template <class T>
+T TErrorAttributes::Get(TStringBuf key) const
+{
+    using NYTree::ConvertTo;
+    auto yson = GetYson(key);
+    try {
+        return ConvertTo<T>(yson);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error parsing attribute %Qv",
+            key)
+            << ex;
+    }
+}
+
+template <class T>
+typename TOptionalTraits<T>::TOptional TErrorAttributes::Find(TStringBuf key) const
+{
+    using NYTree::ConvertTo;
+
+    auto yson = FindYson(key);
+    if (!yson) {
+        return typename TOptionalTraits<T>::TOptional();
+    }
+    try {
+        return ConvertTo<T>(yson);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error parsing attribute %Qv",
+            key)
+            << ex;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

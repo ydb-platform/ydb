@@ -135,6 +135,10 @@ private:
     std::vector<TColumnRecord> Records;
 
 public:
+    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
+        return BlobIds;
+    }
+
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
     }

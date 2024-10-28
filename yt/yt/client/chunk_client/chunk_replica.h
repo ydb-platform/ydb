@@ -9,6 +9,8 @@
 #include <yt/yt/core/phoenix/context.h>
 #include <yt/yt/core/phoenix/type_decl.h>
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
 namespace NYT::NChunkClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -245,16 +247,35 @@ public:
     explicit TChunkReplicaAddressFormatter(NNodeTrackerClient::TNodeDirectoryPtr nodeDirectory);
 
     void operator()(TStringBuilderBase* builder, TChunkReplicaWithMedium replica) const;
-
     void operator()(TStringBuilderBase* builder, TChunkReplica replica) const;
 
 private:
-    NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
+    const NNodeTrackerClient::TNodeDirectoryPtr NodeDirectory_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChunkClient
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplica>
+{
+    using TSerialized = ui32;
+};
+
+template <>
+struct TProtoTraits<NChunkClient::TChunkReplicaWithMedium>
+{
+    using TSerialized = ui64;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
 
 //! A hasher for TChunkIdWithIndex.
 template <>

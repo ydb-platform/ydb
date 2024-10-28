@@ -72,25 +72,57 @@ ENDIF()
 {% block gen_ya_make %}
 (
 cd lib/builtins
-echo 'SRCS('
-ls *.c | sort
-echo ')'
+
+cat << EOF > join.py
+import os
+import sys
+
+common = open(sys.argv[1]).read().strip().split('\n')
+special = open(sys.argv[2]).read().strip().split('\n')
+
+def name(n):
+    return os.path.basename(n).split('.')[0]
+
+sset = frozenset([name(x) for x in special])
+
+def it_srcs():
+    for x in common:
+        if name(x) not in sset:
+            yield x
+
+    yield from special
+
+print('\n'.join(sorted(list(it_srcs()))).strip())
+EOF
+
+ls *.c > common
+
 echo 'IF (ARCH_AARCH64)'
 echo 'SRCS('
-ls aarch64/*.c | sort
-ls aarch64/*.S | sort
+ls aarch64/*.c aarch64/*.S > special
+python3 join.py common special
 echo ')'
-echo 'ENDIF()'
-echo 'IF (ARCH_X86_64)'
+echo 'ELSEIF (ARCH_X86_64)'
 echo 'SRCS('
-ls x86_64/*.c | sort
-ls x86_64/*.S | sort
+ls x86_64/*.c x86_64/*.S > special
+python3 join.py common special
+echo ')'
+echo 'ELSE()'
+echo 'SRCS('
+cat common | sort
 echo ')'
 echo 'ENDIF()'
+
+rm join.py common special
 ) >> ya.make
 {% endblock %}
 
 {% block move_to_output %}
 {{super()}}
 cp -R lib/builtins/* ${OUTPUT}/
+{% endblock %}
+
+{% block run_license_analyzer %}
+{{super()}}
+sed -e 's|.*    LLVM.*||' -i ${OUTPUT}/ya.make
 {% endblock %}

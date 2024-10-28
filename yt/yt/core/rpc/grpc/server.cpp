@@ -946,11 +946,11 @@ private:
             header->set_method(MethodName_);
             header->set_protocol_version_major(ProtocolVersion_.Major);
             header->set_protocol_version_minor(ProtocolVersion_.Minor);
-            header->set_request_codec(ToProto<int>(RequestCodec_));
-            header->set_response_codec(ToProto<int>(ResponseCodec_));
+            header->set_request_codec(ToProto(RequestCodec_));
+            header->set_response_codec(ToProto(ResponseCodec_));
 
             if (Timeout_) {
-                header->set_timeout(ToProto<i64>(*Timeout_));
+                header->set_timeout(ToProto(*Timeout_));
             }
             if (SslCredentialsExt_) {
                 *header->MutableExtension(NGrpc::NProto::TSslCredentialsExt::ssl_credentials_ext) = std::move(*SslCredentialsExt_);

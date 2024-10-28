@@ -127,23 +127,28 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
-        if (!config->ProxyEndpoints && !config->ClusterUrl && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
-            THROW_ERROR_EXCEPTION("Either \"endpoints\" or \"cluster_url\" or \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
-        }
-        if (config->ProxyEndpoints && config->ProxyRole) {
-            THROW_ERROR_EXCEPTION("\"proxy_role\" is not supported by Service Discovery");
-        }
-        if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
-            THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
-        }
-        if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
-            THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
-        }
-
         if (!config->ClusterName && config->ClusterUrl) {
             config->ClusterName = InferYTClusterFromClusterUrl(*config->ClusterUrl);
         }
     });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ValidateConnectionConfig(const TConnectionConfigPtr& config)
+{
+    if (!config->ProxyEndpoints && !config->ClusterUrl && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
+        THROW_ERROR_EXCEPTION("Either \"endpoints\" or \"cluster_url\" or \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
+    }
+    if (config->ProxyEndpoints && config->ProxyRole) {
+        THROW_ERROR_EXCEPTION("\"proxy_role\" is not supported by Service Discovery");
+    }
+    if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
+        THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
+    }
+    if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
+        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

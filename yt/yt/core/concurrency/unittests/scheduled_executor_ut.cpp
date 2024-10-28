@@ -93,6 +93,51 @@ TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
     EXPECT_GT(TDuration::MilliSeconds(20), executionDuration);
 }
 
+TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithNonEmptyInterval)
+{
+    std::atomic<int> count = {0};
+
+    auto callback = BIND([&] {
+        ++count;
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TScheduledExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        std::nullopt);
+
+    executor->Start();
+    executor->SetOptions(TDuration::MilliSeconds(200));
+
+    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+    EXPECT_GE(count.load(), 1);
+    EXPECT_LE(count.load(), 3);
+}
+
+TEST_W(TScheduledExecutorTest, SetOptionsAfterStartWithEmptyInterval)
+{
+    std::atomic<int> count = {0};
+
+    auto callback = BIND([&] {
+        ++count;
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    // Divide by 16 to prevent overflow.
+    auto executor = New<TScheduledExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        TDuration::Max() / 16);
+
+    executor->Start();
+    executor->SetOptions(std::nullopt);
+
+    EXPECT_EQ(count.load(), 0);
+}
+
 TEST_W(TScheduledExecutorTest, ParallelStop)
 {
     auto interval = TDuration::MilliSeconds(10);

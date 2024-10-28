@@ -80,40 +80,137 @@ void AddResolveResultToRegistry(const TResolveResult& resolveResult, const TMap<
 TUdfIndex::TUdfIndex() {
 }
 
-TUdfIndex::TUdfIndex(const TMap<TString, TResourceInfo::TPtr>& resources)
-    : Resources_(resources)
-{
-
+void TUdfIndex::SetCaseSentiveSearch(bool caseSensitive) {
+    CaseSensitive_ = caseSensitive;
 }
 
-bool TUdfIndex::ContainsModule(const TString& moduleName) const {
+TUdfIndex::TUdfIndex(const TMap<TString, TResourceInfo::TPtr>& resources, bool caseSensitive)
+    : Resources_(resources)
+    , CaseSensitive_(caseSensitive)
+{
+    for (const auto& x : Resources_) {
+        ICaseModules_[to_lower(x.first)].insert(x.first);
+    }
+}
+
+bool TUdfIndex::ContainsModuleStrict(const TString& moduleName) const {
     return Resources_.contains(moduleName);
+}
+
+bool TUdfIndex::CanonizeModule(TString& moduleName) const {
+    if (Resources_.contains(moduleName)) {
+        return true;
+    }
+
+    if (CaseSensitive_) {
+        return false;
+    }
+
+    auto p = ICaseModules_.FindPtr(to_lower(moduleName));
+    if (!p) {
+        return false;
+    }
+
+    Y_ENSURE(p->size() > 0);
+    if (p->size() > 1) {
+        return false;
+    }
+
+    moduleName = *p->begin();
+    return true;
+}
+
+TUdfIndex::EStatus TUdfIndex::ContainsModule(const TString& moduleName) const {
+    if (Resources_.contains(moduleName)) {
+        return EStatus::Found;
+    }
+
+    if (CaseSensitive_) {
+        return EStatus::NotFound;
+    }
+
+    auto p = ICaseModules_.FindPtr(to_lower(moduleName));
+    if (!p) {
+        return EStatus::NotFound;
+    }
+
+    Y_ENSURE(p->size() > 0);
+    return p->size() > 1 ? EStatus::Ambigious : EStatus::Found;
 }
 
 bool TUdfIndex::ContainsAnyModule(const TSet<TString>& modules) const {
     return AnyOf(modules, [this](auto& m) {
-        return this->ContainsModule(m);
+        return Resources_.contains(m);
     });
 }
 
-bool TUdfIndex::FindFunction(const TString& moduleName, const TString& functionName, TFunctionInfo& function) const {
-    auto r = FindResourceByModule(moduleName);
+TUdfIndex::EStatus TUdfIndex::FindFunction(const TString& moduleName, const TString& functionName, TFunctionInfo& function) const {
+    auto r = Resources_.FindPtr(moduleName);
     if (!r) {
-        return false;
+        if (CaseSensitive_) {
+            return EStatus::NotFound;
+        }
+
+        auto p = ICaseModules_.FindPtr(to_lower(moduleName));
+        if (!p) {
+            return EStatus::NotFound;
+        }
+
+        Y_ENSURE(p->size() > 0);
+        if (p->size() > 1) {
+            return EStatus::Ambigious;
+        }
+
+        r = Resources_.FindPtr(*p->begin());
+        Y_ENSURE(r);
     }
 
-    auto f = r->Functions.FindPtr(functionName);
+    auto f = (*r)->Functions.FindPtr(functionName);
     if (!f) {
-        return false;
+        if (CaseSensitive_) {
+            return EStatus::NotFound;
+        }
+
+        auto p = (*r)->ICaseFuncNames.FindPtr(to_lower(functionName));
+        if (!p) {
+            return EStatus::NotFound;
+        }
+
+        Y_ENSURE(p->size() > 0);
+        if (p->size() > 1) {
+            return EStatus::Ambigious;
+        }
+
+        f = (*r)->Functions.FindPtr(*p->begin());
+        Y_ENSURE(f);
     }
 
     function = *f;
-    return true;
+    return EStatus::Found;
 }
 
 TResourceInfo::TPtr TUdfIndex::FindResourceByModule(const TString& moduleName) const {
     auto p = Resources_.FindPtr(moduleName);
-    return p ? *p : nullptr;
+    if (!p) {
+        if (CaseSensitive_) {
+            return nullptr;
+        }
+
+        auto n = ICaseModules_.FindPtr(to_lower(moduleName));
+        if (!n) {
+            return nullptr;
+        }
+        
+        Y_ENSURE(n->size() > 0);
+        if (n->size() > 1) {
+            return nullptr;
+        }
+
+        p = Resources_.FindPtr(*n->begin());
+        Y_ENSURE(p);
+    }
+
+    return *p;
 }
 
 TSet<TResourceInfo::TPtr> TUdfIndex::FindResourcesByModules(const TSet<TString>& modules) const {
@@ -130,6 +227,11 @@ TSet<TResourceInfo::TPtr> TUdfIndex::FindResourcesByModules(const TSet<TString>&
 void TUdfIndex::UnregisterResource(TResourceInfo::TPtr resource) {
     for (auto& m : resource->Modules) {
         Resources_.erase(m);
+        auto& names = ICaseModules_[to_lower(m)];
+        names.erase(m);
+        if (names.empty()) {
+            ICaseModules_.erase(to_lower(m));
+        }
     }
     // resource pointer should be alive here to avoid problems with erase
 }
@@ -170,11 +272,12 @@ void TUdfIndex::RegisterResource(const TResourceInfo::TPtr& resource, EOverrideM
 
     for (auto& m : resource->Modules) {
         Resources_.emplace(m, resource);
+        ICaseModules_[to_lower(m)].insert(m);
     }
 }
 
 TIntrusivePtr<TUdfIndex> TUdfIndex::Clone() const {
-    return new TUdfIndex(Resources_);
+    return new TUdfIndex(Resources_, CaseSensitive_);
 }
 
 void TUdfIndex::RegisterResources(const TVector<TResourceInfo::TPtr>& resources, EOverrideMode mode) {

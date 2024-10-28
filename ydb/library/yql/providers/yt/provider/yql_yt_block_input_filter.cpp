@@ -72,10 +72,6 @@ private:
             return false;
         }
 
-        if (!NYql::GetSettingAsColumnList(map.Input().Item(0).Settings().Ref(), EYtSettingType::SysColumns).empty()) {
-            return false;
-        }
-
         for (auto path : map.Input().Item(0).Paths()) {
             if (!IsYtTableSuitableForArrowInput(path.Table(), [](const TString&) {})) {
                 return false;

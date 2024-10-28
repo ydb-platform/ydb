@@ -2,7 +2,7 @@
 #include <ydb/core/external_sources/object_storage/s3_fetcher.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_fetcher.h>
 #include <ydb/core/external_sources/object_storage/inference/arrow_inferencinator.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/library/yql/providers/common/http_gateway/mock/yql_http_mock_gateway.h>
 #include <arrow/buffer.h>
 #include <arrow/table.h>

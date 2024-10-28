@@ -3004,7 +3004,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res.Root);
 
         TString a1 = Err2Str(res);
-        TString a2(R"foo(<main>:1:16: Error: Unknown cluster: edar
+        TString a2(R"foo(<main>:1:14: Error: token recognition error at: 'с'
 )foo");
 
         UNIT_ASSERT_NO_DIFF(a1, a2);
@@ -3016,8 +3016,8 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res1.Root);
         UNIT_ASSERT(!res2.Root);
 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res1), "<main>:1:12: Error: mismatched input 'b' expecting {<EOF>, ';'}\n");
-        UNIT_ASSERT_NO_DIFF(Err2Str(res2), "<main>:1:12: Error: mismatched input 'b' expecting {<EOF>, ';'}\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res1), "<main>:1:13: Error: token recognition error at: '';'\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res2), "<main>:1:13: Error: token recognition error at: '\";'\n");
     }
 
     Y_UNIT_TEST(InvalidHexInStringLiteral) {
@@ -3055,7 +3055,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvalidStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select \"FOO\"\"BAR from plato.foo");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: mismatched input '\"' expecting {<EOF>, ';'}\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: token recognition error at: '\"BAR from plato.foo'\n");
     }
 
     Y_UNIT_TEST(InvalidDoubleAtStringFromTable) {
@@ -7401,7 +7401,7 @@ Y_UNIT_TEST_SUITE(Restore) {
 }
 
 Y_UNIT_TEST_SUITE(ColumnFamily) {
-    Y_UNIT_TEST(CompressionLevel) {
+    Y_UNIT_TEST(CompressionLevelCorrectUsage) {
         NYql::TAstParseResult res = SqlToYql(R"( use plato;
             CREATE TABLE tableName (
                 Key Uint32 FAMILY default,
@@ -7433,5 +7433,90 @@ Y_UNIT_TEST_SUITE(ColumnFamily) {
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
         UNIT_ASSERT_VALUES_EQUAL(2, elementStat["compression_level"]);
+    }
+
+    Y_UNIT_TEST(FieldDataIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = 1,
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "DATA value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = 2,
+                     COMPRESSION_LEVEL = 5
+                ),
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionLevelIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = "5"
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+
+    Y_UNIT_TEST(AlterCompressionCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION lz4;
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "mismatched input 'lz4' expecting {STRING_VALUE, DIGITS, INTEGER_VALUE}");
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL "5";
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
 }

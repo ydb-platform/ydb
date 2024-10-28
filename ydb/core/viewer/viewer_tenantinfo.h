@@ -262,7 +262,11 @@ public:
     void SendWhiteboardSystemStateRequest(const TNodeId nodeId) {
         Subscribers.insert(nodeId);
         if (SystemStateResponse.count(nodeId) == 0) {
-            SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvSystemStateRequest()));
+            auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+            request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+            request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+            request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
+            SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
         }
     }
 
@@ -731,7 +735,8 @@ public:
 
                         if (tablesStorageByType.empty() && entry.DomainDescription->Description.HasDiskSpaceUsage()) {
                             tablesStorageByType[GuessStorageType(entry.DomainDescription->Description)] =
-                                entry.DomainDescription->Description.GetDiskSpaceUsage().GetTables().GetTotalSize();
+                                entry.DomainDescription->Description.GetDiskSpaceUsage().GetTables().GetTotalSize()
+                                + entry.DomainDescription->Description.GetDiskSpaceUsage().GetTopics().GetDataSize();
                         }
 
                         if (storageQuotasByType.empty()) {
@@ -784,14 +789,24 @@ public:
                                 targetPoolStat->SetName(poolName);
                             }
                             double poolUsage = targetPoolStat->GetUsage() * targetPoolStat->GetThreads();
-                            poolUsage += poolStat.GetUsage() * poolStat.GetThreads();
+                            ui32 usageThreads = poolStat.GetLimit() ? poolStat.GetLimit() : poolStat.GetThreads();
+                            poolUsage += poolStat.GetUsage() * usageThreads;
                             ui32 poolThreads = targetPoolStat->GetThreads() + poolStat.GetThreads();
                             if (poolThreads != 0) {
                                 double threadUsage = poolUsage / poolThreads;
                                 targetPoolStat->SetUsage(threadUsage);
                                 targetPoolStat->SetThreads(poolThreads);
                             }
-                            tenant.SetCoresUsed(tenant.GetCoresUsed() + poolStat.GetUsage() * poolStat.GetThreads());
+                            if (nodeInfo.GetCoresTotal() == 0) {
+                                tenant.SetCoresUsed(tenant.GetCoresUsed() + poolStat.GetUsage() * usageThreads);
+                                if (poolStat.GetName() != "IO") {
+                                    tenant.SetCoresTotal(tenant.GetCoresTotal() + poolStat.GetThreads());
+                                }
+                            }
+                        }
+                        if (nodeInfo.GetCoresTotal() > 0) {
+                            tenant.SetCoresUsed(tenant.GetCoresUsed() + nodeInfo.GetCoresUsed());
+                            tenant.SetCoresTotal(tenant.GetCoresTotal() + nodeInfo.GetCoresTotal());
                         }
                         if (nodeInfo.HasMemoryUsed()) {
                             tenant.SetMemoryUsed(tenant.GetMemoryUsed() + nodeInfo.GetMemoryUsed());

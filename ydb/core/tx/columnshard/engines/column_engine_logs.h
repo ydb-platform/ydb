@@ -87,7 +87,7 @@ public:
     };
 
     TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot,
-        const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
+        const TSchemaInitializationData& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
     TColumnEngineForLogs(
         ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
 
@@ -135,7 +135,7 @@ public:
         IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
 
     void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
-    void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) override;
+    void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) override;
 
     std::shared_ptr<TSelectInfo> Select(
         ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const override;

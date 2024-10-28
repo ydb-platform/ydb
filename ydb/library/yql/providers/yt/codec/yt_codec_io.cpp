@@ -670,6 +670,7 @@ public:
     NKikimr::NUdf::TUnboxedValue Row_;
     bool IgnoreStreamTableIndex = false;
     bool KeySwitch_ = true;
+    bool HandlesSysColumns_ = false;
 
 protected:
     TInputBuf& Buf_;
@@ -1456,9 +1457,12 @@ public:
     {
         InputStream_ = std::make_unique<TInputBufArrowInputStream>(buf, pool);
         ResetColumnConverters();
+
+        HandlesSysColumns_ = true;
     }
 
     bool DecodeNext(NKikimr::NUdf::TUnboxedValue*& items, TMaybe<NKikimr::NMiniKQL::TValuesDictHashMap>&) override {
+        YQL_ENSURE(!RangeIndex_);
         AtStart_ = false;
         
         if (Chunks_.empty()) {
@@ -1474,11 +1478,12 @@ public:
         auto& inputFields = SpecsCache_.GetSpecs().Inputs[TableIndex_]->FieldsVec;
         Row_ = SpecsCache_.NewRow(TableIndex_, items, true);
 
-        auto& [chunkLen, chunk] = Chunks_.front();
+        auto& [chunkRowIndex, chunkLen, chunk] = Chunks_.front();
         for (size_t i = 0; i < inputFields.size(); i++) {
             items[inputFields[i].StructIndex] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
         }
         items[inputFields.size()] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
+        RowIndex_ = chunkRowIndex;
 
         Chunks_.pop_front();
         return true;
@@ -1514,22 +1519,56 @@ public:
             return ReadNext();
         }
 
-        auto& inputFields = Specs_.Inputs[TableIndex_]->FieldsVec;
+        auto rowIndices = batch->GetColumnByName("$row_index");
+        YQL_ENSURE(rowIndices);
+
+        auto& decoder = *Specs_.Inputs[TableIndex_];
+        auto& inputFields = decoder.FieldsVec;
         YQL_ENSURE(inputFields.size() == ColumnConverters_.size());
 
+        arrow::compute::ExecContext execContext(Pool_);
         std::vector<arrow::Datum> convertedBatch;
         for (size_t i = 0; i < inputFields.size(); i++) {
             auto batchColumn = batch->GetColumnByName(inputFields[i].Name);
-            YQL_ENSURE(batchColumn);
-            
+            if (!batchColumn) {
+                arrow::Datum convertedColumn;
+
+                if (decoder.FillSysColumnPath == inputFields[i].StructIndex) {
+                    auto tableName = Specs_.TableNames.at(TableIndex_).AsStringRef();
+                    auto tableNameScalar = arrow::BinaryScalar(std::make_shared<arrow::Buffer>(reinterpret_cast<const uint8_t*>(tableName.Data()), tableName.Size()));
+                    convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(tableNameScalar, batch->num_rows(), Pool_));
+
+                } else if (decoder.FillSysColumnRecord == inputFields[i].StructIndex || decoder.FillSysColumnNum == inputFields[i].StructIndex) {
+                    auto addFirst = ARROW_RESULT(arrow::compute::Cast(rowIndices, arrow::uint64(), arrow::compute::CastOptions::Safe(), &execContext));
+                    auto addSecond = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1));
+                    convertedColumn = ARROW_RESULT(arrow::compute::Add(addFirst, addSecond, arrow::compute::ArithmeticOptions(), &execContext));
+
+                    if (decoder.FillSysColumnNum == inputFields[i].StructIndex) {
+                        auto addThird = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Specs_.TableOffsets.at(TableIndex_)));
+                        convertedColumn = ARROW_RESULT(arrow::compute::Add(convertedColumn, addThird, arrow::compute::ArithmeticOptions(), &execContext));
+                    }
+                } else if (decoder.FillSysColumnIndex == inputFields[i].StructIndex) {
+                    convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt32Scalar(TableIndex_), batch->num_rows()));
+                } else {
+                    YQL_ENSURE(false, "unexpected column: " << inputFields[i].Name);
+                }
+
+                convertedBatch.emplace_back(convertedColumn);
+                continue;
+            }
+
             convertedBatch.emplace_back(ColumnConverters_[i]->Convert(batchColumn->data()));
         }
+
+        // index of the first row in the block
+        ui64 blockRowIndex = std::dynamic_pointer_cast<arrow::Int64Scalar>(ARROW_RESULT(rowIndices->GetScalar(0)))->value;
 
         NUdf::TArgsDechunker dechunker(std::move(convertedBatch));
         std::vector<arrow::Datum> chunk;
         ui64 chunkLen = 0;
         while (dechunker.Next(chunk, chunkLen)) {
-            Chunks_.emplace_back(chunkLen, std::move(chunk));
+            Chunks_.emplace_back(blockRowIndex, chunkLen, std::move(chunk));
+            blockRowIndex += chunkLen;
         }
 
         return true;
@@ -1551,7 +1590,7 @@ private:
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> StreamReader_;
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
 
-    TDeque<std::pair<ui64, std::vector<arrow::Datum>>> Chunks_;
+    TDeque<std::tuple<ui64, ui64, std::vector<arrow::Datum>>> Chunks_;
 
     const TMkqlIOSpecs& Specs_;
     arrow::MemoryPool* Pool_;
@@ -1679,7 +1718,7 @@ void TMkqlReaderImpl::Next() {
         return;
     }
 
-    if (Decoder_->RowIndex_) {
+    if (Decoder_->RowIndex_ && !Decoder_->HandlesSysColumns_) {
         ++*Decoder_->RowIndex_;
     }
 
@@ -1746,6 +1785,11 @@ void TMkqlReaderImpl::Next() {
             items[index] = defVal;
         }
     }
+
+    if (Decoder_->HandlesSysColumns_) {
+        return;
+    }
+
     if (decoder.FillSysColumnPath) {
         items[*decoder.FillSysColumnPath] = Specs_->TableNames.at(Decoder_->TableIndex_);
     }

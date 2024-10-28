@@ -346,6 +346,7 @@ private:
                 ctx.AddError(TIssue(udf->Pos, udfRes.GetError()));
                 hasErrors = true;
             } else {
+                udf->NormalizedName = udf->Name;
                 udf->CallableType = ParseTypeFromYson(TStringBuf{udfRes.GetCallableType()}, ctx, udf->Pos);
                 if (!udf->CallableType) {
                     hasErrors = true;

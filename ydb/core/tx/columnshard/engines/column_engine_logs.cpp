@@ -27,7 +27,7 @@
 namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<TVersionCounters>& versionCounters)
+    const TSnapshot& snapshot, const TSchemaInitializationData& schema, const std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
     , StoragesManager(storagesManager)
     , VersionedIndex(versionCounters)
@@ -167,11 +167,17 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     }
 }
 
-void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) {
-    std::optional<NOlap::TIndexInfo> indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema, StoragesManager, SchemaObjectsCache);
+void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
+    std::optional<NOlap::TIndexInfo> indexInfoOptional;
+    if (schema.GetDiff()) {
+        AFL_VERIFY(!VersionedIndex.IsEmpty());
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
+            *schema.GetDiff(), VersionedIndex.GetLastSchema()->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+    } else {
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
+    }
     AFL_VERIFY(indexInfoOptional);
-    NOlap::TIndexInfo indexInfo = std::move(*indexInfoOptional);
-    RegisterSchemaVersion(snapshot, std::move(indexInfo));
+    RegisterSchemaVersion(snapshot, std::move(*indexInfoOptional));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {

@@ -12,17 +12,16 @@ import library.python.retry as retry
 from ydb.public.api.grpc.draft.fq_v1_pb2_grpc import FederatedQueryServiceStub
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-import ydb.tests.library.common.yatest_common as yatest_common
-
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 
 final_statuses = [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED, fq.QueryMeta.ABORTED_BY_SYSTEM,
                   fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.PAUSED]
 
-CONTROL_PLANE_REQUEST_TIMEOUT = yatest_common.plain_or_under_sanitizer(30.0, 60.0)
+CONTROL_PLANE_REQUEST_TIMEOUT = plain_or_under_sanitizer(30.0, 60.0)
 
 
 class FederatedQueryException(Exception):
@@ -282,7 +281,7 @@ class FederatedQueryClient(object):
         return result.status
 
     # TODO: merge wait_query() and wait_query_status
-    def wait_query(self, query_id, timeout=yatest_common.plain_or_under_sanitizer(40, 200), statuses=final_statuses):
+    def wait_query(self, query_id, timeout=plain_or_under_sanitizer(40, 200), statuses=final_statuses):
         start = time.time()
         deadline = start + timeout
         while True:
@@ -300,10 +299,10 @@ class FederatedQueryClient(object):
                     response.result.query.issue,
                     response.result.query.transient_issue
                 )
-            time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+            time.sleep(plain_or_under_sanitizer(0.5, 2))
 
     # Wait query status or one of statuses in list
-    def wait_query_status(self, query_id, expected_status, timeout=yatest_common.plain_or_under_sanitizer(60, 150)):
+    def wait_query_status(self, query_id, expected_status, timeout=plain_or_under_sanitizer(60, 150)):
         statuses = expected_status if isinstance(expected_status, list) else [expected_status]
         return self.wait_query(query_id, timeout, statuses=statuses).query.meta.status
 

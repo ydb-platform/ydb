@@ -3380,6 +3380,13 @@
             "uri": "https://{canondata_backend}/1817427/4978ac42ab916ab33f9caeb75154df4b4d7e3dee/resource.tar.gz#test_sql2yql.test_blocks-block_input_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-block_input_sys_columns]": [
+        {
+            "checksum": "2f2abdffad20313a9c0dcd5eb1124e94",
+            "size": 5695,
+            "uri": "https://{canondata_backend}/1599023/85abe49b40cf536aae38f22fd9096a110453232d/resource.tar.gz#test_sql2yql.test_blocks-block_input_sys_columns_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-block_input_various_types]": [
         {
             "checksum": "000d1e06a52c9e63fae366c4d00b485d",
@@ -23160,6 +23167,13 @@
             "checksum": "93b9d3952da87a0e3c4e9bfc8eac56e0",
             "size": 145,
             "uri": "https://{canondata_backend}/1916746/5f2f0160368a9941e5c2a4f26544ec2ad584dc00/resource.tar.gz#test_sql_format.test_blocks-block_input_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-block_input_sys_columns]": [
+        {
+            "checksum": "0ad7ef4ec663eb32830c69d3b85e0c13",
+            "size": 597,
+            "uri": "https://{canondata_backend}/1599023/85abe49b40cf536aae38f22fd9096a110453232d/resource.tar.gz#test_sql_format.test_blocks-block_input_sys_columns_/formatted.sql"
         }
     ],
     "test_sql_format.test[blocks-block_input_various_types]": [

@@ -29,9 +29,6 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     if (sharding.ColumnShardsSize() == 0) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "No shards to write to");
     }
-    if (!scheme.HasEngine() || scheme.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_NONE) {
-        return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "Wrong column table configuration");
-    }
 
     std::shared_ptr<arrow::RecordBatch> batch;
     if (data.HasDeserializedBatch()) {

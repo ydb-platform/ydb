@@ -6,89 +6,91 @@ using namespace NYdb::NConsoleClient;
 TTopicWorkloadWriterProducer::TTopicWorkloadWriterProducer(
         const TTopicWorkloadWriterParams& params,
         std::shared_ptr<NYdb::NConsoleClient::TTopicWorkloadStatsCollector> statsCollector,
-        const TString &producerId,
-        const ui64 partitionId
+        const TString& producerId,
+        const ui64 partitionId,
+        const NUnifiedAgent::TClock& clock
 ) :
-        MessageId(1),
-        ProducerId(producerId),
-        PartitionId(partitionId),
-        Params(params),
-        StatsCollector(statsCollector) {
+        MessageId_(1),
+        ProducerId_(producerId),
+        PartitionId_(partitionId),
+        Params_(params),
+        StatsCollector_(statsCollector),
+        Clock_(clock) {
     NYdb::NTopic::TWriteSessionSettings settings;
-    settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
-    settings.Path(Params.TopicName);
-    settings.ProducerId(ProducerId);
+    settings.Codec((NYdb::NTopic::ECodec) Params_.Codec);
+    settings.Path(Params_.TopicName);
+    settings.ProducerId(ProducerId_);
 
     NYdb::NTopic::TWriteSessionSettings::TEventHandlers eventHandlers;
-    eventHandlers.AcksHandler([this](auto &&PH1) { HandleAckEvent(std::forward<decltype(PH1)>(PH1)); });
+    eventHandlers.AcksHandler([this](auto&& PH1) { HandleAckEvent(std::forward<decltype(PH1)>(PH1)); });
     eventHandlers.SessionClosedHandler(
             std::bind(&TTopicWorkloadWriterProducer::HandleSessionClosed, this, std::placeholders::_1));
     settings.EventHandlers(eventHandlers);
 
-    if (Params.UseAutoPartitioning) {
-        settings.MessageGroupId(ProducerId);
+    if (Params_.UseAutoPartitioning) {
+        settings.MessageGroupId(ProducerId_);
     } else {
-        settings.PartitionId(PartitionId);
+        settings.PartitionId(PartitionId_);
     }
 
-    settings.DirectWriteToPartition(Params.Direct);
+    settings.DirectWriteToPartition(Params_.Direct);
 
-    WriteSession = NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings);
+    WriteSession_ = NYdb::NTopic::TTopicClient(Params_.Driver).CreateWriteSession(settings);
 
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO,
-              TStringBuilder() << "Created Producer with id " << ProducerId << " for partition " << PartitionId);
+    WRITE_LOG(Params_.Log, ELogPriority::TLOG_INFO,
+              TStringBuilder() << "Created Producer with id " << ProducerId_ << " for partition " << PartitionId_);
 }
 
 TTopicWorkloadWriterProducer::~TTopicWorkloadWriterProducer() {
-    if (WriteSession)
-        WriteSession->Close(TDuration::Zero());
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG,
-              TStringBuilder() << "Destructor for producer  " << ProducerId << " was called");
+    if (WriteSession_)
+        WriteSession_->Close(TDuration::Zero());
+    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
+              TStringBuilder() << "Destructor for producer  " << ProducerId_ << " was called");
 }
 
-void TTopicWorkloadWriterProducer::Send(const TInstant &createTimestamp,
+void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
                                         std::optional<NYdb::NTable::TTransaction> transaction) {
     TString data = GetGeneratedMessage();
-    InflightMessagesCreateTs[MessageId] = createTimestamp;
+    InflightMessagesCreateTs_[MessageId_] = createTimestamp;
 
     NTopic::TWriteMessage writeMessage(data);
-    writeMessage.SeqNo(MessageId);
+    writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(createTimestamp);
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());
     }
 
-    WriteSession->Write(std::move(ContinuationToken.GetRef()), std::move(writeMessage));
+    WriteSession_->Write(std::move(ContinuationToken_.GetRef()), std::move(writeMessage));
 
-    ContinuationToken.Clear();
+    ContinuationToken_.Clear();
 
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG,
-              TStringBuilder() << "Sent message with id " << MessageId
-                << " for producer " << ProducerId
-                << " in writer " << Params.WriterIdx
+    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
+              TStringBuilder() << "Sent message with id " << MessageId_
+                << " for producer " << ProducerId_
+                << " in writer " << Params_.WriterIdx
                 );
 
-    MessageId++;
+    MessageId_++;
 }
 
 void TTopicWorkloadWriterProducer::Close() {
-    if (WriteSession)
-        WriteSession->Close(TDuration::Zero());
+    if (WriteSession_)
+        WriteSession_->Close(TDuration::Zero());
 }
 
 
 TString TTopicWorkloadWriterProducer::GetGeneratedMessage() const {
-    return Params.GeneratedMessages[MessageId % TTopicWorkloadWriterWorker::GENERATED_MESSAGES_COUNT];
+    return Params_.GeneratedMessages[MessageId_ % TTopicWorkloadWriterWorker::GENERATED_MESSAGES_COUNT];
 }
 
 bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {
-    NThreading::TFuture<ui64> InitSeqNo = WriteSession->GetInitSeqNo();
-    while (!*Params.ErrorFlag) {
+    NThreading::TFuture<ui64> InitSeqNo = WriteSession_->GetInitSeqNo();
+    while (!*Params_.ErrorFlag) {
         if (!InitSeqNo.HasValue() && !InitSeqNo.Wait(TDuration::Seconds(1))) {
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_WARNING,
-                      TStringBuilder() << "No initial sequence number for ProducerId " << ProducerId << " PartitionId "
-                                       << PartitionId);
+            WRITE_LOG(Params_.Log, ELogPriority::TLOG_WARNING,
+                      TStringBuilder() << "No initial sequence number for ProducerId " << ProducerId_ << " PartitionId "
+                                       << PartitionId_);
             Sleep(TDuration::Seconds(1));
             continue;
         }
@@ -96,20 +98,20 @@ bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {
             try {
                 InitSeqNo.GetValue();
             } catch (yexception e) {
-                WRITE_LOG(Params.Log, ELogPriority::TLOG_ERR, TStringBuilder()
-                    << "Producer " << ProducerId
-                    << " in writer " << Params.WriterIdx
-                    << " for partition " << PartitionId
+                WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR, TStringBuilder()
+                    << "Producer " << ProducerId_
+                    << " in writer " << Params_.WriterIdx
+                    << " for partition " << PartitionId_
                     << ". Future exception: " << e.what());
             }
-            *Params.ErrorFlag = 1;
+            *Params_.ErrorFlag = 1;
             return false;
         }
 
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG,
+        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
                   TStringBuilder() << "Sequence number initialized " << InitSeqNo.GetValue());
-        if (MessageId != InitSeqNo.GetValue() + 1) {
-            MessageId = InitSeqNo.GetValue() + 1;
+        if (MessageId_ != InitSeqNo.GetValue() + 1) {
+            MessageId_ = InitSeqNo.GetValue() + 1;
         }
 
         return true;
@@ -118,55 +120,62 @@ bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {
     return false;
 }
 
-void TTopicWorkloadWriterProducer::WaitForContinuationToken(const TDuration &timeout) {
+void TTopicWorkloadWriterProducer::WaitForContinuationToken(const TDuration& timeout) {
+    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+            << "WriterId " << Params_.WriterIdx
+            << " producer id " << ProducerId_
+            << " for partition " << PartitionId_
+            << ": WaitEvent for timeToNextMessage " << timeout);
+
     // only TReadyToAcceptEvent will come here, cause we subscribed for other event types in constructor
     // we are waiting for this event, cause we can't proceed without ContinuationToken from previous write
-    bool foundEvent = WriteSession->WaitEvent().Wait(timeout);
+    bool foundEvent = WriteSession_->WaitEvent().Wait(timeout);
 
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-            << "Producer " << ProducerId
-            << " in writer " << Params.WriterIdx
-            << " for partition " << PartitionId
+    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+            << "Producer " << ProducerId_
+            << " in writer " << Params_.WriterIdx
+            << " for partition " << PartitionId_
             << ": foundEvent - " << foundEvent);
 
     if (foundEvent) {
-        auto variant = WriteSession->GetEvent(true).GetRef();
+        auto variant = WriteSession_->GetEvent(true).GetRef();
         if (std::holds_alternative<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant)) {
             auto event = std::get<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(variant);
-            ContinuationToken = std::move(event.ContinuationToken);
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-                              << "Producer " << ProducerId
-                              << " in writer " << Params.WriterIdx
-                              << " for partition " << PartitionId
+            ContinuationToken_ = std::move(event.ContinuationToken);
+            WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+                              << "Producer " << ProducerId_
+                              << " in writer " << Params_.WriterIdx
+                              << " for partition " << PartitionId_
                               << ": Got new ContinuationToken token");
+        } else {
+            throw std::runtime_error("Unexpected event type in WaitForContinuationToken");
         }
     }
-
 }
 
-void TTopicWorkloadWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent &event) {
-    auto now = Now();
+void TTopicWorkloadWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
+    auto now = Clock_.Now();
     //! Acks just confirm that message was received and saved by server
     //! successfully. Here we just count acked messages to check, that everything
     //! written is confirmed.
-    for (const auto &ack: event.Acks) {
+    for (const auto& ack: event.Acks) {
         ui64 AckedMessageId = ack.SeqNo;
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got ack for write " << AckedMessageId);
+        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got ack for write " << AckedMessageId);
 
-        auto inflightMessageIter = InflightMessagesCreateTs.find(AckedMessageId);
-        if (inflightMessageIter == InflightMessagesCreateTs.end()) {
-            *Params.ErrorFlag = 1;
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_ERR,
+        auto inflightMessageIter = InflightMessagesCreateTs_.find(AckedMessageId);
+        if (inflightMessageIter == InflightMessagesCreateTs_.end()) {
+            *Params_.ErrorFlag = 1;
+            WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR,
                       TStringBuilder() << "Unknown AckedMessageId " << AckedMessageId);
         }
 
         auto inflightTime = (now - inflightMessageIter->second);
-        InflightMessagesCreateTs.erase(inflightMessageIter);
+        InflightMessagesCreateTs_.erase(inflightMessageIter);
 
-        StatsCollector->AddWriterEvent(Params.WriterIdx, {Params.MessageSize, inflightTime.MilliSeconds(),
-                                                          InflightMessagesCreateTs.size()});
+        StatsCollector_->AddWriterEvent(Params_.WriterIdx, {Params_.MessageSize, inflightTime.MilliSeconds(),
+                                                          InflightMessagesCreateTs_.size()});
 
-        WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG,
+        WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
                   TStringBuilder() << "Ack PartitionId " << ack.Details->PartitionId << " Offset "
                                    << ack.Details->Offset << " InflightTime " << inflightTime << " WriteTime "
                                    << ack.Stat->WriteTime << " MinTimeInPartitionQueue "
@@ -177,10 +186,26 @@ void TTopicWorkloadWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEve
     }
 }
 
-void TTopicWorkloadWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent &event) {
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-        << "Producer " << ProducerId
+void TTopicWorkloadWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event) {
+    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
+        << "Producer " << ProducerId_
         << ": got close event: " << event.DebugString());
     //! Session is closed, stop any work with it.
-    *Params.ErrorFlag = 1;
+    *Params_.ErrorFlag = 1;
+}
+
+bool TTopicWorkloadWriterProducer::ContinuationTokenDefined() {
+    return ContinuationToken_.Defined();
+}
+
+ui64 TTopicWorkloadWriterProducer::GetCurrentMessageId() {
+    return MessageId_;
+}
+
+ui64 TTopicWorkloadWriterProducer::GetPartitionId() {
+    return PartitionId_;
+}
+
+size_t TTopicWorkloadWriterProducer::InflightMessagesCnt() {
+    return InflightMessagesCreateTs_.size();
 }

@@ -31,7 +31,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
     ydb/public/sdk/cpp/client/ydb_topic
     ydb/public/sdk/cpp/client/ydb_types/operation
-    ydb/public/sdk/cpp/client/ydb_types/status    
+    ydb/public/sdk/cpp/client/ydb_types/status
+    library/cpp/unified_agent_client
 )
 
 END()

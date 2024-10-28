@@ -53,6 +53,8 @@ namespace NYdb {
 
             void Close();
 
+            TTopicWorkloadWriterProducer CreateProducer(ui64 partitionId);
+
             void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(TTopicWorkloadWriterProducer& producer);
 
             void Process(TInstant endTime);

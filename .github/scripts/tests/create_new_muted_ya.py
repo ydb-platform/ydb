@@ -11,7 +11,11 @@ import logging
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
-from update_mute_issues import create_and_add_issue_to_project, generate_github_issue_title_and_body, get_muted_tests_from_issues
+from update_mute_issues import (
+    create_and_add_issue_to_project,
+    generate_github_issue_title_and_body,
+    get_muted_tests_from_issues,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -163,7 +167,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         add_lines_to_file(os.path.join(output_path, 'muted_stable.txt'), muted_stable_tests)
 
         muted_stable_tests_debug = set(
-            f"{test.get('suite_folder')} {test.get('test_name')} " + f"# owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
+            f"{test.get('suite_folder')} {test.get('test_name')} "
+            + f"# owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')} days in state {test.get('days_in_state')}\n"
             for test in all_tests
             if test.get('muted_stable_n_days_today')
         )
@@ -184,7 +189,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         add_lines_to_file(os.path.join(output_path, 'flaky.txt'), flaky_tests)
 
         flaky_tests_debug = set(
-            re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}") + f" # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
+            re.sub(r'\d+/(\d+)\]', r'*/*]', f"{test.get('suite_folder')} {test.get('test_name')}")
+            + f" # owner {test.get('owner')} success_rate {test.get('success_rate')}%, state {test.get('state')}, days in state {test.get('days_in_state')}, pass_count {test.get('pass_count')}, fail count {test.get('fail_count')}\n"
             for test in all_tests
             if test.get('days_in_state') >= 1
             and test.get('flaky_today')
@@ -213,13 +219,15 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             test_string = f"{testsuite} {testcase}\n"
             test_string_debug = f"{testsuite} {testcase} # owner {owner} success_rate {success_rate}%, state {state} days in state {days_in_state}\n"
             test_string = re.sub(r'\d+/(\d+)\]', r'*/*]', test_string)
-            if (testsuite and testcase and mute_check(testsuite, testcase) or test_string in flaky_tests) and test_string not in new_muted_ya_tests_with_flaky:
+            if (
+                testsuite and testcase and mute_check(testsuite, testcase) or test_string in flaky_tests
+            ) and test_string not in new_muted_ya_tests_with_flaky:
                 if test_string not in muted_stable_tests and test_string not in deleted_tests:
                     new_muted_ya_tests_with_flaky.append(test_string)
                     new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
 
             if testsuite and testcase and mute_check(testsuite, testcase):
-                
+
                 if test_string not in new_muted_ya_tests:
                     muted_before_count += 1
                     if test_string not in muted_stable_tests and test_string not in deleted_tests:
@@ -230,7 +238,6 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
                     if test_string in deleted_tests:
                         unmuted_deleted += 1
                     unmuted_tests_debug.append(test_string_debug)
-                 
 
         new_muted_ya_tests = sorted(new_muted_ya_tests)
         add_lines_to_file(os.path.join(output_path, 'new_muted_ya.txt'), new_muted_ya_tests)
@@ -248,7 +255,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         logging.info(f"Muted before script: {muted_before_count} tests")
         logging.info(f"Muted stable : {len(muted_stable_tests)}")
         logging.info(f"Flaky tests : {len(flaky_tests)}")
-        #logging.info(f"Deleted (no runs) tests : {len(deleted_tests)}")
+        # logging.info(f"Deleted (no runs) tests : {len(deleted_tests)}")
         logging.info(f"Result: Muted without deleted and stable : {len(new_muted_ya_tests)}")
         logging.info(f"Result: Muted without deleted and stable, with flaky : {len(new_muted_ya_tests_with_flaky)}")
         logging.info(f"Result: Unmuted tests : stable {unmuted_stable} and deleted {unmuted_deleted}")
@@ -258,6 +265,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
 
     return len(new_muted_ya_tests)
 
+
 def read_tests_from_file(file_path):
     result = []
     with open(file_path, "r") as fp:
@@ -265,11 +273,12 @@ def read_tests_from_file(file_path):
             line = line.strip()
             try:
                 testsuite, testcase = line.split(" ", maxsplit=1)
-                result.append({'testsuite' : testsuite ,'testcase': testcase , 'full_name' : f"{testsuite}/{testcase}"})
+                result.append({'testsuite': testsuite, 'testcase': testcase, 'full_name': f"{testsuite}/{testcase}"})
             except ValueError:
                 log_print(f"cant parse line: {line!r}")
                 continue
     return result
+
 
 def create_mute_issues(all_tests, file_path):
     tests_from_file = read_tests_from_file(file_path)
@@ -278,43 +287,49 @@ def create_mute_issues(all_tests, file_path):
     for test in all_tests:
         for test_from_file in tests_from_file:
             if test['full_name'] == test_from_file['full_name']:
-                if test['full_name'] in muted_tests_in_issues :
-                    logging.info(f"test {test['full_name']} already have issue, {muted_tests_in_issues[test['full_name']][0]['url']}")
+                if test['full_name'] in muted_tests_in_issues:
+                    logging.info(
+                        f"test {test['full_name']} already have issue, {muted_tests_in_issues[test['full_name']][0]['url']}"
+                    )
                 else:
                     key = f"{test_from_file['testsuite']}:{test['owner']}"
                     if not prepared_tests_by_suite.get(key):
                         prepared_tests_by_suite[key] = []
-                    prepared_tests_by_suite[key].append({
-                        
-                        'mute_string' :  f"{ test.get('suite_folder')} {test.get('test_name')}",
-                        'test_name': test.get('test_name'),
-                        'suite_folder': test.get('suite_folder'),
-                        'full_name' :  test.get('full_name'),
-                        'success_rate' : test.get('success_rate'),
-                        'days_in_state' : test.get('days_in_state'),
-                        'owner' : test.get('owner'),
-                        'state' : test.get('state'),
-                        'summary' : test.get('summary'),
-                        'fail_count' : test.get('fail_count'),
-                        'pass_count' : test.get('pass_count'),
-                        'branch' : test.get('branch'),
-                    
-                })
+                    prepared_tests_by_suite[key].append(
+                        {
+                            'mute_string': f"{ test.get('suite_folder')} {test.get('test_name')}",
+                            'test_name': test.get('test_name'),
+                            'suite_folder': test.get('suite_folder'),
+                            'full_name': test.get('full_name'),
+                            'success_rate': test.get('success_rate'),
+                            'days_in_state': test.get('days_in_state'),
+                            'owner': test.get('owner'),
+                            'state': test.get('state'),
+                            'summary': test.get('summary'),
+                            'fail_count': test.get('fail_count'),
+                            'pass_count': test.get('pass_count'),
+                            'branch': test.get('branch'),
+                        }
+                    )
     results = []
     for item in prepared_tests_by_suite:
-        
-        title, body  = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        result = create_and_add_issue_to_project(title,body, state = 'Muted', owner = prepared_tests_by_suite[item][0]['owner'].split('/',1)[1])
+
+        title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
+        result = create_and_add_issue_to_project(
+            title, body, state='Muted', owner=prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1]
+        )
         if not result:
             break
         else:
-            results.append(f"Created issue '{title}' for {prepared_tests_by_suite[item][0]['owner']}, url {result['issue_url']}")
-    
+            results.append(
+                f"Created issue '{title}' for {prepared_tests_by_suite[item][0]['owner']}, url {result['issue_url']}"
+            )
+
     print("\n\n")
     print("\n".join(results))
-     
+
+
 def mute_worker(args):
-    
 
     # Simplified Connection
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
@@ -348,25 +363,23 @@ def mute_worker(args):
     elif args.mode == 'create_issues':
         file_path = args.file_path
         create_mute_issues(all_tests, file_path)
-        
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Add tests to mutes files based on flaky_today condition")
 
-    subparsers = parser.add_subparsers(dest='mode',  help="Mode to perform")
+    subparsers = parser.add_subparsers(dest='mode', help="Mode to perform")
 
-    update_muted_ya_parser = subparsers.add_parser(
-        'update_muted_ya', help='create new muted_ya'
-    )
+    update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
-
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
         help='create issues by muted_ya like files',
     )
-    create_issues_parser.add_argument('--file_path', default='/home/kirrysin/fork/mute_update/flaky.txt', required=False, help='file path')
+    create_issues_parser.add_argument(
+        '--file_path', default='/home/kirrysin/fork/mute_update/flaky.txt', required=False, help='file path'
+    )
 
     args = parser.parse_args()
 

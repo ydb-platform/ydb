@@ -12,21 +12,19 @@ TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 
 
-
 def run_query(query, variables=None):
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-    HEADERS = {
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    request = requests.post('https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS)
+    HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
+    request = requests.post(
+        'https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS
+    )
     if request.status_code == 200:
         return request.json()
     else:
         raise Exception(f"Query failed to run by returning code of {request.status_code}. {query}")
 
 
-def get_repository(org_name = ORG_NAME, repo_name = REPO_NAME):
+def get_repository(org_name=ORG_NAME, repo_name=REPO_NAME):
     query = """
     {
       organization(login: "%s") {
@@ -35,11 +33,15 @@ def get_repository(org_name = ORG_NAME, repo_name = REPO_NAME):
         }
       }
     }
-    """ % (org_name, repo_name)
+    """ % (
+        org_name,
+        repo_name,
+    )
     result = run_query(query)
     return result['data']['organization']['repository']
-      
-def get_project_v2_fields( org_name = ORG_NAME, project_id = PROJECT_ID):
+
+
+def get_project_v2_fields(org_name=ORG_NAME, project_id=PROJECT_ID):
     query_template = """
    {
       organization(login: "%s") {
@@ -67,12 +69,16 @@ def get_project_v2_fields( org_name = ORG_NAME, project_id = PROJECT_ID):
       }
     }
     """
-    query = query_template  % (org_name, project_id)
-   
-    result = run_query(query)
-    return result['data']['organization']['projectV2']['id'], result['data']['organization']['projectV2']['fields']['nodes']
+    query = query_template % (org_name, project_id)
 
-def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_name = ORG_NAME, state=None, owner=None):
+    result = run_query(query)
+    return (
+        result['data']['organization']['projectV2']['id'],
+        result['data']['organization']['projectV2']['fields']['nodes'],
+    )
+
+
+def create_and_add_issue_to_project(title, body, project_id=PROJECT_ID, org_name=ORG_NAME, state=None, owner=None):
     """Добавляет issue в проект.
 
     Args:
@@ -84,7 +90,7 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
     Returns:
         None
     """
-   
+
     result = None
     # Получаем ID полей "State" и "Owner"
     inner_project_id, project_fields = get_project_v2_fields(org_name, project_id)
@@ -92,28 +98,28 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
     owner_field_id = None
     for field in project_fields:
         if field.get('name'):
-          if field['name'].lower() == "status":
-              state_field_id = field['id']
-              state_option_id = None
-              if state:
-                  for option in field['options']:
-                      if option['name'].lower() == state.lower():
-                          state_option_id = option['id']
-                          break
-          if field['name'].lower() == "owner":
-              owner_field_id = field['id']
-              owner_option_id = None
-              if owner:
-                  for option in field['options']:
-                      if option['name'].lower() == owner.lower():
-                          owner_option_id = option['id']
-                          break
+            if field['name'].lower() == "status":
+                state_field_id = field['id']
+                state_option_id = None
+                if state:
+                    for option in field['options']:
+                        if option['name'].lower() == state.lower():
+                            state_option_id = option['id']
+                            break
+            if field['name'].lower() == "owner":
+                owner_field_id = field['id']
+                owner_option_id = None
+                if owner:
+                    for option in field['options']:
+                        if option['name'].lower() == owner.lower():
+                            owner_option_id = option['id']
+                            break
 
     if not state_field_id or not owner_field_id:
         raise Exception(f"Не найдены поля 'State' или 'Owner' в проекте {project_id}")
-    #get repo
-    repo = get_repository()    
-    #create issue
+    # get repo
+    repo = get_repository()
+    # create issue
     query = """
     mutation ($repositoryId: ID!, $title: String!, $body: String!) {
       createIssue(input: {repositoryId: $repositoryId, title: $title, body: $body}) {
@@ -124,17 +130,13 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
       }
     }
     """
-    variables = {
-        "repositoryId": repo['id'],
-        "title": title,
-        "body": body
-    }
+    variables = {"repositoryId": repo['id'], "title": title, "body": body}
     issue = run_query(query, variables)
     if not issue.get('errors'):
-      print(f"Issue {title} created ")
+        print(f"Issue {title} created ")
     else:
-      print(f"Error: Issue {title} not created ")
-      return result
+        print(f"Error: Issue {title} not created ")
+        return result
     issue_id = issue['data']['createIssue']['issue']['id']
     issue_url = issue['data']['createIssue']['issue']['url']
 
@@ -149,18 +151,21 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
     """
     variables = {
         "projectId": inner_project_id,
-        "issueId": issue_id ,
+        "issueId": issue_id,
     }
     result_add_to_project = run_query(query_add_to_project, variables)
     item_id = result_add_to_project['data']['addProjectV2ItemById']['item']['id']
     if not result_add_to_project.get('errors'):
-      print(f"Issue {issue_url} added to project.")
+        print(f"Issue {issue_url} added to project.")
     else:
-      print(f"Error: Issue {title}: {issue_url} not added to project.")
-      return result
-    
-    for field_name,filed_value, field_id, value_id  in [['state',state, state_field_id, state_option_id],['owner',owner, owner_field_id, owner_option_id]]:
-      query_modify_fields = """
+        print(f"Error: Issue {title}: {issue_url} not added to project.")
+        return result
+
+    for field_name, filed_value, field_id, value_id in [
+        ['state', state, state_field_id, state_option_id],
+        ['owner', owner, owner_field_id, owner_option_id],
+    ]:
+        query_modify_fields = """
       mutation ($projectId: ID!, $itemId: ID!, $FieldId: ID!, $OptionId: String) {
         updateProjectV2ItemFieldValue(input: {
           projectId: $projectId,
@@ -177,24 +182,23 @@ def create_and_add_issue_to_project(title, body, project_id = PROJECT_ID, org_na
 
       }
       """
-      variables = {
-          "projectId": inner_project_id,
-          "itemId": item_id,
-          "FieldId": field_id,
-          "OptionId": value_id,
-      }
-      result_modify_field = run_query(query_modify_fields, variables)
-      if not result_modify_field.get('errors'):
-        print(f"Issue {title}: {issue_url} modified :{field_name} = {filed_value}")
-      else:
-        print(f"Error: Issue {title}: {issue_url}  not modified")
-        return result
-    result = {'issue_url': issue_url, 'owner': owner, 'title': title }
+        variables = {
+            "projectId": inner_project_id,
+            "itemId": item_id,
+            "FieldId": field_id,
+            "OptionId": value_id,
+        }
+        result_modify_field = run_query(query_modify_fields, variables)
+        if not result_modify_field.get('errors'):
+            print(f"Issue {title}: {issue_url} modified :{field_name} = {filed_value}")
+        else:
+            print(f"Error: Issue {title}: {issue_url}  not modified")
+            return result
+    result = {'issue_url': issue_url, 'owner': owner, 'title': title}
     return result
-    
 
 
-def fetch_all_issues(org_name = ORG_NAME, project_id = PROJECT_ID):
+def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
     issues = []
     has_next_page = True
     end_cursor = "null"
@@ -270,7 +274,6 @@ def fetch_all_issues(org_name = ORG_NAME, project_id = PROJECT_ID):
     """
     while has_next_page:
         query = project_issues_query % (org_name, project_id, end_cursor)
-        
 
         result = run_query(query)
 
@@ -286,46 +289,46 @@ def fetch_all_issues(org_name = ORG_NAME, project_id = PROJECT_ID):
 
     return issues
 
-def generate_github_issue_title_and_body( test_data):
+
+def generate_github_issue_title_and_body(test_data):
     owner = test_data[0]['owner']
     branch = test_data[0]['branch']
     test_full_names = [f"{d['full_name']}" for d in test_data]
     test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
-      f"{d['test_name']}: {d['state']} last {d['days_in_state']} days. {d['date_window']}: success_rate {d['success_rate']}%, {d['summary']}" 
-      for d in test_data
-      ]
-    
+        f"{d['test_name']}: {d['state']} last {d['days_in_state']} days. {d['date_window']}: success_rate {d['success_rate']}%, {d['summary']}"
+        for d in test_data
+    ]
+
     # Title
     if len(test_full_names) > 1:
-      title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests'
+        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests'
     else:
-      title = f'Mute {test_data[0]["full_name"]}'
-      
+        title = f'Mute {test_data[0]["full_name"]}'
 
     # Преобразование списка тестов в строку и кодирование
     test_string = "\n".join(test_full_names)
-    
+
     test_mute_strings_string = "\n".join(test_mute_strings)
-    
+
     summary_string = "\n".join(summary)
 
     # Создаем ссылку на историю тестов, кодируя параметры
-    
+
     test_run_history_params = "&".join(
         urlencode({"full_name": f"__in_{test}"})
         for test in test_full_names
     )
     test_run_history_link = f"{CURRENT_TEST_HISTORY_DASHBOARD}{test_run_history_params}"
 
-    #owner
+    # owner
     owner_link = f"[{owner}](https://github.com/orgs/ydb-platform/teams/{owner.split('/',1)[1]})"
     # Тело сообщения и кодирование
     body_template = (
         f"Mute:<!--mute_list_start-->\n"
         f"{test_string}\n"
         f"<!--mute_list_end-->\n\n"
-         f"Branch:<!--branch_list_start-->\n"
+        f"Branch:<!--branch_list_start-->\n"
         f"{branch}\n"
         f"<!--branch_list_end-->\n\n"
         f"**Add line to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**\n"
@@ -339,9 +342,13 @@ def generate_github_issue_title_and_body( test_data):
         f"**Test run history:** [link]({test_run_history_link})\n\n"
         f"More info in [dashboard]({TEST_HISTORY_DASHBOARD})"
     )
-    
-    return title, body_template,
-  
+
+    return (
+        title,
+        body_template,
+    )
+
+
 def parse_body(body):
     tests = []
     branches = []
@@ -453,20 +460,21 @@ def get_muted_tests_from_issues():
     return muted_tests
 
 
-
 def main():
-    
+
     if "GITHUB_TOKEN" not in os.environ:
         print("Error: Env variable GITHUB_TOKEN is missing, skipping")
         return 1
     else:
-      github_token = os.environ["GITHUB_TOKEN"]
-    #muted_tests = get_muted_tests_from_issues()
-    
-    #create_github_issues(tests)
-   # create_and_add_issue_to_project('test issue','test_issue_body', state = 'Muted', owner = 'fq')
-    #print(1)
-    #update_issue_state(muted_tests, github_token, "closed")
+        github_token = os.environ["GITHUB_TOKEN"]
+    # muted_tests = get_muted_tests_from_issues()
+
+    # create_github_issues(tests)
+
+
+# create_and_add_issue_to_project('test issue','test_issue_body', state = 'Muted', owner = 'fq')
+# print(1)
+# update_issue_state(muted_tests, github_token, "closed")
 
 if __name__ == "__main__":
     main()

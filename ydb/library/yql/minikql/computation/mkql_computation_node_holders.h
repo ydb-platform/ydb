@@ -583,7 +583,7 @@ public:
     }
 
     inline static TArrowBlock& From(const NUdf::TUnboxedValue& value) {
-        return *static_cast<TArrowBlock*>(value.AsBoxed().Get());
+        return *static_cast<TArrowBlock*>(value.AsRawBoxed());
     }
 
     inline arrow::Datum& GetDatum() {

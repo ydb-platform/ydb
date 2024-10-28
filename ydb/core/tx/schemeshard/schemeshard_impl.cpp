@@ -7377,7 +7377,7 @@ void TSchemeShard::ConnectToSA() {
 
 TDuration TSchemeShard::SendBaseStatsToSA() {
     if (!EnableStatistics) {
-        return TDuration::Max();
+        return TDuration::Seconds(30);
     }
 
     if (!SAPipeClientId) {

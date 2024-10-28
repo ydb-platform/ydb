@@ -17,6 +17,7 @@ struct TEvService {
         EvRunWorker,
         EvStopWorker,
         EvWorkerStatus,
+        EvWorkerDataEnd,
 
         EvEnd,
     };
@@ -71,6 +72,11 @@ struct TEvService {
             Record.SetLagMilliSeconds(lag.MilliSeconds());
         }
     };
+
+    struct TEvWorkerDataEnd: public TEventPB<TEvWorkerDataEnd, NKikimrReplication::TEvWorkerDataEnd, EvWorkerDataEnd> {
+        TEvWorkerDataEnd() = default;
+    };
+
 };
 
 namespace NService {

@@ -1468,7 +1468,7 @@ public:
                 FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             }
 
-            CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
+            CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
             << ", Locks= " << [&]() {
                 TStringBuilder builder;
@@ -1631,7 +1631,7 @@ public:
             Rollback();
             State = EState::FINISHED;
             Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
-        } else if (TxManager->IsSingleShard() && !WriteInfos.empty()) {
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && !WriteInfos.empty()) {
             TxManager->StartExecute();
             ImmediateCommit();
         } else {

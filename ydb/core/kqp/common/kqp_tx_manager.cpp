@@ -1,5 +1,6 @@
 #include "kqp_tx_manager.h"
 
+#include <algorithm>
 #include <ydb/core/tx/locks/sys_tables.h>
 
 namespace NKikimr {
@@ -166,6 +167,12 @@ public:
         return GetShardsCount() == 1;
     }
 
+    bool HasOlapTable() const override {
+        return std::any_of(std::begin(ShardsInfo), std::end(ShardsInfo), [](const auto& element) {
+            return element.second.IsOlap;
+        });
+    }
+
     bool IsEmpty() const override {
         return GetShardsCount() == 0;
     }
@@ -304,7 +311,7 @@ public:
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard());
+        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard() || HasOlapTable());
     }
 
     TCommitInfo GetCommitInfo() override {

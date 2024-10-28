@@ -54,6 +54,8 @@ public:
 
     virtual bool IsReadOnly() const = 0;
     virtual bool IsSingleShard() const = 0;
+    virtual bool HasOlapTable() const = 0;
+
     virtual bool IsEmpty() const = 0;
     virtual bool HasLocks() const = 0;
 

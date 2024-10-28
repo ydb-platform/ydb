@@ -1069,6 +1069,7 @@ private:
 class TShardedWriteController : public IShardedWriteController {
 public:
     void OnPartitioningChanged(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) override {
+        IsOlap = true;
         SchemeEntry = schemeEntry;
         BeforePartitioningChanged();
         for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
@@ -1083,6 +1084,7 @@ public:
     void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) override {
+        IsOlap = false;
         SchemeEntry = schemeEntry;
         PartitionsEntry = std::move(partitionsEntry);
         BeforePartitioningChanged();
@@ -1427,9 +1429,10 @@ private:
 
     void BuildBatchesForShard(TShardsInfo::TShardInfo& shard) {
         if (shard.GetBatchesInFlight() == 0) {
+            YQL_ENSURE(IsOlap != std::nullopt);
             shard.MakeNextBatches(
                 Settings.MemoryLimitPerMessage,
-                Settings.MaxBatchesPerMessage);
+                (*IsOlap) ? 1 : Settings.MaxBatchesPerMessage);
         }
     }
 
@@ -1464,6 +1467,7 @@ private:
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     std::optional<NSchemeCache::TSchemeCacheRequest::TEntry> PartitionsEntry;
+    std::optional<bool> IsOlap;
 };
 
 }

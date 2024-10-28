@@ -200,7 +200,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
         }
     }
 
-    auto batch = TPortionDataAccessor(Portion.get())
+    auto batch = TPortionDataAccessor(*Portion)
                      ->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
                      .AssembleToGeneralContainer(SequentialEntityIds)
                      .DetachResult();

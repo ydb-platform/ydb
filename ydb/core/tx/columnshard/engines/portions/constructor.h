@@ -111,8 +111,8 @@ public:
             MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
         if (withBlobs) {
-            Indexes = portion.GetIndexes();
-            Records = portion.GetRecords();
+            Indexes = portion.Indexes;
+            Records = portion.Records;
             BlobIds = portion.BlobIds;
         }
     }

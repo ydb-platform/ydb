@@ -288,7 +288,7 @@ private:
 
     virtual NJson::TJsonValue DoDebugJsonForMemory() const override {
         NJson::TJsonValue result = TBase::DoDebugJsonForMemory();
-        auto columns = Portion->GetColumnIds();
+        auto columns = TPortionDataAccessor(*Portion).GetColumnIds();
         for (auto&& i : SequentialEntityIds) {
             AFL_VERIFY(columns.erase(i));
         }
@@ -302,7 +302,7 @@ private:
         result.InsertValue("portion_id", Portion->GetPortionId());
         result.InsertValue("raw", Portion->GetTotalRawBytes());
         result.InsertValue("blob", Portion->GetTotalBlobBytes());
-        result.InsertValue("read_memory", GetColumnRawBytes(Portion->GetColumnIds()));
+        result.InsertValue("read_memory", GetColumnRawBytes(TPortionDataAccessor(*Portion).GetColumnIds()));
         return result;
     }
     virtual void DoAbort() override;

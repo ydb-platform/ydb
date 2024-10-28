@@ -116,7 +116,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
                     dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
                 }
                 if (dataColumnIds.size() != resultSchema->GetColumnsCount()) {
-                    for (auto id : i.GetColumnIds()) {
+                    for (auto id : TPortionDataAccessor(i).GetColumnIds()) {
                         if (resultSchema->HasColumnId(id)) {
                             dataColumnIds.emplace(id);
                         }
@@ -239,8 +239,9 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
 ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo& portionInfo) {
     SumMemoryFix += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16)) + portionInfo.GetTotalBlobBytes();
     ++PortionsCount;
-    auto it = MaxMemoryByColumnChunk.begin();
     SumMemoryDelta = 0;
+/*
+    auto it = MaxMemoryByColumnChunk.begin();
     const auto advanceIterator = [&](const ui32 columnId, const ui64 maxColumnChunkRawBytes) {
         while (it != MaxMemoryByColumnChunk.end() && it->ColumnId < columnId) {
             ++it;
@@ -266,6 +267,7 @@ ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPorti
         }
     }
     advanceIterator(columnId, maxChunkSize);
+*/
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_prediction_after", SumMemoryFix + SumMemoryDelta)(
         "portion_info", portionInfo.DebugString());

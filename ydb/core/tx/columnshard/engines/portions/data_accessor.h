@@ -67,6 +67,14 @@ public:
         : PortionInfo(&portionInfo) {
     }
 
+    std::set<ui32> GetColumnIds() const {
+        std::set<ui32> result;
+        for (auto&& i : PortionInfo->Records) {
+            result.emplace(i.GetColumnId());
+        }
+        return result;
+    }
+
     ui64 GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;

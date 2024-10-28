@@ -81,17 +81,16 @@ private:
     ui64 PathId = 0;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();   // {PlanStep, TxId} is min snapshot for {Granule, Portion}
-    TSnapshot RemoveSnapshot =
-        TSnapshot::Zero();   // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
+    TSnapshot RemoveSnapshot = TSnapshot::Zero();
     std::optional<ui64> SchemaVersion;
     std::optional<ui64> ShardingVersion;
 
     TPortionMeta Meta;
-    YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
     YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
     std::vector<TUnifiedBlobId> BlobIds;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
+    std::vector<TIndexChunk> Indexes;
     std::vector<TColumnRecord> Records;
 
 public:
@@ -230,10 +229,6 @@ public:
     static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
-    const std::vector<TColumnRecord>& GetRecords() const {
-        return Records;
-    }
-
     ui64 GetPathId() const {
         return PathId;
     }
@@ -286,14 +281,6 @@ public:
     }
 
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
-
-    std::set<ui32> GetColumnIds() const {
-        std::set<ui32> result;
-        for (auto&& i : Records) {
-            result.emplace(i.GetColumnId());
-        }
-        return result;
-    }
 
     NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;

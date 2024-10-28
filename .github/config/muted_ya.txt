@@ -39,6 +39,7 @@ ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
+ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient

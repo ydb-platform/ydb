@@ -100,7 +100,7 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
 }
 
 void TPortionInfoConstructor::LoadRecord(const TIndexInfo& indexInfo, const TColumnChunkLoadContext& loadContext) {
-    TColumnRecord rec(RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext, indexInfo.GetColumnFeaturesVerified(loadContext.GetAddress().GetColumnId()));
+    TColumnRecord rec(RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext);
     Records.push_back(std::move(rec));
 
     if (loadContext.GetPortionMeta()) {

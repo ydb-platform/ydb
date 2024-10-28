@@ -66,7 +66,17 @@ public:
         ui64 SumMemoryDelta = 0;
         ui64 SumMemoryFix = 0;
         ui32 PortionsCount = 0;
-        THashMap<ui32, ui64> MaxMemoryByColumnChunk;
+        class TColumnInfo {
+        public:
+            const ui32 ColumnId;
+            ui64 MemoryUsage = 0;
+            TColumnInfo(const ui32 columnId)
+                : ColumnId(columnId)
+            {
+
+            }
+        };
+        std::list<TColumnInfo> MaxMemoryByColumnChunk;
 
     public:
         virtual ui64 AddPortion(const TPortionInfo& portionInfo) override;

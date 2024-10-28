@@ -204,7 +204,6 @@ public:
     }
 
     void FullValidation() const;
-    void ReorderChunks();
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));

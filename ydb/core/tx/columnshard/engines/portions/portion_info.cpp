@@ -198,41 +198,6 @@ ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) cons
     return index.GetSchema(MinSnapshotDeprecated);
 }
 
-void TPortionInfo::ReorderChunks() {
-    {
-        auto pred = [](const TColumnRecord& l, const TColumnRecord& r) {
-            return l.GetAddress() < r.GetAddress();
-        };
-        std::sort(Records.begin(), Records.end(), pred);
-        std::optional<TChunkAddress> chunk;
-        for (auto&& i : Records) {
-            if (!chunk) {
-                chunk = i.GetAddress();
-            } else {
-                AFL_VERIFY(*chunk < i.GetAddress());
-                chunk = i.GetAddress();
-            }
-            AFL_VERIFY(chunk->GetEntityId());
-        }
-    }
-    {
-        auto pred = [](const TIndexChunk& l, const TIndexChunk& r) {
-            return l.GetAddress() < r.GetAddress();
-        };
-        std::sort(Indexes.begin(), Indexes.end(), pred);
-        std::optional<TChunkAddress> chunk;
-        for (auto&& i : Indexes) {
-            if (!chunk) {
-                chunk = i.GetAddress();
-            } else {
-                AFL_VERIFY(*chunk < i.GetAddress());
-                chunk = i.GetAddress();
-            }
-            AFL_VERIFY(chunk->GetEntityId());
-        }
-    }
-}
-
 void TPortionInfo::FullValidation() const {
     TPortionDataAccessor::CheckChunksOrder(Records);
     TPortionDataAccessor::CheckChunksOrder(Indexes);

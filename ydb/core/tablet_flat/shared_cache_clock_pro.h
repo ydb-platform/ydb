@@ -401,7 +401,7 @@ private:
         }
     }
 
-    TPageEntry* AsEntry(THashSet<TPageEntry, TPageKeyHash, TPageKeyEqual>::iterator it) const {
+    TPageEntry* AsEntry(typename THashSet<TPageEntry, TPageKeyHash, TPageKeyEqual>::iterator it) const {
         return const_cast<TPageEntry*>(&*it);
     }
 

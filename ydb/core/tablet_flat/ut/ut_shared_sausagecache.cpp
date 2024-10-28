@@ -128,7 +128,7 @@ void RestartAndClearCache(TMyEnvBase& env) {
     env->GetMemObserver()->NotifyStat({200*MB, 100*MB, 100*MB});
     WaitEvent(env, NSharedCache::EvMem);
 
-    env->GetMemObserver()->NotifyStat({100*MB, 200*MB, 200*MB});
+    env->GetMemObserver()->NotifyStat({100*MB, 108*MB, 108*MB});
     WaitEvent(env, NSharedCache::EvMem);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
@@ -137,7 +137,7 @@ void RestartAndClearCache(TMyEnvBase& env) {
 void SwitchPolicy(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy) {
     auto configure = MakeHolder<TEvSharedPageCache::TEvConfigure>();
     configure->Record.SetReplacementPolicy(policy);
-    configure->Record.SetMemoryLimit(8_MB);
+    configure->Record.SetMemoryLimit(0); // no limit
     env->Send(MakeSharedPageCacheId(), TActorId{}, configure.Release());
     WaitEvent(env, TEvSharedPageCache::EvConfigure);
 }
@@ -151,6 +151,11 @@ Y_UNIT_TEST(Limits) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    auto configure = MakeHolder<TEvSharedPageCache::TEvConfigure>();
+    configure->Record.SetMemoryLimit(8_MB);
+    env->Send(MakeSharedPageCacheId(), TActorId{}, configure.Release());
+    WaitEvent(env, TEvSharedPageCache::EvConfigure);
 
     SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
 
@@ -320,6 +325,9 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
+    env->GetMemObserver()->NotifyStat({100*MB, 108*MB, 108*MB});
+    WaitEvent(env, NSharedCache::EvMem);
+
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
         TString value(size_t(100 * 1024), char('a' + key % 26));
@@ -419,6 +427,9 @@ Y_UNIT_TEST(S3FIFO) {
     SwitchPolicy(env, NKikimrSharedCache::S3FIFO);
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
+    env->GetMemObserver()->NotifyStat({100*MB, 108*MB, 108*MB});
+    WaitEvent(env, NSharedCache::EvMem);
+
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
         TString value(size_t(100 * 1024), char('a' + key % 26));
@@ -517,6 +528,9 @@ Y_UNIT_TEST(ClockPro) {
 
     SwitchPolicy(env, NKikimrSharedCache::ClockPro);
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+
+    env->GetMemObserver()->NotifyStat({100*MB, 108*MB, 108*MB});
+    WaitEvent(env, NSharedCache::EvMem);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {

@@ -17,6 +17,25 @@ class TPortionDataAccessor {
 private:
     const TPortionInfo* PortionInfo;
 
+    template <class TChunkInfo>
+    static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
+        ui32 entityId = 0;
+        ui32 chunkIdx = 0;
+        for (auto&& i : chunks) {
+            if (entityId != i.GetEntityId()) {
+                AFL_VERIFY(entityId < i.GetEntityId());
+                AFL_VERIFY(i.GetChunkIdx() == 0);
+                entityId = i.GetEntityId();
+                chunkIdx = 0;
+            } else {
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
+                chunkIdx = i.GetChunkIdx();
+            }
+        }
+    }
+
+    void FullValidation() const;
+
 public:
     template <class TAggregator, class TChunkInfo>
     static void AggregateIndexChunksData(
@@ -46,23 +65,6 @@ public:
         }
     }
 
-    template <class TChunkInfo>
-    static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
-        ui32 entityId = 0;
-        ui32 chunkIdx = 0;
-        for (auto&& i : chunks) {
-            if (entityId != i.GetEntityId()) {
-                AFL_VERIFY(entityId < i.GetEntityId());
-                AFL_VERIFY(i.GetChunkIdx() == 0);
-                entityId = i.GetEntityId();
-                chunkIdx = 0;
-            } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1);
-                chunkIdx = i.GetChunkIdx();
-            }
-        }
-    }
-
     TPortionDataAccessor(const TPortionInfo& portionInfo)
         : PortionInfo(&portionInfo) {
     }
@@ -74,6 +76,9 @@ public:
         }
         return result;
     }
+
+    void RemoveFromDatabase(IDbWrapper& db) const;
+    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
 
     NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;

@@ -160,7 +160,7 @@ public:
         auto copy = *portion;
         modifier(copy);
         TDbWrapper wrapper(db, nullptr);
-        copy.SaveToDatabase(wrapper, 0, true);
+        TPortionDataAccessor(copy).SaveToDatabase(wrapper, 0, true);
     }
 
     template <class TModifier>
@@ -172,10 +172,10 @@ public:
     }
 
     void InsertPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TPortionInfo>& portion) const {
+        NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
         AFL_VERIFY(!InsertedPortions.contains(portion->GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
-        portion->SaveToDatabase(wrapper, 0, false);
+        portion.SaveToDatabase(wrapper, 0, false);
     }
 
     void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {

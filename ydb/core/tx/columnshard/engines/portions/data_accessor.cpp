@@ -494,6 +494,52 @@ ui64 TPortionDataAccessor::GetMinMemoryForReadColumns(const std::optional<std::s
     return maxRawBytes;
 }
 
+void TPortionDataAccessor::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
+    FullValidation();
+    db.WritePortion(*PortionInfo);
+    if (!saveOnlyMeta) {
+        for (auto& record : PortionInfo->Records) {
+            db.WriteColumn(*this, record, firstPKColumnId);
+        }
+        for (auto& record : PortionInfo->Indexes) {
+            db.WriteIndex(*this, record);
+        }
+    }
+}
+
+void TPortionDataAccessor::RemoveFromDatabase(IDbWrapper& db) const {
+    db.ErasePortion(*PortionInfo);
+    for (auto& record : PortionInfo->Records) {
+        db.EraseColumn(*this, record);
+    }
+    for (auto& record : PortionInfo->Indexes) {
+        db.EraseIndex(*this, record);
+    }
+}
+
+void TPortionDataAccessor::FullValidation() const {
+    CheckChunksOrder(PortionInfo->Records);
+    CheckChunksOrder(PortionInfo->Indexes);
+    AFL_VERIFY(PathId);
+    AFL_VERIFY(PortionId);
+    AFL_VERIFY(MinSnapshotDeprecated.Valid());
+    std::set<ui32> blobIdxs;
+    for (auto&& i : PortionInfo->Records) {
+        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+    }
+    for (auto&& i : PortionInfo->Indexes) {
+        if (auto bRange = i.GetBlobRangeOptional()) {
+            blobIdxs.emplace(bRange->GetBlobIdxVerified());
+        }
+    }
+    if (BlobIds.size()) {
+        AFL_VERIFY(BlobIds.size() == blobIdxs.size());
+        AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
+    } else {
+        AFL_VERIFY(blobIdxs.empty());
+    }
+}
+
 TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAccessor::TPreparedColumn::AssembleAccessor() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 

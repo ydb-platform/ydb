@@ -57,29 +57,6 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     return sb << ")";
 }
 
-void TPortionInfo::RemoveFromDatabase(IDbWrapper& db) const {
-    db.ErasePortion(*this);
-    for (auto& record : Records) {
-        db.EraseColumn(*this, record);
-    }
-    for (auto& record : Indexes) {
-        db.EraseIndex(*this, record);
-    }
-}
-
-void TPortionInfo::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
-    FullValidation();
-    db.WritePortion(*this);
-    if (!saveOnlyMeta) {
-        for (auto& record : Records) {
-            db.WriteColumn(*this, record, firstPKColumnId);
-        }
-        for (auto& record : Indexes) {
-            db.WriteIndex(*this, record);
-        }
-    }
-}
-
 ui64 TPortionInfo::GetMetadataMemorySize() const {
     return sizeof(TPortionInfo) + Records.size() * (sizeof(TColumnRecord) + 8) + Indexes.size() * sizeof(TIndexChunk) +
            BlobIds.size() * sizeof(TUnifiedBlobId) - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
@@ -196,29 +173,6 @@ ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) cons
         return schema;
     }
     return index.GetSchema(MinSnapshotDeprecated);
-}
-
-void TPortionInfo::FullValidation() const {
-    TPortionDataAccessor::CheckChunksOrder(Records);
-    TPortionDataAccessor::CheckChunksOrder(Indexes);
-    AFL_VERIFY(PathId);
-    AFL_VERIFY(PortionId);
-    AFL_VERIFY(MinSnapshotDeprecated.Valid());
-    std::set<ui32> blobIdxs;
-    for (auto&& i : Records) {
-        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
-    }
-    for (auto&& i : Indexes) {
-        if (auto bRange = i.GetBlobRangeOptional()) {
-            blobIdxs.emplace(bRange->GetBlobIdxVerified());
-        }
-    }
-    if (BlobIds.size()) {
-        AFL_VERIFY(BlobIds.size() == blobIdxs.size());
-        AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
-    } else {
-        AFL_VERIFY(blobIdxs.empty());
-    }
 }
 
 ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {

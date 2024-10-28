@@ -206,8 +206,6 @@ public:
         return (RuntimeFeatures & (TRuntimeFeatures)feature);
     }
 
-    void FullValidation() const;
-
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
     }
@@ -234,10 +232,6 @@ public:
     ui64 GetPathId() const {
         return PathId;
     }
-
-    void RemoveFromDatabase(IDbWrapper& db) const;
-
-    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
 
     bool OlderThen(const TPortionInfo& info) const {
         return RecordSnapshotMin() < info.RecordSnapshotMin();

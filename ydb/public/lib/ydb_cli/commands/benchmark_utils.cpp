@@ -6,10 +6,12 @@
 #include <util/folder/pathsplit.h>
 #include <util/folder/path.h>
 
+#include <library/cpp/colorizer/colors.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/csv/csv.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
@@ -669,20 +671,28 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
             return false;
         }
     }
-    bool hasDiff = false;
+    TVector<TVector<TString>> diffs;
     for (ui32 i = 0; i < expectedLines.size() - 1; ++i) {
         TString copy = expectedLines[i + 1];
         NCsvFormat::CsvSplitter splitter(copy);
         bool isCorrectCurrent = true;
+        TVector<TString> lineDiff(columnIndexes.size() + 1, ToString(i));
+        bool hasDiff = false;
         for (ui32 cIdx = 0; cIdx < columnIndexes.size(); ++cIdx) {
             const NYdb::TValue& resultValue = Result[i][columnIndexes[cIdx]];
             if (!isCorrectCurrent) {
                 Cerr << "has diff: no element in expectation" << Endl;
                 return false;
             }
-            TStringBuf cItem = splitter.Consume();
-            if (!CompareValue(resultValue, cItem)) {
-                Cerr << "Line " << i << ", column " << Columns[cIdx].Name << " has diff: " <<  TStringBuf(resultValue.GetProto().DebugString()).Before('\n') << "; EXPECTED:" << cItem << Endl;
+            TStringBuf expectedValue = splitter.Consume();
+            const TString resultStr = FormatValueYson(resultValue);
+            if (CompareValue(resultValue, expectedValue)) {
+                lineDiff[cIdx + 1] = resultStr;
+            } else {
+                auto& colors = NColorizer::StdErr();
+                lineDiff[cIdx + 1] = TStringBuilder()
+                    << colors.Red()  << resultStr << colors.Reset()
+                    << " (" << colors.Green()  << expectedValue << colors.Reset() << ")";
                 hasDiff = true;
             }
             isCorrectCurrent = splitter.Step();
@@ -691,8 +701,28 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
             Cerr << "expected more columns than have in result" << Endl;
             return false;
         }
+        if (hasDiff) {
+            diffs.emplace_back(std::move(lineDiff));
+        }
     }
-    return !hasDiff;
+    if (!diffs.empty()) {
+        TVector<TString> tableColums {"Line"};
+        tableColums.reserve(columnIndexes.size() + 1);
+        for (const auto& col: Columns) {
+            tableColums.emplace_back(col.Name);
+        }
+        TPrettyTable table(tableColums);
+        for (const auto& diffLine: diffs) {
+            auto& row = table.AddRow();
+            for (ui32 i = 0; i < diffLine.size(); ++i) {
+                row.Column(i, diffLine[i]);
+            }
+        }
+        Cerr << "There is diff in results: " << Endl;
+        table.Print(Cerr);
+        return false;
+    }
+    return true;
 }
 
 } // NYdb::NConsoleClient::BenchmarkUtils

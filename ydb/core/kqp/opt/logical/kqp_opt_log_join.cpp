@@ -980,6 +980,10 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
         return node;
     }
 
+    /* 
+     * this cycle looks for applied hints for these join labels. if we've found one then we will leave the function.
+     * But if it is a LookupJoin we will rewrite it with KqpJoinToIndexLookupImpl because lookup join needs to be rewritten
+     */
     auto joinLabels = CollectLabels(node);
     for (const auto& hint: hints.JoinAlgoHints->Hints) {
         if (

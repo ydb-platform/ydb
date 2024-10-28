@@ -7,7 +7,7 @@ import "ydb/core/scheme/protos/key_range.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/data_events.proto";
 import "ydb/core/protos/kqp.proto";
-import "ydb/core/formats/arrow/protos/ssa.proto";
+import "ydb/library/formats/arrow/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
@@ -451,6 +451,12 @@ message TMoveIndex {
     optional TRemapIndexPathId ReMapIndex = 3;
 }
 
+
+message TCreateIncrementalBackupSrc {
+    optional TSendSnapshot SendSnapshot = 1;
+    optional TCreateCdcStreamNotice CreateCdcStreamNotice = 2;
+}
+
 message TFlatSchemeTransaction {
     optional NKikimrSchemeOp.TTableDescription CreateTable = 1;
     optional NKikimrSchemeOp.TTableDescription DropTable = 2;
@@ -480,6 +486,9 @@ message TFlatSchemeTransaction {
     optional TAlterCdcStreamNotice AlterCdcStreamNotice = 19;
     optional TDropCdcStreamNotice DropCdcStreamNotice = 20;
     optional TMoveIndex MoveIndex = 21;
+
+    optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
+    optional TCreateIncrementalBackupSrc CreateIncrementalBackupSrc = 23;
 }
 
 message TDistributedEraseTransaction {
@@ -809,6 +818,7 @@ message TEvPeriodicTableStats {
     optional bool IsDstSplit = 13;
 
     repeated TEvPeriodicTableStats Tables = 14;
+    optional uint32 FollowerId = 15;
 }
 
 message TObjectStorageListingFilter {
@@ -1195,10 +1205,24 @@ message TEvGetRSInfoResponse {
         optional uint64 SeqNo = 6;
     }
 
+    message TExpectation {
+        optional uint64 Source = 1;
+        optional uint64 TxId = 2;
+        optional uint64 Step = 3;
+    }
+
+    message TPipe {
+        optional uint64 Destination = 1;
+        optional uint64 OutReadSets = 2;
+        optional bool Subscribed = 3;
+    }
+
     optional TStatus Status = 1;
     repeated TOutRSInfo OutReadSets = 2;
     repeated TRSAckInfo OutRSAcks = 3;
     repeated TRSAckInfo DelayedRSAcks = 4;
+    repeated TExpectation Expectations = 5;
+    repeated TPipe Pipes = 6;
 }
 
 message TEvGetDataHistogramRequest {
@@ -1507,10 +1531,10 @@ message TEvLocalKMeansRequest {
         UNSPECIFIED = 0;
         SAMPLE = 1;
         KMEANS = 2;
-        UPLOAD_MAIN_TO_TMP = 3;
+        UPLOAD_MAIN_TO_BUILD = 3;
         UPLOAD_MAIN_TO_POSTING = 4;
-        UPLOAD_TMP_TO_TMP = 5;
-        UPLOAD_TMP_TO_POSTING = 6;
+        UPLOAD_BUILD_TO_BUILD = 5;
+        UPLOAD_BUILD_TO_POSTING = 6;
         DONE = 7;
     };
     optional EState Upload = 11;
@@ -1522,7 +1546,7 @@ message TEvLocalKMeansRequest {
 
     // id of parent cluster
     optional uint32 Parent = 15;
-    // [Child ... Child + K] ids reserved for our clusters
+    // [Child ... Child + K) ids reserved for this kmeans clusters
     optional uint32 Child = 16;
 
     optional string LevelName = 17;
@@ -1532,7 +1556,7 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 }
 
-message TEvLocalKMeansProgressResponse {
+message TEvLocalKMeansResponse {
     optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;
@@ -1550,6 +1574,53 @@ message TEvLocalKMeansProgressResponse {
 
     // optional TEvLocalKMeansRequest.EState State = 10;
     // optional uint32 DoneRounds = 11;
+}
+
+message TEvReshuffleKMeansRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 SnapshotTxId = 4;
+    optional uint64 SnapshotStep = 5;
+
+    optional uint64 SeqNoGeneration = 6;
+    optional uint64 SeqNoRound = 7;
+
+    optional Ydb.Table.VectorIndexSettings Settings = 8;
+
+    optional TEvLocalKMeansRequest.EState Upload = 9;
+
+    // id of parent cluster
+    optional uint32 Parent = 10;
+    // [Child ... Child + ClustersSize) ids of this kmeans clusters
+    optional uint32 Child = 11;
+    // centroids of clusters
+    repeated string Clusters = 12;
+
+    optional string PostingName = 13;
+
+    optional string EmbeddingColumn = 14;
+    repeated string DataColumns = 15;
+}
+
+message TEvReshuffleKMeansResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    // TODO(mbkkt) implement slow-path (reliable-path)
+    // optional uint64 RowsDelta = 8;
+    // optional uint64 BytesDelta = 9;
+    // optional last written primary key
 }
 
 message TEvCdcStreamScanRequest {
@@ -1777,6 +1848,24 @@ message TEvRead {
 
     // Limits total number of rows which iterator can read.
     optional uint64 TotalRowsLimit = 12;
+
+    enum EHint {
+        // No hits. This is the default.
+        HINT_NONE = 0;
+
+        // This hint should be specified for batch queries. DataShard will
+        // attempt to run this query as a scan when possible, minimizing
+        // effects on concurrent OLTP queries.
+        HINT_BATCH = 1;
+
+        // This hint should be specified for low priority queries. DataShard
+        // will attempt to use low-priority reads when possible, minimizing
+        // effects on concurrent OLTP queries.
+        HINT_LOW_PRIORITY = 2;
+    }
+
+    // Optional bit flags with hints
+    optional uint32 Hints = 13;
 
     // Request must contain either keys, queries or program
     // mixed requests are not supported

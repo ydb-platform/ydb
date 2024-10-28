@@ -432,7 +432,7 @@ struct test_accept_many_args {
 };
 
 /*
- * Test issue many accepts and see if we handle cancellation on exit
+ * Test issue many accepts and see if we handle cancelation on exit
  */
 static int test_accept_many(struct test_accept_many_args args)
 {
@@ -487,7 +487,7 @@ static int test_accept_many(struct test_accept_many_args args)
 		if (io_uring_peek_cqe(&m_io_uring, &cqe))
 			break;
 		if (cqe->res != -ECANCELED) {
-			fprintf(stderr, "Expected cqe to be cancelled %d\n", cqe->res);
+			fprintf(stderr, "Expected cqe to be canceled %d\n", cqe->res);
 			ret = 1;
 			goto out;
 		}

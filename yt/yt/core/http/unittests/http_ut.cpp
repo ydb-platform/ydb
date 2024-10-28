@@ -159,6 +159,11 @@ struct TFakeConnection
     TString Input;
     TString Output;
 
+    TConnectionId GetId() const override
+    {
+        return {};
+    }
+
     bool SetNoDelay() override
     {
         return true;
@@ -201,6 +206,11 @@ struct TFakeConnection
         return true;
     }
 
+    bool IsReusable() const override
+    {
+        return true;
+    }
+
     TFuture<void> Abort() override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
@@ -216,12 +226,12 @@ struct TFakeConnection
         THROW_ERROR_EXCEPTION("Not implemented");
     }
 
-    const TNetworkAddress& LocalAddress() const override
+    const TNetworkAddress& GetLocalAddress() const override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
     }
 
-    const TNetworkAddress& RemoteAddress() const override
+    const TNetworkAddress& GetRemoteAddress() const override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
     }
@@ -1149,7 +1159,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         auto response = New<THttpInput>(
             connection,
-            connection->RemoteAddress(),
+            connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
             New<THttpIOConfig>());
@@ -1183,7 +1193,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         auto response = New<THttpInput>(
             connection,
-            connection->RemoteAddress(),
+            connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
             New<THttpIOConfig>());

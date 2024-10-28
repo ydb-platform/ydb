@@ -4,7 +4,7 @@
 
 ### Сигнатура
 
-```
+```yql
 DictCreate(K,V)->Dict<K,V>
 ```
 
@@ -20,15 +20,15 @@ DictCreate(K,V)->Dict<K,V>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictCreate(String, Tuple<String,Double?>);
 ```
 
-``` yql
+```yql
 SELECT DictCreate(Tuple<Int32?,String>, OptionalType(DataType("String")));
 ```
 
-``` yql
+```yql
 SELECT DictCreate(ParseType("Tuple<Int32?,String>"), ParseType("Tuple<String,Double?>"));
 ```
 
@@ -36,7 +36,7 @@ SELECT DictCreate(ParseType("Tuple<Int32?,String>"), ParseType("Tuple<String,Dou
 
 ### Сигнатура
 
-```
+```yql
 SetCreate(T)->Set<T>
 ```
 
@@ -46,11 +46,11 @@ SetCreate(T)->Set<T>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT SetCreate(String);
 ```
 
-``` yql
+```yql
 SELECT SetCreate(Tuple<Int32?,String>);
 ```
 
@@ -58,7 +58,7 @@ SELECT SetCreate(Tuple<Int32?,String>);
 
 ### Сигнатура
 
-```
+```yql
 DictLength(Dict<K,V>)->Uint64
 DictLength(Dict<K,V>?)->Uint64?
 ```
@@ -67,12 +67,13 @@ DictLength(Dict<K,V>?)->Uint64?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictLength(AsDict(AsTuple(1, AsList("foo", "bar"))));
 ```
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT DictLength(dict_column) FROM my_table;
 ```
 
@@ -82,7 +83,7 @@ SELECT DictLength(dict_column) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 DictHasItems(Dict<K,V>)->Bool
 DictHasItems(Dict<K,V>?)->Bool?
 ```
@@ -91,21 +92,23 @@ DictHasItems(Dict<K,V>?)->Bool?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictHasItems(AsDict(AsTuple(1, AsList("foo", "bar")))) FROM my_table;
 ```
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT DictHasItems(dict_column) FROM my_table;
 ```
+
 {% endif %}
 
 ## DictItems {#dictitems}
 
 ### Сигнатура
 
-```
+```yql
 DictItems(Dict<K,V>)->List<Tuple<K,V>>
 DictItems(Dict<K,V>?)->List<Tuple<K,V>>?
 ```
@@ -114,23 +117,25 @@ DictItems(Dict<K,V>?)->List<Tuple<K,V>>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictItems(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ ( 1, [ "foo", "bar" ] ) ]
 ```
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT DictItems(dict_column)
 FROM my_table;
 ```
+
 {% endif %}
 
 ## DictKeys {#dictkeys}
 
 ### Сигнатура
 
-```
+```yql
 DictKeys(Dict<K,V>)->List<K>
 DictKeys(Dict<K,V>?)->List<K>?
 ```
@@ -139,13 +144,14 @@ DictKeys(Dict<K,V>?)->List<K>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictKeys(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ 1 ]
 ```
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT DictKeys(dict_column)
 FROM my_table;
 ```
@@ -156,7 +162,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 DictPayloads(Dict<K,V>)->List<V>
 DictPayloads(Dict<K,V>?)->List<V>?
 ```
@@ -165,22 +171,25 @@ DictPayloads(Dict<K,V>?)->List<V>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictPayloads(AsDict(AsTuple(1, AsList("foo", "bar"))));
 -- [ [ "foo", "bar" ] ]
 ```
+
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT DictPayloads(dict_column)
 FROM my_table;
 ```
+
 {% endif %}
 
 ## DictLookup {#dictlookup}
 
 ### Сигнатура
 
-```
+```yql
 DictLookup(Dict<K,V>, K)->V?
 DictLookup(Dict<K,V>?, K)->V?
 DictLookup(Dict<K,V>, K?)->V?
@@ -191,7 +200,7 @@ DictLookup(Dict<K,V>?, K?)->V?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictLookup(AsDict(
     AsTuple(1, AsList("foo", "bar")),
     AsTuple(2, AsList("bar", "baz"))
@@ -200,7 +209,8 @@ SELECT DictLookup(AsDict(
 ```
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT DictLookup(dict_column, "foo")
 FROM my_table;
 ```
@@ -211,7 +221,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 DictContains(Dict<K,V>, K)->Bool
 DictContains(Dict<K,V>?, K)->Bool
 DictContains(Dict<K,V>, K?)->Bool
@@ -222,7 +232,7 @@ DictContains(Dict<K,V>?, K?)->Bool
 
 ### Примеры
 
-``` yql
+```yql
 SELECT DictContains(AsDict(
     AsTuple(1, AsList("foo", "bar")),
     AsTuple(2, AsList("bar", "baz"))
@@ -231,17 +241,19 @@ SELECT DictContains(AsDict(
 ```
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT DictContains(dict_column, "foo")
 FROM my_table;
 ```
+
 {% endif %}
 
 ## DictAggregate {#dictaggregate}
 
 ### Сигнатура
 
-```
+```yql
 DictAggregate(Dict<K,List<V>>, List<V>->T)->Dict<K,T>
 DictAggregate(Dict<K,List<V>>?, List<V>->T)->Dict<K,T>?
 ```
@@ -271,7 +283,7 @@ SELECT DictAggregate(AsDict(
 
 ### Сигнатура
 
-```
+```yql
 SetIsDisjoint(Dict<K,V1>, Dict<K,V2>)->Bool
 SetIsDisjoint(Dict<K,V1>?, Dict<K,V2>)->Bool?
 SetIsDisjoint(Dict<K,V1>, Dict<K,V2>?)->Bool?
@@ -301,7 +313,7 @@ SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- false
 
 ### Сигнатура
 
-```
+```yql
 SetIntersection(Dict<K,V1>, Dict<K,V2>)->Set<K>
 SetIntersection(Dict<K,V1>?, Dict<K,V2>)->Set<K>?
 SetIntersection(Dict<K,V1>, Dict<K,V2>?)->Set<K>?
@@ -322,7 +334,7 @@ SetIntersection(Dict<K,V1>?, Dict<K,V2>?, (K,V1,V2)->U)->Dict<K,U>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT SetIntersection(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 3 }
 SELECT SetIntersection(
     AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
@@ -341,7 +353,7 @@ SELECT SetIntersection(
 
 ### Сигнатура
 
-```
+```yql
 SetIncludes(Dict<K,V1>, List<K>)->Bool
 SetIncludes(Dict<K,V1>?, List<K>)->Bool?
 SetIncludes(Dict<K,V1>, List<K>?)->Bool?
@@ -362,7 +374,7 @@ SetIncludes(Dict<K,V1>?, Dict<K,V2>?)->Bool?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT SetIncludes(ToSet(AsList(1, 2, 3)), AsList(3, 4)); -- false
 SELECT SetIncludes(ToSet(AsList(1, 2, 3)), ToSet(AsList(2, 3))); -- true
 ```
@@ -371,7 +383,7 @@ SELECT SetIncludes(ToSet(AsList(1, 2, 3)), ToSet(AsList(2, 3))); -- true
 
 ### Сигнатура
 
-```
+```yql
 SetUnion(Dict<K,V1>, Dict<K,V2>)->Set<K>
 SetUnion(Dict<K,V1>?, Dict<K,V2>)->Set<K>?
 SetUnion(Dict<K,V1>, Dict<K,V2>?)->Set<K>?
@@ -392,7 +404,7 @@ SetUnion(Dict<K,V1>?, Dict<K,V2>?,(K,V1?,V2?)->U)->Dict<K,U>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT SetUnion(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 3, 4 }
 SELECT SetUnion(
     AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
@@ -405,7 +417,7 @@ SELECT SetUnion(
 
 ### Сигнатура
 
-```
+```yql
 SetDifference(Dict<K,V1>, Dict<K,V2>)->Dict<K,V1>
 SetDifference(Dict<K,V1>?, Dict<K,V2>)->Dict<K,V1>?
 SetDifference(Dict<K,V1>, Dict<K,V2>?)->Dict<K,V1>?
@@ -416,7 +428,7 @@ SetDifference(Dict<K,V1>?, Dict<K,V2>?)->Dict<K,V1>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT SetDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2 }
 SELECT SetDifference(
     AsDict(AsTuple(1, "foo"), AsTuple(2, "bar")),
@@ -428,7 +440,7 @@ SELECT SetDifference(
 
 ### Сигнатура
 
-```
+```yql
 SetSymmetricDifference(Dict<K,V1>, Dict<K,V2>)->Set<K>
 SetSymmetricDifference(Dict<K,V1>?, Dict<K,V2>)->Set<K>?
 SetSymmetricDifference(Dict<K,V1>, Dict<K,V2>?)->Set<K>?
@@ -449,7 +461,7 @@ SetSymmetricDifference(Dict<K,V1>?, Dict<K,V2>?,(K,V1?,V2?)->U)->Dict<K,U>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT SetSymmetricDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 4 }
 SELECT SetSymmetricDifference(
     AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),

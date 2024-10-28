@@ -11,6 +11,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -87,6 +88,19 @@ public:
         SetGlobal(4u);
     }
 
+public:
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        auto status = TOptimizeTransformerBase::DoTransform(input, output, ctx);
+        
+        if (status == TStatus::Ok) {
+            for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedString()) {
+                ctx.AddWarning(YqlIssue({}, TIssuesIds::YQL_UNUSED_HINT, "Unapplied hint: " + hint));
+            }
+        }
+
+        return status;
+    }
+
 protected:
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
@@ -152,14 +166,10 @@ protected:
         auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPccpDPTableSize));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
-                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), stat, node));
+                rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
             },
             KqpCtx.EquiJoinsCount,
-            TOptimizerHints{
-                .CardinalityHints = KqpCtx.GetCardinalityHints(),
-                .JoinAlgoHints = KqpCtx.GetJoinAlgoHints(),
-                .JoinOrderHints = KqpCtx.GetJoinOrderHints()
-            }
+            KqpCtx.GetOptimizerHints()
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;

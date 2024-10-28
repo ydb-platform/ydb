@@ -54,6 +54,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request_);
         SetDatabase(ev, *Request_);
+        ev->Record.MutableRequest()->SetClientAddress(Request_->GetPeerName());
 
         if (CheckSession(req->session_id(), Request_.get())) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -83,7 +84,7 @@ private:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *GetProtoRequest(), ev, ctx);
 
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         SetCost(record.GetConsumedRu());
         AddServerHintsIfAny(record);
 

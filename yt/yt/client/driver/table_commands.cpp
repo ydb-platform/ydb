@@ -836,6 +836,12 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
             return command->Options.VersionedReadOptions;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_lookup_cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseLookupCache;
+        })
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const
@@ -1558,6 +1564,14 @@ void TAlterTableReplicaCommand::Register(TRegistrar registrar)
             return command->Options.EnableReplicatedTableTracker;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+        "replica_path",
+        [] (TThis* command) -> auto& {
+            return command->Options.ReplicaPath;
+        })
+        .Optional(/*init*/ false);
+
 }
 
 void TAlterTableReplicaCommand::DoExecute(ICommandContextPtr context)

@@ -1,11 +1,11 @@
 #pragma once
-#include "xx_hash.h"
 #include <ydb/core/formats/arrow/common/adapter.h>
-#include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>

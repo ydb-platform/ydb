@@ -4,7 +4,7 @@
 
 namespace NYql::NDq {
 
-void RegisterS3ReadActorFactory(
+inline void RegisterS3ReadActorFactory(
     TDqAsyncIoFactory& factory,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr gateway = IHTTPGateway::Make(),

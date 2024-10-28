@@ -3,6 +3,8 @@
 #include "oidc_protected_page_yandex.h"
 
 namespace NMVP {
+namespace NOIDC {
+
 TProtectedPageHandler::TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
     : TBase(&TProtectedPageHandler::StateWork)
     , HttpProxyId(httpProxyId)
@@ -20,4 +22,5 @@ void TProtectedPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
     }
 }
 
+}  // NOIDC
 }  // NMVP

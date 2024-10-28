@@ -1,0 +1,15 @@
+--- a/src/google/protobuf/arena.h	(index)
++++ b/src/google/protobuf/arena.h	(working tree)
+@@ -242,1 +242,1 @@ struct ArenaOptions {
+-class PROTOBUF_EXPORT PROTOBUF_ALIGNAS(8) Arena final {
++class PROTOBUF_EXPORT PROTOBUF_ALIGNAS(8) Arena {
+--- a/src/google/protobuf/repeated_field.h	(index)
++++ b/src/google/protobuf/repeated_field.h	(working tree)
+@@ -163,1 +163,1 @@ PROTO_MEMSWAP_DEF_SIZE(uint64, (1u << 31))
+-class RepeatedField final {
++class RepeatedField {
+--- a/src/google/protobuf/repeated_ptr_field.h	(index)
++++ b/src/google/protobuf/repeated_ptr_field.h	(working tree)
+@@ -521,1 +521,1 @@ class StringTypeHandler {
+-class RepeatedPtrField final : private internal::RepeatedPtrFieldBase {
++class RepeatedPtrField : private internal::RepeatedPtrFieldBase {

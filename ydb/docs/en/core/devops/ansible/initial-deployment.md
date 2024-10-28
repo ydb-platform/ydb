@@ -1,5 +1,7 @@
 # Deploying {{ ydb-short-name }} cluster with Ansible
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 This guide outlines the process of deploying a {{ ydb-short-name }} cluster on a group of servers using [Ansible](https://www.ansible.com/). The recommended setup to get started is 3 servers with 3 disk drives for user data each. For reliability purposes each server should have as independent infrastructure as possible: they'd better be each in a separate datacenter or availability zone, or at least in different server racks.
 
 For large-scale setups, it is recommended to use at least 9 servers for highly available clusters (`mirror-3-dc`) or 8 servers for single-datacenter clusters (`block-4-2`). In these cases, servers can have only one disk drive for user data each, but they'd better have an additional small drive for the operating system. You can learn about redundancy models available in {{ ydb-short-name }} from the [{#T}](../../concepts/topology.md) article. During operation, the cluster can be [expanded](../../maintenance/manual/cluster_expansion.md) without suspending user access to the databases.
@@ -147,7 +149,7 @@ After modifying the inventory files, you can proceed to prepare the {{ ydb-short
 
 ### Prepare the {{ ydb-short-name }} configuration file {#ydb-config-prepare}
 
-The {{ ydb-short-name }} configuration file contains the settings for {{ ydb-short-name }} nodes and is located in the subdirectory `/files/config.yaml`. A detailed description of the configuration file settings for {{ ydb-short-name }} can be found in the article [{#T}](../../deploy/configuration/config.md).
+The {{ ydb-short-name }} configuration file contains the settings for {{ ydb-short-name }} nodes and is located in the subdirectory `/files/config.yaml`. A detailed description of the configuration file settings for {{ ydb-short-name }} can be found in the article [{#T}](../../reference/configuration/index.md).
 
 The default {{ ydb-short-name }} configuration file already includes almost all the necessary settings for deploying the cluster. You need to replace the standard FQDNs of hosts with the current FQDNs in the `hosts` and `blob_storage_config` sections:
 
@@ -199,7 +201,6 @@ To prepare your template, you can follow the instructions below:
 4. Make changes to the {{ ydb-short-name }} configuration file according to the [instructions](#ydb-config-prepare).
 5. In the directory of the cloned template, execute the command `ansible-playbook ydb_platform.ydb.initial_setup`.
 
-
 ## Installation script execution plan for {{ ydb-short-name }} {#ydb-playbook-run}
 
 The sequence of role executions and their brief descriptions:
@@ -228,7 +229,7 @@ After successfully creating the {{ ydb-short-name }} cluster, you can check its 
 
 This section displays the following parameters of the {{ ydb-short-name }} cluster, reflecting its state:
 
-* `Tablets` – a list of running [tablets](../../concepts/cluster/common_scheme_ydb.md#tablets). All tablet state indicators should be green;
+* `Tablets` – a list of running [tablets](../../concepts/glossary.md#tablets). All tablet state indicators should be green;
 * `Nodes` – the number and state of static and dynamic nodes launched in the cluster. The node state indicator should be green, and the ratio of created to launched nodes should be equal. For example, 27/27 for a nine-node cluster.
 
 The `Load` indicators (amount of RAM used) and `Storage` (amount of disk space used) should also be green.

@@ -1416,6 +1416,11 @@ public:
             : NodeId(nodeInfo.NodeId)
             , Location(std::move(nodeInfo.Location))
         {}
+
+        THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)
+            : NodeId(node.GetNodeId())
+            , Location(node.GetLocation())
+        {}
     };
 
     class THostRecordMapImpl {
@@ -1428,6 +1433,15 @@ public:
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
                 HostIdToRecord.emplace(hostId, std::move(nodeInfo));
+            }
+        }
+
+        THostRecordMapImpl(const NKikimrBlobStorage::TStorageConfig& config) {
+            for (const auto& item : config.GetAllNodes()) {
+                const THostId hostId(item.GetHost(), item.GetPort());
+                const TNodeId nodeId = item.GetNodeId();
+                NodeIdToHostId.emplace(nodeId, hostId);
+                HostIdToRecord.emplace(hostId, item);
             }
         }
 
@@ -1788,6 +1802,7 @@ private:
 
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
+    void OnHostRecordsInitiate();
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move

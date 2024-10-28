@@ -29,6 +29,7 @@ message TStorageConfig { // contents of storage metadata
     string ClusterUUID = 6; // cluster GUID as provided in nameservice config
     string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
     TStorageConfig PrevConfig = 8; // previous version of StorageConfig (if any)
+    optional bytes StorageConfigCompressedYAML = 12; // compressed stored storage config YAML (if stored)
 }
 
 message TPDiskMetadataRecord {
@@ -187,6 +188,13 @@ message TEvNodeConfigInvokeOnRoot {
     message TAdvanceGeneration
     {}
 
+    message TFetchStorageConfig
+    {}
+
+    message TReplaceStorageConfig {
+        string YAML = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -195,6 +203,8 @@ message TEvNodeConfigInvokeOnRoot {
         TDropDonor DropDonor = 5;
         TReassignStateStorageNode ReassignStateStorageNode = 6;
         TAdvanceGeneration AdvanceGeneration = 7;
+        TFetchStorageConfig FetchStorageConfig = 8;
+        TReplaceStorageConfig ReplaceStorageConfig = 9;
     }
 }
 
@@ -217,6 +227,10 @@ message TEvNodeConfigInvokeOnRootResult {
         TStorageConfig CurrentProposedStorageConfig = 2;
     }
 
+    message TFetchStorageConfig {
+        string YAML = 1;
+    }
+
     EStatus Status = 1;
     optional string ErrorReason = 2;
     TScepter Scepter = 3;
@@ -225,6 +239,7 @@ message TEvNodeConfigInvokeOnRootResult {
 
     oneof Response {
         TQueryConfig QueryConfig = 5;
+        TFetchStorageConfig FetchStorageConfig = 10;
     }
 }
 

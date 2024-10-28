@@ -10,7 +10,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 Ensure(T, Bool, String)->T
 EnsureType(T, Type<T>, String)->T
 EnsureConvertibleTo(T, Type<T>, String)->T
@@ -30,7 +30,7 @@ EnsureConvertibleTo(T, Type<T>, String)->T
 
 ### Примеры
 
-``` yql
+```yql
 SELECT Ensure(
     value,
     value < 100,
@@ -38,7 +38,7 @@ SELECT Ensure(
 ) AS value FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT EnsureType(
     value,
     TypeOf(other_value),
@@ -46,7 +46,7 @@ SELECT EnsureType(
 ) AS value FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT EnsureConvertibleTo(
     value,
     Double?,

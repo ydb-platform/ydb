@@ -27,8 +27,7 @@ namespace NKikimr {
         using TGcMapIterator = typename TGcMap::TIterator;
 
         // compaction record merger
-        using TCompactRecordMergerIndexPass = NKikimr::TCompactRecordMergerIndexPass<TKey, TMemRec>;
-        using TCompactRecordMergerDataPass = NKikimr::TCompactRecordMergerDataPass<TKey, TMemRec>;
+        using TCompactRecordMerger = NKikimr::TCompactRecordMerger<TKey, TMemRec>;
 
         // level segment
         using TLevelSegment = NKikimr::TLevelSegment<TKey, TMemRec>;
@@ -131,7 +130,7 @@ namespace NKikimr {
         TDeque<TChunkIdx> AllocatedChunks;
 
         // record merger for compaction
-        TCompactRecordMergerIndexPass IndexMerger;
+        TCompactRecordMerger IndexMerger;
 
         // current handoff-transformed item
         const TTransformedItem *TransformedItem = nullptr;

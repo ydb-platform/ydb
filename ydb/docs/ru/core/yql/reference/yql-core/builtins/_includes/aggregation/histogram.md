@@ -8,6 +8,7 @@ HISTOGRAM(Double?, weight:Double)->HistogramStruct?
 HISTOGRAM(Double?, intervals:Uint32)->HistogramStruct?
 HISTOGRAM(Double?, weight:Double, intervals:Uint32)->HistogramStruct?
 ```
+
 В описании сигнатур под HistogramStruct подразумевается результат работы агрегатной функции, который является структурой определенного вида.
 
 Построение примерной гистограммы по числовому выражению с автоматическим выбором корзин.
@@ -86,13 +87,13 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     HISTOGRAM(numeric_column)
 FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT
     Histogram::Print(
         HISTOGRAM(numeric_column, 10),

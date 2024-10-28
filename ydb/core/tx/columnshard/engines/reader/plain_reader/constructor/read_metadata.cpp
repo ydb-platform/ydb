@@ -34,17 +34,29 @@ TConclusionStatus TReadMetadata::Init(
 
     if (LockId) {
         for (auto&& i : CommittedBlobs) {
-            if (auto writeId = i.GetWriteIdOptional()) {
-                if (owner->HasLongTxWrites(*writeId)) {
+            if (!i.IsCommitted()) {
+                if (owner->HasLongTxWrites(i.GetInsertWriteId())) {
                 } else {
-                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(*writeId);
-                    AddWriteIdToCheck(*writeId, op->GetLockId());
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i.GetInsertWriteId());
+                    AddWriteIdToCheck(i.GetInsertWriteId(), op->GetLockId());
                 }
             }
         }
     }
 
-    SelectInfo = dataAccessor.Select(readDescription);
+    SelectInfo = dataAccessor.Select(readDescription, !!LockId);
+    if (LockId) {
+        for (auto&& i : SelectInfo->PortionsOrderedPK) {
+            if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
+                if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
+                } else {
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified());
+                    AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLockId());
+                }
+            }
+        }
+    }
+
     StatsMode = readDescription.StatsMode;
     return TConclusionStatus::Success();
 }
@@ -125,7 +137,7 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
 bool TReadMetadata::IsMyUncommitted(const TInsertWriteId writeId) const {
     AFL_VERIFY(LockSharingInfo);
     auto it = ConflictedWriteIds.find(writeId);
-    AFL_VERIFY(it != ConflictedWriteIds.end());
+    AFL_VERIFY(it != ConflictedWriteIds.end())("write_id", writeId)("write_ids_count", ConflictedWriteIds.size());
     return it->second.GetLockId() == LockSharingInfo->GetLockId();
 }
 

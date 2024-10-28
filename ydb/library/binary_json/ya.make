@@ -7,8 +7,11 @@ YQL_ABI_VERSION(
 )
 
 PEERDIR(
+    library/cpp/containers/absl_flat_hash
     library/cpp/json
+    ydb/library/conclusion
     ydb/library/yql/minikql/dom
+    contrib/libs/simdjson
 )
 
 SRCS(
@@ -23,4 +26,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_benchmark
 )

@@ -17,6 +17,9 @@ namespace NYT::NObjectClient {
 //! Function for temporary use: to gradually allow types supported in Sequoia.
 bool IsScalarType(NObjectClient::EObjectType type);
 
+//! Checks if the given type is a Sequoia node.
+bool IsSequoiaNode(NObjectClient::EObjectType type);
+
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
 
@@ -115,6 +118,9 @@ EObjectType SchemaTypeFromType(EObjectType type);
 
 //! Returns the regular type for a given schema #type.
 EObjectType TypeFromSchemaType(EObjectType type);
+
+//! Formats object type into string (taking schemas into account).
+TString FormatObjectType(EObjectType type);
 
 //! Constructs the id from its parts.
 TObjectId MakeId(

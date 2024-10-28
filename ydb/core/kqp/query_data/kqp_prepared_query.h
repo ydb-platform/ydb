@@ -37,6 +37,7 @@ class TPreparedQueryAllocHolder;
 struct TPhyTxResultMetadata {
     NKikimr::NMiniKQL::TType* MkqlItemType;
     TVector<ui32> ColumnOrder;
+    TVector<TString> ColumnHints;
 };
 
 struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {

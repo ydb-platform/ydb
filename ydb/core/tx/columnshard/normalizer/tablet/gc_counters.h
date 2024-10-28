@@ -21,7 +21,7 @@ public:
     }
 
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return {};
+        return ENormalizerSequentialId::GCCountersNormalizer;
     }
 
     virtual TString GetClassName() const override {

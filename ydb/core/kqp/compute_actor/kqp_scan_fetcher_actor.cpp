@@ -46,9 +46,9 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     KeyColumnTypes.reserve(Meta.GetKeyColumnTypes().size());
     for (size_t i = 0; i < Meta.KeyColumnTypesSize(); i++) {
         NScheme::TTypeId typeId = Meta.GetKeyColumnTypes().at(i);
-        NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Pg ?
-            NScheme::TTypeInfo(typeId, NPg::TypeDescFromPgTypeId(Meta.GetKeyColumnTypeInfos().at(i).GetPgTypeId())) :
-            NScheme::TTypeInfo(typeId);    
+        NScheme::TTypeInfo typeInfo = NScheme::NTypeIds::IsParametrizedType(typeId) ?
+            NScheme::TypeInfoFromProto(typeId,Meta.GetKeyColumnTypeInfos().at(i)) :
+            NScheme::TTypeInfo(typeId);
         KeyColumnTypes.push_back(typeInfo);
     }
 }
@@ -84,7 +84,7 @@ void TKqpScanFetcherActor::Bootstrap() {
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
-    Y_ABORT_UNLESS(ev->Get()->GetFreeSpace());
+    AFL_ENSURE(ev->Get()->GetFreeSpace());
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "AckDataFromCompute")("self_id", SelfId())("scan_id", ScanId)
         ("packs_to_send", InFlightComputes.GetPacksToSendCount())
         ("from", ev->Sender)("shards remain", PendingShards.size())
@@ -237,7 +237,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
     PendingResolveShards.pop_front();
     ResolveNextShard();
 
-    Y_ABORT_UNLESS(!InFlightShards.GetShardScanner(state.TabletId));
+    AFL_ENSURE(!InFlightShards.GetShardScanner(state.TabletId));
 
     AFL_ENSURE(state.State == EShardState::Resolving);
     CA_LOG_D("Received TEvResolveKeySetResult update for table '" << ScanDataMeta.TablePath << "'");
@@ -364,13 +364,19 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
         case TEvDataShard::TEvKqpScan::EventType:
             // Handled by TEvPipeCache::TEvDeliveryProblem event.
             return;
-        case TEvKqpCompute::TEvScanDataAck::EventType:
-            if (!!InFlightShards.GetShardScanner(ev->Cookie)) {
-                SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR, "Delivery problem: EvScanDataAck lost.");
+        case TEvKqpCompute::TEvScanDataAck::EventType: {
+            auto info = InFlightShards.GetShardScanner(ev->Cookie);
+            if (!!info) {
+                TStringBuilder builder;
+                builder << "Delivery problem: EvScanDataAck lost, NodeId: "
+                    << SelfId().NodeId() << ", Details: " << info->ToString() << ".";
+
+                SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR, TString(builder));
             }
             return;
+        }
     }
-    Y_ABORT("UNEXPECTED EVENT TYPE");
+    AFL_ENSURE("Unexpected event type ")("source_type", ev->Get()->SourceType);
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

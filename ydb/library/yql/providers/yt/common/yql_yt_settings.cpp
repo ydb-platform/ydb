@@ -54,7 +54,7 @@ void MediaValidator(const NYT::TNode& value) {
     }
 }
 
-TYtConfiguration::TYtConfiguration()
+TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -168,7 +168,8 @@ TYtConfiguration::TYtConfiguration()
         .Warning("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
     REGISTER_SETTING(*this, UseNativeDescSort);
-    REGISTER_SETTING(*this, UseIntermediateSchema);
+    REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
+    REGISTER_SETTING(*this, UseIntermediateStreams);
     REGISTER_SETTING(*this, StaticPool);
     REGISTER_SETTING(*this, UseFlow)
         .ValueSetter([this](const TString&, bool value) {
@@ -187,7 +188,7 @@ TYtConfiguration::TYtConfiguration()
             }
         });
     REGISTER_SETTING(*this, ExpirationDeadline)
-        .Lower(Now())
+        .Lower(typeCtx.QContext.CanRead() ? TInstant::Zero() : Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
         });
@@ -265,6 +266,7 @@ TYtConfiguration::TYtConfiguration()
         })
         ;
     REGISTER_SETTING(*this, ParallelOperationsLimit).Lower(1);
+    REGISTER_SETTING(*this, LocalCalcLimit).Lower(1);
     REGISTER_SETTING(*this, DefaultCalcMemoryLimit);
     REGISTER_SETTING(*this, LayerPaths).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TVector<TString>& value) {
@@ -444,7 +446,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
-    REGISTER_SETTING(*this, _ForceJobSizeAdjuster);
+    REGISTER_SETTING(*this, ForceJobSizeAdjuster);
     REGISTER_SETTING(*this, _EnableWriteReorder);
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
@@ -452,6 +454,17 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
     REGISTER_SETTING(*this, BlockReaderSupportedTypes);
     REGISTER_SETTING(*this, BlockReaderSupportedDataTypes)
+        .Parser([](const TString& v) {
+            TSet<TString> vec;
+            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            TSet<NUdf::EDataSlot> res;
+            for (auto& s: vec) {
+                res.emplace(NUdf::GetDataSlot(s));
+            }
+            return res;
+        });
+    REGISTER_SETTING(*this, JobBlockInputSupportedTypes);
+    REGISTER_SETTING(*this, JobBlockInputSupportedDataTypes)
         .Parser([](const TString& v) {
             TSet<TString> vec;
             StringSplitter(v).SplitBySet(",").AddTo(&vec);
@@ -485,6 +498,8 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
+    REGISTER_SETTING(*this, JobBlockInput);
+    REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

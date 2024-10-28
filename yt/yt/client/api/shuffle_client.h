@@ -9,7 +9,7 @@ namespace NYT::NApi {
 struct TShuffleHandle
     : public NYTree::TYsonStruct
 {
-    TGuid TransactionId;
+    NObjectClient::TTransactionId TransactionId;
     TString CoordinatorAddress;
     TString Account;
     int PartitionCount;

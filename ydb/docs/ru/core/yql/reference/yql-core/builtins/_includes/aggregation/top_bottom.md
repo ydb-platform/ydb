@@ -52,7 +52,7 @@ SELECT
 FROM my_table;
 ```
 
-`` yql
+```yql
 $top_by_factory = AggregationFactory("TOP_BY", 3);
 $bottom_by_factory = AggregationFactory("BOTTOM_BY", 3);
 

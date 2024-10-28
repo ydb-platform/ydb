@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::NotInSubdomain,
-                            NLs::PathVersionEqual(7), // it is 6 if drop simultaneous with create
+                            NLs::PathVersionOneOf({6, 7}), // it is 6 if drop simultaneous with create
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3})});
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
@@ -1096,7 +1096,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathVersionEqual(7), // version 6 if deletion is simultaneous with creation
+                            NLs::PathVersionOneOf({6, 7}), // version 6 if deletion is simultaneous with creation
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
 

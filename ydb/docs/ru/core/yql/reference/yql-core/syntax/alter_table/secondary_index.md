@@ -8,7 +8,7 @@
 
 ## Добавление индекса {#add-index}
 
-```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" %}строковых таблицах.{% else %}таблицах.{% endif %} Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
+`ADD INDEX` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" and oss == true %}строковых таблицах.{% else %}таблицах.{% endif %} Приведенный ниже код добавит глобальный индекс с именем `title_index` для колонки `title`.
 
 ```yql
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
@@ -16,7 +16,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
 
@@ -40,6 +40,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 * `<table_name>` - имя таблицы, индекс которой нужно изменить.
 * `<index_name>` - имя индекса, который нужно изменить.
 * `<partitioning_setting_name>` - имя изменяемого параметра, который должен быть одним из следующих:
+
   * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
   * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
   * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
@@ -53,12 +54,14 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_nam
 {% endnote %}
 
 * `<value>` - новое значение параметра. Возможные значения включают:
+
   * `ENABLED` или `DISABLED` для параметров `AUTO_PARTITIONING_BY_SIZE` и `AUTO_PARTITIONING_BY_LOAD`
   * для остальных параметров — целое число типа `Uint64`
 
 ### Пример
 
 Код из следующего примера включает автоматическое партиционирование по нагрузке для индекса с именем `title_index` в таблице `series` и устанавливает ему минимальное количество партиций равным 5:
+
 ```yql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
@@ -68,13 +71,13 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 
 ## Удаление индекса {#drop-index}
 
-```DROP INDEX``` — удаляет индекс с указанным именем. Приведенный ниже код удалит индекс с именем ```title_index```.
+`DROP INDEX` — удаляет индекс с указанным именем. Приведенный ниже код удалит индекс с именем `title_index`.
 
 ```yql
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 Также удалить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) {{ ydb-short-name }} CLI.
 
@@ -84,7 +87,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 `RENAME INDEX` — переименовывает индекс с указанным именем. Если индекс с новым именем существует, будет возвращена ошибка.
 
-{% if backend_name == "YDB" %}
+{% if backend_name == "YDB" and oss == true %}
 
 Возможность атомарной замены индекса под нагрузкой поддерживается командой [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
 

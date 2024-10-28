@@ -15,6 +15,99 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 
+class TestDiscoveryExtEndpoint(object):
+    @classmethod
+    def setup_class(cls):
+        conf = KikimrConfigGenerator()
+        cls.ext_port_1 = conf.port_allocator.get_node_port_allocator(0).ext_port
+        cls.ext_port_2 = conf.port_allocator.get_node_port_allocator(1).ext_port
+        conf.clone_grpc_as_ext_endpoint(cls.ext_port_1, "extserv1")
+        conf.clone_grpc_as_ext_endpoint(cls.ext_port_2, "extserv2")
+        cls.cluster = kikimr_cluster_factory(
+            configurator=conf
+        )
+        cls.cluster.start()
+        cls.database_name = '/Root/database'
+        cls.logger = logger.getChild(cls.__name__)
+        cls.cluster.create_database(
+            cls.database_name,
+            storage_pool_units_count={
+                'hdd': 1
+            }
+        )
+        cls.cluster.register_and_start_slots(cls.database_name, count=2)
+        cls.cluster.wait_tenant_up(cls.database_name)
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, 'cluster'):
+            cls.cluster.stop()
+
+    def test_scenario(self):
+        ext_port_1 = TestDiscoveryExtEndpoint.ext_port_1
+        ext_port_2 = TestDiscoveryExtEndpoint.ext_port_2
+        driver_config = ydb.DriverConfig(
+            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), self.database_name)
+        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+        driver = ydb.Driver(driver_config)
+        driver.wait(timeout=10)
+
+        endpoint_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
+        # Discovery has been performed using default endpoint
+        # but ext endpoint marked with label
+        # such ext endpoint should not present in discovery
+        assert_that(ext_port_1 not in endpoint_ports)
+        assert_that(ext_port_2 not in endpoint_ports)
+
+        for slot in self.cluster.slots.values():
+            assert_that(slot.grpc_port in endpoint_ports)
+            assert_that(slot.grpc_port != ext_port_1)
+            assert_that(slot.grpc_port != ext_port_2)
+
+        driver_config = ydb.DriverConfig(
+            "%s:%s" % (self.cluster.nodes[1].host, ext_port_1), self.database_name)
+        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+        driver = ydb.Driver(driver_config)
+        driver.wait(timeout=10)
+
+        endpoint_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
+        # Discovery has been performed using external endpoint with label
+        # only endpoint with such label expected
+        assert_that(ext_port_1 in endpoint_ports)
+        assert_that(ext_port_2 not in endpoint_ports)
+
+        for slot in self.cluster.slots.values():
+            assert_that(slot.grpc_port not in endpoint_ports)
+
+        # Just check again to cover discovery cache issue
+        driver_config = ydb.DriverConfig(
+            "%s:%s" % (self.cluster.nodes[1].host, ext_port_1), self.database_name)
+        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+        driver = ydb.Driver(driver_config)
+        driver.wait(timeout=10)
+
+        endpoint_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
+        assert_that(ext_port_1 in endpoint_ports)
+        assert_that(ext_port_2 not in endpoint_ports)
+
+        for slot in self.cluster.slots.values():
+            assert_that(slot.grpc_port not in endpoint_ports)
+
+        # Repeat using other ext endpoint
+        driver_config = ydb.DriverConfig(
+            "%s:%s" % (self.cluster.nodes[1].host, ext_port_2), self.database_name)
+        resolver = ydb.DiscoveryEndpointsResolver(driver_config)
+        driver = ydb.Driver(driver_config)
+        driver.wait(timeout=10)
+
+        endpoint_ports = [endpoint.port for endpoint in resolver.resolve().endpoints]
+        assert_that(ext_port_1 not in endpoint_ports)
+        assert_that(ext_port_2 in endpoint_ports)
+
+        for slot in self.cluster.slots.values():
+            assert_that(slot.grpc_port not in endpoint_ports)
+
+
 @six.add_metaclass(abc.ABCMeta)
 class AbstractTestDiscoveryFaultInjection(object):
     @classmethod

@@ -1,5 +1,6 @@
 #pragma once
-#include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/core/formats/arrow/process_columns.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
@@ -399,6 +400,10 @@ private:
     THashMap<ui64, TReadIntervals> ReadIntervalsByPathId;
 
 public:
+    bool HasReadIntervals(const ui64 pathId) const {
+        return ReadIntervalsByPathId.contains(pathId);
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         for (auto&& i : ReadIntervalsByPathId) {

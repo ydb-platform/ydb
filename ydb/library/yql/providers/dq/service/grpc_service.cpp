@@ -849,19 +849,6 @@ namespace NYql::NDqs {
 */
     }
 
-    void TDqsGrpcService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-        Limiter = limiter;
-    }
-
-    bool TDqsGrpcService::IncRequest() {
-        return Limiter->Inc();
-    }
-
-    void TDqsGrpcService::DecRequest() {
-        Limiter->Dec();
-        Y_ASSERT(Limiter->GetCurrentInFlight() >= 0);
-    }
-
     TFuture<void> TDqsGrpcService::Stop() {
         TGuard<TMutex> lock(Mutex);
         Stopping = true;

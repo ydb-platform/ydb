@@ -1,5 +1,7 @@
 # Functions for JSON
 
+<!-- markdownlint-disable no-trailing-punctuation -->
+
 **JSON** is a lightweight [data-interchange format](https://www.json.org). In YQL, it's represented by the `Json` type. Unlike relational tables, JSON can store data with no schema defined. Here is an example of a valid JSON object:
 
 ```json
@@ -42,7 +44,7 @@ Let's look at an example. Suppose we have a JSON object like:
 
 Then, to get the text of the second comment, we can write the following JsonPath query:
 
-```
+```yql
 $.comments[1].text
 ```
 
@@ -933,10 +935,12 @@ Behavior
 
 1. If `<JSON expression>` is `NULL` or an empty `Json?`, it returns an empty `Bool?`
 2. If an error occurs during JsonPath execution, the returned value depends on the `ON ERROR` section:
+
     - `TRUE`: Return `True`
     - `FALSE`: Return `False`
     - `UNKNOWN`: Return an empty `Bool?`
     - `ERROR`: Abort the entire query
+
 3. If the result of JsonPath execution is one or more values, the return value is `True`.
 4. Otherwise, `False` is returned.
 
@@ -996,16 +1000,22 @@ Behavior:
 
 1. If `<JSON expression>` is `NULL` or an empty `Json?`, it returns an empty `<type>?`
 2. If an error occurs, the returned value depends on the `ON ERROR` section:
+
     - `NULL`: Return an empty `<type>?`
     - `ERROR`: Abort the entire query
     - `DEFAULT <expr>`: Return `<expr>` after running the `CAST` function to convert the data type to `<type>?`. If the `CAST` fails, the entire query fails, too.
+
 3. If the JsonPath execution result is empty, the returned value depends on the `ON EMPTY` section:
+
     - `NULL`: Return an empty `<type>?`
     - `ERROR`: Abort the entire query
     - `DEFAULT <expr>`: Return `<expr>` after running the `CAST` function to convert the data type to `<type>?`. If the `CAST` fails, the behavior matches the `ON ERROR` section.
+
 4. If the result of JsonPath execution is a single value, then:
+
     - If the `RETURNING` section isn't specified, the value is converted to `Utf8`.
     - Otherwise, the `CAST` function is run to convert the value to `<type>`. If the `CAST` fails, the behavior matches the `ON ERROR` section. In this case, the value from JSON must match the `<type>` type.
+
 5. Return the result
 
 Correlation between JSON and YQL types:
@@ -1101,19 +1111,25 @@ You can't specify the `WITH ... WRAPPER` and `ON EMPTY` sections at the same tim
 
 1. If `<JSON expression>` is `NULL` or an empty `Json?`, it returns an empty `Json?`
 2. If the `WRAPPER` section is specified, then:
+
     - `WITHOUT WRAPPER` or `WITHOUT ARRAY WRAPPER`: Don't convert the result of JsonPath execution in any way.
     - `WITH UNCONDITIONAL WRAPPER` or `WITH UNCONDITIONAL ARRAY WRAPPER`: Wrap the result of JsonPath execution in an array.
     - `WITH CONDITIONAL WRAPPER` or `WITH CONDITIONAL ARRAY WRAPPER`: Wrap the result of JsonPath execution in an array if it isn't the only array or object.
+
 3. If the JsonPath execution result is empty, the returned value depends on the `ON EMPTY` section:
+
     - `NULL`: Return an empty `Json?`
     - `ERROR`: Abort the entire query
     - `EMPTY ARRAY`: Return an empty JSON array, `[]`
     - `EMPTY OBJECT`: Return an empty JSON object, `{}`
+
 4. If an error occurs, the returned value depends on the `ON ERROR` section:
+
     - `NULL`: Return an empty `Json?`
     - `ERROR`: Abort the entire query
     - `EMPTY ARRAY`: Return an empty JSON array, `[]`
     - `EMPTY OBJECT`: Return an empty JSON object, `{}`
+
 5. Return the result
 
 Errors running a `JSON_QUERY`:

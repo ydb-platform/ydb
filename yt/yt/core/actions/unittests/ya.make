@@ -11,6 +11,7 @@ PROTO_NAMESPACE(yt)
 SRCS(
     actions_ut.cpp
     bind_ut.cpp
+    cancelation_token_ut.cpp
     future_ut.cpp
     invoker_ut.cpp
     new_with_offloaded_dtor_ut.cpp

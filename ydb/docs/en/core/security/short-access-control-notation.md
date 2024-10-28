@@ -6,6 +6,7 @@ When describing or logging the permissions granted to users (e.g., in the [audit
 
 Each entry begins with a `+` sign and consists of 2 or 3 attributes listed through the `:` symbol.
 These attributes are:
+
 - List of permissions. If there are multiple, they are wrapped in round brackets and separated by `|`. *Mandatory.*
 - SID of the subject granted permissions. *Mandatory.*
 - Inheritance type. *Optional.*

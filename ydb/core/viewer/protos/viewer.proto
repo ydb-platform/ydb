@@ -322,7 +322,10 @@ message TClusterInfo {
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
     uint32 NumberOfCpus = 20;
-    double LoadAverage = 21;
+    uint32 CoresTotal = 24;
+    double CoresUsed = 21;
+    double LoadAverage = 22;
+    repeated NKikimrWhiteboard.TSystemStateInfo.TPoolStats PoolStats = 23;
     uint64 MemoryTotal = 30;
     uint64 MemoryUsed = 31;
     uint64 StorageTotal = 40;
@@ -334,6 +337,7 @@ message TClusterInfo {
     repeated string Versions = 46;
     map<string, uint32> MapVersions = 47;
     map<string, uint32> MapNodeStates = 48;
+    map<string, uint32> MapNodeRoles = 49;
     repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 50;
     repeated NKikimrSysView.TStorageStatsEntry StorageStats = 51;
     uint64 Hosts = 60;
@@ -355,7 +359,7 @@ message TStorageUsage {
         SSD = 2;
     }
     EType Type = 1;
-    uint64 Size = 2;
+    optional uint64 Size = 2;
     uint64 Limit = 3;
     uint64 SoftQuota = 4;
     uint64 HardQuota = 5;
@@ -391,6 +395,7 @@ message TTenant {
     Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
     repeated TStorageUsage TablesStorage = 44;
     repeated TStorageUsage DatabaseStorage = 45;
+    uint32 CoresTotal = 50;
 }
 
 message TTenants {
@@ -460,6 +465,16 @@ message TStorageGroupInfo {
 message TStorageGroupGroup {
     string GroupName = 1;
     uint64 GroupCount = 2;
+    optional uint64 Used = 13;
+    optional uint64 Limit = 14;
+    optional uint64 Available = 15;
+    optional float Usage = 16;
+    optional uint64 Read = 17;
+    optional uint64 Write = 18;
+    optional float DiskSpaceUsage = 19;
+    optional uint64 LatencyPutTabletLog = 20;
+    optional uint64 LatencyPutUserData = 21;
+    optional uint64 LatencyGetFast = 22;
 }
 
 message TStoragePoolInfo {
@@ -512,6 +527,11 @@ message TNodeGroup {
 
 message TNodeInfo {
     uint32 NodeId = 1;
+    string Database = 2;
+    int32 UptimeSeconds = 3; // negative for disconnect time
+    bool Disconnected = 4;
+    float CpuUsage = 5;
+    float DiskSpaceUsage = 6;
     NKikimrWhiteboard.TSystemStateInfo SystemState = 10;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 20;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 30;

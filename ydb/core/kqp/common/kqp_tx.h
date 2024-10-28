@@ -123,11 +123,49 @@ private:
 
 struct TTableInfo {
     bool IsOlap = false;
-    THashSet<TString> Pathes;
+    THashSet<TStringBuf> Pathes;
 };
 
-using TShardIdToTableInfo = THashMap<ui64, TTableInfo>;
+
+class TShardIdToTableInfo {
+public:
+    const TTableInfo& Get(ui64 shardId) const {
+        const auto* result = GetPtr(shardId);
+        AFL_ENSURE(result);
+        return *result;
+    }
+
+    const TTableInfo* GetPtr(ui64 shardId) const {
+        auto it = ShardIdToInfo.find(shardId);
+        return it != std::end(ShardIdToInfo)
+            ? &it->second
+            : nullptr;
+    }
+
+    void Add(ui64 shardId, bool isOlap, const TString& path) {
+        const auto [stringsIter, _] = Strings.insert(path);
+        const TStringBuf pathBuf = *stringsIter;
+        auto infoIter = ShardIdToInfo.find(shardId);
+        if (infoIter != std::end(ShardIdToInfo)) {
+            AFL_ENSURE(infoIter->second.IsOlap == isOlap);
+            infoIter->second.Pathes.insert(pathBuf);
+        } else {
+            ShardIdToInfo.emplace(
+                shardId,
+                TTableInfo{
+                    .IsOlap = isOlap,
+                    .Pathes = {pathBuf},
+                });
+        }
+    }
+
+private:
+    THashMap<ui64, TTableInfo> ShardIdToInfo;
+    std::unordered_set<TString> Strings;// Pointers aren't invalidated.
+};
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
+
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery);
 
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
@@ -196,6 +234,11 @@ public:
         ParamsState = MakeIntrusive<TParamsState>();
         SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         HasImmediateEffects = false;
+
+        HasOlapTable = false;
+        HasOltpTable = false;
+        HasTableWrite = false;
+        NeedUncommittedChangesFlush = false;
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -232,7 +275,7 @@ public:
     }
 
     bool ShouldExecuteDeferredEffects() const {
-        if (HasUncommittedChangesRead) {
+        if (NeedUncommittedChangesFlush || HasOlapTable) {
             return !DeferredEffects.Empty();
         }
 
@@ -261,11 +304,18 @@ public:
     }
 
     bool CanDeferEffects() const {
-        if (HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
+        if (NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution() || HasOlapTable) {
             return false;
         }
 
         return true;
+    }
+
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery) {
+        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery);
+        if (NeedUncommittedChangesFlush) {
+            ModifiedTablesSinceLastFlush.clear();   
+        }
     }
 
 public:
@@ -297,6 +347,9 @@ public:
     bool HasOlapTable = false;
     bool HasOltpTable = false;
     bool HasTableWrite = false;
+
+    bool NeedUncommittedChangesFlush = false;
+    THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };

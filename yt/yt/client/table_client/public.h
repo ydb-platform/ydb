@@ -47,6 +47,7 @@ class TColumnMetaExt;
 class TVersionedRowDigestExt;
 class TCompressionDictionaryExt;
 class TVersionedReadOptions;
+class TVersionedWriteOptions;
 
 } // namespace NProto
 
@@ -443,6 +444,7 @@ static_assert(sizeof(TDynamicTableKeyMask) * 8 == MaxKeyColumnCountInDynamicTabl
 using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedValue*, int);
 
 struct TVersionedReadOptions;
+struct TVersionedWriteOptions;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -57,13 +57,13 @@ public:
     TGRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
+    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override final;
 
     NThreading::TFuture<void> Prepare(NActors::TActorSystem* system, const NActors::TActorId& pqMeta, const NActors::TActorId& msgBusProxy, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
     void Start();
 
-    bool IncRequest();
-    void DecRequest();
+    bool IncRequest() override final;
+    void DecRequest() override final;
     i64 GetCurrentInFlight() const;
 
 private:

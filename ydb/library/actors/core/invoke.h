@@ -1,5 +1,6 @@
 #pragma once
 
+#include "actorsystem.h"
 #include "actor_bootstrapped.h"
 #include "events.h"
 #include "event_local.h"

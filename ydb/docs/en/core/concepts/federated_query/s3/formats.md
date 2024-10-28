@@ -156,13 +156,16 @@ Query result:
 {% endcut %}
 
 ### Format json_as_string {#json_as_string}
+
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. The `json_as_string` format does not split the input JSON document into fields but represents each file line as a single JSON object (or string). This format is helpful when the list of fields is not the same in all rows and may vary.
 
 Each file must contain:
+
 - a JSON object on each line, or
 - JSON objects combined into an array.
 
 Example of valid data (data presented as a list of JSON objects):
+
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
@@ -260,7 +263,7 @@ WITH
 
 Query result:
 
-```
+```text
 Year,Manufacturer,Model,Price
 1997,Man_1,Model_1,3000.00
 1999,Man_2,Model_2,4900.00

@@ -1,5 +1,7 @@
 # Primitive data types
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 The terms "simple", "primitive", and "elementary" data types are used synonymously.
 
 ## Numeric types {#numeric}

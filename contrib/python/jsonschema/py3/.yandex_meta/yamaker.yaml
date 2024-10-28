@@ -1,0 +1,4 @@
+exclude:
+  - json/*
+mark_as_tests:
+  - jsonschema/benchmarks/*

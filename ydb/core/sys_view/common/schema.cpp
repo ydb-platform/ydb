@@ -21,7 +21,7 @@ TVector<Schema::PgColumn> GetPgStaticTableColumns(const TString& schema, const T
 
 Schema::PgColumn::PgColumn(NIceDb::TColumnId columnId, TStringBuf columnTypeName, TStringBuf columnName)
     : _ColumnId(columnId)
-    , _ColumnTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
+    , _ColumnTypeInfo(NPg::TypeDescFromPgTypeId(NYql::NPg::LookupType(TString(columnTypeName)).TypeId))
     , _ColumnName(columnName)
 {}
 

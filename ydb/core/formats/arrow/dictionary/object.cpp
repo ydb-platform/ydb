@@ -1,6 +1,6 @@
 #include "object.h"
-#include <ydb/core/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NArrow::NDictionary {

@@ -4,18 +4,19 @@
 
 Чтобы инициировать проверку, вызовите метод `SelfCheck` из пространства имен `NYdb::NMonitoring` в SDK. Также необходимо передать имя проверяемой БД стандартным способом.
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
   Пример кода приложения для создания клиента:
+
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
 
   Вызов метода `SelfCheck`:
 
-  ```
+  ```c++
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
@@ -51,7 +52,7 @@
 
 Полный список дополнительных параметров представлен ниже:
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - C++
 
@@ -236,7 +237,7 @@ message IssueLog {
 
 **Описание:** `HealthCheck` не может определить состояние PDisk. Внутренняя ошибка.
 
-#### PDisk state is ...
+#### PDisk state is
 
 **Описание:** Сообщает состояние физического диска.
 **Действия при срабатывании:** В [Embedded UI](../embedded-ui/ydb-monitoring.md) перейти на страницу базы данных, выбрать вкладку `Storage`, установить фильтры `Nodes` и `Degraded`. По известным `id` ноды и pDisk проверить доступность нод и дисков на нодах.

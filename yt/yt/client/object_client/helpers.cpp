@@ -21,6 +21,13 @@ bool IsScalarType(EObjectType type)
         type == EObjectType::BooleanNode;
 }
 
+bool IsSequoiaNode(NObjectClient::EObjectType type)
+{
+    return
+        type == EObjectType::SequoiaMapNode ||
+        type == EObjectType::SequoiaLink;
+}
+
 bool IsVersionedType(EObjectType type)
 {
     return
@@ -204,6 +211,7 @@ bool IsChunkOwnerType(EObjectType type)
 bool IsCellType(EObjectType type)
 {
     return
+        type == EObjectType::MasterCell ||
         type == EObjectType::TabletCell ||
         type == EObjectType::ChaosCell;
 }
@@ -321,6 +329,11 @@ bool HasSchema(EObjectType type)
 bool IsSchemaType(EObjectType type)
 {
     return (static_cast<ui32>(type) & SchemaObjectTypeMask) != 0;
+}
+
+TString FormatObjectType(EObjectType type)
+{
+    return IsSchemaType(type) ? Format("schema:%v", TypeFromSchemaType(type)) : FormatEnum(type);
 }
 
 bool IsGlobalCellId(TCellId cellId)

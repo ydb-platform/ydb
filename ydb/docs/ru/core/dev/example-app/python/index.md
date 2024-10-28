@@ -1,14 +1,16 @@
 # Приложение на Python
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-python-sdk/tree/master/examples/basic_example_v2), доступного в составе [Python SDK](https://github.com/ydb-platform/ydb-python-sdk) {{ ydb-short-name }}.
 
 ## Скачивание и запуск {#download}
 
-Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Python3](https://www.python.org/downloads/). Предварительно должен быть установлен [YDB Python SDK](../../../reference/ydb-sdk/install.md).
+Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Python3](https://www.python.org/downloads/). Предварительно должен быть установлен [{{ ydb-short-name }} Python SDK](../../../reference/ydb-sdk/install.md).
 
-Создайте рабочую директорию и выполните в ней из командной строки команды клонирования репозитория с github.com и установки необходимых пакетов Python:
+Создайте рабочую директорию и выполните в ней из командной строки команды клонирования репозитория с GitHub и установки необходимых пакетов Python:
 
-``` bash
+```bash
 git clone https://github.com/ydb-platform/ydb-python-sdk.git
 python3 -m pip install iso8601
 ```
@@ -21,7 +23,7 @@ python3 -m pip install iso8601
 
 Фрагмент кода приложения для инициализации драйвера:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -63,7 +65,7 @@ python3 -m pip install iso8601
 
 Фрагмент кода приложения для создания пула сессий:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -87,12 +89,14 @@ python3 -m pip install iso8601
 Существует два основных метода для выполнения запросов, которые имеют различные свойства и области применения:
 
 * `pool.execute_with_retries`:
+
   * Буферизует весь результат в памяти клиента.
   * Автоматически перезапускает выполнение в случае ошибок, которые можно устранить перезапуском.
   * Не позволяет указать режим выполнения транзакции.
   * Рекомендуется для разовых запросов, которые возвращают небольшой по размеру результат.
 
 * `tx.execute`:
+
   * Возвращает итератор над результатом запроса, что позволяет обработать результат, который может не поместиться в памяти клиента.
   * Перезапуски в случае ошибок должны обрабатываться вручную с помощью `pool.retry_operation_sync`.
   * Позволяет указать режим выполнения транзакции.
@@ -102,7 +106,7 @@ python3 -m pip install iso8601
 
 Для выполнения запросов `CREATE TABLE` стоит использовать метод `pool.execute_with_retries()`:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -202,7 +206,7 @@ python3 -m pip install iso8601
 
 Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -234,7 +238,7 @@ python3 -m pip install iso8601
 
 Для выполнения YQL-запросов метод часто эффективен метод `pool.execute_with_retries()`.
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -329,7 +333,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 Фрагмент кода, демонстрирующий возможность использования параметризованных запросов:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -402,12 +406,12 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ('episode title:', u'To Build a Better Beta', ', air date:', '2016-06-05')
 ```
 
-
 {% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
 Метод `session.transaction().execute()` так же может быть использован для выполнения YQL запросов. В отличие от `pool.execute_with_retries`, данный метод позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
 
 Доступные режимы транзакции:
+
 * `ydb.QuerySerializableReadWrite()` (по умолчанию);
 * `ydb.QueryOnlineReadOnly(allow_inconsistent_reads=False)`;
 * `ydb.QuerySnapshotReadOnly()`;
@@ -417,7 +421,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 Результатом выполнения `tx.execute()` является итератор. Итератор позволяет считать неограниченное количество строк и объем данных, не загружая в память весь результат. Однако, для корректного сохранения состояния транзакции на стороне {{ ydb-short-name }} итератор необходимо прочитывать до конца после каждого запроса. Если этого не сделать, пишущие запросы могут не выполниться на стороне {{ ydb-short-name }}. Для удобства результат функции `tx.execute()` представлен в виде контекстного менеджера, который долистывает итератор до конца после выхода.
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -437,7 +441,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 Фрагмент кода, демонстрирующий явное использование вызовов `transaction().begin()` и `tx.commit()`:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 
@@ -528,7 +532,7 @@ series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 
 Пример `SELECT` с неограниченным количеством данных и неявным контролем транзакции:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Синхронный
 

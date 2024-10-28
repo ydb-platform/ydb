@@ -99,18 +99,6 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
 
             return EExecutionStatus::Executed;
-        } else if (!DataShard.IsMvccEnabled()) {
-            TString err = TStringBuilder()
-                << "Operation " << *op << " reads from snapshot " << snapshot
-                << " with MVCC feature disabled at " << DataShard.TabletID();
-
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
-                ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
-            op->Abort(EExecutionUnitKind::FinishPropose);
-
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
-
-            return EExecutionStatus::Executed;
         } else if (snapshot < DataShard.GetSnapshotManager().GetLowWatermark()) {
             TString err = TStringBuilder()
                 << "Operation " << *op << " reads from stale snapshot " << snapshot

@@ -21,6 +21,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/util/random.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/schlab/mon/mon.h>
 
@@ -30,7 +31,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/algorithm.h>
-#include <util/random/entropy.h>
 #include <util/string/split.h>
 #include <util/system/sanitizers.h>
 
@@ -416,9 +416,9 @@ public:
                     NPDisk::TKey chunkKey;
                     NPDisk::TKey logKey;
                     NPDisk::TKey sysLogKey;
-                    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-                    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-                    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+                    SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+                    SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+                    SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
                     TPDiskConfig *cfg = actor->Cfg.Get();
 
                     try {
@@ -1069,7 +1069,9 @@ public:
     void Handle(TEvBlobStorage::TEvAskWardenRestartPDiskResult::TPtr &ev) {
         bool restartAllowed = ev->Get()->RestartAllowed;
 
-        bool isReadingLog = PDisk->InitPhase == EInitPhase::ReadingSysLog || PDisk->InitPhase == EInitPhase::ReadingLog;
+        EInitPhase initPhase = PDisk->InitPhase.load();
+
+        bool isReadingLog = initPhase == EInitPhase::ReadingSysLog || initPhase == EInitPhase::ReadingLog;
 
         if ((isReadingLog && CurrentStateFunc() != &TPDiskActor::StateError) || IsFormattingNow) {
             // If disk is in the process of initialization (reading log) and it is not in error state, or disk is being formatted,
@@ -1083,7 +1085,7 @@ public:
             }
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(PCtx->PDiskId, NKikimrProto::EReplyStatus::NOTREADY));
-            
+
             return;
         }
 
@@ -1096,7 +1098,7 @@ public:
             NPDisk::TMainKey newMainKey = ev->Get()->MainKey;
 
             SecureWipeBuffer((ui8*)ev->Get()->MainKey.Keys.data(), sizeof(NPDisk::TKey) * ev->Get()->MainKey.Keys.size());
-            
+
             P_LOG(PRI_NOTICE, BSP01, "Going to restart PDisk since received TEvAskWardenRestartPDiskResult");
 
             const TActorIdentity& thisActorId = SelfId();
@@ -1109,7 +1111,7 @@ public:
             TIntrusivePtr<TPDiskConfig> actorCfg = std::move(Cfg);
 
             auto& newCfg = ev->Get()->Config;
-            
+
             if (newCfg) {
                 Y_VERIFY_S(newCfg->PDiskId == pdiskId,
                         "New config's PDiskId# " << newCfg->PDiskId << " is not equal to real PDiskId# " << pdiskId);
@@ -1124,7 +1126,7 @@ public:
             TGenericExecutorThread& executorThread = actorCtx.ExecutorThread;
 
             PassAway();
-            
+
             CreatePDiskActor(executorThread, counters, actorCfg, newMainKey, pdiskId, poolId, nodeId);
 
             Send(ev->Sender, new TEvBlobStorage::TEvNotifyWardenPDiskRestarted(pdiskId));
@@ -1134,7 +1136,7 @@ public:
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {
         const TCgiParameters &cgi = ev->Get()->Request.GetPostParams();
 
-        bool enableChunkLocking = Cfg->FeatureFlags.GetEnableChunkLocking();
+        bool enableChunkLocking = AppData()->FeatureFlags.GetEnableChunkLocking();
 
         if (enableChunkLocking) {
             using TColor = NKikimrBlobStorage::TPDiskSpaceColor;

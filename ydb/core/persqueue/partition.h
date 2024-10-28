@@ -73,8 +73,9 @@ struct TTransaction {
         : ProposeTransaction(proposeTx)
         , State(ECommitState::Committed)
     {
-        if (proposeTx->Record.HasSupportivePartitionActor()) {
-            SupportivePartitionActor = ActorIdFromProto(proposeTx->Record.GetSupportivePartitionActor());
+        const auto& record = proposeTx->GetRecord();
+        if (record.HasSupportivePartitionActor()) {
+            SupportivePartitionActor = ActorIdFromProto(record.GetSupportivePartitionActor());
         }
         Y_ABORT_UNLESS(ProposeTransaction);
     }
@@ -390,7 +391,7 @@ private:
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
 
     void EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
-                                  NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
+                                  const TEvPQ::TMessageGroupsPtr& explicitMessageGroups,
                                   NPersQueue::TTopicConverterPtr topicConverter,
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
@@ -785,6 +786,7 @@ private:
     TMaybe<ui64> TxId;
     bool TxIdHasChanged = false;
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
+    TEvPQ::TMessageGroupsPtr PendingExplicitMessageGroups;
     TVector<THolder<TEvPQ::TEvSetClientInfo>> ChangeConfigActs;
     bool ChangingConfig = false;
     bool SendChangeConfigReply = true;

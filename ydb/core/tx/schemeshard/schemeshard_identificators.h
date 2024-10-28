@@ -7,6 +7,10 @@
 #include <util/generic/utility.h>
 #include <util/stream/output.h>
 
+namespace NKikimrSchemeOp {
+class TShardIdx;
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 

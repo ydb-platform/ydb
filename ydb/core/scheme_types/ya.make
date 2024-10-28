@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    scheme_type_info.cpp
+    scheme_decimal_type.cpp
     scheme_type_metadata.cpp
     scheme_type_registry.cpp
     scheme_types_defs.cpp

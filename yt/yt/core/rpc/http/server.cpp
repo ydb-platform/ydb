@@ -238,12 +238,12 @@ private:
         }
 
         const auto& url = req->GetUrl();
-        if (url.Path.Size() <= BaseUrl_.Size()) {
+        if (url.Path.size() <= BaseUrl_.size()) {
             return TError("Invalid URL");
         }
 
         ToProto(rpcHeader->mutable_service(), Underlying_->GetServiceId().ServiceName);
-        ToProto(rpcHeader->mutable_method(), url.Path.substr(BaseUrl_.Size()));
+        ToProto(rpcHeader->mutable_method(), url.Path.substr(BaseUrl_.size()));
 
         const auto& httpHeaders = req->GetHeaders();
 

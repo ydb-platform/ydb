@@ -4,7 +4,7 @@
 
 ### Сигнатуры
 
-```
+```yql
 StartsWith(T str, U prefix)->Bool[?]
 
 EndsWith(T str, U suffix)->Bool[?]
@@ -20,18 +20,22 @@ EndsWith(T str, U suffix)->Bool[?]
 
 ### Примеры
 
-``` yql
+```yql
 SELECT StartsWith("abc_efg", "abc") AND EndsWith("abc_efg", "efg"); -- true
 ```
-``` yql
+
+```yql
 SELECT StartsWith("abc_efg", "efg") OR EndsWith("abc_efg", "abc"); -- false
 ```
-``` yql
+
+```yql
 SELECT StartsWith("abcd", NULL); -- null
 ```
-``` yql
+
+```yql
 SELECT EndsWith(NULL, Utf8("")); -- null
 ```
-``` yql
+
+```yql
 SELECT StartsWith("abc_efg"u, "abc"p) AND EndsWith("abc_efg", "efg"pv); -- true
 ```

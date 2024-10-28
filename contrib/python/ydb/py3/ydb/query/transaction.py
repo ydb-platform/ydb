@@ -294,7 +294,7 @@ class BaseQueryTxContext:
         self._tx_state._change_state(QueryTxStateEnum.COMMITTED)
 
 
-class QueryTxContextSync(BaseQueryTxContext):
+class QueryTxContext(BaseQueryTxContext):
     def __enter__(self) -> "BaseQueryTxContext":
         """
         Enters a context manager and returns a transaction
@@ -326,10 +326,8 @@ class QueryTxContextSync(BaseQueryTxContext):
                 pass
             self._prev_stream = None
 
-    def begin(self, settings: Optional[BaseRequestSettings] = None) -> "QueryTxContextSync":
-        """WARNING: This API is experimental and could be changed.
-
-        Explicitly begins a transaction
+    def begin(self, settings: Optional[BaseRequestSettings] = None) -> "QueryTxContext":
+        """Explicitly begins a transaction
 
         :param settings: An additional request settings BaseRequestSettings;
 
@@ -340,9 +338,7 @@ class QueryTxContextSync(BaseQueryTxContext):
         return self
 
     def commit(self, settings: Optional[BaseRequestSettings] = None) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Calls commit on a transaction if it is open otherwise is no-op. If transaction execution
+        """Calls commit on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
         :param settings: An additional request settings BaseRequestSettings;
@@ -361,9 +357,7 @@ class QueryTxContextSync(BaseQueryTxContext):
         self._commit_call(settings)
 
     def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
-        """WARNING: This API is experimental and could be changed.
-
-        Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
+        """Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
         failed then this method raises PreconditionFailed.
 
         :param settings: An additional request settings BaseRequestSettings;
@@ -391,9 +385,8 @@ class QueryTxContextSync(BaseQueryTxContext):
         concurrent_result_sets: Optional[bool] = False,
         settings: Optional[BaseRequestSettings] = None,
     ) -> base.SyncResponseContextIterator:
-        """WARNING: This API is experimental and could be changed.
+        """Sends a query to Query Service
 
-        Sends a query to Query Service
         :param query: (YQL or SQL text) to be executed.
         :param parameters: dict with parameters and YDB types;
         :param commit_tx: A special flag that allows transaction commit.
@@ -427,6 +420,7 @@ class QueryTxContextSync(BaseQueryTxContext):
             lambda resp: base.wrap_execute_query_response(
                 rpc_state=None,
                 response_pb=resp,
+                session_state=self._session_state,
                 tx=self,
                 commit_tx=commit_tx,
                 settings=self.session._settings,

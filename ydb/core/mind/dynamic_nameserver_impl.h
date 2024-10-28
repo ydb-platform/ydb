@@ -10,6 +10,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -213,10 +214,13 @@ public:
 
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+
+            hFunc(TEvNodeWardenStorageConfig, Handle);
         }
     }
 
     void Bootstrap(const TActorContext &ctx);
+    void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Die(const TActorContext &ctx) override;
 
 private:
@@ -262,6 +266,7 @@ private:
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;
     THashSet<TActorId> StaticNodeChangeSubscribers;
+    bool SubscribedToConsole = false;
 };
 
 } // NNodeBroker

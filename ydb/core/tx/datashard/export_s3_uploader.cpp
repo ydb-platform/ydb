@@ -182,8 +182,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetSchemeKey())
-            .WithStorageClass(Settings.GetStorageClass());
+            .WithKey(Settings.GetSchemeKey());
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
 
         this->Become(&TThis::StateUploadScheme);
@@ -199,8 +198,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         google::protobuf::TextFormat::PrintToString(Permissions.GetRef(), &Buffer);
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetPermissionsKey())
-            .WithStorageClass(Settings.GetStorageClass());
+            .WithKey(Settings.GetPermissionsKey());
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
 
         this->Become(&TThis::StateUploadPermissions);
@@ -212,8 +210,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         Buffer = std::move(Metadata);
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Settings.GetMetadataKey())
-            .WithStorageClass(Settings.GetStorageClass());
+            .WithKey(Settings.GetMetadataKey());
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
 
         this->Become(&TThis::StateUploadMetadata);
@@ -311,8 +308,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     void UploadData() {
         if (!MultiPart) {
             auto request = Aws::S3::Model::PutObjectRequest()
-                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
-                .WithStorageClass(Settings.GetStorageClass());
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
             this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
         } else {
             if (!UploadId) {
@@ -351,8 +347,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (!upload) {
             auto request = Aws::S3::Model::CreateMultipartUploadRequest()
-                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
-                .WithStorageClass(Settings.GetStorageClass());
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
             this->Send(Client, new TEvExternalStorage::TEvCreateMultipartUploadRequest(request));
         } else {
             UploadId = upload->Id;

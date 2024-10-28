@@ -35,7 +35,7 @@ TIntrusivePtr<NKqp::IKqpGateway> GetIcGateway(Tests::TServer& server) {
     counters->Counters = new TKqpCounters(server.GetRuntime()->GetAppData(0).Counters);
     counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
     std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TestCluster, server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr),false);
-    return NKqp::CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
+    return NKqp::CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
         server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
@@ -3495,14 +3495,16 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexUsingInJoin) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin, UseStreamJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        bool streamLookupEnabled = serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup();
 
         {
             auto tableBuilder = db.GetTableBuilder();
@@ -3570,16 +3572,30 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int indexPhaseId = streamLookupEnabled ? 1 : 2;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), streamLookupEnabled ? 2 : 3);
+            if (UseStreamJoin) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+                for (const auto& ta : stats.query_phases(0).table_access()) {
+                    if (ta.name() == "/Root/TestTable1") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 3);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
+            } else {
+                int indexPhaseId = 1;
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+            }
         }
 
         {
@@ -3600,16 +3616,30 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int indexPhaseId = streamLookupEnabled ? 1 : 2;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), streamLookupEnabled ? 2 : 3);
+            if (UseStreamJoin) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+                for (const auto& ta : stats.query_phases(0).table_access()) {
+                    if (ta.name() == "/Root/TestTable1") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 3);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
+            } else {
+                int indexPhaseId = 1;
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+            }
         }
 
         {
@@ -3631,17 +3661,30 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int indexPhaseId = 1;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), streamLookupEnabled ? 2 : 3);
-            indexPhaseId = streamLookupEnabled ? 1 : 2;
+            if (UseStreamJoin) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+                for (const auto& ta : stats.query_phases(0).table_access()) {
+                    if (ta.name() == "/Root/TestTable1") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 3);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
+            } else {
+                int indexPhaseId = 1;
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+            }
         }
 
         {
@@ -3662,27 +3705,43 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int indexPhaseId = streamLookupEnabled ? 1 : 2;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), streamLookupEnabled ? 2 : 3);
+            if (UseStreamJoin) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+                for (const auto& ta : stats.query_phases(0).table_access()) {
+                    if (ta.name() == "/Root/TestTable1") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 3);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
+            } else {
+                int indexPhaseId = 1;
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+            }
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexUsingInJoin2) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexUsingInJoin2, UseStreamJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(UseStreamJoin);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        bool streamLookupEnabled = serverSettings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup();
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
@@ -3751,29 +3810,36 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int indexPhaseId = streamLookupEnabled ? 1 : 2;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), streamLookupEnabled ? 2 : 4);
+            if (UseStreamJoin) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 3);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
-
-            if (streamLookupEnabled) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(1).name(), "/Root/TestTable2/Index1/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(1).reads().rows(), 2);
+                for (const auto& ta : stats.query_phases(0).table_access()) {
+                    if (ta.name() == "/Root/TestTable1") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 3);
+                    } else if (ta.name() == "/Root/TestTable2") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-                indexPhaseId++;
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
+                
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 2);
+                for (const auto& ta : stats.query_phases(1).table_access()) {
+                    if (ta.name() == "/Root/TestTable2") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
             }
         }
 
@@ -3796,29 +3862,36 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            int indexPhaseId = streamLookupEnabled ? 1 : 2;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), streamLookupEnabled ? 2 : 4);
+            if (UseStreamJoin) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 3);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
-
-            if (streamLookupEnabled) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(1).name(), "/Root/TestTable2/Index1/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(1).reads().rows(), 2);
+                for (const auto& ta : stats.query_phases(0).table_access()) {
+                    if (ta.name() == "/Root/TestTable1") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 3);
+                    } else if (ta.name() == "/Root/TestTable2") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2/Index1/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-                indexPhaseId++;
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable1");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
 
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable2");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).reads().rows(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 2);
+                for (const auto& ta : stats.query_phases(1).table_access()) {
+                    if (ta.name() == "/Root/TestTable2") {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(ta.name(), "/Root/TestTable2/Index1/indexImplTable");
+                        UNIT_ASSERT_VALUES_EQUAL(ta.reads().rows(), 2);
+                    }
+                }
             }
         }
     }

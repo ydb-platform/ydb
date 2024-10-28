@@ -17,11 +17,11 @@ TUint128 GetDivider(ui8 scale) {
 }
 
 bool IsError(TInt128 v) {
-    return v > Nan() || v < -Nan();
+    return v > Nan() || v < -Inf();
 }
 
 bool IsNan(TInt128 v) {
-    return v == Nan() || v == -Nan();
+    return v == Nan();
 }
 
 bool IsInf(TInt128 v) {
@@ -47,8 +47,6 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
         return "-inf";
     if (val == Nan())
         return "nan";
-    if (val == -Nan())
-        return "-nan";
 
     if (!IsNormal(val)) {
         return nullptr;

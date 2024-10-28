@@ -8,17 +8,17 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListCreate(Tuple<String,Double?>);
 ```
 
-``` yql
+```yql
 SELECT ListCreate(OptionalType(DataType("String")));
 ```
 
 ### Сигнатура
 
-```
+```yql
 ListCreate(T)->List<T>
 ```
 
@@ -28,13 +28,13 @@ ListCreate(T)->List<T>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT AsList(1, 2, 3, 4, 5);
 ```
 
 ### Сигнатура
 
-```
+```yql
 AsList(T..)->List<T>
 ```
 
@@ -46,14 +46,14 @@ AsList(T..)->List<T>
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListLength(list_column) FROM my_table;
 ```
 {% endif %}
 
 ### Сигнатура
 
-```
+```yql
 ListLength(List<T>)->Uint64
 ListLength(List<T>?)->Uint64?
 ```
@@ -66,7 +66,7 @@ ListLength(List<T>?)->Uint64?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListHasItems(list_column) FROM my_table;
 ```
 
@@ -74,7 +74,7 @@ SELECT ListHasItems(list_column) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 ListHasItems(List<T>)->Bool
 ListHasItems(List<T>?)->Bool?
 ```
@@ -87,7 +87,7 @@ ListHasItems(List<T>?)->Bool?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListCollect(list_column) FROM my_table;
 ```
 
@@ -95,7 +95,7 @@ SELECT ListCollect(list_column) FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 ListCollect(LazyList<T>)->List<T>
 ListCollect(LazyList<T>?)->List<T>?
 ```
@@ -113,13 +113,13 @@ ListCollect(LazyList<T>?)->List<T>?
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT ListSortDesc(list_column) FROM my_table;
 ```
 
 {% endif %}
 
-``` yql
+```yql
 $list = AsList(
     AsTuple("x", 3),
     AsTuple("xx", 1),
@@ -139,7 +139,7 @@ SELECT ListSort($list, ($x) -> {
 
 ### Сигнатура
 
-```
+```yql
 ListSort(List<T>)->List<T>
 ListSort(List<T>?)->List<T>?
 
@@ -154,16 +154,18 @@ ListSort(List<T>?, (T)->U)->List<T>?
 Если хотя бы один из списков является опциональным, то таким же является и результат.
 Если хотя бы один аргумент является `NULL`, то тип результата - `NULL`.
 
+{% if feature_column_container_type %}
+
 ### Примеры
 
-{% if feature_column_container_type %}
-``` yql
+```yql
 SELECT ListExtend(
     list_column_1,
     list_column_2,
     list_column_3
 ) FROM my_table;
 ```
+
 {% endif %}
 
 ```yql
@@ -176,7 +178,7 @@ SELECT ListExtend($l1, $l2, $l3);  -- ["a","b","b","c","d","e"]
 
 ### Сигнатура
 
-```
+```yql
 ListExtend(List<T>..)->List<T>
 ListExtend(List<T>?..)->List<T>?
 ```
@@ -190,13 +192,15 @@ ListExtend(List<T>?..)->List<T>?
 ### Примеры
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT ListUnionAll(
     list_column_1,
     list_column_2,
     list_column_3
 ) FROM my_table;
 ```
+
 {% endif %}
 
 ```yql
@@ -214,7 +218,7 @@ SELECT ListUnionAll($l1, $l2);  -- result: [("value":1),("value":2),("key":"a"),
 
 ### Сигнатура
 
-```
+```yql
 ListUnionAll(List<Struct<..>>, List<Struct<..>>..)->List<Struct<..>>
 ListUnionAll(List<Struct<..>>?, List<Struct<..>>?..)->List<Struct<..>>?
 ```
@@ -229,12 +233,14 @@ ListUnionAll(List<Struct<..>>?, List<Struct<..>>?..)->List<Struct<..>>?
 ### Примеры
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT
     ListZip(list_column_1, list_column_2, list_column_3),
     ListZipAll(list_column_1, list_column_2)
 FROM my_table;
 ```
+
 {% endif %}
 
 ```yql
@@ -247,7 +253,7 @@ SELECT ListZipAll($l1, $l2);  -- [("a",1),("b",2),(null,3)]
 
 ### Сигнатура
 
-```
+```yql
 ListZip(List<T1>, List<T2>)->List<Tuple<T1, T2>>
 ListZip(List<T1>?, List<T2>?)->List<Tuple<T1, T2>>?
 
@@ -263,14 +269,15 @@ ListZipAll(List<T1>?, List<T2>?)->List<Tuple<T1?, T2?>>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListEnumerate(list_column) FROM my_table;
 ```
+
 {% endif %}
 
 ### Сигнатура
 
-```
+```yql
 ListEnumerate(List<T>)->List<Tuple<Uint64, T>>
 ListEnumerate(List<T>?)->List<Tuple<Uint64, T>>?
 ```
@@ -283,14 +290,15 @@ ListEnumerate(List<T>?)->List<Tuple<Uint64, T>>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListReverse(list_column) FROM my_table;
 ```
+
 {% endif %}
 
 ### Сигнатура
 
-```
+```yql
 ListReverse(List<T>)->List<T>
 ListReverse(List<T>?)->List<T>?
 ```
@@ -305,7 +313,7 @@ ListReverse(List<T>?)->List<T>?
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT
     ListSkip(list_column, 3)
 FROM my_table;
@@ -321,7 +329,7 @@ SELECT ListSkip($l1, 2);  -- [3,4,5]
 
 ### Сигнатура
 
-```
+```yql
 ListSkip(List<T>, Uint64)->List<T>
 ListSkip(List<T>?, Uint64)->List<T>?
 ```
@@ -336,7 +344,7 @@ ListSkip(List<T>?, Uint64)->List<T>?
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT ListTake(list_column, 3) FROM my_table;
 ```
 
@@ -350,7 +358,7 @@ SELECT ListTake($l1, 2);  -- [1,2]
 
 ### Сигнатура
 
-```
+```yql
 ListTake(List<T>, Uint64)->List<T>
 ListTake(List<T>?, Uint64)->List<T>?
 ```
@@ -363,7 +371,7 @@ ListTake(List<T>?, Uint64)->List<T>?
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT
     ListIndexOf(list_column, 123)
 FROM my_table;
@@ -379,7 +387,7 @@ SELECT ListIndexOf($l1, 2);  -- 1
 
 ### Сигнатура
 
-```
+```yql
 ListIndexOf(List<T>, T)->Uint64?
 ListIndexOf(List<T>?, T)->Uint64?
 ```
@@ -402,10 +410,14 @@ ListIndexOf(List<T>?, T)->Uint64?
 
 1. Исходный список;
 2. Функции для обработки элементов, например:
+
     * [Лямбда функция](../../syntax/expressions.md#lambda);
     * `Module::Function` - С++ UDF;
+
 {% if feature_udf_noncpp and oss != true %}
+
     * [Python UDF](../../udf/python.md), [JavaScript UDF](../../udf/javascript.md) или любое другое вызываемое значение;
+
 {% endif %}
 
 Если исходный список является опциональным, то таким же является и выходной список.
@@ -413,12 +425,14 @@ ListIndexOf(List<T>?, T)->Uint64?
 ### Примеры
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT
     ListMap(list_column, ($x) -> { RETURN $x > 2; }),
     ListFlatMap(list_column, My::Udf)
 FROM my_table;
 ```
+
 {% endif %}
 
 ```yql
@@ -439,7 +453,7 @@ SELECT ListFilter($list, $callable);  -- [1,3]
 
 ### Сигнатура
 
-```
+```yql
 ListMap(List<T>, (T)->U)->List<U>
 ListMap(List<T>?, (T)->U)->List<U>?
 
@@ -460,14 +474,14 @@ ListFilter(List<T>?, (T)->Bool)->List<T>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListNotNull([1,2]),   -- [1,2]
     ListNotNull([3,null,4]); -- [3,4]
 ```
 
 ### Сигнатура
 
-```
+```yql
 ListNotNull(List<T?>)->List<T>
 ListNotNull(List<T?>?)->List<T>?
 ```
@@ -480,14 +494,14 @@ ListNotNull(List<T?>?)->List<T>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListFlatten([[1,2],[3,4]]),   -- [1,2,3,4]
     ListFlatten([null,[3,4],[5,6]]); -- [3,4,5,6]
 ```
 
 ### Сигнатура
 
-```
+```yql
 ListFlatten(List<List<T>?>)->List<T>
 ListFlatten(List<List<T>?>?)->List<T>?
 ```
@@ -498,7 +512,7 @@ ListFlatten(List<List<T>?>?)->List<T>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListUniq([1, 2, 3, 2, 4, 5, 1]) -- [5, 4, 2, 1, 3]
 SELECT ListUniqStable([1, 2, 3, 2, 4, 5, 1]) -- [1, 2, 3, 4, 5]
 SELECT ListUniqStable([1, 2, null, 7, 2, 8, null]) -- [1, 2, null, 7, 8]
@@ -506,7 +520,7 @@ SELECT ListUniqStable([1, 2, null, 7, 2, 8, null]) -- [1, 2, null, 7, 8]
 
 ### Сигнатура
 
-```
+```yql
 ListUniq(List<T>)->List<T>
 ListUniq(List<T>?)->List<T>?
 
@@ -527,7 +541,7 @@ ListUniqStable(List<T>?)->List<T>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     ListAll(bool_column),
     ListAny(bool_column)
@@ -537,7 +551,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 ListAny(List<Bool>)->Bool
 ListAny(List<Bool>?)->Bool?
 ListAll(List<Bool>)->Bool
@@ -551,11 +565,13 @@ ListAll(List<Bool>?)->Bool?
 ### Примеры
 
 {% if feature_column_container_type %}
-``` yql
+
+```yql
 SELECT
     ListHas(list_column, "my_needle")
 FROM my_table;
 ```
+
 {% endif %}
 
 ```yql
@@ -567,7 +583,7 @@ SELECT ListHas($l1, 6);  -- false
 
 ### Сигнатура
 
-```
+```yql
 ListHas(List<T>, T)->Bool
 ListHas(List<T>?, T)->Bool?
 ```
@@ -580,7 +596,7 @@ ListHas(List<T>?, T)->Bool?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     ListHead(numeric_list_column) AS head,
     ListLast(numeric_list_column) AS last
@@ -590,7 +606,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 ListHead(List<T>)->T?
 ListHead(List<T>?)->T?
 ListLast(List<T>)->T?
@@ -605,7 +621,7 @@ ListLast(List<T>?)->T?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     ListMax(numeric_list_column) AS max,
     ListMin(numeric_list_column) AS min,
@@ -617,7 +633,7 @@ FROM my_table;
 
 ### Сигнатура
 
-```
+```yql
 ListMin(List<T>)->T?
 ListMin(List<T>?)->T?
 ```
@@ -651,7 +667,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ListFold(List<T>, U, (T, U)->U)->U
 ListFold(List<T>?, U, (T, U)->U)->U?
 
@@ -688,7 +704,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ListFoldMap(List<T>, S, (T, S)->Tuple<U,S>)->List<U>
 ListFoldMap(List<T>?, S, (T, S)->Tuple<U,S>)->List<U>?
 
@@ -720,19 +736,19 @@ ListFold1Map(List<T>?, (T)->Tuple<U,S>, (T, S)->Tuple<U,S>)->List<U>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
     ListFromRange(-2, 2), -- [-2, -1, 0, 1]
     ListFromRange(2, 1, -0.5); -- [2.0, 1.5]
 ```
 
-``` yql
+```yql
 SELECT ListFromRange(Datetime("2022-05-23T15:30:00Z"), Datetime("2022-05-30T15:30:00Z"), DateTime::IntervalFromDays(1));
 ```
 
 ### Сигнатура
 
-```
+```yql
 ListFromRange(T, T)->LazyList<T> -- T - числовой тип или тип, представляющий дату/время
 ```
 
@@ -747,13 +763,13 @@ ListFromRange(T, T)->LazyList<T> -- T - числовой тип или тип, �
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListReplicate(true, 3); -- [true, true, true]
 ```
 
 ### Сигнатура
 
-```
+```yql
 ListReplicate(T, Uint64)->List<T>
 ```
 
@@ -766,7 +782,7 @@ ListReplicate(T, Uint64)->List<T>
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT
     ListConcat(string_list_column),
     ListConcat(string_list_column, "; ")
@@ -784,7 +800,7 @@ SELECT ListConcat($l1, " ");  -- "h e l l o"
 
 ### Сигнатура
 
-```
+```yql
 ListConcat(List<String>)->String?
 ListConcat(List<String>?)->String?
 
@@ -800,7 +816,7 @@ ListConcat(List<String>?, String)->String?
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT
     ListExtract(struct_list_column, "MyMember")
 FROM my_table;
@@ -818,7 +834,7 @@ SELECT ListExtract($l, "key");  -- ["a", "b"]
 
 ### Сигнатура
 
-```
+```yql
 ListExtract(List<Struct<..>>, String)->List<T>
 ListExtract(List<Struct<..>>?, String)->List<T>?
 ```
@@ -840,7 +856,7 @@ ListExtract(List<Struct<..>>?, String)->List<T>?
 
 ### Примеры
 
-``` yql
+```yql
 $data = AsList(1, 2, 5, 1, 2, 7);
 
 SELECT
@@ -852,7 +868,7 @@ SELECT
 
 ### Сигнатура
 
-```
+```yql
 ListTakeWhile(List<T>, (T)->Bool)->List<T>
 ListTakeWhile(List<T>?, (T)->Bool)->List<T>?
 ```
@@ -870,13 +886,13 @@ ListTakeWhile(List<T>?, (T)->Bool)->List<T>?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT ListAggregate(AsList(1, 2, 3), AggregationFactory("Sum")); -- 6
 ```
 
 ### Сигнатура
 
-```
+```yql
 ListAggregate(List<T>, AggregationFactory)->T
 ListAggregate(List<T>?, AggregationFactory)->T?
 ```
@@ -896,7 +912,7 @@ ListAggregate(List<T>?, AggregationFactory)->T?
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT
     ToDict(tuple_list_column)
 FROM my_table;
@@ -911,7 +927,7 @@ SELECT ToDict($l);  -- {"a": 1,"b": 2}
 
 ### Сигнатура
 
-```
+```yql
 ToDict(List<Tuple<K,V>>)->Dict<K,V>
 ToDict(List<Tuple<K,V>>?)->Dict<K,V>?
 ```
@@ -927,7 +943,7 @@ ToDict(List<Tuple<K,V>>?)->Dict<K,V>?
 
 {% if feature_column_container_type %}
 
-``` yql
+```yql
 SELECT
     ToSet(list_column)
 FROM my_table;
@@ -942,7 +958,7 @@ SELECT ToSet($l);  -- {1,2,3}
 
 ### Сигнатура
 
-```
+```yql
 ToSet(List<T>)->Set<T>
 ToSet(List<T>?)->Set<T>?
 ```
@@ -960,7 +976,7 @@ SELECT ListFromTuple($t);  -- [1,2,3]
 
 ### Сигнатура
 
-```
+```yql
 ListFromTuple(Null)->Null
 ListFromTuple(Tuple<>)->EmptyList
 ListFromTuple(Tuple<T1,T2,...>)->List<T>
@@ -980,7 +996,7 @@ SELECT ListToTuple($l, 3);  -- (1,2,3)
 
 ### Сигнатура
 
-```
+```yql
 ListToTuple(Null,N)->Null
 ListToTuple(EmptyList,N)->()) -- N должен быть 0
 ListToTuple(List<T>, N)->Tuple<T,T,...T> -- ширина кортежа N
@@ -1001,8 +1017,9 @@ ListToTuple(List<T>?, N)->Tuple<T,T,...T>? -- ширина кортежа N
 
 ### Сигнатура
 
-```
+```yql
 ListTop(List<T>{Flags:AutoMap}, N)->List<T>
 ListTop(List<T>{Flags:AutoMap}, N, (T)->U)->List<T>
 ```
+
 Сигнатуры остальных функций совпадают с `ListTop`.

@@ -8,7 +8,7 @@
 
 ## Примеры
 
-``` yql
+```yql
 INSERT INTO my_table WITH TRUNCATE
 SELECT key FROM my_table_source;
 ```

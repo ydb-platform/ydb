@@ -22,7 +22,7 @@ public:
 class TCommandExportToYt : public TYdbOperationCommand,
                            public TCommandWithYtProxy,
                            public TCommandWithYtToken,
-                           public TCommandWithFormat {
+                           public TCommandWithOutput {
 public:
     TCommandExportToYt();
     virtual void Config(TConfig& config) override;
@@ -46,7 +46,7 @@ private:
 
 class TCommandExportToS3 : public TYdbOperationCommand,
                            public TCommandWithAwsCredentials,
-                           public TCommandWithFormat {
+                           public TCommandWithOutput {
     using EStorageClass = NExport::TExportToS3Settings::EStorageClass;
 
 public:

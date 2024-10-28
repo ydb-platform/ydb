@@ -26,6 +26,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 
 #include <util/string/builder.h>
+#include <regex>
 
 using namespace NKikimr;
 using namespace NViewer;
@@ -1831,4 +1832,206 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto resultSets = json["Databases"].GetArray();
         UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
     }
+
+    static const ui32 ROWS_N = 15;
+    static const ui32 ROWS_LIMIT = 5;
+
+    TString PostExecuteScript(TKeepAliveHttpClient& httpClient, TString query) {
+        TStringStream requestBody;
+        requestBody
+            << "{ \"database\": \"/Root\","
+            << " \"script_content\": {"
+                << " \"text\": \"" << query << "\"},"
+            << " \"exec_mode\": \"EXEC_MODE_EXECUTE\" }";
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost(TStringBuilder()
+                                                            << "/query/script/execute?timeout=600000"
+                                                            << "&database=%2FRoot", requestBody.Str(), &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        return response;
+    }
+
+    TString GetOperation(TKeepAliveHttpClient& httpClient, TString id) {
+        TStringStream requestBody;
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
+                                                            << "/operation/get?timeout=600000&id=" << id
+                                                            << "&database=%2FRoot", &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        return response;
+    }
+
+    TString GetFetchScript(TKeepAliveHttpClient& httpClient, TString id) {
+        TStringStream requestBody;
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
+                                                            << "/query/script/fetch?timeout=600000&operation_id=" << id
+                                                            << "&database=%2FRoot"
+                                                            << "&rows_limit=" << ROWS_LIMIT, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        return response;
+    }
+
+    Y_UNIT_TEST(QueryExecuteScript) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        client.InitRootScheme();
+
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+
+        PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query");
+        for (ui32 i = 1; i <= ROWS_N; ++i) {
+            PostQuery(httpClient, TStringBuilder() << "INSERT INTO `/Root/Test` (Key, Value) VALUES (" << i << ", 'testvalue');", "execute-query");
+        }
+
+        NJson::TJsonReaderConfig jsonCfg;
+        NJson::TJsonValue json;
+
+        TString response = PostExecuteScript(httpClient, "SELECT * FROM `/Root/Test`;");
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "SUCCESS", response);
+        TString id = json["id"].GetString();
+
+        Sleep(TDuration::MilliSeconds(1000));
+
+        response = GetOperation(httpClient, id);
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["issues"].GetArray().size(), 0, response);
+
+        response = GetFetchScript(httpClient, id);
+        NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
+        UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "SUCCESS", response);
+        auto rows = json["result_set"].GetMap().at("rows").GetArray();
+        UNIT_ASSERT_EQUAL_C(rows.size(), ROWS_LIMIT, response);
+    }
+
+    Y_UNIT_TEST(Plan2SvgOK) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString tinyPlan = R"json({
+            "Plan" : {
+                "Node Type" : "Query",
+                "PlanNodeType" : "Query",
+                "Plans" : [
+                    {
+                        "Node Type" : "ResultSet",
+                        "PlanNodeType" : "ResultSet",
+                        "Plans" : [
+                            {
+                                "Node Type" : "Limit"
+                            }
+                        ]
+                    }
+                ]
+            }
+        })json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", tinyPlan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("<svg"), response);
+    }
+
+    Y_UNIT_TEST(Plan2SvgBad) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port);
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+
+        TString brokenPlan = R"json({
+            "Plan" : {
+                "Node Type" : "Query",
+                "PlanNodeType" : "Query",
+                "Plans" : [
+                    {
+                        "Node Type" : "ResultSet",
+                        "PlanNodeType" : "ResultSet",
+                        "Plans" : [
+                            {
+                                "Node Type" : "Limit",
+                                "Plans" : [
+                                    {
+                                        "Node Type" : "Merge",
+                                        "CTE Name": "TableFullScan_15",
+                                        "PlanNodeType" : "Connection"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        })json";
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", brokenPlan, &responseStream, headers);
+        const TString response = responseStream.ReadAll();
+        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);
+        UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
+    }
+
 }

@@ -181,8 +181,28 @@ private:
             return;
         }
 
+        StatusIds::StatusCode code = StatusIds::SUCCESS;
+        TString error;
+
+        bool hasSerial = false;
+        for (const auto& column : req->columns()) {
+            switch (column.default_value_case()) {
+                case Ydb::Table::ColumnMeta::kFromSequence: {
+                    auto* seqDesc = modifyScheme->MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
+                    if (!FillSequenceDescription(*seqDesc, column.from_sequence(), code, error)) {
+                        NYql::TIssues issues;
+                        issues.AddIssue(NYql::TIssue(error));
+                        return Reply(code, issues, ctx);
+                    }
+                    hasSerial = true;
+                    break;
+                }
+                default: break;
+            }
+        }
+
         NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
-        if (req->indexesSize()) {
+        if (req->indexesSize() || hasSerial) {
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
             tableDesc = modifyScheme->MutableCreateIndexedTable()->MutableTableDescription();
         } else {
@@ -191,9 +211,6 @@ private:
         }
 
         tableDesc->SetName(name);
-
-        StatusIds::StatusCode code = StatusIds::SUCCESS;
-        TString error;
 
         if (!FillColumnDescription(*tableDesc, req->columns(), code, error)) {
             NYql::TIssues issues;

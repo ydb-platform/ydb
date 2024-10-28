@@ -16,6 +16,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/security/secure_request.h>
+#include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -312,6 +313,7 @@ private:
                     SetTokenAndDie();
                     break;
                 case Ydb::StatusIds::TIMEOUT:
+                case Ydb::StatusIds::CANCELLED:
                     Counters_->IncDatabaseRateLimitedCounter();
                     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded");
                     ReplyOverloadedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED, "Throughput limit exceeded"));
@@ -331,7 +333,8 @@ private:
             }
         };
 
-        req.mutable_operation_params()->mutable_operation_timeout()->set_nanos(200000000); // same as cloud-go serverless proxy
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(10);
+        req.mutable_operation_params()->mutable_cancel_after()->set_nanos(200000000); // same as cloud-go serverless proxy
 
         NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(
             std::move(req),

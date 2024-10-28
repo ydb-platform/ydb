@@ -38,7 +38,7 @@ WHERE  ...
 * `CROSS` — декартово произведение двух таблиц целиком без указания ключевых колонок, секция с `ON/USING` явно не пишется;
 * `EXCLUSION` — обе стороны минус пересечение.
 
-![](../_assets/join-YQL-06.png)
+![JOIN](../_assets/join-YQL-06.png)
 
 {% note info %}
 
@@ -101,7 +101,7 @@ INNER JOIN b_table VIEW b_index_ref AS b ON a.ref = b.ref;
 
 Запрос
 
-``` yql
+```yql
 $t1 = AsList(
     AsStruct("1" AS key, "v111" AS value),
     AsStruct("2" AS key, "v121" AS value),

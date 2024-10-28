@@ -42,6 +42,7 @@ TEST_SRCS(
     test_recovery_match_recognize.py
     test_recovery_mz.py
     test_restart_query.py
+    test_row_dispatcher.py
     test_select_1.py
     test_select_limit_db_id.py
     test_select_limit.py
@@ -52,7 +53,7 @@ TEST_SRCS(
     test_yq_streaming.py
 )
 
-IF (SANITIZER_TYPE == "thread")
+IF (SANITIZER_TYPE)
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)

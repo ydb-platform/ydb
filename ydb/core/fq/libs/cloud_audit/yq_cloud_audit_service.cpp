@@ -385,7 +385,7 @@ public:
         clientParameters.SetLog(*SdkLogger);
 
         const auto& sharedKey = Config.GetUAConfig().GetSharedSecretKey();
-        if (!sharedKey.Empty()) {
+        if (!sharedKey.empty()) {
             clientParameters.SetSharedSecretKey(sharedKey);
         }
         auto clientPtr = NUnifiedAgent::MakeClient(clientParameters);

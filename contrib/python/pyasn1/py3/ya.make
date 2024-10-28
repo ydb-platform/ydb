@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.6.0)
+VERSION(0.6.1)
 
 LICENSE(BSD-3-Clause)
 
@@ -28,7 +28,6 @@ PY_SRCS(
     pyasn1/codec/streaming.py
     pyasn1/compat/__init__.py
     pyasn1/compat/integer.py
-    pyasn1/compat/octets.py
     pyasn1/debug.py
     pyasn1/error.py
     pyasn1/type/__init__.py

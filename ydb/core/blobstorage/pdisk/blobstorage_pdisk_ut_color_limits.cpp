@@ -1,11 +1,12 @@
 #include "blobstorage_pdisk_abstract.h"
+#include "blobstorage_pdisk_chunk_tracker.h"
+#include "blobstorage_pdisk_color_limits.h"
 #include "blobstorage_pdisk_impl.h"
 
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_actions.h"
 #include "blobstorage_pdisk_ut_helpers.h"
 #include "blobstorage_pdisk_ut_run.h"
-#include "blobstorage_pdisk_color_limits.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
 
@@ -115,7 +116,7 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
             SetColor(NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
             for (i64 i = 0; i < (chunks - all); i++) {
                 Cout << "#";
-                
+
                 if ((++cur % 100) == 0) {
                     cur = 0;
                     Cout << Endl;
@@ -137,6 +138,61 @@ Y_UNIT_TEST_SUITE(TColorLimitsTest) {
         printLimitsFn(100);
         printLimitsFn(65);
         printLimitsFn(13);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor_E AllColors[] = {
+        NKikimrBlobStorage::TPDiskSpaceColor::GREEN,
+        NKikimrBlobStorage::TPDiskSpaceColor::CYAN,
+        NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW,
+        NKikimrBlobStorage::TPDiskSpaceColor::YELLOW,
+        NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE,
+        NKikimrBlobStorage::TPDiskSpaceColor::PRE_ORANGE,
+        NKikimrBlobStorage::TPDiskSpaceColor::ORANGE,
+        NKikimrBlobStorage::TPDiskSpaceColor::RED,
+        NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
+    };
+
+    Y_UNIT_TEST(OwnerFreeSpaceShare) {
+        using namespace NPDisk;
+
+        double prevOccupancy = 0;
+
+        for (auto borderColor : AllColors) {
+            TChunkTracker chunkTracker;
+            TKeeperParams params {
+                .TotalChunks = 1000,
+                .ExpectedOwnerCount = 2,
+                .SysLogSize = 0,
+                .CommonLogSize = 0,
+                .MaxCommonLogChunks = 0,
+                .HasStaticGroups = false,
+                .SpaceColorBorder = borderColor,
+                .SeparateCommonLog = true,
+            };
+            auto limits = NPDisk::TColorLimits::MakeChunkLimits(params.ChunkBaseLimit);
+            TString errorReason;
+            bool ok = chunkTracker.Reset(params, limits, errorReason);
+            UNIT_ASSERT(ok);
+
+            TOwner owner1 = NPDisk::EOwner::OwnerBeginUser + 1;
+            TOwner owner2 = NPDisk::EOwner::OwnerBeginUser + 2;
+
+            chunkTracker.AddOwner(owner1, TVDiskID());
+            chunkTracker.AddOwner(owner2, TVDiskID());
+
+            double occupancy;
+            // consume 100% of personal quota and 50% of common quota
+            auto color = chunkTracker.EstimateSpaceColor(owner1, params.TotalChunks / 2, &occupancy);
+            double borderOccupancy = limits.GetOccupancyForColor(color, params.TotalChunks);
+            Cerr << color << " \t" << occupancy << " \t" << borderOccupancy << Endl;
+
+            UNIT_ASSERT_C(color == borderColor, "Because owner consumed all his quota his color should be equal to border");
+            if (color != NKikimrBlobStorage::TPDiskSpaceColor::GREEN) {
+                UNIT_ASSERT_C(std::fabs(occupancy - borderOccupancy) <= 0.001,
+                    "Because owner consumed all his quota his occupancy should be equal to occupancy border");
+            }
+            UNIT_ASSERT_C(occupancy >= prevOccupancy, "check that with Border is increasing fair occupancy is increasing too");
+        }
     }
 }
 } // namespace NKikimr

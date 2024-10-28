@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
@@ -76,7 +77,7 @@ static int PrintDescription(TCommand* self, EDataFormat format, const TValue& va
     return EXIT_SUCCESS;
 }
 
-class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
+class TCommandDescribe : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithOutput {
 public:
     TCommandDescribe();
     virtual void Config(TConfig& config) override;
@@ -100,6 +101,9 @@ private:
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
 
+    int DescribeView(const TDriver& driver);
+    int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
+
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;
     int PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerDescription& description) const;
@@ -122,9 +126,10 @@ private:
     bool ShowKeyShardBoundaries = false;
     bool ShowStats = false;
     bool ShowPartitionStats = false;
+    TString Database;
 };
 
-class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
+class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithOutput {
 public:
     TCommandList();
     virtual void Config(TConfig& config) override;

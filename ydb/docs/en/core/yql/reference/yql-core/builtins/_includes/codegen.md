@@ -15,12 +15,12 @@ The S-expressions nodes form a directed graph. Atoms are always leaf nodes, beca
 
 In the text representation, S-expressions have the following format:
 
-* Atom: ```'"foo"```. The apostrophe character (') denotes quoting of the next line that is usually enclosed in quotation marks.
-* List: ```'("foo" "bar")```. The apostrophe character (') denotes that there will be no function call in parentheses.
-* Calling the built-in function: ```(foo "bar")```. The first item inside the brackets is the mandatory name of the function followed by the function arguments.
-* Declaring a lambda function: ```(lambda '(x y) (+ x y))```. The `lambda` keyword is followed by a list of argument names and then by the body of the lambda function.
-* The lambda function argument is ```x```. Unlike an atom, a string without an apostrophe character (') references a name in the current scope. When declaring a lambda function, the names of arguments are added to the body's visibility scope, and, if needed, the name is hidden from the global scope.
-* The ```world```.
+* Atom: `'"foo"`. The apostrophe character (') denotes quoting of the next line that is usually enclosed in quotation marks.
+* List: `'("foo" "bar")`. The apostrophe character (') denotes that there will be no function call in parentheses.
+* Calling the built-in function: `(foo "bar")`. The first item inside the brackets is the mandatory name of the function followed by the function arguments.
+* Declaring a lambda function: `(lambda '(x y) (+ x y))`. The `lambda` keyword is followed by a list of argument names and then by the body of the lambda function.
+* The lambda function argument is `x`. Unlike an atom, a string without an apostrophe character (') references a name in the current scope. When declaring a lambda function, the names of arguments are added to the body's visibility scope, and, if needed, the name is hidden from the global scope.
+* The `world`.
 
 ## FormatCode
 

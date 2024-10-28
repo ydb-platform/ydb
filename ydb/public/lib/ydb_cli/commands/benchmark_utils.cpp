@@ -13,6 +13,7 @@
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <vector>
 #include <algorithm>
@@ -122,11 +123,20 @@ TString FullTablePath(const TString& database, const TString& table) {
 }
 
 
-void ThrowOnError(const TStatus& status) {
-    if (!status.IsSuccess()) {
-        ythrow yexception() << "Operation failed with status " << status.GetStatus() << ": "
-                            << status.GetIssues().ToString();
+TMaybe<TQueryBenchmarkResult> ResultByStatus(const TStatus& status, const TString& deadlineName) {
+    if (status.IsSuccess()) {
+        return Nothing();
     }
+    TStringBuilder errorInfo;
+    switch (status.GetStatus()) {
+        case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+            errorInfo << deadlineName << " deadline expiried: " << status.GetIssues();
+            break;
+        default:
+            errorInfo << "Operation failed with status " << status.GetStatus() << ": " << status.GetIssues().ToString();
+            break;
+    }
+    return TQueryBenchmarkResult::Error(errorInfo, "", "");
 }
 
 bool HasCharsInString(const TString& str) {
@@ -147,6 +157,7 @@ private:
     YDB_READONLY_DEF(TDuration, ServerTiming);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
+    YDB_ACCESSOR_DEF(TString, DeadlineName);
 
 public:
     virtual ~IQueryResultScanner() = default;
@@ -155,8 +166,15 @@ public:
     virtual void OnAfterRow() = 0;
     virtual void OnRowItem(const NYdb::TColumn& c, const NYdb::TValue& value) = 0;
     virtual void OnFinish() = 0;
-    void OnError(const TString& info) {
-        ErrorInfo = info;
+    void OnError(const NYdb::EStatus status, const TString& info) {
+        switch (status) {
+            case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+                ErrorInfo = TStringBuilder() << DeadlineName << " deadline expiried: " << info;
+                break;
+            default:
+                ErrorInfo = info;
+                break;
+        }
     }
 
     template <typename TIterator>
@@ -181,7 +199,7 @@ public:
 
             if (!streamPart.IsSuccess()) {
                 if (!streamPart.EOS()) {
-                    OnError(streamPart.GetIssues().ToString());
+                    OnError(streamPart.GetStatus(), streamPart.GetIssues().ToString());
                     return false;
                 }
                 break;
@@ -292,16 +310,34 @@ public:
     }
 };
 
-TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, bool explainOnly) {
+template<class TSettings>
+TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(TSettings& settings, const TQueryBenchmarkDeadline& deadline) {
+    if (deadline.Deadline != TInstant::Max()) {
+        auto now = Now();
+        if (now >= deadline.Deadline) {
+            return TQueryBenchmarkResult::Error(deadline.Name + " deadline expiried", "", "");
+        }
+        settings.ClientTimeout(deadline.Deadline - now);
+    }
+    return Nothing();
+}
+
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline, bool explainOnly) {
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     settings.Explain(explainOnly);
+    if (auto error = SetTimeoutSettings(settings, deadline)) {
+        return *error;
+    }
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
-    ThrowOnError(it);
+    if (auto error = ResultByStatus(it, deadline.Name)) {
+        return *error;
+    }
 
     std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
     std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
     TQueryResultScannerComposite composite;
+    composite.SetDeadlineName(deadline.Name);
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
@@ -318,27 +354,33 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& cl
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
-    return ExecuteImpl(query, client, false);
+TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, false);
 }
 
-TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client) {
-    return ExecuteImpl(query, client, true);
+TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, true);
 }
 
-TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, bool explainOnly) {
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline, bool explainOnly) {
     NQuery::TExecuteQuerySettings settings;
     settings.StatsMode(NQuery::EStatsMode::Full);
     settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
+    if (auto error = SetTimeoutSettings(settings, deadline)) {
+        return *error;
+    }
     auto it = client.StreamExecuteQuery(
         query,
         NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
         settings).GetValueSync();
-    ThrowOnError(it);
+    if (auto error = ResultByStatus(it, deadline.Name)) {
+        return *error;
+    }
 
     std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
     std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
     TQueryResultScannerComposite composite;
+    composite.SetDeadlineName(deadline.Name);
     composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
@@ -355,12 +397,12 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
     }
 }
 
-TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client) {
-    return ExecuteImpl(query, client, false);
+TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, false);
 }
 
-TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client) {
-    return ExecuteImpl(query, client, true);
+TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline) {
+    return ExecuteImpl(query, client, deadline, true);
 }
 
 NJson::TJsonValue GetQueryLabels(ui32 queryId) {
@@ -396,13 +438,51 @@ bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
 }
 
 template <class T>
-bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected, const double floatPrecesion) {
+bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected) {
+    constexpr T relativeFloatPrecession = 0.0001;
+    TStringBuf precesionStr;
+    vExpected.Split("+-", vExpected, precesionStr);
     T valExpected;
     if (!TryFromString<T>(vExpected, valExpected)) {
         Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
         return false;
     }
-    return valResult > (1 - floatPrecesion) * valExpected && valResult < (1 + floatPrecesion) * valExpected;
+    if (precesionStr) {
+        T absolutePrecesion;
+        if (!TryFromString<T>(precesionStr, absolutePrecesion)) {
+            Cerr << "cannot parse precession expected as " << typeid(valResult).name() << "(" << precesionStr << ")" << Endl;
+            return false;
+        }
+        return valResult >= valExpected - absolutePrecesion && valResult <= valExpected + absolutePrecesion;
+    }
+
+    return valResult > (1 - relativeFloatPrecession) * valExpected && valResult < (1 + relativeFloatPrecession) * valExpected;
+}
+
+template <>
+bool CompareValueImpl<float>(const float& valResult, TStringBuf vExpected) {
+    return CompareValueImplFloat(valResult, vExpected);
+}
+
+template <>
+bool CompareValueImpl<double>(const double& valResult, TStringBuf vExpected) {
+    return CompareValueImplFloat(valResult, vExpected);
+}
+
+bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vExpected) {
+    auto resInt = NYql::NDecimal::FromHalfs(valResult.Low_, valResult.Hi_);
+    TStringBuf precesionStr;
+    vExpected.Split("+-", vExpected, precesionStr);
+    auto expectedInt = NYql::NDecimal::FromString(vExpected, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
+
+    if (precesionStr) {
+        auto precInt = NYql::NDecimal::FromString(precesionStr, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
+        return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
+    }
+    const auto from = NYql::NDecimal::FromString("0.9999", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
+    const auto to = NYql::NDecimal::FromString("1.0001", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
+    const auto devider = NYql::NDecimal::GetDivider(valResult.DecimalType_.Scale);
+    return resInt > NYql::NDecimal::MulAndDivNormalDivider(from, expectedInt, devider) && resInt < NYql::NDecimal::MulAndDivNormalDivider(to, expectedInt, devider);
 }
 
 bool CompareValueImplDatetime(const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
@@ -432,16 +512,49 @@ bool CompareValueImplDatetime64(const T& valResult, TStringBuf vExpected, TDurat
     return valResult == valExpected;
 }
 
-bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double floatPrecession) {
-    TValueParser vp(v);
-    TTypeParser tp(v.GetType());
-    if (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
-        if (vp.IsNull()) {
-            return vExpected == "";
+template<class T>
+bool CompareValuePgImpl(const NYdb::TPgValue& v, TStringBuf vExpected) {
+    if (v.IsText()) {
+        T value;
+        if (!TryFromString(v.Content_, value)) {
+            Cerr << "cannot parse value as " << typeid(value).name() << "(" << v.Content_ << ")" << Endl;
+            return false;
         }
-        vp.OpenOptional();
-        tp.OpenOptional();
+        return CompareValueImpl(value, vExpected);
     }
+    const T* value = reinterpret_cast<const T*>(v.Content_.data());
+    return CompareValueImpl(*value, vExpected);
+}
+
+bool CompareValuePg(const NYdb::TPgValue& v, TStringBuf vExpected) {
+    if (v.IsNull()) {
+        return vExpected == "";
+    }
+    if (v.PgType_.TypeName == "pgint2") {
+        return CompareValuePgImpl<i16>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgint4") {
+        return CompareValuePgImpl<i32>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgint8") {
+        return CompareValuePgImpl<i64>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgfloat4") {
+        return CompareValuePgImpl<float>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgfloat8") {
+        return CompareValuePgImpl<double>(v, vExpected);
+    }
+    if (IsIn({"pgbytea", "pgtext"}, v.PgType_.TypeName)) {
+        return vExpected == v.Content_;
+    }
+    Cerr << "Unsupported pg type: typename=" << v.PgType_.TypeName
+        << "; type_mod=" << v.PgType_.TypeModifier
+        << Endl;
+    return false;
+}
+
+bool CompareValuePrimitive(const NYdb::TValue& v, const TValueParser& vp, const TTypeParser& tp, TStringBuf vExpected) {
     switch (tp.GetPrimitive()) {
     case EPrimitiveType::Bool:
         return CompareValueImpl(vp.GetBool(), vExpected);
@@ -462,9 +575,9 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double floatPrece
     case EPrimitiveType::Uint64:
         return CompareValueImpl(vp.GetUint64(), vExpected);
     case EPrimitiveType::Float:
-        return CompareValueImplFloat(vp.GetFloat(), vExpected, floatPrecession);
+        return CompareValueImpl(vp.GetFloat(), vExpected);
     case EPrimitiveType::Double:
-        return CompareValueImplFloat(vp.GetDouble(), vExpected, floatPrecession);
+        return CompareValueImpl(vp.GetDouble(), vExpected);
     case EPrimitiveType::Date:
         return CompareValueImplDatetime(vp.GetDate(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime:
@@ -491,14 +604,41 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected, double floatPrece
     }
 }
 
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
+    TValueParser vp(v);
+    TTypeParser tp(v.GetType());
+    while (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
+        if (vp.IsNull()) {
+            return vExpected == "";
+        }
+        vp.OpenOptional();
+        tp.OpenOptional();
+    }
+    switch (tp.GetKind()) {
+    case TTypeParser::ETypeKind::Decimal:
+        return  CompareValueImplDecimal(vp.GetDecimal(), vExpected);
+    case TTypeParser::ETypeKind::Primitive:
+        return CompareValuePrimitive(v, vp, tp, vExpected);
+    case TTypeParser::ETypeKind::Pg:
+        return CompareValuePg(vp.GetPg(), vExpected);
+    default:
+        Cerr  << "Unsupported value type kind: " << tp.GetKind() << Endl;
+        return false;
+    }
+}
 
 bool TQueryResultInfo::IsExpected(std::string_view expected) const {
-    constexpr double floatPrecesion = 0.0001;
     if (expected.empty()) {
         return true;
     }
-    const auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
-    if (Result.size() + 1 != expectedLines.size()) {
+    auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
+    if (!expectedLines.empty() && expectedLines.back() == "...") {
+        expectedLines.pop_back();
+        if (Result.size() + 1 < expectedLines.size()) {
+            Cerr << "has diff: too samll lines count (" << Result.size() << " in result, but " << expectedLines.size() << "+ expected with header)" << Endl;
+            return false;
+        }
+    } else if (Result.size() + 1 != expectedLines.size()) {
         Cerr << "has diff: incorrect lines count (" << Result.size() << " in result, but " << expectedLines.size() << " expected with header)" << Endl;
         return false;
     }
@@ -529,8 +669,8 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
             return false;
         }
     }
-
-    for (ui32 i = 0; i < Result.size(); ++i) {
+    bool hasDiff = false;
+    for (ui32 i = 0; i < expectedLines.size() - 1; ++i) {
         TString copy = expectedLines[i + 1];
         NCsvFormat::CsvSplitter splitter(copy);
         bool isCorrectCurrent = true;
@@ -541,18 +681,18 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
                 return false;
             }
             TStringBuf cItem = splitter.Consume();
-            if (!CompareValue(resultValue, cItem, floatPrecesion)) {
-                Cerr << "has diff: " << resultValue.GetProto().DebugString() << ";EXPECTED:" << cItem << Endl;
-                return false;
+            if (!CompareValue(resultValue, cItem)) {
+                Cerr << "Line " << i << ", column " << Columns[cIdx].Name << " has diff: " <<  TStringBuf(resultValue.GetProto().DebugString()).Before('\n') << "; EXPECTED:" << cItem << Endl;
+                hasDiff = true;
             }
             isCorrectCurrent = splitter.Step();
         }
         if (isCorrectCurrent) {
-            Cerr << "expected more items than have in result" << Endl;
+            Cerr << "expected more columns than have in result" << Endl;
             return false;
         }
     }
-    return true;
+    return !hasDiff;
 }
 
 } // NYdb::NConsoleClient::BenchmarkUtils

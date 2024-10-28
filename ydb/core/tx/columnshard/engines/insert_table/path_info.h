@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 #include <util/generic/noncopyable.h>
+#include <util/generic/set.h>
 
 namespace NKikimr::NOlap {
 class TInsertionSummary;
@@ -56,8 +57,6 @@ public:
     bool IsEmpty() const {
         return Committed.empty() && !InsertedSize;
     }
-
-    const THashMap<TInsertWriteId, TInsertedData>& GetInserted() const;
 
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);
 

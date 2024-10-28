@@ -1,5 +1,7 @@
 # Примитивные типы данных
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 Термины «простые», «примитивные» и «элементарные» типы данных используются как синонимы.
 
 ## Числовые типы {#numeric}
@@ -23,7 +25,6 @@
 Явное приведение при помощи [CAST](../../syntax/expressions.md#cast):
 
 #### Приведение к численным типам
-
 
 Тип | Bool | Int8 | Int16 | Int32 | Int64 | Uint8 | Uint16 | Uint32 | Uint64 | Float | Double | Decimal
 --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
@@ -109,7 +110,7 @@
 
 <sup>1</sup> При помощи встроенной функции [Yson::ConvertTo](../../udf/list/yson.md#ysonconvertto).
 
-**Примеры**
+##### Примеры
 
 {% include [x](../../_includes/cast_examples.md) %}
 

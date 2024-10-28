@@ -2,6 +2,7 @@
 #include "vdisk_events.h"
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <util/generic/queue.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
 

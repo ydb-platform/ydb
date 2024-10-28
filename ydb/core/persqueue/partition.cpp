@@ -82,7 +82,7 @@ TString TPartition::LogPrefix() const {
     } else {
         state = "Unknown";
     }
-    return TStringBuilder() << "[PQ: " << TabletID << ", Partition:" << Partition << ", State:" << state << "] ";
+    return TStringBuilder() << "[PQ: " << TabletID << ", Partition: " << Partition << ", State: " << state << "] ";
 }
 
 bool TPartition::IsActive() const {
@@ -191,7 +191,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
-    , PartitionedBlob(partition, 0, 0, 0, 0, 0, Head, NewHead, true, false, 8_MB)
+    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
@@ -899,7 +899,7 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
-    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->Record;
+    const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     Y_ABORT_UNLESS(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(event.HasData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
@@ -1008,6 +1008,7 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
                        "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
                        TabletID, Partition.OriginalPartitionId,
                        ev->Get()->Step, ev->Get()->TxId);
+        PendingExplicitMessageGroups = ev->Get()->ExplicitMessageGroups;
     } else {
         Y_ABORT_UNLESS(!TransactionsInflight.empty(),
                        "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
@@ -1187,10 +1188,19 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
-        Send(Tablet,
-             MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
+        auto result = MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
                                                                 tx->ProposeConfig->TxId,
-                                                                Partition).Release());
+                                                                Partition);
+
+        result->Data.SetPartitionId(Partition.OriginalPartitionId);
+        for (auto& [id, v] : SourceIdStorage.GetInMemorySourceIds()) {
+            if (v.Explicit) {
+                auto* m = result->Data.AddMessageGroup();
+                m->SetId(id);
+                m->SetSeqNo(v.SeqNo);
+            }
+        }
+        Send(Tablet, result.Release());
     }
 }
 
@@ -1207,9 +1217,6 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
         protoInfo.SetSourceId(sourceId);
 
         auto info = SourceManager.Get(sourceId);
-        if (info.State == TSourceIdInfo::EState::Unknown) {
-            continue;
-        }
 
         Y_ABORT_UNLESS(info.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, info.Offset);
         Y_ABORT_UNLESS(info.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, info.SeqNo);
@@ -1990,7 +1997,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             return EProcessResult::Continue;
         }
         t->Predicate.ConstructInPlace(true);
-        return PreProcessImmediateTx(t->ProposeTransaction->Record);
+        return PreProcessImmediateTx(t->ProposeTransaction->GetRecord());
 
     } else if (t->Tx) { // Distributed TX
         if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
@@ -2052,8 +2059,7 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     } else if (t->ProposeConfig) {
         Y_ABORT_UNLESS(ChangingConfig);
         ChangeConfig = MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                                         t->ProposeConfig->Config,
-                                                                         t->ProposeConfig->BootstrapConfig);
+                                                                         t->ProposeConfig->Config);
         PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
         SendChangeConfigReply = false;
     }
@@ -2139,8 +2145,7 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 {
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                          event.Config,
-                                                          event.BootstrapConfig);
+                                                          event.Config);
     PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
 
     SendChangeConfigReply = false;
@@ -2149,6 +2154,8 @@ bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
 
 void TPartition::CommitWriteOperations(TTransaction& t)
 {
+    PQ_LOG_D("TPartition::CommitWriteOperations TxId: " << t.GetTxId());
+
     Y_ABORT_UNLESS(PersistRequest);
     Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
 
@@ -2166,6 +2173,10 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         HaveWriteMsg = true;
     }
 
+    PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
+             ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
+    PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
+
     if (!t.WriteInfo->BodyKeys.empty()) {
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
@@ -2180,6 +2191,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            MaxBlobSize);
 
         for (auto& k : t.WriteInfo->BodyKeys) {
+            PQ_LOG_D("add key " << k.Key.ToString());
             auto write = PartitionedBlob.Add(k.Key, k.Size);
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
@@ -2188,18 +2200,17 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             }
         }
 
-    }
 
-    if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
-        ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
-        RenameFormedBlobs(formedBlobs,
-                          *Parameters,
-                          curWrites,
-                          PersistRequest.Get(),
-                          ctx);
-    }
+        PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
+        if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+            ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
+            RenameFormedBlobs(formedBlobs,
+                              *Parameters,
+                              curWrites,
+                              PersistRequest.Get(),
+                              ctx);
+        }
 
-    if (!t.WriteInfo->BodyKeys.empty()) {
         const auto& last = t.WriteInfo->BodyKeys.back();
 
         NewHead.Offset += (last.Key.GetOffset() + last.Key.GetCount());
@@ -2377,9 +2388,10 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 
     if (ChangeConfig) {
         EndChangePartitionConfig(std::move(ChangeConfig->Config),
-                                 std::move(ChangeConfig->BootstrapConfig),
+                                 PendingExplicitMessageGroups,
                                  ChangeConfig->TopicConverter,
                                  ctx);
+        PendingExplicitMessageGroups.reset();
     }
 
     for (auto& user : AffectedUsers) {
@@ -2444,7 +2456,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
-                                          NKikimrPQ::TBootstrapConfig&& bootstrapConfig,
+                                          const TEvPQ::TMessageGroupsPtr& explicitMessageGroups,
                                           NPersQueue::TTopicConverterPtr topicConverter,
                                           const TActorContext& ctx)
 {
@@ -2452,14 +2464,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     PartitionConfig = GetPartitionConfig(Config);
     PartitionGraph = MakePartitionGraph(Config);
 
-    for (const auto& mg : bootstrapConfig.GetExplicitMessageGroups()) {
-        TMaybe<TPartitionKeyRange> keyRange;
-        if (mg.HasKeyRange()) {
-            keyRange = TPartitionKeyRange::Parse(mg.GetKeyRange());
+    if (explicitMessageGroups) {
+        for (const auto& [id, group] : *explicitMessageGroups) {
+            NPQ::TPartitionKeyRange keyRange = group.KeyRange;
+            TSourceIdInfo sourceId(group.SeqNo, 0, ctx.Now(), std::move(keyRange), false);
+            SourceIdStorage.RegisterSourceIdInfo(id, std::move(sourceId), true);
         }
-
-        TSourceIdInfo sourceId(0, 0, ctx.Now(), std::move(keyRange), false);
-        SourceIdStorage.RegisterSourceIdInfo(mg.GetId(), std::move(sourceId), true);
     }
 
     TopicConverter = topicConverter;
@@ -2471,15 +2481,14 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         InitSplitMergeSlidingWindow();
     }
 
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, bootstrapConfig));
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config, bootstrapConfig));
+    Send(ReadQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
-                                                                          Config,
-                                                                          bootstrapConfig));
+                                                                          Config));
         } else {
             CreateMirrorerActor();
         }
@@ -2567,7 +2576,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
 void TPartition::ExecImmediateTx(TTransaction& t)
 {
     --ImmediateTxCount;
-    auto& record = t.ProposeTransaction->Record;
+    const auto& record = t.ProposeTransaction->GetRecord();
     Y_ABORT_UNLESS(record.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     Y_ABORT_UNLESS(record.HasData());
 
@@ -2580,7 +2589,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
                              t.Message);
         return;
     }
-    for (auto& operation : record.GetData().GetOperations()) {
+    for (const auto& operation : record.GetData().GetOperations()) {
         if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }
@@ -3117,8 +3126,8 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
     Y_ABORT_UNLESS(ChangeConfig->Config.SerializeToString(&data));
 
     auto write = request.AddCmdWrite();
-    write->SetKey(key.Data(), key.Size());
-    write->SetValue(data.Data(), data.Size());
+    write->SetKey(key.data(), key.size());
+    write->SetValue(data.data(), data.size());
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 

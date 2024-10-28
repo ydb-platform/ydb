@@ -15,7 +15,7 @@ TSQLHints CollectHints(const TString& query, bool antlr4Parser) {
     TSQLHints result;
     NYql::TIssues issues;
     size_t maxErrors = 100;
-    UNIT_ASSERT(CollectSqlHints(*lexer, query, "", "", result, issues, maxErrors));
+    UNIT_ASSERT(CollectSqlHints(*lexer, query, "", "", result, issues, maxErrors, false));
     UNIT_ASSERT(issues.Empty());
     return result;
 }

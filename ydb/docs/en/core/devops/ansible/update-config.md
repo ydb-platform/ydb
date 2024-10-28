@@ -24,6 +24,7 @@ ansible-playbook ydb_platform.ydb.update_config --tags static
 ```
 
 These two commands are equivalent and will change the configuration of all [database nodes](../../concepts/glossary.md#database-node):
+
 ```bash
 ansible-playbook ydb_platform.ydb.update_config --tags database
 ansible-playbook ydb_platform.ydb.update_config --tags dynamic

@@ -13,13 +13,15 @@ TTpcDSGeneratorInventory::TTpcDSGeneratorInventory(const TTpcdsWorkloadDataIniti
     : TBulkDataGenerator(owner, INVENTORY)
 {}
 
-void TTpcDSGeneratorInventory::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorInventory::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_INVENTORY_TBL> inventoryList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_inventory(NULL, ctxs.front().GetStart() + i);
         inventoryList[i] = g_w_inventory;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_INVENTORY_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, inv_date_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, inv_item_sk);

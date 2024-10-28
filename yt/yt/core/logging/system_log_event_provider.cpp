@@ -142,7 +142,9 @@ std::unique_ptr<ISystemLogEventProvider> CreateDefaultSystemLogEventProvider(
 
 std::unique_ptr<ISystemLogEventProvider> CreateDefaultSystemLogEventProvider(const TLogWriterConfigPtr& writerConfig)
 {
-    return CreateDefaultSystemLogEventProvider(writerConfig->AreSystemMessagesEnabled(), writerConfig->GetSystemMessageFamily());
+    return CreateDefaultSystemLogEventProvider(
+        writerConfig->AreSystemMessagesEnabled(),
+        writerConfig->GetSystemMessageFamily());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

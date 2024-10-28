@@ -449,6 +449,10 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = TGetJobStderrOptions()) override;
 
+    std::vector<TJobTraceEvent> GetJobTrace(
+        const TOperationId& operationId,
+        const TGetJobTraceOptions& options = TGetJobTraceOptions()) override;
+
     TNode::TListType SkyShareTable(
         const std::vector<TYPath>& tablePaths,
         const TSkyShareTableOptions& options = TSkyShareTableOptions()) override;

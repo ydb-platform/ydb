@@ -51,6 +51,7 @@ void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
     clusterConfig.SetUseSsl(ds.secure());
     clusterConfig.SetAddBearerToToken(useBearerForYdb);
     clusterConfig.SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
+    clusterConfig.SetSharedReading(ds.shared_reading());
     FillClusterAuth(clusterConfig, ds.auth(), authToken, accountIdSignatures);
 }
 

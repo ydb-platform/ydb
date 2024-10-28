@@ -57,7 +57,8 @@ std::unordered_map<TString, TPoolSettings::TProperty> TPoolSettings::GetProperti
         {"queue_size", &QueueSize},
         {"query_memory_limit_percent_per_node", &QueryMemoryLimitPercentPerNode},
         {"database_load_cpu_threshold", &DatabaseLoadCpuThreshold},
-        {"total_cpu_limit_percent_per_node", &TotalCpuLimitPercentPerNode}
+        {"total_cpu_limit_percent_per_node", &TotalCpuLimitPercentPerNode},
+        {"query_cpu_limit_percent_per_node", &QueryCpuLimitPercentPerNode},
     };
     if (!restricted) {
         properties.insert({"query_cancel_after_seconds", &QueryCancelAfter});

@@ -13,7 +13,7 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
     AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
 }
 
-std::shared_ptr<NArrow::TGeneralContainer> TReadPortionInfoWithBlobs::RestoreBatch(
+TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
     const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const {
     THashMap<TChunkAddress, TString> blobs;
     for (auto&& i : PortionInfo.Records) {
@@ -119,7 +119,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
     }
 
-    const NSplitter::TEntityGroups groups = to->GetIndexInfo().GetEntityGroupsByStorageId(targetTier, *storages);
+    const NSplitter::TEntityGroups groups = source.PortionInfo.GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<NArrow::NSplitter::TSerializationStats>());
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 

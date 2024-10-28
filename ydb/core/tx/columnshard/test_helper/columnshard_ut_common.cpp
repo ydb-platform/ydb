@@ -63,7 +63,7 @@ bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString
     return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
 }
 
-void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap) {
+void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
     auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
     auto tx = plan->Record.AddTransactions();
     tx->SetTxId(snap.GetTxId());
@@ -78,7 +78,7 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
     UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
 }
 
-void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
+void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
     auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
     auto tx = plan->Record.AddTransactions();
     tx->SetTxId(snap.GetTxId());
@@ -229,7 +229,7 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, con
     PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, txIds);
 }
 
-void Wakeup(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId) {
+void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId) {
     auto wakeup = std::make_unique<TEvPrivate::TEvPeriodicWakeup>(true);
     ForwardToTablet(runtime, shardId, sender, wakeup.release());
 }

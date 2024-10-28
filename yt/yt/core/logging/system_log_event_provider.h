@@ -20,7 +20,8 @@ struct ISystemLogEventProvider
 std::unique_ptr<ISystemLogEventProvider> CreateDefaultSystemLogEventProvider(
     bool systemMessagesEnabled,
     ELogFamily systemMessagesFamily);
-std::unique_ptr<ISystemLogEventProvider> CreateDefaultSystemLogEventProvider(const TLogWriterConfigPtr& writerConfig);
+std::unique_ptr<ISystemLogEventProvider> CreateDefaultSystemLogEventProvider(
+    const TLogWriterConfigPtr& writerConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

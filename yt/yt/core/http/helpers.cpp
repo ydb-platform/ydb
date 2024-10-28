@@ -413,7 +413,7 @@ bool TryParseTraceParent(const TString& traceParent, NTracing::TSpanContext& spa
     // Now we have exactly three parts: traceId-spanId-options.
 
     // Parse trace context.
-    if (!TGuid::FromStringHex32(parts[0], &spanContext.TraceId)) {
+    if (!NTracing::TTraceId::FromStringHex32(parts[0], &spanContext.TraceId)) {
         return false;
     }
 

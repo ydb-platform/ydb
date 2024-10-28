@@ -87,12 +87,17 @@ public:
     {
     }
     ~TYtLookupActor() {
+        Free();
+    }
+
+private:
+    void Free() {
         auto guard = Guard(*Alloc);
         KeyTypeHelper.reset();
         TKeyTypeHelper empty;
         Data = IDqAsyncLookupSource::TUnboxedValueMap{0, empty.GetValueHash(), empty.GetValueEqual()};
     }
-
+public:
 
     void Bootstrap() {
         YQL_CLOG(INFO, ProviderYt) << "New Yt proivider lookup source actor(ActorId=" << SelfId() << ") for"
@@ -156,20 +161,29 @@ private: //IDqAsyncLookupSource
     size_t GetMaxSupportedKeysInRequest() const override {
         return MaxKeysInRequest;
     }
-    void AsyncLookup(IDqAsyncLookupSource::TUnboxedValueMap&& request) override {
-        YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << request.size() << " keys";
+    void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> wrequest) override {
         Y_ABORT_IF(InProgress);
-        Y_ABORT_IF(request.size() > MaxKeysInRequest);
-        InProgress = true;
         auto guard = Guard(*Alloc);
-        for (const auto& [k, _]: request) {
+        auto request = wrequest.lock();
+        if (!request) {
+            YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " LookupRequest was lost";
+            return;
+        }
+        YQL_CLOG(DEBUG, ProviderYt) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
+        InProgress = true;
+        Y_ABORT_IF(request->size() > MaxKeysInRequest);
+        for (auto& [k, val]: *request) {
             if (const auto* v = Data.FindPtr(k)) {
-                request[k] = *v;
+                val = *v;
             }
         }
-        auto ev = new IDqAsyncLookupSource::TEvLookupResult(Alloc, std::move(request));
+        auto ev = new IDqAsyncLookupSource::TEvLookupResult(request);
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
         InProgress = false;
+    }
+    void PassAway() override {
+        Free();
+        TBase::PassAway();
     }
 
 private: //events

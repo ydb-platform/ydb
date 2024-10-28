@@ -326,9 +326,9 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void TryScheduleGetAcceleration() {
-        if (!IsGetAccelerateScheduled && GetsAccelerated < 2) {
-            // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
-            if (CountDisksWithActiveRequests() <= 2) {
+        if (!IsGetAccelerateScheduled && GetsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
+            // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
+            if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAccelerateGetNs(LogCtx) / 1000;
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();
@@ -345,9 +345,9 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
     }
 
     void TrySchedulePutAcceleration() {
-        if (!IsPutAccelerateScheduled && PutsAccelerated < 2) {
-            // Count VDisks that have requests in flight, if there is no more than 2 such VDisks, Accelerate
-            if (CountDisksWithActiveRequests() <= 2) {
+        if (!IsPutAccelerateScheduled && PutsAccelerated < AccelerationParams.MaxNumOfSlowDisks) {
+            // Count VDisks with requests in flight, if there are <= the maximum number of slow VDisks, Accelerate
+            if (CountDisksWithActiveRequests() <= AccelerationParams.MaxNumOfSlowDisks) {
                 ui64 timeToAccelerateUs = GetImpl.GetTimeToAcceleratePutNs(LogCtx) / 1000;
                 TDuration timeToAccelerate = TDuration::MicroSeconds(timeToAccelerateUs);
                 TMonotonic now = TActivationContext::Monotonic();

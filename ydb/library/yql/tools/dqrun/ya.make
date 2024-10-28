@@ -5,7 +5,7 @@ IF (PROFILE_MEMORY_ALLOCATIONS)
     ALLOCATOR(LF_DBG)
     CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
 ELSE()
-    IF (OS_LINUX)
+    IF (OS_LINUX AND NOT DISABLE_TCMALLOC)
         ALLOCATOR(TCMALLOC_256K)
     ELSE()
         ALLOCATOR(J)
@@ -53,6 +53,7 @@ ENDIF()
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/dq/provider/exec
         ydb/library/yql/providers/pq/async_io
+        ydb/library/yql/providers/pq/gateway/dummy
         ydb/library/yql/providers/pq/gateway/native
         ydb/library/yql/providers/pq/provider
         ydb/library/yql/providers/s3/actors
@@ -94,6 +95,7 @@ ENDIF()
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors
         ydb/core/fq/libs/db_id_async_resolver_impl
+        ydb/core/fq/libs/init
 
         ydb/library/yql/udfs/common/clickhouse/client
     )

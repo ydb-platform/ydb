@@ -2379,7 +2379,7 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, ui64 nativeYtType
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                 buf.Write(StringMarker);
                 auto key = structType->GetMemberName(i);
-                buf.WriteVarI32(key.Size());
+                buf.WriteVarI32(key.size());
                 buf.WriteMany(key);
                 buf.Write(KeyValueSeparatorSymbol);
                 WriteYsonValueInTableFormat(buf, structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), false);

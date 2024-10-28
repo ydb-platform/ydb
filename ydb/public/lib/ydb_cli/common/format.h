@@ -8,6 +8,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
+#include <util/generic/set.h>
+
 namespace NYdb {
 
     class TResultSetParquetPrinter;
@@ -28,15 +30,52 @@ protected:
 
 class TCommandWithFormat {
 protected:
-    void AddInputFormats(TClientCommand::TConfig& config, 
-                         const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::JsonUnicode);
-    void AddStdinFormats(TClientCommand::TConfig& config, const TVector<EDataFormat>& allowedStdinFormats, 
-                         const TVector<EDataFormat>& allowedFramingFormats);
+    // Has both input and output
+    bool IsIoCommand();
+    virtual bool HasInput();
+    virtual bool HasOutput();
+};
+
+class TCommandWithInput: virtual public TCommandWithFormat {
+protected:
+    void AddInputFormats(TClientCommand::TConfig& config, const TVector<EDataFormat>& allowedFormats,
+        EDataFormat defaultFormat = EDataFormat::Json);
+    void AddLegacyInputFormats(TClientCommand::TConfig& config, const TString& legacyName,
+        const TVector<TString>& newNames,
+        const TVector<EDataFormat>& allowedFormats);
+    void AddLegacyJsonInputFormats(TClientCommand::TConfig& config);
+    void AddInputFramingFormats(TClientCommand::TConfig &config, const TVector<EFramingFormat>& allowedFormats,
+        EFramingFormat defaultFormat = EFramingFormat::NoFraming);
+    void AddInputBinaryStringEncodingFormats(TClientCommand::TConfig &config,
+        const TVector<EBinaryStringEncodingFormat>& allowedFormats,
+        EBinaryStringEncodingFormat defaultFormat = EBinaryStringEncodingFormat::Unicode);
+    void AddInputFileOption(TClientCommand::TConfig& config, bool allowMultiple,
+        const TString& description = "File name with input data");
+    void ParseInputFormats();
+
+    virtual THashMap<EDataFormat, TString>& GetInputFormatDescriptions();
+    virtual bool HasInput() override;
+
+protected:
+    TVector<TString> InputFiles;
+    bool AllowMultipleInputFiles;
+    EDataFormat InputFormat = EDataFormat::Default;
+    EFramingFormat InputFramingFormat = EFramingFormat::Default;
+    EBinaryStringEncodingFormat InputBinaryStringEncodingFormat = EBinaryStringEncodingFormat::Default;
+    EBinaryStringEncoding InputBinaryStringEncoding;
+
+private:
+    TVector<EDataFormat> LegacyInputFormats;
+    TSet<EDataFormat> AllowedInputFormats;
+    TSet<EFramingFormat> AllowedInputFramingFormats;
+    TSet<EBinaryStringEncodingFormat> AllowedBinaryStringEncodingFormats;
+};
+
+class TCommandWithOutput: virtual public TCommandWithFormat {
+protected:
     void AddOutputFormats(TClientCommand::TConfig& config, 
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::Pretty);
-    void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
-    void ParseFormats();
-    void ParseMessagingFormats();
+    void ParseOutputFormats();
 
     // Deprecated
     void AddDeprecatedJsonOption(TClientCommand::TConfig& config,
@@ -45,23 +84,22 @@ protected:
 
 protected:
     EDataFormat OutputFormat = EDataFormat::Default;
-    EDataFormat InputFormat = EDataFormat::Default;
-    EDataFormat FramingFormat = EDataFormat::Default;
-    EDataFormat StdinFormat = EDataFormat::Default;
-    TVector<EDataFormat> StdinFormats;
+
+private:
+    TVector<EDataFormat> AllowedFormats;
+    bool DeprecatedOptionUsed = false;
+};
+
+class TCommandWithMessagingFormat {
+protected:
+    void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
+    void ParseMessagingFormats();
+
+protected:
     EMessagingFormat MessagingFormat = EMessagingFormat::SingleMessage;
 
 private:
-    TVector<EDataFormat> AllowedInputFormats;
-    TVector<EDataFormat> AllowedStdinFormats;
-    TVector<EDataFormat> AllowedFramingFormats;
-    TVector<EDataFormat> AllowedFormats;
     TVector<EMessagingFormat> AllowedMessagingFormats;
-    bool DeprecatedOptionUsed = false;
-    
-protected:
-    bool IsStdinFormatSet = false;
-    bool IsFramingFormatSet = false;
 };
 
 class TResultSetPrinter {

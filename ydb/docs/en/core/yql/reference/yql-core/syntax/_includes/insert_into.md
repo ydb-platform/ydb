@@ -5,7 +5,8 @@
 {% note warning %}
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
-{% include [OLAP_not_allow_text](../../../../_includes/ways_add_data_to_olap.md) %}
+
+{% include [ways_add_data_to_olap](../../../../_includes/ways_add_data_to_olap.md) %}
 
 {% endnote %}
 
@@ -19,20 +20,20 @@
 
 * Adding constant values using [`VALUES`](../values.md).
 
-```yql
+  ```yql
   INSERT INTO my_table (Key1, Key2, Value1, Value2)
   VALUES (345987,'ydb', 'Pied piper', 1414);
   COMMIT;
   ```
 
-```yql
+  ```yql
   INSERT INTO my_table (key, value)
   VALUES ("foo", 1), ("bar", 2);
   ```
 
 * Saving the `SELECT` result.
 
-```yql
+  ```yql
   INSERT INTO my_table
   SELECT Key AS Key1, "Empty" AS Key2, Value AS Value1
   FROM my_table1;

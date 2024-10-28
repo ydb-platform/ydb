@@ -128,7 +128,7 @@ message GetQueueAttributesResult {
 message GetQueueUrlRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string queue_name = 2;
-    optional string queue_owner_aws_account_id = 3;
+    optional string queue_owner_a_w_s_account_id = 3;
 }
 
 message GetQueueUrlResponse {
@@ -194,8 +194,8 @@ message ReceiveMessageResponse {
 message Message {
     map<string, string> attributes = 1;
     string body = 2;
-    string md5_of_body = 3;
-    string md5_of_message_attributes = 4;
+    string m_d_5_of_body = 3 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_attributes = 4 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     map<string, MessageAttribute>  message_attributes = 5;
     string  message_id = 6;
     string receipt_handle = 7;
@@ -221,9 +221,9 @@ message SendMessageResponse {
 }
 
 message SendMessageResult {
-    string md5_of_message_attributes = 1;
-    string md5_of_message_body= 2;
-    string md5_of_message_system_attributes= 3;
+    string m_d_5_of_message_attributes = 1 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_body= 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_system_attributes= 3 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string message_id = 4;
     string sequence_number = 5;
 }
@@ -248,10 +248,10 @@ message SendMessageBatchRequestEntry {
 
 message SendMessageBatchResultEntry {
     string id = 1;
-    string md5_of_message_body = 2;
+    string m_d_5_of_message_body = 2 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string message_id = 3;
-    string md5_of_message_attributes = 4;
-    string md5_of_message_system_attributes = 5;
+    string m_d_5_of_message_attributes = 4 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string m_d_5_of_message_system_attributes = 5 [(Ydb.FieldTransformation.FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string sequence_number = 6;
 }
 

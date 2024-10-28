@@ -19,14 +19,14 @@ COVARIANCE_POPULATION(Double?, Double?)->Double?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   CORRELATION(numeric_column, another_numeric_column),
   COVARIANCE(numeric_column, another_numeric_column)
 FROM my_table;
 ```
 
-``` yql
+```yql
 $corr_factory = AggregationFactory("CORRELATION");
 
 SELECT

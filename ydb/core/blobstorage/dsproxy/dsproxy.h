@@ -16,7 +16,7 @@
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -55,9 +55,10 @@ const ui32 MaskSizeBits = 32;
 constexpr bool DefaultEnablePutBatching = true;
 constexpr bool DefaultEnableVPatch = false;
 
-constexpr float DefaultSlowDiskThreshold = 2;
-constexpr float DefaultPredictedDelayMultiplier = 1;
+constexpr double DefaultSlowDiskThreshold = 2;
+constexpr double DefaultPredictedDelayMultiplier = 1;
 constexpr TDuration DefaultLongRequestThreshold = TDuration::Seconds(50);
+constexpr ui32 DefaultMaxNumOfSlowDisks = 2;
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 
@@ -193,8 +194,9 @@ inline void SetExecutionRelay(IEventBase& ev, std::shared_ptr<TEvBlobStorage::TE
 }
 
 struct TAccelerationParams {
-    double SlowDiskThreshold = 2;
-    double PredictedDelayMultiplier = 1;
+    double SlowDiskThreshold = DefaultSlowDiskThreshold;
+    double PredictedDelayMultiplier = DefaultPredictedDelayMultiplier;
+    ui32 MaxNumOfSlowDisks = DefaultMaxNumOfSlowDisks;
 };
 
 class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor> {
@@ -520,6 +522,7 @@ struct TBlobStorageProxyParameters {
     const TControlWrapper& SlowDiskThreshold;
     const TControlWrapper& PredictedDelayMultiplier;
     const TControlWrapper& LongRequestThresholdMs = TControlWrapper(DefaultLongRequestThreshold.MilliSeconds(), 1, 1'000'000);
+    const TControlWrapper& MaxNumOfSlowDisks = TControlWrapper(DefaultMaxNumOfSlowDisks, 1, 2);
 };
 
 IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,

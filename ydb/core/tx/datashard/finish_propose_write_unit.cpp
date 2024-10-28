@@ -81,7 +81,7 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
         op->SetWaitCompletionFlag(true);
     } else if (DataShard.IsFollower()) {
         // It doesn't matter whether we wait or not
-    } else if (DataShard.IsMvccEnabled() && op->IsImmediate()) {
+    } else if (op->IsImmediate()) {
         auto res = PromoteImmediatePostExecuteEdges(op.Get(), txc);
 
         if (res.HadWrites) {
@@ -176,7 +176,6 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
         DataShard.IncCounter(COUNTER_WRITE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {
         DataShard.CheckSplitCanStart(ctx);
-        DataShard.CheckMvccStateChangeCanStart(ctx);
     }
 
     AddDiagnosticsResult(*res);

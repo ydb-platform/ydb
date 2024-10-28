@@ -39,11 +39,11 @@ protected:
     }
 
     static void SaveString(TFileOutput& file, const TString& str, ui64& totalBytes, ui64& checksum) {
-        ui32 length = str.Size();
+        ui32 length = str.size();
         checksum = crc64(&length, sizeof(length), checksum);
         file.Write(&length, sizeof(length));
-        checksum = crc64(str.Data(), length, checksum);
-        file.Write(str.Data(), length);
+        checksum = crc64(str.data(), length, checksum);
+        file.Write(str.data(), length);
         totalBytes += length;
     }
 

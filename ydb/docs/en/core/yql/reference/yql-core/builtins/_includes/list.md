@@ -265,7 +265,9 @@ Arguments:
 
     * [Lambda function](../../syntax/expressions.md#lambda).
     * `Module::Function` - C++ UDF.
+
 {% if feature_udf_noncpp %}
+
     * [Python UDF](../../udf/python.md), [JavaScript UDF](../../udf/javascript.md) or any other called value.
 
 If the source list is optional, then the output list is also optional.
@@ -284,6 +286,7 @@ FROM my_table;
 ```
 
 {% endif %}
+
 {% endif %}
 
 ## ListNotNull {#listnotnull}
@@ -410,7 +413,7 @@ Arguments:
 
 1. List
 2. Initial state `U` for `ListFold`, `initLambda(item:T)->U` for `ListFold1`
-3. updateLambda(item:T, state:U)->U
+3. `updateLambda(item:T, state:U)->U`
 
 Type returned:
 `U` for `ListFold`, `U?` for `ListFold1`.
@@ -629,7 +632,7 @@ Arguments:
 
 ### Examples
 
-```text
+```yql
 ListTop(List<T>{Flags:AutoMap}, N)->List<T>
 ListTop(List<T>{Flags:AutoMap}, N, (T)->U)->List<T>
 ```

@@ -1252,6 +1252,7 @@ namespace NKikimr {
             if (record.GetIndexOnly())
                 str << " IndexOnly";
             if (record.HasMsgQoS()) {
+                str << ' ';
                 TEvBlobStorage::TEvVPut::OutMsgQos(record.GetMsgQoS(), str);
             }
             str << " Notify# " << record.GetNotifyIfNotReady()

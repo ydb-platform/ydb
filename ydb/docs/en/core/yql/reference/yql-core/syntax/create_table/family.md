@@ -8,14 +8,14 @@
 
 Columns of the same table can be grouped to set the following parameters:
 
-* `DATA`: A storage device type for the data in this column group. Acceptable values: ```ssd```, ```rot```.
-* `COMPRESSION`: A data compression codec. Acceptable values: ```off```, ```lz4```.
+* `DATA`: A storage device type for the data in this column group. Acceptable values: `ssd`, `rot`.
+* `COMPRESSION`: A data compression codec. Acceptable values: `off`, `lz4`.
 
-By default, all columns are in the same group named ```default```.  If necessary, the parameters of this group can also be redefined.
+By default, all columns are in the same group named `default`.  If necessary, the parameters of this group can also be redefined.
 
 ## Example
 
-In the example below, for the created table, the ```family_large``` group of columns is added and set for the ```series_info``` column, and the parameters for the default group, which is set by ```default``` for all other columns, are also redefined.
+In the example below, for the created table, the `family_large` group of columns is added and set for the `series_info` column, and the parameters for the default group, which is set by `default` for all other columns, are also redefined.
 
 ```yql
 CREATE TABLE series_with_families (

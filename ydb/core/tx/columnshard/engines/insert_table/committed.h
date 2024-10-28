@@ -9,6 +9,7 @@ class TCommittedData: public TUserDataContainer {
 private:
     using TBase = TUserDataContainer;
     YDB_READONLY(TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
+    YDB_READONLY(TInsertWriteId, InsertWriteId, (TInsertWriteId)0);
     YDB_READONLY_DEF(TString, DedupId);
     YDB_READONLY(bool, Remove, false);
 
@@ -16,19 +17,23 @@ public:
     TCommittedData(const std::shared_ptr<TUserData>& userData, const ui64 planStep, const ui64 txId, const TInsertWriteId insertWriteId)
         : TBase(userData)
         , Snapshot(planStep, txId)
+        , InsertWriteId(insertWriteId)
         , DedupId(ToString(planStep) + ":" + ToString((ui64)insertWriteId)) {
     }
 
-    TCommittedData(const std::shared_ptr<TUserData>& userData, const ui64 planStep, const ui64 txId, const TString& dedupId)
+    TCommittedData(const std::shared_ptr<TUserData>& userData, const ui64 planStep, const ui64 txId, const TInsertWriteId insertWriteId,
+        const TString& dedupId)
         : TBase(userData)
         , Snapshot(planStep, txId)
+        , InsertWriteId(insertWriteId)
         , DedupId(dedupId) {
     }
 
-    TCommittedData(const std::shared_ptr<TUserData>& userData, const TSnapshot& ss, const TInsertWriteId insertWriteId)
+    TCommittedData(const std::shared_ptr<TUserData>& userData, const TSnapshot& ss, const ui64 generation, const TInsertWriteId ephemeralWriteId)
         : TBase(userData)
         , Snapshot(ss)
-        , DedupId(ToString(ss.GetPlanStep()) + ":" + ToString((ui64)insertWriteId)) {
+        , InsertWriteId(ephemeralWriteId)
+        , DedupId(ToString(generation) + ":" + ToString((ui64)ephemeralWriteId)) {
     }
 
     void SetRemove() {
@@ -52,7 +57,8 @@ public:
 class TCommittedBlob {
 private:
     TBlobRange BlobRange;
-    std::variant<TSnapshot, TInsertWriteId> WriteInfo;
+    std::optional<TSnapshot> CommittedSnapshot;
+    const TInsertWriteId InsertWriteId;
     YDB_READONLY(ui64, SchemaVersion, 0);
     YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY(bool, IsDelete, false);
@@ -61,6 +67,31 @@ private:
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
 
 public:
+    const std::optional<TSnapshot>& GetCommittedSnapshot() const {
+        return CommittedSnapshot;
+    }
+
+    const TSnapshot& GetCommittedSnapshotDef(const TSnapshot& def) const {
+        if (CommittedSnapshot) {
+            return *CommittedSnapshot;
+        } else {
+            return def;
+        }
+    }
+
+    const TSnapshot& GetCommittedSnapshotVerified() const {
+        AFL_VERIFY(!!CommittedSnapshot);
+        return *CommittedSnapshot;
+    }
+
+    bool IsCommitted() const {
+        return !!CommittedSnapshot;
+    }
+
+    TInsertWriteId GetInsertWriteId() const {
+        return InsertWriteId;
+    }
+
     const NArrow::TReplaceKey& GetFirst() const {
         return First;
     }
@@ -72,11 +103,12 @@ public:
         return BlobRange.Size;
     }
 
-    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const ui64 recordsCount,
+    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const TInsertWriteId insertWriteId, const ui64 schemaVersion, const ui64 recordsCount,
         const NArrow::TReplaceKey& first, const NArrow::TReplaceKey& last, const bool isDelete,
         const NArrow::TSchemaSubset& subset)
         : BlobRange(blobRange)
-        , WriteInfo(snapshot)
+        , CommittedSnapshot(snapshot)
+        , InsertWriteId(insertWriteId)
         , SchemaVersion(schemaVersion)
         , RecordsCount(recordsCount)
         , IsDelete(isDelete)
@@ -85,11 +117,11 @@ public:
         , SchemaSubset(subset) {
     }
 
-    TCommittedBlob(const TBlobRange& blobRange, const TInsertWriteId writeId, const ui64 schemaVersion, const ui64 recordsCount,
+    TCommittedBlob(const TBlobRange& blobRange, const TInsertWriteId insertWriteId, const ui64 schemaVersion, const ui64 recordsCount,
         const NArrow::TReplaceKey& first, const NArrow::TReplaceKey& last, const bool isDelete,
         const NArrow::TSchemaSubset& subset)
         : BlobRange(blobRange)
-        , WriteInfo(writeId)
+        , InsertWriteId(insertWriteId)
         , SchemaVersion(schemaVersion)
         , RecordsCount(recordsCount)
         , IsDelete(isDelete)
@@ -107,43 +139,13 @@ public:
         return BlobRange.Hash();
     }
     TString DebugString() const {
-        if (auto* ss = GetSnapshotOptional()) {
-            return TStringBuilder() << BlobRange << ";snapshot=" << ss->DebugString();
-        } else {
-            return TStringBuilder() << BlobRange << ";write_id=" << (ui64)GetWriteIdVerified();
+        TStringBuilder sb;
+        sb << BlobRange;
+        if (CommittedSnapshot) {
+            sb << ";snapshot=" << CommittedSnapshot->DebugString();
         }
-    }
-
-    bool HasSnapshot() const {
-        return GetSnapshotOptional();
-    }
-
-    const TSnapshot& GetSnapshotDef(const TSnapshot& def) const {
-        if (auto* snapshot = GetSnapshotOptional()) {
-            return *snapshot;
-        } else {
-            return def;
-        }
-    }
-
-    const TSnapshot* GetSnapshotOptional() const {
-        return std::get_if<TSnapshot>(&WriteInfo);
-    }
-
-    const TSnapshot& GetSnapshotVerified() const {
-        auto* result = GetSnapshotOptional();
-        AFL_VERIFY(result);
-        return *result;
-    }
-
-    const TInsertWriteId* GetWriteIdOptional() const {
-        return std::get_if<TInsertWriteId>(&WriteInfo);
-    }
-
-    TInsertWriteId GetWriteIdVerified() const {
-        auto* result = GetWriteIdOptional();
-        AFL_VERIFY(result);
-        return *result;
+        sb << ";write_id=" << GetInsertWriteId();
+        return sb;
     }
 
     const TBlobRange& GetBlobRange() const {

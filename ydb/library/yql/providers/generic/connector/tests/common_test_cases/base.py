@@ -66,7 +66,7 @@ class BaseTestCase:
         '''
         match self.data_source_kind:
             case EDataSourceKind.CLICKHOUSE:
-                return 't' + make_random_string(8)
+                return self.name_  # without protocol
             case EDataSourceKind.MS_SQL_SERVER:
                 return self.name
             case EDataSourceKind.MYSQL:

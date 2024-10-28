@@ -6,7 +6,7 @@
 
 ### Сигнатура
 
-```
+```yql
 IF(Bool, T, T)->T
 IF(Bool, T)->T?
 ```
@@ -15,7 +15,7 @@ IF(Bool, T)->T?
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   IF(foo > 0, bar, baz) AS bar_or_baz,
   IF(foo > 0, foo) AS only_positive_foo

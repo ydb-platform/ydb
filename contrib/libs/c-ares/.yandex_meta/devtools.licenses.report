@@ -1,0 +1,565 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  07056dc9c6a316252fc58ce2d224dedb
+BELONGS ya.make
+    License text:
+        /* MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/ares.h [1:1]
+        include/ares_dns.h [1:1]
+        include/ares_dns_record.h [1:1]
+        include/ares_nameser.h [1:1]
+        include/ares_version.h [1:1]
+        src/lib/ares_addrinfo2hostent.c [1:1]
+        src/lib/ares_addrinfo_localhost.c [1:1]
+        src/lib/ares_android.c [1:1]
+        src/lib/ares_android.h [1:1]
+        src/lib/ares_cancel.c [1:1]
+        src/lib/ares_close_sockets.c [1:1]
+        src/lib/ares_conn.c [1:1]
+        src/lib/ares_conn.h [1:1]
+        src/lib/ares_cookie.c [1:1]
+        src/lib/ares_data.c [1:1]
+        src/lib/ares_data.h [1:1]
+        src/lib/ares_destroy.c [1:1]
+        src/lib/ares_free_hostent.c [1:1]
+        src/lib/ares_free_string.c [1:1]
+        src/lib/ares_freeaddrinfo.c [1:1]
+        src/lib/ares_getaddrinfo.c [1:1]
+        src/lib/ares_getenv.c [1:1]
+        src/lib/ares_getenv.h [1:1]
+        src/lib/ares_gethostbyaddr.c [1:1]
+        src/lib/ares_gethostbyname.c [1:1]
+        src/lib/ares_getnameinfo.c [1:1]
+        src/lib/ares_hosts_file.c [1:1]
+        src/lib/ares_inet_net_pton.h [1:1]
+        src/lib/ares_init.c [1:1]
+        src/lib/ares_ipv6.h [1:1]
+        src/lib/ares_library_init.c [1:1]
+        src/lib/ares_metrics.c [1:1]
+        src/lib/ares_options.c [1:1]
+        src/lib/ares_parse_into_addrinfo.c [1:1]
+        src/lib/ares_private.h [1:1]
+        src/lib/ares_process.c [1:1]
+        src/lib/ares_qcache.c [1:1]
+        src/lib/ares_query.c [1:1]
+        src/lib/ares_search.c [1:1]
+        src/lib/ares_send.c [1:1]
+        src/lib/ares_set_socket_functions.c [1:1]
+        src/lib/ares_setup.h [1:1]
+        src/lib/ares_socket.c [1:1]
+        src/lib/ares_socket.h [1:1]
+        src/lib/ares_strerror.c [1:1]
+        src/lib/ares_sysconfig.c [1:1]
+        src/lib/ares_sysconfig_files.c [1:1]
+        src/lib/ares_sysconfig_mac.c [1:1]
+        src/lib/ares_sysconfig_win.c [1:1]
+        src/lib/ares_timeout.c [1:1]
+        src/lib/ares_update_servers.c [1:1]
+        src/lib/ares_version.c [1:1]
+        src/lib/config-win32.h [1:1]
+        src/lib/dsa/ares_array.c [1:1]
+        src/lib/dsa/ares_htable.c [1:1]
+        src/lib/dsa/ares_htable.h [1:1]
+        src/lib/dsa/ares_htable_asvp.c [1:1]
+        src/lib/dsa/ares_htable_dict.c [1:1]
+        src/lib/dsa/ares_htable_strvp.c [1:1]
+        src/lib/dsa/ares_htable_szvp.c [1:1]
+        src/lib/dsa/ares_htable_vpstr.c [1:1]
+        src/lib/dsa/ares_htable_vpvp.c [1:1]
+        src/lib/dsa/ares_llist.c [1:1]
+        src/lib/dsa/ares_slist.c [1:1]
+        src/lib/dsa/ares_slist.h [1:1]
+        src/lib/event/ares_event.h [1:1]
+        src/lib/event/ares_event_configchg.c [1:1]
+        src/lib/event/ares_event_epoll.c [1:1]
+        src/lib/event/ares_event_kqueue.c [1:1]
+        src/lib/event/ares_event_poll.c [1:1]
+        src/lib/event/ares_event_select.c [1:1]
+        src/lib/event/ares_event_thread.c [1:1]
+        src/lib/event/ares_event_wake_pipe.c [1:1]
+        src/lib/event/ares_event_win32.c [1:1]
+        src/lib/event/ares_event_win32.h [1:1]
+        src/lib/include/ares_array.h [1:1]
+        src/lib/include/ares_buf.h [1:1]
+        src/lib/include/ares_htable_asvp.h [1:1]
+        src/lib/include/ares_htable_dict.h [1:1]
+        src/lib/include/ares_htable_strvp.h [1:1]
+        src/lib/include/ares_htable_szvp.h [1:1]
+        src/lib/include/ares_htable_vpstr.h [1:1]
+        src/lib/include/ares_htable_vpvp.h [1:1]
+        src/lib/include/ares_llist.h [1:1]
+        src/lib/include/ares_mem.h [1:1]
+        src/lib/include/ares_str.h [1:1]
+        src/lib/legacy/ares_create_query.c [1:1]
+        src/lib/legacy/ares_expand_name.c [1:1]
+        src/lib/legacy/ares_expand_string.c [1:1]
+        src/lib/legacy/ares_fds.c [1:1]
+        src/lib/legacy/ares_getsock.c [1:1]
+        src/lib/legacy/ares_parse_a_reply.c [1:1]
+        src/lib/legacy/ares_parse_aaaa_reply.c [1:1]
+        src/lib/legacy/ares_parse_caa_reply.c [1:1]
+        src/lib/legacy/ares_parse_mx_reply.c [1:1]
+        src/lib/legacy/ares_parse_naptr_reply.c [1:1]
+        src/lib/legacy/ares_parse_ns_reply.c [1:1]
+        src/lib/legacy/ares_parse_ptr_reply.c [1:1]
+        src/lib/legacy/ares_parse_soa_reply.c [1:1]
+        src/lib/legacy/ares_parse_srv_reply.c [1:1]
+        src/lib/legacy/ares_parse_txt_reply.c [1:1]
+        src/lib/legacy/ares_parse_uri_reply.c [1:1]
+        src/lib/record/ares_dns_mapping.c [1:1]
+        src/lib/record/ares_dns_multistring.c [1:1]
+        src/lib/record/ares_dns_multistring.h [1:1]
+        src/lib/record/ares_dns_name.c [1:1]
+        src/lib/record/ares_dns_parse.c [1:1]
+        src/lib/record/ares_dns_private.h [1:1]
+        src/lib/record/ares_dns_record.c [1:1]
+        src/lib/record/ares_dns_write.c [1:1]
+        src/lib/str/ares_buf.c [1:1]
+        src/lib/str/ares_str.c [1:1]
+        src/lib/str/ares_strsplit.c [1:1]
+        src/lib/str/ares_strsplit.h [1:1]
+        src/lib/util/ares_iface_ips.c [1:1]
+        src/lib/util/ares_iface_ips.h [1:1]
+        src/lib/util/ares_math.c [1:1]
+        src/lib/util/ares_math.h [1:1]
+        src/lib/util/ares_rand.c [1:1]
+        src/lib/util/ares_rand.h [1:1]
+        src/lib/util/ares_threads.c [1:1]
+        src/lib/util/ares_threads.h [1:1]
+        src/lib/util/ares_time.h [1:1]
+        src/lib/util/ares_timeval.c [1:1]
+        src/lib/util/ares_uri.c [1:1]
+        src/lib/util/ares_uri.h [1:1]
+
+KEEP     APSL-2.0             1d515ca9f03c1c884ee87fdbbafed30b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: APSL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.apple.com/license/apsl/, https://spdx.org/licenses/APSL-2.0
+    Files with this license:
+        src/lib/thirdparty/apple/dnsinfo.h [4:21]
+
+KEEP     Public-Domain        272a72d9bbb24bb4aa3eba1740f4de24
+BELONGS ya.make
+    License text:
+        /* Uses public domain code snippets from
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/lib/util/ares_math.c [29:29]
+
+KEEP     MIT                  3158a75221c70090b7e127aa7c980dd8
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/ares.h [25:25]
+        include/ares_build-ios.h [5:5]
+        include/ares_build-linux.h [5:5]
+        include/ares_dns.h [25:25]
+        include/ares_dns_record.h [24:24]
+        include/ares_nameser.h [25:25]
+        include/ares_version.h [24:24]
+        src/lib/ares_addrinfo2hostent.c [27:27]
+        src/lib/ares_addrinfo_localhost.c [25:25]
+        src/lib/ares_android.c [24:24]
+        src/lib/ares_android.h [24:24]
+        src/lib/ares_cancel.c [24:24]
+        src/lib/ares_close_sockets.c [25:25]
+        src/lib/ares_config-android.h [2:2]
+        src/lib/ares_config-linux.h [2:2]
+        src/lib/ares_config-osx.h [2:2]
+        src/lib/ares_conn.c [25:25]
+        src/lib/ares_conn.h [24:24]
+        src/lib/ares_cookie.c [24:24]
+        src/lib/ares_data.c [24:24]
+        src/lib/ares_data.h [24:24]
+        src/lib/ares_destroy.c [25:25]
+        src/lib/ares_free_hostent.c [25:25]
+        src/lib/ares_free_string.c [25:25]
+        src/lib/ares_freeaddrinfo.c [25:25]
+        src/lib/ares_getaddrinfo.c [26:26]
+        src/lib/ares_getenv.c [25:25]
+        src/lib/ares_getenv.h [25:25]
+        src/lib/ares_gethostbyaddr.c [25:25]
+        src/lib/ares_gethostbyname.c [25:25]
+        src/lib/ares_getnameinfo.c [24:24]
+        src/lib/ares_hosts_file.c [24:24]
+        src/lib/ares_inet_net_pton.h [24:24]
+        src/lib/ares_init.c [25:25]
+        src/lib/ares_ipv6.h [24:24]
+        src/lib/ares_library_init.c [25:25]
+        src/lib/ares_metrics.c [24:24]
+        src/lib/ares_options.c [25:25]
+        src/lib/ares_parse_into_addrinfo.c [25:25]
+        src/lib/ares_private.h [25:25]
+        src/lib/ares_process.c [25:25]
+        src/lib/ares_qcache.c [24:24]
+        src/lib/ares_query.c [25:25]
+        src/lib/ares_search.c [25:25]
+        src/lib/ares_send.c [25:25]
+        src/lib/ares_set_socket_functions.c [24:24]
+        src/lib/ares_setup.h [24:24]
+        src/lib/ares_socket.c [25:25]
+        src/lib/ares_socket.h [24:24]
+        src/lib/ares_strerror.c [25:25]
+        src/lib/ares_sysconfig.c [25:25]
+        src/lib/ares_sysconfig_files.c [25:25]
+        src/lib/ares_sysconfig_mac.c [24:24]
+        src/lib/ares_sysconfig_win.c [25:25]
+        src/lib/ares_timeout.c [25:25]
+        src/lib/ares_update_servers.c [26:26]
+        src/lib/ares_version.c [25:25]
+        src/lib/config-win32.h [24:24]
+        src/lib/dsa/ares_array.c [24:24]
+        src/lib/dsa/ares_htable.c [24:24]
+        src/lib/dsa/ares_htable.h [24:24]
+        src/lib/dsa/ares_htable_asvp.c [24:24]
+        src/lib/dsa/ares_htable_dict.c [24:24]
+        src/lib/dsa/ares_htable_strvp.c [24:24]
+        src/lib/dsa/ares_htable_szvp.c [24:24]
+        src/lib/dsa/ares_htable_vpstr.c [24:24]
+        src/lib/dsa/ares_htable_vpvp.c [24:24]
+        src/lib/dsa/ares_llist.c [24:24]
+        src/lib/dsa/ares_slist.c [24:24]
+        src/lib/dsa/ares_slist.h [24:24]
+        src/lib/event/ares_event.h [24:24]
+        src/lib/event/ares_event_configchg.c [24:24]
+        src/lib/event/ares_event_epoll.c [24:24]
+        src/lib/event/ares_event_kqueue.c [24:24]
+        src/lib/event/ares_event_poll.c [24:24]
+        src/lib/event/ares_event_select.c [24:24]
+        src/lib/event/ares_event_thread.c [24:24]
+        src/lib/event/ares_event_wake_pipe.c [24:24]
+        src/lib/event/ares_event_win32.c [24:24]
+        src/lib/event/ares_event_win32.h [24:24]
+        src/lib/include/ares_array.h [24:24]
+        src/lib/include/ares_buf.h [24:24]
+        src/lib/include/ares_htable_asvp.h [24:24]
+        src/lib/include/ares_htable_dict.h [24:24]
+        src/lib/include/ares_htable_strvp.h [24:24]
+        src/lib/include/ares_htable_szvp.h [24:24]
+        src/lib/include/ares_htable_vpstr.h [24:24]
+        src/lib/include/ares_htable_vpvp.h [24:24]
+        src/lib/include/ares_llist.h [24:24]
+        src/lib/include/ares_mem.h [24:24]
+        src/lib/include/ares_str.h [25:25]
+        src/lib/inet_net_pton.c [18:18]
+        src/lib/inet_ntop.c [17:17]
+        src/lib/legacy/ares_create_query.c [24:24]
+        src/lib/legacy/ares_expand_name.c [25:25]
+        src/lib/legacy/ares_expand_string.c [25:25]
+        src/lib/legacy/ares_fds.c [25:25]
+        src/lib/legacy/ares_getsock.c [24:24]
+        src/lib/legacy/ares_parse_a_reply.c [25:25]
+        src/lib/legacy/ares_parse_aaaa_reply.c [26:26]
+        src/lib/legacy/ares_parse_caa_reply.c [24:24]
+        src/lib/legacy/ares_parse_mx_reply.c [24:24]
+        src/lib/legacy/ares_parse_naptr_reply.c [24:24]
+        src/lib/legacy/ares_parse_ns_reply.c [24:24]
+        src/lib/legacy/ares_parse_ptr_reply.c [24:24]
+        src/lib/legacy/ares_parse_soa_reply.c [24:24]
+        src/lib/legacy/ares_parse_srv_reply.c [24:24]
+        src/lib/legacy/ares_parse_txt_reply.c [24:24]
+        src/lib/legacy/ares_parse_uri_reply.c [24:24]
+        src/lib/record/ares_dns_mapping.c [24:24]
+        src/lib/record/ares_dns_multistring.c [24:24]
+        src/lib/record/ares_dns_multistring.h [24:24]
+        src/lib/record/ares_dns_name.c [24:24]
+        src/lib/record/ares_dns_parse.c [24:24]
+        src/lib/record/ares_dns_private.h [24:24]
+        src/lib/record/ares_dns_record.c [24:24]
+        src/lib/record/ares_dns_write.c [24:24]
+        src/lib/str/ares_buf.c [24:24]
+        src/lib/str/ares_str.c [25:25]
+        src/lib/str/ares_strsplit.c [24:24]
+        src/lib/str/ares_strsplit.h [24:24]
+        src/lib/util/ares_iface_ips.c [24:24]
+        src/lib/util/ares_iface_ips.h [24:24]
+        src/lib/util/ares_math.c [24:24]
+        src/lib/util/ares_math.h [24:24]
+        src/lib/util/ares_rand.c [24:24]
+        src/lib/util/ares_rand.h [24:24]
+        src/lib/util/ares_threads.c [24:24]
+        src/lib/util/ares_threads.h [24:24]
+        src/lib/util/ares_time.h [24:24]
+        src/lib/util/ares_timeval.c [24:24]
+        src/lib/util/ares_uri.c [24:24]
+        src/lib/util/ares_uri.h [24:24]
+        src/lib/windows_port.c [6:6]
+
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.md [1:1]
+
+KEEP     ISC                  496ba8557c8105b63a14ddbb272cca56
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/lib/inet_ntop.c [5:15]
+
+KEEP     BSD-3-Clause         9d018aaf6e89baa34c9bc9407e762114
+BELONGS ya.make
+    License text:
+         * Lifted from the 'Android Bionic' project with the BSD license.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/lib/ares_sortaddrinfo.c [3:3]
+
+KEEP     MIT                  9f87b7b185f90608bae6d2b5c377f145
+BELONGS ya.make
+    License text:
+        c-ares will build with any C89 compiler and is [MIT licensed](LICENSE.md),
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [31:31]
+
+KEEP     BSD-3-Clause         9f9f74951499b982d601e33ab0c03bed
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/lib/ares_sortaddrinfo.c [12:34]
+
+KEEP     ISC                  a33bf68b7a1c6d0ca7948114d5f40d02
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/lib/inet_net_pton.c [5:16]
+
+KEEP     BSD-3-Clause         bcd96bf495243cd22767952d056c373c
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: BSD-3-Clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/lib/ares_sortaddrinfo.c [36:36]
+
+KEEP     MIT                  c2fd01dec4e4c4c415b4e2bd90cd2e6b
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: include/ares.h at line 20, include/ares_dns.h at line 20, include/ares_dns_record.h at line 19, include/ares_nameser.h at line 20, include/ares_version.h at line 19, src/lib/ares_addrinfo2hostent.c at line 22, src/lib/ares_addrinfo_localhost.c at line 20, src/lib/ares_android.c at line 19, src/lib/ares_android.h at line 19, src/lib/ares_cancel.c at line 19, src/lib/ares_close_sockets.c at line 20, src/lib/ares_conn.c at line 20, src/lib/ares_conn.h at line 19, src/lib/ares_cookie.c at line 19, src/lib/ares_data.c at line 19, src/lib/ares_data.h at line 19, src/lib/ares_destroy.c at line 20, src/lib/ares_free_hostent.c at line 20, src/lib/ares_free_string.c at line 20, src/lib/ares_freeaddrinfo.c at line 20, src/lib/ares_getaddrinfo.c at line 21, src/lib/ares_getenv.c at line 20, src/lib/ares_getenv.h at line 20, src/lib/ares_gethostbyaddr.c at line 20, src/lib/ares_gethostbyname.c at line 20, src/lib/ares_getnameinfo.c at line 19, src/lib/ares_hosts_file.c at line 19, src/lib/ares_inet_net_pton.h at line 19, src/lib/ares_init.c at line 20, src/lib/ares_ipv6.h at line 19, src/lib/ares_library_init.c at line 20, src/lib/ares_metrics.c at line 19, src/lib/ares_options.c at line 20, src/lib/ares_parse_into_addrinfo.c at line 20, src/lib/ares_private.h at line 20, src/lib/ares_process.c at line 20, src/lib/ares_qcache.c at line 19, src/lib/ares_query.c at line 20, src/lib/ares_search.c at line 20, src/lib/ares_send.c at line 20, src/lib/ares_set_socket_functions.c at line 19, src/lib/ares_setup.h at line 19, src/lib/ares_socket.c at line 20, src/lib/ares_socket.h at line 19, src/lib/ares_strerror.c at line 20, src/lib/ares_sysconfig.c at line 20, src/lib/ares_sysconfig_files.c at line 20, src/lib/ares_sysconfig_mac.c at line 19, src/lib/ares_sysconfig_win.c at line 20, src/lib/ares_timeout.c at line 20, src/lib/ares_update_servers.c at line 21, src/lib/ares_version.c at line 20, src/lib/config-win32.h at line 19, src/lib/dsa/ares_array.c at line 19, src/lib/dsa/ares_htable.c at line 19, src/lib/dsa/ares_htable.h at line 19, src/lib/dsa/ares_htable_asvp.c at line 19, src/lib/dsa/ares_htable_dict.c at line 19, src/lib/dsa/ares_htable_strvp.c at line 19, src/lib/dsa/ares_htable_szvp.c at line 19, src/lib/dsa/ares_htable_vpstr.c at line 19, src/lib/dsa/ares_htable_vpvp.c at line 19, src/lib/dsa/ares_llist.c at line 19, src/lib/dsa/ares_slist.c at line 19, src/lib/dsa/ares_slist.h at line 19, src/lib/event/ares_event.h at line 19, src/lib/event/ares_event_configchg.c at line 19, src/lib/event/ares_event_epoll.c at line 19, src/lib/event/ares_event_kqueue.c at line 19, src/lib/event/ares_event_poll.c at line 19, src/lib/event/ares_event_select.c at line 19, src/lib/event/ares_event_thread.c at line 19, src/lib/event/ares_event_wake_pipe.c at line 19, src/lib/event/ares_event_win32.c at line 19, src/lib/event/ares_event_win32.h at line 19, src/lib/include/ares_array.h at line 19, src/lib/include/ares_buf.h at line 19, src/lib/include/ares_htable_asvp.h at line 19, src/lib/include/ares_htable_dict.h at line 19, src/lib/include/ares_htable_strvp.h at line 19, src/lib/include/ares_htable_szvp.h at line 19, src/lib/include/ares_htable_vpstr.h at line 19, src/lib/include/ares_htable_vpvp.h at line 19, src/lib/include/ares_llist.h at line 19, src/lib/include/ares_mem.h at line 19, src/lib/include/ares_str.h at line 20, src/lib/legacy/ares_create_query.c at line 19, src/lib/legacy/ares_expand_name.c at line 20, src/lib/legacy/ares_expand_string.c at line 20, src/lib/legacy/ares_fds.c at line 20, src/lib/legacy/ares_getsock.c at line 19, src/lib/legacy/ares_parse_a_reply.c at line 20, src/lib/legacy/ares_parse_aaaa_reply.c at line 21, src/lib/legacy/ares_parse_caa_reply.c at line 19, src/lib/legacy/ares_parse_mx_reply.c at line 19, src/lib/legacy/ares_parse_naptr_reply.c at line 19, src/lib/legacy/ares_parse_ns_reply.c at line 19, src/lib/legacy/ares_parse_ptr_reply.c at line 19, src/lib/legacy/ares_parse_soa_reply.c at line 19, src/lib/legacy/ares_parse_srv_reply.c at line 19, src/lib/legacy/ares_parse_txt_reply.c at line 19, src/lib/legacy/ares_parse_uri_reply.c at line 19, src/lib/record/ares_dns_mapping.c at line 19, src/lib/record/ares_dns_multistring.c at line 19, src/lib/record/ares_dns_multistring.h at line 19, src/lib/record/ares_dns_name.c at line 19, src/lib/record/ares_dns_parse.c at line 19, src/lib/record/ares_dns_private.h at line 19, src/lib/record/ares_dns_record.c at line 19, src/lib/record/ares_dns_write.c at line 19, src/lib/str/ares_buf.c at line 19, src/lib/str/ares_str.c at line 20, src/lib/str/ares_strsplit.c at line 19, src/lib/str/ares_strsplit.h at line 19, src/lib/util/ares_iface_ips.c at line 19, src/lib/util/ares_iface_ips.h at line 19, src/lib/util/ares_math.c at line 19, src/lib/util/ares_math.h at line 19, src/lib/util/ares_rand.c at line 19, src/lib/util/ares_rand.h at line 19, src/lib/util/ares_threads.c at line 19, src/lib/util/ares_threads.h at line 19, src/lib/util/ares_time.h at line 19, src/lib/util/ares_timeval.c at line 19, src/lib/util/ares_uri.c at line 19, src/lib/util/ares_uri.h at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/ares.h [6:23]
+        include/ares_dns.h [6:23]
+        include/ares_dns_record.h [5:22]
+        include/ares_nameser.h [6:23]
+        include/ares_version.h [5:22]
+        src/lib/ares_addrinfo2hostent.c [8:25]
+        src/lib/ares_addrinfo_localhost.c [6:23]
+        src/lib/ares_android.c [5:22]
+        src/lib/ares_android.h [5:22]
+        src/lib/ares_cancel.c [5:22]
+        src/lib/ares_close_sockets.c [6:23]
+        src/lib/ares_conn.c [6:23]
+        src/lib/ares_conn.h [5:22]
+        src/lib/ares_cookie.c [5:22]
+        src/lib/ares_data.c [5:22]
+        src/lib/ares_data.h [5:22]
+        src/lib/ares_destroy.c [6:23]
+        src/lib/ares_free_hostent.c [6:23]
+        src/lib/ares_free_string.c [6:23]
+        src/lib/ares_freeaddrinfo.c [6:23]
+        src/lib/ares_getaddrinfo.c [7:24]
+        src/lib/ares_getenv.c [6:23]
+        src/lib/ares_getenv.h [6:23]
+        src/lib/ares_gethostbyaddr.c [6:23]
+        src/lib/ares_gethostbyname.c [6:23]
+        src/lib/ares_getnameinfo.c [5:22]
+        src/lib/ares_hosts_file.c [5:22]
+        src/lib/ares_inet_net_pton.h [5:22]
+        src/lib/ares_init.c [6:23]
+        src/lib/ares_ipv6.h [5:22]
+        src/lib/ares_library_init.c [6:23]
+        src/lib/ares_metrics.c [5:22]
+        src/lib/ares_options.c [6:23]
+        src/lib/ares_parse_into_addrinfo.c [6:23]
+        src/lib/ares_private.h [6:23]
+        src/lib/ares_process.c [6:23]
+        src/lib/ares_qcache.c [5:22]
+        src/lib/ares_query.c [6:23]
+        src/lib/ares_search.c [6:23]
+        src/lib/ares_send.c [6:23]
+        src/lib/ares_set_socket_functions.c [5:22]
+        src/lib/ares_setup.h [5:22]
+        src/lib/ares_socket.c [6:23]
+        src/lib/ares_socket.h [5:22]
+        src/lib/ares_strerror.c [6:23]
+        src/lib/ares_sysconfig.c [6:23]
+        src/lib/ares_sysconfig_files.c [6:23]
+        src/lib/ares_sysconfig_mac.c [5:22]
+        src/lib/ares_sysconfig_win.c [6:23]
+        src/lib/ares_timeout.c [6:23]
+        src/lib/ares_update_servers.c [7:24]
+        src/lib/ares_version.c [6:23]
+        src/lib/config-win32.h [5:22]
+        src/lib/dsa/ares_array.c [5:22]
+        src/lib/dsa/ares_htable.c [5:22]
+        src/lib/dsa/ares_htable.h [5:22]
+        src/lib/dsa/ares_htable_asvp.c [5:22]
+        src/lib/dsa/ares_htable_dict.c [5:22]
+        src/lib/dsa/ares_htable_strvp.c [5:22]
+        src/lib/dsa/ares_htable_szvp.c [5:22]
+        src/lib/dsa/ares_htable_vpstr.c [5:22]
+        src/lib/dsa/ares_htable_vpvp.c [5:22]
+        src/lib/dsa/ares_llist.c [5:22]
+        src/lib/dsa/ares_slist.c [5:22]
+        src/lib/dsa/ares_slist.h [5:22]
+        src/lib/event/ares_event.h [5:22]
+        src/lib/event/ares_event_configchg.c [5:22]
+        src/lib/event/ares_event_epoll.c [5:22]
+        src/lib/event/ares_event_kqueue.c [5:22]
+        src/lib/event/ares_event_poll.c [5:22]
+        src/lib/event/ares_event_select.c [5:22]
+        src/lib/event/ares_event_thread.c [5:22]
+        src/lib/event/ares_event_wake_pipe.c [5:22]
+        src/lib/event/ares_event_win32.c [5:22]
+        src/lib/event/ares_event_win32.h [5:22]
+        src/lib/include/ares_array.h [5:22]
+        src/lib/include/ares_buf.h [5:22]
+        src/lib/include/ares_htable_asvp.h [5:22]
+        src/lib/include/ares_htable_dict.h [5:22]
+        src/lib/include/ares_htable_strvp.h [5:22]
+        src/lib/include/ares_htable_szvp.h [5:22]
+        src/lib/include/ares_htable_vpstr.h [5:22]
+        src/lib/include/ares_htable_vpvp.h [5:22]
+        src/lib/include/ares_llist.h [5:22]
+        src/lib/include/ares_mem.h [5:22]
+        src/lib/include/ares_str.h [6:23]
+        src/lib/legacy/ares_create_query.c [5:22]
+        src/lib/legacy/ares_expand_name.c [6:23]
+        src/lib/legacy/ares_expand_string.c [6:23]
+        src/lib/legacy/ares_fds.c [6:23]
+        src/lib/legacy/ares_getsock.c [5:22]
+        src/lib/legacy/ares_parse_a_reply.c [6:23]
+        src/lib/legacy/ares_parse_aaaa_reply.c [7:24]
+        src/lib/legacy/ares_parse_caa_reply.c [5:22]
+        src/lib/legacy/ares_parse_mx_reply.c [5:22]
+        src/lib/legacy/ares_parse_naptr_reply.c [5:22]
+        src/lib/legacy/ares_parse_ns_reply.c [5:22]
+        src/lib/legacy/ares_parse_ptr_reply.c [5:22]
+        src/lib/legacy/ares_parse_soa_reply.c [5:22]
+        src/lib/legacy/ares_parse_srv_reply.c [5:22]
+        src/lib/legacy/ares_parse_txt_reply.c [5:22]
+        src/lib/legacy/ares_parse_uri_reply.c [5:22]
+        src/lib/record/ares_dns_mapping.c [5:22]
+        src/lib/record/ares_dns_multistring.c [5:22]
+        src/lib/record/ares_dns_multistring.h [5:22]
+        src/lib/record/ares_dns_name.c [5:22]
+        src/lib/record/ares_dns_parse.c [5:22]
+        src/lib/record/ares_dns_private.h [5:22]
+        src/lib/record/ares_dns_record.c [5:22]
+        src/lib/record/ares_dns_write.c [5:22]
+        src/lib/str/ares_buf.c [5:22]
+        src/lib/str/ares_str.c [6:23]
+        src/lib/str/ares_strsplit.c [5:22]
+        src/lib/str/ares_strsplit.h [5:22]
+        src/lib/util/ares_iface_ips.c [5:22]
+        src/lib/util/ares_iface_ips.h [5:22]
+        src/lib/util/ares_math.c [5:22]
+        src/lib/util/ares_math.h [5:22]
+        src/lib/util/ares_rand.c [5:22]
+        src/lib/util/ares_rand.h [5:22]
+        src/lib/util/ares_threads.c [5:22]
+        src/lib/util/ares_threads.h [5:22]
+        src/lib/util/ares_time.h [5:22]
+        src/lib/util/ares_timeval.c [5:22]
+        src/lib/util/ares_uri.c [5:22]
+        src/lib/util/ares_uri.h [5:22]
+
+KEEP     MIT                  e5e4ee9811f07656fe849a31959bb283
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE.md at line 21
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE.md [7:24]

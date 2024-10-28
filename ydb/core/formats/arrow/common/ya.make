@@ -5,8 +5,8 @@ PEERDIR(
     ydb/core/formats/arrow/switch
     ydb/library/actors/core
     ydb/library/conclusion
+    ydb/library/formats/arrow
     ydb/core/formats/arrow/splitter
-    ydb/core/formats/arrow/validation
 )
 
 SRCS(

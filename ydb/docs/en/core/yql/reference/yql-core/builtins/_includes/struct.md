@@ -296,7 +296,6 @@ Arguments:
 ### Examples
 
 ```yql
-
 SELECT
   SpreadMembers([('a',1),('a',2)],['a','b']); -- (a: 2, b: null)
 ```
@@ -313,7 +312,6 @@ Arguments:
 ### Examples
 
 ```yql
-
 SELECT
   ForceSpreadMembers([('a',1),('a',2),('c',100)],['a','b']); -- (a: 2, b: null)
 ```
@@ -329,7 +327,7 @@ Combine two structures using one of the four methods (using the provided lambda 
 
 ### Signatures
 
-```text
+```yql
 StructUnion(left:Struct<...>, right:Struct<...>[, mergeLambda:(name:String, l:T1?, r:T2?)->T])->Struct<...>
 StructIntersection(left:Struct<...>, right:Struct<...>[, mergeLambda:(name:String, l:T1?, r:T2?)->T])->Struct<...>
 StructDifference(left:Struct<...>, right:Struct<...>)->Struct<...>

@@ -58,20 +58,5 @@ void TYdbOperationCommand::Config(TConfig& config) {
         .RequiredArgument("ms").StoreResult(&OperationTimeout);
 }
 
-NScripting::TExplainYqlResult TYdbOperationCommand::ExplainQuery(TClientCommand::TConfig& config, const TString& queryText,
-        NScripting::ExplainYqlRequestMode mode) {
-    NScripting::TScriptingClient client(CreateDriver(config));
-
-    NScripting::TExplainYqlRequestSettings explainSettings;
-    explainSettings.Mode(mode);
-
-    auto result = client.ExplainYqlScript(
-        queryText,
-        explainSettings
-    ).GetValueSync();
-    ThrowOnError(result);
-    return result;
-}
-
 }
 }

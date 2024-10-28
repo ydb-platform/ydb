@@ -12,6 +12,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -43,7 +44,8 @@ private:
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
-    NMonitoring::THistogramPtr PackageSize;
+    NMonitoring::THistogramPtr PackageSizeRecordsByRecords;
+    NMonitoring::THistogramPtr PackageSizeCountByRecords;
 
     NMonitoring::THistogramPtr PreparingDuration;
     NMonitoring::THistogramPtr WritingDuration;
@@ -108,7 +110,8 @@ public:
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
         RowsCount->Add(rowsCount);
-        PackageSize->Collect(rowsCount);
+        PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
+        PackageSizeCountByRecords->Collect(rowsCount);
     }
 
     void OnReply(const TDuration dFull, const TDuration dDelta, const ::Ydb::StatusIds::StatusCode code) const;
@@ -179,8 +182,8 @@ namespace NTxProxy {
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
-    std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NYql::TIssues> issues);
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -222,6 +225,8 @@ private:
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
     TUploadCounters::TGuard UploadCountersGuard;
+    bool ImmediateWrite = false;
+
 protected:
     enum class EUploadSource {
         ProtoValues = 0,
@@ -280,6 +285,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
+        ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
         OnBeforeStart(ctx);
         ResolveTable(GetTable(), ctx);
     }
@@ -466,14 +472,7 @@ private:
         } else if (reqColumns.empty()) {
             for (auto& [name, typeInfo] : SrcColumns) {
                 Ydb::Type ydbType;
-                if (typeInfo.GetTypeId() != NScheme::NTypeIds::Pg) {
-                    ydbType.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-                } else {
-                    auto typeDesc = typeInfo.GetPgTypeDesc();
-                    auto* pg = ydbType.mutable_pg_type();
-                    pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-                    pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-                }
+                ProtoFromTypeInfo(typeInfo, ydbType);
                 reqColumns.emplace_back(name, std::move(ydbType));
             }
         }
@@ -485,66 +484,65 @@ private:
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
                 return false;
             }
-            i32 typmod = -1;
+            i32 pgTypeMod = -1;            
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
-            const auto& typeInProto = reqColumns[pos].second;
+            TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
-            if (typeInProto.type_id()) {
-                auto typeInRequest = NScheme::TTypeInfo(typeInProto.type_id());
+            const Ydb::Type& typeInProto = reqColumns[pos].second;
+            
+            TString parseProtoError;
+            NScheme::TTypeInfoMod inTypeInfoMod;
+            if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
+                errorMessage = Sprintf("Type parse error for column %s: %s",
+                    name.c_str(), parseProtoError.c_str());
+                return false;
+            }
+
+            const NScheme::TTypeInfo& typeInRequest = inTypeInfoMod.TypeInfo;
+
+            TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
+
+            if (typeInProto.has_type_id()) {
                 bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
                 if (!ok) {
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(ci.PType).c_str(),
-                                           NScheme::TypeName(typeInRequest).c_str());
+                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
                     return false;
                 }
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
-            } else if (typeInProto.has_decimal_type() && ci.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-                int precision = typeInProto.decimal_type().precision();
-                int scale = typeInProto.decimal_type().scale();
-                if (precision != NScheme::DECIMAL_PRECISION || scale != NScheme::DECIMAL_SCALE) {
-                    errorMessage = Sprintf("Unsupported Decimal(%d,%d) for column %s: expected Decimal(%d,%d)",
-                                           precision, scale,
-                                           name.c_str(),
-                                           NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
-
+            } else if (typeInProto.has_decimal_type()) {
+                if (typeInRequest != ci.PType) {
+                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
                     return false;
                 }
             } else if (typeInProto.has_pg_type()) {
-                const auto& typeName = typeInProto.pg_type().type_name();
-                auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-                if (!typeDesc) {
-                    errorMessage = Sprintf("Unknown pg type for column %s: %s",
-                                           name.c_str(), typeName.c_str());
-                    return false;
-                }
-                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
-                    errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
-                                           name.c_str(), NScheme::TypeName(ci.PType).c_str(),
-                                           NScheme::TypeName(typeInRequest).c_str());
+                    errorMessage = Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str());
                     return false;
                 }
-                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeDesc)) {
-                    auto result = NPg::BinaryTypeModFromTextTypeMod(ci.PTypeMod, typeDesc);
-                    if (result.Error) {
-                        errorMessage = Sprintf("Invalid typemod for column %s: type %s, error %s",
-                            name.c_str(), NScheme::TypeName(ci.PType, ci.PTypeMod).c_str(),
-                            result.Error->c_str());
+                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
+                    if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
+                        errorMessage = Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str());
                         return false;
                     }
-                    typmod = result.Typmod;
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
+                    if (result.Error) {
+                        errorMessage = Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                           inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str());
+                        return false;
+                    }
+                    pgTypeMod = result.Typmod;
                 }
-            } else {
-                errorMessage = Sprintf("Unexpected type for column %s: expected %s",
-                                       name.c_str(), NScheme::TypeName(ci.PType).c_str());
-                return false;
             }
 
             bool notNull = entry.NotNullColumns.contains(ci.Name);
@@ -554,11 +552,11 @@ private:
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, typmod, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, typmod, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }
@@ -774,7 +772,7 @@ private:
                 // (re)calculate RuCost for batch variant if it's bigger then RuCost calculated in ExtractRows()
                 Y_ABORT_UNLESS(Batch && Batch->num_rows() >= 0);
                 ui32 numRows = Batch->num_rows();
-                ui64 bytesSize = Max<ui64>(NArrow::GetBatchDataSize(Batch), GetSourceData().Size());
+                ui64 bytesSize = Max<ui64>(NArrow::GetBatchDataSize(Batch), GetSourceData().size());
                 float batchRuCost = TUpsertCost::CostToRu(TUpsertCost::BatchCost(bytesSize, numRows));
                 if (batchRuCost > RuCost) {
                     RuCost = batchRuCost;
@@ -845,7 +843,7 @@ private:
                     LogPrefix() << "no data or conversion error", ctx);
             }
 
-            auto batch = NArrow::TColumnOperator().NullIfAbsent().Extract(Batch, outputColumns);
+            auto batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {
@@ -919,8 +917,8 @@ private:
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
-        DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
-            GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
+        DoLongTxWriteSameMailbox(
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -947,9 +945,11 @@ private:
                 RaiseIssue(issue);
             }
             return ReplyWithResult(status, ctx);
+        } else if (ImmediateWrite) {
+            return ReplyWithResult(status, ctx);
+        } else {
+            CommitLongTx(ctx);
         }
-
-        CommitLongTx(ctx);
     }
 
     void CommitLongTx(const TActorContext& ctx) {
@@ -1332,7 +1332,7 @@ private:
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
             // If it si still there it means we need to rollback
-            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS);
+            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS || ImmediateWrite);
             RollbackLongTx(ctx);
         }
         Span.EndOk();

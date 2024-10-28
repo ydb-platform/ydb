@@ -21,6 +21,7 @@ RECURSE(
     rate_limiter
     replication
     tablet
+    view
     ydb
     ymq
 )

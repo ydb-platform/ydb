@@ -1,14 +1,16 @@
 # Приложение на Go
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic), использующего [Go SDK](https://github.com/ydb-platform/ydb-go-sdk/v3) {{ ydb-short-name }}.
 
 ## Скачивание и запуск {#download}
 
-Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Go](https://go.dev/doc/install). Предварительно должен быть установлен [YDB Go SDK](../../../reference/ydb-sdk/install.md).
+Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Go](https://go.dev/doc/install). Предварительно должен быть установлен [{{ ydb-short-name }} Go SDK](../../../reference/ydb-sdk/install.md).
 
-Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с github.com:
+Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с GitHub:
 
-``` bash
+```bash
 git clone https://github.com/ydb-platform/ydb-go-examples/
 ```
 
@@ -16,11 +18,9 @@ git clone https://github.com/ydb-platform/ydb-go-examples/
 
 {% include [run_options.md](_includes/run_options.md) %}
 
-
-
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-Для работы с `YDB` в `go` следует импортировать пакет драйвера `ydb-go-sdk`:
+Для работы с {{ ydb-short-name }} в `go` следует импортировать пакет драйвера `ydb-go-sdk`:
 
 ```go
 import (
@@ -73,7 +73,7 @@ defer db.Close(ctx)
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `table.Session.CreateTable()`:
+Для создания строковых таблиц используется метод `table.Session.CreateTable()`:
 
 ```go
 err = db.Table().Do(ctx,
@@ -93,7 +93,9 @@ if err != nil {
 }
 ```
 
-С помощью метода `table.Session.DescribeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+Метод `table.Session.CreateTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `table.Session.Execute()`, который выполняет YQL-запросы.
+
+Если вы создали строковую таблицу и хотите вывести информацию о её структуре и убедиться, что она успешно создалась, воспользуйтесь методом `table.Session.DescribeTable()`:
 
 ```go
 err = db.Table().Do(ctx,

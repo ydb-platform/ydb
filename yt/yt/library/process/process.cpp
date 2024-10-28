@@ -720,6 +720,10 @@ IConnectionWriterPtr TSimpleProcess::GetStdInWriter()
 
 TFuture<void> TProcessBase::Spawn()
 {
+    auto finally = Finally([&] {
+        CleanUpParent();
+    });
+
     try {
         // Resolve binary path.
         std::vector<TError> innerErrors;
@@ -753,13 +757,6 @@ TFuture<void> TProcessBase::Spawn()
 void TSimpleProcess::DoSpawn()
 {
 #ifdef _unix_
-    auto finally = Finally([&] {
-        StdPipes_[STDIN_FILENO].CloseReadFD();
-        StdPipes_[STDOUT_FILENO].CloseWriteFD();
-        StdPipes_[STDERR_FILENO].CloseWriteFD();
-        PipeFactory_.Clear();
-    });
-
     YT_VERIFY(ProcessId_ == InvalidProcessId && !Finished_);
 
     // Make sure no spawn action closes Pipe_.WriteFD
@@ -809,6 +806,14 @@ void TSimpleProcess::DoSpawn()
 #else
     THROW_ERROR_EXCEPTION("Unsupported platform");
 #endif
+}
+
+void TSimpleProcess::CleanUpParent()
+{
+    StdPipes_[STDIN_FILENO].CloseReadFD();
+    StdPipes_[STDOUT_FILENO].CloseWriteFD();
+    StdPipes_[STDERR_FILENO].CloseWriteFD();
+    PipeFactory_.Clear();
 }
 
 void TSimpleProcess::PrepareErrorPipe()

@@ -12,7 +12,7 @@
 #include "table_writer.h"
 #include "transaction.h"
 
-#include <yt/yt/client/api/distributed_table_sessions.h>
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
@@ -1046,6 +1046,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     }
     req->set_range_expansion_limit(options.RangeExpansionLimit);
     req->set_max_subqueries(options.MaxSubqueries);
+    req->set_min_row_count_per_subquery(options.MinRowCountPerSubquery);
     req->set_allow_full_scan(options.AllowFullScan);
     req->set_allow_join_without_index(options.AllowJoinWithoutIndex);
 
@@ -1068,6 +1069,9 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_use_canonical_null_relations(options.UseCanonicalNullRelations);
     req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
+    if (options.UseLookupCache) {
+        req->set_use_lookup_cache(*options.UseLookupCache);
+    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

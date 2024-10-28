@@ -23,6 +23,16 @@ struct TVersionedReadOptions
     static void Register(TRegistrar registrar);
 };
 
+struct TVersionedWriteOptions
+    : public NYTree::TYsonStructLite
+{
+    EVersionedIOMode WriteMode;
+
+    REGISTER_YSON_STRUCT_LITE(TVersionedWriteOptions);
+
+    static void Register(TRegistrar registrar);
+};
+
 void ToProto(
     NProto::TVersionedReadOptions* protoOptions,
     const NTableClient::TVersionedReadOptions& options);
@@ -30,6 +40,14 @@ void ToProto(
 void FromProto(
     NTableClient::TVersionedReadOptions* options,
     const NProto::TVersionedReadOptions& protoOptions);
+
+void ToProto(
+    NProto::TVersionedWriteOptions* protoOptions,
+    const NTableClient::TVersionedWriteOptions& options);
+
+void FromProto(
+    NTableClient::TVersionedWriteOptions* options,
+    const NProto::TVersionedWriteOptions& protoOptions);
 
 std::optional<TString> GetTimestampColumnOriginalNameOrNull(TStringBuf name);
 

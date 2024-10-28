@@ -9,9 +9,8 @@ static inline bool IsDropped(const TOlapColumnsDescription::TColumn& col) {
     return false;
 }
 
-static inline ui32 GetType(const TOlapColumnsDescription::TColumn& col) {
-    Y_ABORT_UNLESS(col.GetType().GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-    return col.GetType().GetTypeId();
+static inline NScheme::TTypeInfo GetType(const TOlapColumnsDescription::TColumn& col) {
+    return col.GetType();
 }
 
 }
@@ -56,8 +55,10 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
 
     auto unit = ttl.GetColumnUnit();
 
-    switch (GetType(*column)) {
+    const auto& columnType = GetType(*column);
+    switch (columnType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::Pg:
             errors.AddError("Unsupported column type for TTL in column tables");
             return false;
         default:
@@ -65,7 +66,7 @@ static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::
     }
 
     TString errStr;
-    if (!NValidation::TTTLValidator::ValidateUnit(GetType(*column), unit, errStr)) {
+    if (!NValidation::TTTLValidator::ValidateUnit(columnType, unit, errStr)) {
         errors.AddError(errStr);
         return false;
     }

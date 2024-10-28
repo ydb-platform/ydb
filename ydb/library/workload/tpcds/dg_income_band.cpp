@@ -12,12 +12,14 @@ TTpcDSGeneratorIncomeBand::TTpcDSGeneratorIncomeBand(const TTpcdsWorkloadDataIni
     : TBulkDataGenerator(owner, INCOME_BAND)
 {}
 
-void TTpcDSGeneratorIncomeBand::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorIncomeBand::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_INCOME_BAND_TBL> incomingBandList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_income_band(&incomingBandList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_INCOME_BAND_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_FIELD(writer, "ib_income_band_sk", ib_income_band_id);
     CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, ib_lower_bound);

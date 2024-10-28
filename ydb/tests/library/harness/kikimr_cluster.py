@@ -7,13 +7,14 @@ import time
 import pprint
 from concurrent import futures
 
-import ydb.tests.library.common.yatest_common as yatest_common
 import ydb
 
 from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
 import yaml
+
+import yatest
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ DEFAULT_GRPC_PORT = 2135
 
 
 def kikimr_cluster_factory(configurator=None, config_path=None):
-    logger.info("All test params = {}".format(pprint.pformat(yatest_common.get_param_dict_copy())))
+    logger.info("All test params = {}".format(pprint.pformat(yatest.common.get_param_dict_copy())))
     logger.info("Starting standalone YDB cluster")
     if config_path is not None:
         return ExternalKiKiMRCluster(config_path)
@@ -75,11 +76,11 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         return self
 
     def _start(self):
-        for inst_set in [self.nodes, self.slots, self.nbs]:
+        for inst_set in [self.nodes, self.slots]:
             self._run_on(inst_set, lambda x: x.start())
 
     def _stop(self):
-        for inst_set in [self.nodes, self.slots, self.nbs]:
+        for inst_set in [self.nodes, self.slots]:
             self._run_on(inst_set, lambda x: x.stop())
 
     @staticmethod
@@ -125,7 +126,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
         self._deploy_secrets()
 
-        for inst_set in [self.nodes, self.nbs]:
+        for inst_set in [self.nodes]:
             self._run_on(
                 inst_set,
                 lambda x: x.prepare_artifacts(
@@ -165,7 +166,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         )
 
         if param_constants.deploy_cluster:
-            for inst_set in [self.nodes, self.slots, self.nbs]:
+            for inst_set in [self.nodes, self.slots]:
                 self._run_on(
                     inst_set,
                     lambda x: x.cleanup_logs()

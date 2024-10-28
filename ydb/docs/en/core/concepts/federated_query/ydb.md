@@ -53,6 +53,22 @@ There are several limitations when working with external {{ ydb-short-name }} da
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 
+    |{{ ydb-short-name }} Data Type|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Uint8`|
+    |`Int16`|
+    |`Uint16`|
+    |`Int32`|
+    |`Uint32`|
+    |`Int64`|
+    |`Uint64`|
+    |`Float`|
+    |`Double`|
+    |`String`|
+    |`Utf8`|
+
 ## Supported data types
 
 When working with tables located in the external {{ ydb-short-name }} database, users have access to a limited set of data types. All other types, except for those listed below, are not supported. Type conversion is not performed, meaning that the columns of the table from the external {{ ydb-short-name }} database retain their type after being read by the {{ ydb-short-name }} database processing the federated query.

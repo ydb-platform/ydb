@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NKqp {
 
@@ -21,13 +22,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         const TString StoreName;
         ui32 MultiColumnRepCount = 100;
         static const ui32 SKIP_GROUPS = 7;
-        const TVector<TString> FIELD_NAMES{"utf", "int", "uint", "float", "double"};
+        const TVector<TString> FIELD_NAMES{ "utf", "int", "uint", "float", "double" };
     public:
         TSparsedDataTest(const TString& storeName)
             : Kikimr(Settings)
             , CSController(NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>())
-            , StoreName(storeName)
-        {
+            , StoreName(storeName) {
 
         }
 
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
             Fill(&counts[0], &counts[FIELD_NAMES.size() * groupsCount], 0);
 
-            for (auto& row: rows) {
+            for (auto& row : rows) {
                 auto incCounts = [&](ui32 i, const TString& column) {
                     if (*NYdb::TValueParser(row.at(column)).GetOptionalBool()) {
                         counts[i]++;
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                     incCounts(ind++, "def_float" + grStr);
                     incCounts(ind++, "def_double" + grStr);
                 }
-             }
+            }
         }
 
         void CheckAllFieldsTable(bool firstCall, ui32 countExpectation, ui32* defCountStart) {
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 NArrow::NConstruction::TStringPoolFiller sPool(1000, 52, "abcde", frq);
                 helper.FillTable(sPool, shiftKff, 10000);
             },
-            [&](bool firstCall) {
+                [&](bool firstCall) {
                 CheckTable("field", "'abcde'", firstCall, countExpectation, defCountStart);
             });
         }
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 TTypedLocalHelper helper("Utf8", Kikimr);
                 helper.FillMultiColumnTable(MultiColumnRepCount, shiftKff, 10000);
             },
-            [&](bool firstCall) {
+                [&](bool firstCall) {
                 CheckAllFieldsTable(firstCall, countExpectation, defCountStart);
             });
         }
@@ -302,6 +302,47 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         TSparsedDataTest test("");
         test.Execute();
     }
+
+    Y_UNIT_TEST(AccessorActualization) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+
+        TLocalHelper helper(kikimr);
+        helper.SetOptionalStorageId(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        helper.CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        csController->WaitIndexation(TDuration::Seconds(3));
+
+        {
+            auto result = session.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=uid, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        csController->WaitActualization(TDuration::Seconds(5));
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT count(uid) FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            Cerr << StreamResultToYson(it) << Endl;
+        }
+    }
+
 }
 
 } // namespace

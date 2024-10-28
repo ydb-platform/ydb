@@ -1,11 +1,11 @@
 services:
   fq-connector-go:
     container_name: fq-tests-mssql-fq-connector-go
-    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.9-rc.2@sha256:ebaefb6a93d8d1504436e222f3eb106b38ca944f91ccdd12f118172e5986633b
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.5.11-rc.6@sha256:15d3cf4ca55c11dbee4661c039eca8248e1eff0796630d325d3028a8d7af372a
     ports:
-    - 2130
+      - 2130
     volumes:
-    - ../../fq-connector-go/:/opt/ydb/cfg/
+      - ../../fq-connector-go/:/opt/ydb/cfg/
   ms_sql_server:
     build:
       context: ./init
@@ -17,5 +17,5 @@ services:
       LANG: ru_RU.UTF-8
       SA_PASSWORD: Qwerty12345!
     ports:
-    - 1433:1433
+      - 1433:1433
 version: "3.4"

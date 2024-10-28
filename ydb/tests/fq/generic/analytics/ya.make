@@ -4,6 +4,8 @@ STYLE_PYTHON()
 
 NO_CHECK_IMPORTS()
 
+DATA(arcadia/ydb/library/yql/providers/generic/connector/tests/fq-connector-go)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/mdb_mock/recipe.inc)
@@ -52,6 +54,8 @@ IF (OPENSOURCE)
 ENDIF()
 
 PEERDIR(
+    ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/generic/connector/tests/utils
     ydb/tests/fq/generic/utils
     library/python/testing/recipe
     library/python/testing/yatest_common

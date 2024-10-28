@@ -250,6 +250,19 @@ protected:
     bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
     bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
+    bool ParseBackupCollectionTables(TVector<TDeferredAtom>& result, const TRule_table_list& tables);
+    bool ParseBackupCollectionEntry(
+        bool& addDatabase,
+        bool& removeDatabase,
+        TVector<TDeferredAtom>& addTables,
+        TVector<TDeferredAtom>& removeTables,
+        const TRule_alter_backup_collection_entry& entry);
+    bool ParseBackupCollectionEntries(
+        bool& addDatabase,
+        bool& removeDatabase,
+        TVector<TDeferredAtom>& addTables,
+        TVector<TDeferredAtom>& removeTables,
+        const TRule_alter_backup_collection_entries& entries);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
@@ -273,6 +286,9 @@ protected:
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
+
+bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
+bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 
 template<typename TChar>
 struct TPatternComponent {

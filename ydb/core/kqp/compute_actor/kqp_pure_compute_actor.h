@@ -29,7 +29,7 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-        TComputeActorSchedulingOptions);
+        TComputeActorSchedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode);
 
     void DoBootstrap();
 
@@ -48,7 +48,7 @@ private:
 
 private:
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev);
-    
+
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev);
 
     void HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev);
@@ -62,14 +62,8 @@ private:
     TActorId SysViewActorId;
     const TDqTaskRunnerParameterProvider ParameterProvider;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 };
-
-IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
-    IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
-    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TComputeActorSchedulingOptions);
 
 } // namespace NKqp
 } // namespace NKikimr

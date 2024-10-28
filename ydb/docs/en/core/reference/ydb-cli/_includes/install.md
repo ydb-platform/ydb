@@ -1,5 +1,7 @@
 # Installing the {{ ydb-short-name }} CLI
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [install_overlay.md](install_overlay.md) %}
 
 {% list tabs %}

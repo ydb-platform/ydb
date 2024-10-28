@@ -16,17 +16,6 @@ namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TIdleConnection
-{
-    NNet::IConnectionPtr Connection;
-    TInstant InsertionTime;
-
-    TDuration GetIdleTime() const;
-    bool IsOK() const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TConnectionPool
     : public TRefCounted
 {
@@ -48,10 +37,20 @@ private:
     const NNet::IDialerPtr Dialer_;
     const TClientConfigPtr Config_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    TMultiLruCache<NNet::TNetworkAddress, TIdleConnection> Connections_;
-    NConcurrency::TPeriodicExecutorPtr ExpiredConnectionsCollector_;
+    struct TPooledConnection
+    {
+        NNet::IConnectionPtr Connection;
+        TInstant InsertionTime;
 
+        TDuration GetIdleTime() const;
+        bool IsValid() const;
+    };
+
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    TMultiLruCache<NNet::TNetworkAddress, TPooledConnection> Cache_;
+    NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
+
+    bool CheckPooledConnection(const TPooledConnection& pooledConnection);
     void DropExpiredConnections();
 };
 

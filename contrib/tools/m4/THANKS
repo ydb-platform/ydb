@@ -1,0 +1,150 @@
+GNU M4 THANKS file
+
+GNU M4 was originally written by René Seindal.  Many people
+further contributed to GNU M4 by reporting problems, suggesting
+various improvements or submitting actual code.  Here is a list of
+these people.  Help me keep it complete and exempt of errors.
+
+Akiko Matsushita        matusita@sra.co.jp
+Akim Demaille           demaille@inf.enst.fr
+Alan Magnuson           awm@osc.edu
+Albert Chin             m4-discuss@mlists.thewrittenword.com
+Alexander Lehmann       alex@hal.rhein-main.de
+Amos Shapira            amoss@cs.huji.ac.il
+Andreas Büning          andreas.buening@nexgo.de
+Andreas Gustafsson      gson@niksula.hut.fi
+Andreas Schultz         aschultz@warp10.net
+Andreas Schwab          schwab@ls5.informatik.uni-dortmund.de
+Assar Westerlund        assar@nada.kth.se
+Ben A. Mesander         ben@piglet.cr.usgs.gov
+Bengt Mertensson        bengt@mathematik.uni-bremen.de
+Bernhard Daeubler       daeb@physik.uni-ulm.de
+Bjorn R. Bjornsson      brb@falcon.is
+Bob Badour              bob@badour.net
+Bob Proulx              bob@proulx.com
+Brendan Kehoe           brendan@cygnus.com
+Bruno Haible            bruno@clisp.org
+Carlo Teubner           carlo.teubner@gmail.com
+Cesar Strauss           cestrauss@gmail.com
+Chris McGuire           chris@wso.net
+Chris Penev             xpenev@gmail.com
+Dagobert Michelsen      dagobert@familie-michelsen.de
+Damian Menscher         menscher@uiuc.edu
+Dan Jacobson            jidanni@jidanni.org
+David J. MacKenzie      djm@uunet.uu.net
+David Perlin            davep@nanosoft.com
+Elbert Pol              elbert.pol@gmail.com
+Elias Benali            elptr@users.sourceforge.net
+Erez Zadok              ezk@cs.columbia.edu
+Eric Allman             eric@cs.berkeley.edu
+Eric Backus             ericb@lsid.hp.com
+Eric Blake              ebb9@byu.net
+Fernando Carrijo        fcarrijo1980@gmail.com
+François Pinard         pinard@iro.umontreal.ca
+Frank Schwidom          schwidom@impernet.de
+Gary V. Vaughan         gary@gnu.org
+Geoff Russell           grussell@guest.adelaide.edu.au
+Giovanni Toffetti       toffettg@lu.unisi.ch
+Giuseppe Scrivano       gscrivano@gnu.org
+Greg A. Woods           woods@web.apc.org
+Hal Peterson            hrp@pecan.cray.com
+Hoang Uong              hoang@ornews.intel.com
+Ian Taylor              ian@cygnus.com
+Ilya N. Golubev         gin@mo.msk.ru
+Jason Merrill           jason@jarthur.claremont.edu
+Jay Krell               jay.krell@cornell.edu
+Jean-Charles Longuet    jclonguet@free.fr
+Jens Rehsack            rehsack@googlemail.com
+Jim Avera               jima@netcom.com
+Jim Kingdom             kingdon@cygnus.com
+Jim Meyering            meyering@acm.org
+Joel E. Denny           jdenny@ces.clemson.edu
+Joel Sherrill           jsherril@uahcs2.cs.uah.edu
+John Brzustowski        jbrzusto@fastmail.fm
+John David Anglin       dave@hiauly1.hia.nrc.ca
+John Gatewood Ham       zappaman@buraphalinux.org
+Josef T. Burger         bolo@bolo.com
+Joseph E. Sacco         jsacco@ssl.com
+Karl Berry              karl@freefriends.org
+Karl Nelson             nelson85@llnl.gov
+Karl Vogel              vogelke@c-17igp.wpafb.af.mil
+Kaveh R. Ghazi          ghazi@noc.rutgers.edu
+KO Myung-Hun		komh@chollian.net
+Konrad Schwarz          konrad.schwarz@siemens.com
+Kristine Lund           lund@lpnaxp.in2p3.fr
+Krste Asanovic          krste@icsi.berkeley.edu
+Lawson Chan             Lawson.Chan@tdsecurities.com
+Marion Hakanson         hakanson@cse.ogi.edu
+Mark Seiden             mis@seiden.com
+Martin Koeppe           mkoeppe@gmx.de
+Matt Kraai              kraai@debian.org
+Matthew Woehlke         mw_triad@users.sourceforge.net
+Matthias Rabe           rabe@mathematik.uni-bielefeld.de
+Michael Fetterman       mafetter@ichips.intel.com
+Michael L. Welcome      welcome@bigbird.llnl.gov
+Mike Dupont             jamesmikedupont@googlemail.com
+Mike Frysinger          vapier@gentoo.org
+Mike Lijewski           lijewski@theory.tc.cornell.edu
+Mike R.                 mroberge@aol.com
+Mike Stump              mikestump@comcast.net
+Mikhail Teterin         Mikhail.Teterin@murex.com
+Nelson H. F. Beebe      beebe@math.utah.edu
+Nick S. Kanakakorn      skanan@otl.scu.edu
+Nicolas Lichtmaier      nick@technisys.com.ar
+Nicolas Pioch           pioch@inf.enst.fr
+Noah Friedman           friedman@gnu.org
+Noah Misch              noah@cs.caltech.edu
+Paolo Bonzini           bonzini@gnu.org
+Paul Eggert             eggert@cs.ucla.edu
+Pete Chown              pete.chown@dale.dircon.co.uk
+Pierre Gaumond          gaumondp@ere.umontreal.ca
+Pierre Mathieu          mathieu@geod.emr.ca
+Rainer Tammer           tammer@tammer.net
+Ralf Wildenhues         Ralf.Wildenhues@gmx.de
+René Seindal            seindal@diku.dk
+Richard A Nelson        cowboy@vnet.ibm.com
+Richard Stallman        rms@gnu.org
+Robert Bernstein        rocky@panix.com
+Robert Bihlmeyer        robbe@orcus.priv.at
+Roland H. Pesch         roland@wrs.com
+Roland McGrath          roland@gnu.org
+Ronny Peine             RonnyPeine@gmx.de
+Sami Liedes             sliedes@cc.hut.fi
+Santiago Vila           sanvila@debian.org
+Scott Bartram           deneb!scottb
+Scott McCreary          scottmc2@gmail.com
+Sergey Poznyakoff       gray@gnu.org.ua
+Simon Leinen            simon@lia.di.epfl.ch
+Skip Montanaro          skip@automatrix.com
+Stepan Kasal            kasal@ucw.cz
+Stephen Perkins         perkins@cps.msu.edu
+Steve Williamson        willy@uinpla.npl.uiuc.edu
+Steven Augart           saugart@yahoo.com
+Thomas Klausner         tk@giga.or.at
+Thorsten Ohl            ohl@physics.harvard.edu
+Todd Rinaldo            toddr@cpanel.net
+Tom G. Christensen      tgc@jupiterrise.com
+Tom McConnell           tmcconne@sedona.intel.com
+Tom Quinn               trq@dionysos.thphys.ox.ac.uk
+Tom Tromey              tromey@cns.caltech.edu
+Ulrich Drepper          drepper@gnu.org
+Vern Paxson             vern@ee.lbl.gov
+Vincent Lonngren        Vincent.lonngren.759@student.lu.se
+Vitezslav Crhonek       vcrhonek@redhat.com
+Vivek P. Singhal        singhal@cs.utexas.edu
+Walter Wong             wcw+@cmu.edu
+
+========================================================================
+
+Local Variables:
+coding: utf-8
+End:
+
+Copyright (C) 2000, 2006-2014, 2016 Free Software Foundation, Inc.
+
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3 or
+any later version published by the Free Software Foundation; with no
+Invariant Sections, with no Front-Cover Texts, and with no Back-Cover
+Texts.  A copy of the license is included in the ``GNU Free
+Documentation License'' file as part of this distribution.

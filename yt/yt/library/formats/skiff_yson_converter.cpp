@@ -748,6 +748,10 @@ TYsonToSkiffConverter CreateDecimalYsonToSkiffConverter(
             return CreatePrimitiveTypeYsonToSkiffConverter<EYsonItemType::StringValue>(
                 std::move(descriptor),
                 TDecimalSkiffWriter<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return CreatePrimitiveTypeYsonToSkiffConverter<EYsonItemType::StringValue>(
+                std::move(descriptor),
+                TDecimalSkiffWriter<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
         default:
@@ -1815,6 +1819,8 @@ TSkiffToYsonConverter CreateDecimalSkiffToYsonConverter(
             return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int64>(precision));
         case EWireType::Int128:
             return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
         default:
@@ -1899,6 +1905,8 @@ void CheckSkiffWireTypeForDecimal(int precision, NSkiff::EWireType wireType)
         skiffBinarySize = sizeof(i64);
     } else if (wireType == NSkiff::EWireType::Int128) {
         skiffBinarySize = 2 * sizeof(i64);
+    } else if (wireType == NSkiff::EWireType::Int256) {
+        skiffBinarySize = 4 * sizeof(i64);
     }
 
     if (decimalBinarySize != skiffBinarySize) {

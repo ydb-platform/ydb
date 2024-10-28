@@ -236,15 +236,24 @@ public:
                     rows.emplace_back(std::move(batch));
                 }
 
-                NYql::NDqs::TProtoBuilder protoBuilder(resultFormatSettings.ResultType, resultFormatSettings.Columns);
-
-                bool ysonTruncated = false;
-                result.Data = protoBuilder.BuildYson(std::move(rows), resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()),
-                    resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
-
-                result.Truncated = result.Truncated || ysonTruncated;
                 result.AddIssues(issues);
-                result.SetSuccess();
+                try {
+                    NYql::NDqs::TProtoBuilder protoBuilder(resultFormatSettings.ResultType, resultFormatSettings.Columns);
+
+                    bool ysonTruncated = false;
+                    result.Data = protoBuilder.BuildYson(std::move(rows),
+                        result.Truncated ? resultFormatSettings.SizeLimit.GetOrElse(Max<ui64>()) : Max<ui64>(),
+                        result.Truncated ? resultFormatSettings.RowsLimit.GetOrElse(Max<ui64>()) : Max<ui64>(),
+                        &ysonTruncated);
+
+                    result.Truncated = result.Truncated || ysonTruncated;
+                    result.SetSuccess();
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderDq) << "Failed to build yson result: " << CurrentExceptionMessage();
+                    error = true;
+                    auto issue = TIssue("Failed to build query result (probably due to malformed UDF)");
+                    result.AddIssue(issue.SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR));
+                }
             } else {
                 YQL_CLOG(ERROR, ProviderDq) << "Issue " << issues.ToString();
                 result.AddIssues(issues);

@@ -22,6 +22,7 @@ import "ydb/core/fq/libs/config/protos/quotas_manager.proto";
 import "ydb/core/fq/libs/config/protos/rate_limiter.proto";
 import "ydb/core/fq/libs/config/protos/read_actors_factory.proto";
 import "ydb/core/fq/libs/config/protos/resource_manager.proto";
+import "ydb/core/fq/libs/config/protos/row_dispatcher.proto";
 import "ydb/core/fq/libs/config/protos/test_connection.proto";
 import "ydb/core/fq/libs/config/protos/token_accessor.proto";
 import "ydb/library/folder_service/proto/config.proto";
@@ -53,4 +54,5 @@ message TConfig {
     TRateLimiterConfig RateLimiter = 22;
     bool EnableTaskCounters = 23;
     TComputeConfig Compute = 24;
+    TRowDispatcherConfig RowDispatcher = 25;
 }

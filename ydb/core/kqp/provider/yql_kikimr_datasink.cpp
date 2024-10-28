@@ -186,9 +186,9 @@ private:
     }
 
     TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
@@ -893,7 +893,7 @@ public:
 
         if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
-            return true; 
+            return true;
         }
 
         return false;
@@ -1469,6 +1469,70 @@ private:
 };
 
 } // namespace
+
+TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TKiBackupCollectionEntry> entries;
+    TVector<TCoNameValueTuple> settings;
+    TVector<TCoNameValueTuple> other;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "entries") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                for (const auto& entry : tuple.Value().Cast<TExprList>()) {
+                    auto builtEntry = Build<TKiBackupCollectionEntry>(ctx, node.Pos());
+
+                    YQL_ENSURE(entry.Maybe<TCoNameValueTupleList>());
+                    for (const auto& item : entry.Cast<TCoNameValueTupleList>()) {
+                        auto itemName = item.Name().Value();
+                        if (itemName == "type") {
+                            builtEntry.Type(item.Value().Cast<TCoAtom>());
+                        } else if (itemName == "path") {
+                            builtEntry.Path(item.Value().Cast<TCoAtom>());
+                        } else {
+                            YQL_ENSURE(false, "unknown entry item");
+                        }
+                    }
+
+                    entries.push_back(builtEntry.Done());
+                }
+            } else if (name == "settings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    settings.push_back(item);
+                }
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& builtEntries = Build<TKiBackupCollectionEntryList>(ctx, node.Pos())
+        .Add(entries)
+        .Done();
+
+    const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(settings)
+        .Done();
+
+    const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteBackupCollectionSettings ret(builtOther);
+    ret.Mode = mode;
+    ret.Entries = builtEntries;
+    ret.BackupCollectionSettings = builtSettings;
+
+    return ret;
+}
 
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,
     TExprContext& ctx)

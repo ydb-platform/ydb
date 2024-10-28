@@ -33,7 +33,7 @@ public:
     void Set(const TRawTypeValue& v) {
         if (!v.IsEmpty()) {
             Buf = TString((const char*)v.Data(), v.Size());
-            Val = TRawTypeValue(Buf.data(), Buf.size(), v.TypeInfo());
+            Val = TRawTypeValue(Buf.data(), Buf.size(), v.Type());
         } else {
             Val = TRawTypeValue();
         }
@@ -72,7 +72,7 @@ inline TFakeTableCell FromVal(NScheme::TTypeId t, i64 val) {
         break;
     }
 
-    c.Set(TRawTypeValue(&val, sz, NScheme::TTypeInfo(t)));
+    c.Set(TRawTypeValue(&val, sz, t));
     return c;
 }
 
@@ -88,7 +88,7 @@ inline TFakeTableCell FromVal(NScheme::TTypeId, std::nullptr_t) {
 
 inline TFakeTableCell FromVal(NScheme::TTypeId t, TString val) {
     TFakeTableCell c;
-    c.Set(TRawTypeValue(val.data(), val.size(), NScheme::TTypeInfo(t)));
+    c.Set(TRawTypeValue(val.data(), val.size(), t));
     return c;
 }
 

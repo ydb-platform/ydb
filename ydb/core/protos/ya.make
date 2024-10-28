@@ -32,6 +32,7 @@ SRCS(
     change_exchange.proto
     channel_purpose.proto
     cms.proto
+    compaction.proto
     compile_service_config.proto
     config.proto
     config_units.proto
@@ -146,6 +147,7 @@ SRCS(
     tx_sequenceshard.proto
     ydb_result_set_old.proto
     ydb_table_impl.proto
+    yql_translation_settings.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
@@ -171,7 +173,7 @@ PEERDIR(
     ydb/library/ydb_issue/proto
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/tx/columnshard/engines/protos
-    ydb/core/formats/arrow/protos
+    ydb/library/formats/arrow/protos
     ydb/core/tx/columnshard/common/protos
 )
 

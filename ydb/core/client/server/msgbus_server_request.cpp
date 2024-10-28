@@ -55,6 +55,7 @@ public:
     {
         TBase::SetSecurityToken(Request->Record.GetSecurityToken());
         TBase::SetRequireAdminAccess(true); // MiniKQL and ReadTable execution required administative access
+        TBase::SetPeerName(msg->MsgContext.GetPeerName());
     }
 
     //STFUNC(StateWork)
@@ -72,6 +73,7 @@ public:
         ProposalStatus.Reset(new NKikimrTxUserProxy::TEvProposeTransactionStatus());
         Proposal.Reset(new TEvTxUserProxy::TEvProposeTransaction());
         NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;
+        record.SetPeerName(GetPeerName());
 
         // Transaction protobuf structure might be very heavy (if it has a batch of parameters)
         // so we don't want to copy it, just move its contents

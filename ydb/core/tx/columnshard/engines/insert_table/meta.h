@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/special_keys.h>
-#include <ydb/core/formats/arrow/modifier/subset.h>
+#include <ydb/library/formats/arrow/modifier/subset.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
@@ -25,7 +25,8 @@ private:
 
 public:
     ui64 GetTxVolume() const {
-        return 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) + (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0);
+        return 512 + 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) + (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0) +
+               SchemaSubset.GetTxVolume();
     }
 
     TInsertedDataMeta(const NKikimrTxColumnShard::TLogicalMetadata& proto)

@@ -266,6 +266,12 @@ struct TEventTypeField {
     PROBE(PDiskEnqueueAllDetails, GROUPS("PDisk"), \
       TYPES(ui64, size_t, size_t, size_t, double), \
       NAMES("pdisk", "initialQueueSize", "processedReqs", "pushedToForsetiReqs", "spentTimeMs")) \
+    PROBE(PDiskUpdateStarted, GROUPS("PDisk"), TYPES(ui64), NAMES("pdisk")) \
+    PROBE(PDiskProcessLogWriteQueue, GROUPS("PDisk"), TYPES(ui64, size_t, size_t), NAMES("pdisk", "logQueueSize", "commitQueueSize")) \
+    PROBE(PDiskProcessChunkReadQueue, GROUPS("PDisk"), TYPES(ui64, size_t), NAMES("pdisk", "queueSize")) \
+    PROBE(PDiskProcessChunkWriteQueue, GROUPS("PDisk"), TYPES(ui64, size_t), NAMES("pdisk", "queueSize")) \
+    PROBE(PDiskStartWaiting, GROUPS("PDisk"), TYPES(ui64), NAMES("pdisk")) \
+    PROBE(PDiskUpdateEnded, GROUPS("PDisk"), TYPES(ui64, float), NAMES("pdisk", "entireUpdateMs")) \
     PROBE(DSProxyGetEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyGetBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyGetHandle, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \

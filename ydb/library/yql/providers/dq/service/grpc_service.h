@@ -28,17 +28,12 @@ namespace NYql::NDqs {
                         const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
 
         void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-        void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
-
-        bool IncRequest();
-        void DecRequest();
 
         NThreading::TFuture<void> Stop();
 
     private:
         NActors::TActorSystem& ActorSystem;
         grpc::ServerCompletionQueue* CQ = nullptr;
-        NYdbGrpc::TGlobalLimiter* Limiter = nullptr;
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
         TDqTaskPreprocessorFactoryCollection DqTaskPreprocessorFactories;

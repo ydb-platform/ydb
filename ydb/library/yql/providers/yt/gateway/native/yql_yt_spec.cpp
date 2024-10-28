@@ -501,7 +501,7 @@ void FillSpec(NYT::TNode& spec,
         }
     }
     if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
-        if (auto val = settings->_ForceJobSizeAdjuster.Get(cluster)) {
+        if (auto val = settings->ForceJobSizeAdjuster.Get(cluster)) {
             spec["force_job_size_adjuster"] = *val;
         }
     }

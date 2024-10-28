@@ -1,5 +1,7 @@
 #include "distconf.h"
 
+#include <ydb/core/mind/bscontroller/group_geometry_info.h>
+
 namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config) {

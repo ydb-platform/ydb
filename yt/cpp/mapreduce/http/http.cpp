@@ -293,7 +293,7 @@ TString THttpHeader::GetHeaderAsString(const TString& hostName, const TString& r
 
     result << Method << " " << GetUrl() << " HTTP/1.1\r\n";
 
-    GetHeader(HostPort.Empty() ? hostName : HostPort, requestId, includeParameters).Get()->WriteTo(&result);
+    GetHeader(HostPort.empty() ? hostName : HostPort, requestId, includeParameters).Get()->WriteTo(&result);
 
     if (ShouldAcceptFraming()) {
         result << "X-YT-Accept-Framing: 1\r\n";

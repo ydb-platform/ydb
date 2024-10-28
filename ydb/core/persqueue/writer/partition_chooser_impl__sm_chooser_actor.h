@@ -28,13 +28,13 @@ public:
     using TParentActor = TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>;
 
     TSMPartitionChooserActor(TActorId parentId,
-                           const NKikimrSchemeOp::TPersQueueGroupDescription& config,
-                           std::shared_ptr<IPartitionChooser>& chooser,
+                           const std::shared_ptr<IPartitionChooser>& chooser,
+                           const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition)
         : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
-        , Graph(MakePartitionGraph(config)) {
+        , Graph(graph) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -69,7 +69,7 @@ public:
             return OnPartitionChosen(ctx);
         }
 
-        const auto* node = Graph.GetPartition(TThis::TableHelper.PartitionId().value());
+        const auto* node = Graph->GetPartition(TThis::TableHelper.PartitionId().value());
         if (!node) {
             // The partition where the writting was performed earlier has already been deleted.
             // We can write without taking into account the hierarchy of the partition.
@@ -78,7 +78,7 @@ public:
         }
 
         // Choosing a partition based on the split and merge hierarchy.
-        auto activeChildren = Graph.GetActiveChildren(TThis::TableHelper.PartitionId().value());
+        auto activeChildren = Graph->GetActiveChildren(TThis::TableHelper.PartitionId().value());
         if (activeChildren.empty()) {
             return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "has't active partition Marker# PC01", ctx);
         }
@@ -150,7 +150,7 @@ private:
         DEBUG("GetOldSeqNo");
         TThis::Become(&TThis::StateGetMaxSeqNo);
 
-        const auto* oldNode = Graph.GetPartition(TThis::TableHelper.PartitionId().value());
+        const auto* oldNode = Graph->GetPartition(TThis::TableHelper.PartitionId().value());
 
         if (!oldNode) {
             return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "Inconsistent status Marker# PC03", ctx);
@@ -243,7 +243,7 @@ private:
 
 private:
     const TPartitionInfo* BoundaryPartition = nullptr;
-    const TPartitionGraph Graph;
+    const std::shared_ptr<TPartitionGraph> Graph;
 };
 
 #undef LOG_PREFIX

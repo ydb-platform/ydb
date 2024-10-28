@@ -104,6 +104,8 @@ void TFileLogWriterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("enable_compression", &TThis::EnableCompression)
         .Default(false);
+    registrar.Parameter("enable_no_reuse", &TThis::EnableNoReuse)
+        .Default(false);
     registrar.Parameter("compression_method", &TThis::CompressionMethod)
         .Default(ECompressionMethod::Gzip);
     registrar.Parameter("compression_level", &TThis::CompressionLevel)
@@ -194,12 +196,15 @@ void TLogManagerConfig::Register(TRegistrar registrar)
     registrar.Parameter("shutdown_busy_timeout", &TThis::ShutdownGraceTimeout)
         .Default(TDuration::Zero());
 
-    registrar.Parameter("writers", &TThis::Writers);
     registrar.Parameter("rules", &TThis::Rules);
-    registrar.Parameter("suppressed_messages", &TThis::SuppressedMessages)
-        .Default();
+    registrar.Parameter("writers", &TThis::Writers);
     registrar.Parameter("category_rate_limits", &TThis::CategoryRateLimits)
         .Default();
+
+    registrar.Parameter("suppressed_messages", &TThis::SuppressedMessages)
+        .Optional();
+    registrar.Parameter("message_level_overrides", &TThis::MessageLevelOverrides)
+        .Optional();
 
     registrar.Parameter("request_suppression_timeout", &TThis::RequestSuppressionTimeout)
         .Alias("trace_suppression_timeout")
@@ -233,8 +238,12 @@ TLogManagerConfigPtr TLogManagerConfig::ApplyDynamic(const TLogManagerDynamicCon
     mergedConfig->ShutdownGraceTimeout = ShutdownGraceTimeout;
     mergedConfig->Rules = CloneYsonStructs(dynamicConfig->Rules.value_or(Rules));
     mergedConfig->Writers = CloneYsonStructs(Writers);
-    mergedConfig->SuppressedMessages = dynamicConfig->SuppressedMessages.value_or(SuppressedMessages);
     mergedConfig->CategoryRateLimits = dynamicConfig->CategoryRateLimits.value_or(CategoryRateLimits);
+    mergedConfig->SuppressedMessages = dynamicConfig->SuppressedMessages.value_or(SuppressedMessages);
+    mergedConfig->MessageLevelOverrides = MessageLevelOverrides;
+    for (const auto& [message, level] : dynamicConfig->MessageLevelOverrides) {
+        mergedConfig->MessageLevelOverrides[message] = level;
+    }
     mergedConfig->RequestSuppressionTimeout = dynamicConfig->RequestSuppressionTimeout.value_or(RequestSuppressionTimeout);
     mergedConfig->EnableAnchorProfiling = dynamicConfig->EnableAnchorProfiling.value_or(EnableAnchorProfiling);
     mergedConfig->MinLoggedMessageRateToProfile = dynamicConfig->MinLoggedMessageRateToProfile.value_or(MinLoggedMessageRateToProfile);
@@ -457,9 +466,12 @@ void TLogManagerDynamicConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("rules", &TThis::Rules)
         .Optional();
+    registrar.Parameter("category_rate_limits", &TThis::CategoryRateLimits)
+        .Optional();
+
     registrar.Parameter("suppressed_messages", &TThis::SuppressedMessages)
         .Optional();
-    registrar.Parameter("category_rate_limits", &TThis::CategoryRateLimits)
+    registrar.Parameter("message_level_overrides", &TThis::MessageLevelOverrides)
         .Optional();
 
     registrar.Parameter("request_suppression_timeout", &TThis::RequestSuppressionTimeout)

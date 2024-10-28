@@ -104,13 +104,6 @@ struct TShortColumnInfo {
         , Type(type)
         , Name(name)
     {}
-
-    TString Dump() const {
-        TStringStream ss;
-        // TODO: support pg types
-        ss << "{Tag: " << Tag << ", Type: " << Type.GetTypeId() << ", Name: " << Name << "}";
-        return ss.Str();
-    }
 };
 
 struct TShortTableInfo {
@@ -145,16 +138,6 @@ struct TShortTableInfo {
     }
 
     TShortTableInfo& operator =(TShortTableInfo&& other) = default;
-
-    TString Dump() const {
-        TStringStream ss;
-        ss << "{LocalTid: " << LocalTid << ", SchemaVerstion: " << SchemaVersion  << ", Columns: {";
-        for (const auto& it: Columns) {
-            ss << it.second.Dump();
-        }
-        ss << "}";
-        return ss.Str();
-    }
 
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;
@@ -228,7 +211,7 @@ std::vector<TRawTypeValue> ToRawTypeValue(
     result.reserve(keyCells.size());
 
     for (ui32 i = 0; i < keyCells.size(); ++i) {
-        result.push_back(TRawTypeValue(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i]));
+        result.push_back(TRawTypeValue(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId()));
     }
 
     // note that currently without nulls it is [prefix, +inf, +inf],
@@ -1507,7 +1490,6 @@ public:
             TableInfo = TShortTableInfo(userTableInfo);
 
             Y_ABORT_UNLESS(!userTableInfo->IsBackup);
-            Y_ABORT_UNLESS(Self->IsMvccEnabled());
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
@@ -1975,7 +1957,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxReadViaPipeline execute"
-            << ": at tablet# " << Self->TabletID());
+            << ": at tablet# " << Self->TabletID() << ", FollowerId " << Self->FollowerId());
 
         auto readIt = Self->ReadIterators.find(ReadId);
         if (readIt == Self->ReadIterators.end() && !Op) {
@@ -2055,16 +2037,6 @@ public:
                         ReplyError(
                             Ydb::StatusIds::BAD_REQUEST,
                             TStringBuilder() << "Can't read from a backup table"
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            readSpan);
-                        return true;
-                    }
-
-                    if (!Self->IsMvccEnabled()) {
-                        ReplyError(
-                            Ydb::StatusIds::UNSUPPORTED,
-                            TStringBuilder() << "Cannot use read iterators without mvcc"
                                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
                             ctx.SelfID.NodeId(),
                             readSpan);
@@ -2764,11 +2736,6 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             return;
         }
         isHeadRead = false;
-    }
-
-    if (MvccSwitchState == TSwitchState::SWITCHING) {
-        Pipeline.AddWaitingReadIterator(readVersion, std::move(ev), ctx);
-        return;
     }
 
     TActorId sessionId;

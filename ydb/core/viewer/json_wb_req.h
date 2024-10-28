@@ -38,7 +38,23 @@ public:
 
     void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
-        SplitIds(params.Get("node_id"), ',', TBase::RequestSettings.FilterNodeIds);
+        std::vector<TNodeId> nodeIds;
+        SplitIds(params.Get("node_id"), ',', nodeIds);
+        if (!nodeIds.empty()) {
+            if (TBase::RequestSettings.FilterNodeIds.empty()) {
+                TBase::RequestSettings.FilterNodeIds = nodeIds;
+            } else {
+                std::sort(nodeIds.begin(), nodeIds.end());
+                std::sort(TBase::RequestSettings.FilterNodeIds.begin(), TBase::RequestSettings.FilterNodeIds.end());
+                std::vector<TNodeId> intersection;
+                std::set_intersection(nodeIds.begin(), nodeIds.end(), TBase::RequestSettings.FilterNodeIds.begin(), TBase::RequestSettings.FilterNodeIds.end(), std::back_inserter(intersection));
+                if (intersection.empty()) {
+                    TBase::RequestSettings.FilterNodeIds = {0};
+                } else {
+                    TBase::RequestSettings.FilterNodeIds = intersection;
+                }
+            }
+        }
         {
             TString merge = params.Get("merge");
             if (merge.empty() || merge == "1" || merge == "true") {

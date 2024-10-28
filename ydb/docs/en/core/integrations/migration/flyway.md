@@ -127,17 +127,17 @@ Contents of SQL files:
 
 - V3__create_episodes.sql
 
-```yql
-CREATE TABLE episodes
-(
-    series_id Uint64,
-    season_id Uint64,
-    episode_id Uint64,
-    title Utf8,
-    air_date Uint64,
-    PRIMARY KEY (series_id, season_id, episode_id)
-);
-```
+  ```yql
+  CREATE TABLE episodes
+  (
+      series_id Uint64,
+      season_id Uint64,
+      episode_id Uint64,
+      title Utf8,
+      air_date Uint64,
+      PRIMARY KEY (series_id, season_id, episode_id)
+  );
+  ```
 
 {% endlist %}
 
@@ -296,7 +296,7 @@ As a result, `series`, `season`, and `episode` tables will be created and filled
 
 Then, we evolve the schema by adding a [secondary index](../../yql/reference/syntax/alter_table/index.md) to the `series` table:
 
-```
+```text
 db/migration:
   V1__create_series.sql
   V2__create_seasons.sql
@@ -349,7 +349,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 The result of executing the `flyway -url=jdbc:ydb:grpc://localhost:2136/local -locations=db/migration info` will provide detailed information about the status of the migrations:
 
-```
+```text
 +-----------+---------+---------------------------+----------+---------------------+--------------------+----------+
 | Category  | Version | Description               | Type     | Installed On        | State              | Undoable |
 +-----------+---------+---------------------------+----------+---------------------+--------------------+----------+

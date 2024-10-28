@@ -96,7 +96,7 @@ void THive::RestartPipeTx(ui64 tabletId) {
 }
 
 bool THive::TryToDeleteNode(TNodeInfo* node) {
-    if (node->CanBeDeleted()) {
+    if (node->CanBeDeleted(TActivationContext::Now())) {
         BLOG_I("TryToDeleteNode(" << node->Id << "): deleting");
         DeleteNode(node->Id);
         return true;
@@ -120,12 +120,15 @@ void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
 void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
         BLOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
-        TNodeInfo* node = FindNode(ev->Get()->ClientId.NodeId());
+        auto nodeId = ev->Get()->ClientId.NodeId();
+        TNodeInfo* node = FindNode(nodeId);
         if (node != nullptr) {
             Erase(node->PipeServers, ev->Get()->ServerId);
             if (node->PipeServers.empty() && node->IsUnknown()) {
                 ObjectDistributions.RemoveNode(*node);
-                TryToDeleteNode(node);
+                if (TryToDeleteNode(node)) {
+                    Execute(CreateDeleteNode(nodeId));
+                }
             }
         }
     }
@@ -237,6 +240,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         if (tablet == nullptr) {
             continue;
         }
+        tablet->InWaitQueue = false;
         if (tablet->IsAlive()) {
             BLOG_D("tablet " << record.TabletId << " already alive, skipping");
             continue;
@@ -258,6 +262,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
                     BootQueue.AddToWaitQueue(record); // waiting for new node
+                    tablet->InWaitQueue = true;
                     continue;
                 }
             }
@@ -1871,12 +1876,15 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         if (info->BalancerPolicy != NKikimrHive::EBalancerPolicy::POLICY_BALANCE) {
             tabletInfo.SetBalancerPolicy(info->BalancerPolicy);
         }
-        if (!info->IsRunning()) {
+        if (!info->IsRunning() && info->Statistics.HasLastAliveTimestamp()) {
             tabletInfo.SetLastAliveTimestamp(info->Statistics.GetLastAliveTimestamp());
         }
         tabletInfo.SetRestartsPerPeriod(info->GetRestartsPerPeriod(restartsBarrierTime));
         if (req.GetReturnMetrics()) {
             tabletInfo.MutableMetrics()->CopyFrom(info->GetResourceValues());
+        }
+        if (info->InWaitQueue) {
+            tabletInfo.SetInWaitQueue(true);
         }
         if (req.GetReturnChannelHistory()) {
             for (const auto& channel : info->TabletStorageInfo->Channels) {
@@ -3424,13 +3432,16 @@ void THive::Handle(TEvPrivate::TEvLogTabletMoves::TPtr&) {
 }
 
 void THive::Handle(TEvPrivate::TEvDeleteNode::TPtr& ev) {
-    auto node = FindNode(ev->Get()->NodeId);
+    auto nodeId = ev->Get()->NodeId;
+    auto node = FindNode(nodeId);
     if (node == nullptr) {
         return;
     }
     node->DeletionScheduled = false;
     if (!node->IsAlive()) {
-        TryToDeleteNode(node);
+        if (TryToDeleteNode(node)) {
+            Execute(CreateDeleteNode(nodeId));
+        }
     }
 }
 

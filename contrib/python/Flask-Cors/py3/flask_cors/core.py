@@ -36,7 +36,7 @@ CONFIG_OPTIONS = ['CORS_ORIGINS', 'CORS_METHODS', 'CORS_ALLOW_HEADERS',
                   'CORS_MAX_AGE', 'CORS_SEND_WILDCARD',
                   'CORS_AUTOMATIC_OPTIONS', 'CORS_VARY_HEADER',
                   'CORS_RESOURCES', 'CORS_INTERCEPT_EXCEPTIONS',
-                  'CORS_ALWAYS_SEND']
+                  'CORS_ALWAYS_SEND', 'CORS_ALLOW_PRIVATE_NETWORK']
 # Attribute added to request object by decorator to indicate that CORS
 # was evaluated, in case the decorator and extension are both applied
 # to a view.
@@ -56,7 +56,8 @@ DEFAULT_OPTIONS = dict(origins='*',
                        vary_header=True,
                        resources=r'/*',
                        intercept_exceptions=True,
-                       always_send=True)
+                       always_send=True,
+                       allow_private_network=False)
 
 
 def parse_resources(resources):
@@ -186,7 +187,8 @@ def get_cors_headers(options, request_headers, request_method):
 
     if ACL_REQUEST_HEADER_PRIVATE_NETWORK in request_headers \
             and request_headers.get(ACL_REQUEST_HEADER_PRIVATE_NETWORK) == 'true':
-        headers[ACL_RESPONSE_PRIVATE_NETWORK] = 'true'
+        allow_private_network = 'true' if options.get('allow_private_network') else 'false'
+        headers[ACL_RESPONSE_PRIVATE_NETWORK] = allow_private_network
 
     # This is a preflight request
     # http://www.w3.org/TR/cors/#resource-preflight-requests

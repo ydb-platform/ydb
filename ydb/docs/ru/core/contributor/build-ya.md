@@ -10,14 +10,14 @@
 
 В корневом каталоге репозитория {{ ydb-short-name }} расположен скрипт `ya` для запуска команд `Ya Make` из командной строки. Его можно добавить в переменную окружения PATH, чтобы он запускался без указания полного пути. Для Linux/Bash и репозитория GitHub, склонированного в `~/ydbwork/ydb`, можно использовать следующую команду:
 
-```
+```bash
 echo "alias ya='~/ydbwork/ydb/ya'" >> ~/.bashrc
 source ~/.bashrc
 ```
 
 Запуск `ya` без параметров выводит справку:
 
-```
+```bash
 $ ya
 Yet another build tool.
 
@@ -32,7 +32,7 @@ Available subcommands:
 
 Подробная справка по любой подкоманде может быть получена её запуском с флагом `--help`, например:
 
-```
+```bash
 $ ya make --help
 Build and run tests
 To see more help use -hh/-hhh
@@ -57,7 +57,7 @@ Options:
 
 Перейдите в каталог в исходном коде, который должен быть корневым для вашего проекта. Запустите команду `ya ide`, указав имя IDE, и целевой каталог для записи конфигурации проекта IDE в параметре `-P`. Например, для работы с изменениями библиотеки YQL в vscode вы можете запустить следующую команду:
 
-```
+```bash
 cd ~/ydbwork/ydb/библиотека/yql
 ya ide vscode -P=~/ydbwork/vscode/yqllib
 ```
@@ -68,14 +68,14 @@ ya ide vscode -P=~/ydbwork/vscode/yqllib
 
 В `Ya Make` есть 3 основных типа таргетов: программа, тест и библиотека. Чтобы собрать таргет, запустите `ya make` с именем каталога. Например, для сборки {{ ydb-short-name }} CLI запустите:
 
-```
+```bash
 cd ~/ydbwork/ydb
 ya make ydb/apps/ydb
 ```
 
 Вы также можете запустить `ya make` из каталога таргета без параметров:
 
-```
+```bash
 cd ~/ydbwork/ydb/ydb/apps/ydb
 ya make
 ```
@@ -86,7 +86,7 @@ ya make
 
 Например, для запуска small тестов {{ ydb-short-name }} Core запустите:
 
-```
+```bash
 cd ~/ydbwork/ydb
 ya test ydb/core
 ```

@@ -232,6 +232,17 @@ Y_UNIT_TEST(ReturningSerial) {
     {
         const auto query = Q_(R"(
             --!syntax_v1
+            UPSERT INTO ReturningTableExtraValue (value, value2) VALUES (4, 5) RETURNING key;
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+        CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
             DELETE FROM ReturningTable WHERE key <= 3 RETURNING key, value;
         )");
 

@@ -6,10 +6,10 @@
 #include "kqp_partition_helper.h"
 #include "kqp_result_channel.h"
 #include "kqp_table_resolver.h"
-#include "kqp_shards_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -19,6 +19,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
+#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -81,6 +82,10 @@ struct TShardRangesWithShardId {
     const TShardKeyRanges* Ranges;
 };
 
+struct TStageScheduleInfo {
+    double StageCost = 0.0;
+    ui32 TaskCount = 0;
+};
 
 TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
     const NKikimrKqp::TRlPath& path);
@@ -210,7 +215,7 @@ protected:
     }
 
     [[nodiscard]]
-    bool HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
+    bool HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
         KqpShardsResolverId = {};
@@ -293,10 +298,9 @@ protected:
             batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
             batch.Payload = std::move(computeData.Payload);
 
-            TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder);
-
             if (!trailingResults) {
+                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+                auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
@@ -314,10 +318,11 @@ protected:
                 ackEv->Record.SetChannelId(channel.Id);
                 ackEv->Record.SetFreeSpace(50_MB);
                 this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
-                txResult.TrailingResult.Swap(&resultSet);
+                ui64 rowCount = batch.RowCount();
+                ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                 txResult.HasTrailingResult = true;
                 LOG_D("staging TEvStreamData to " << Target << ", seqNo: " << computeData.Proto.GetSeqNo()
-                    << ", nRows: " << txResult.TrailingResult.rows().size());
+                    << ", nRows: " << rowCount);
             }
 
             return;
@@ -493,6 +498,7 @@ protected:
         }
 
         TasksGraph.GetMeta().SetLockTxId(lockTxId);
+        TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {
@@ -818,6 +824,40 @@ protected:
         }
     }
 
+    std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+        std::map<ui32, TStageScheduleInfo> result;
+        if (!resourceSnapshot.empty()) // can't schedule w/o node count
+        {
+            // collect costs and schedule stages with external sources only
+            double totalCost = 0.0;
+            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+                auto& stage = tx.Body->GetStages(stageIdx);
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                    if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
+                        totalCost += stage.GetStageCost();
+                        result.emplace(stageIdx, TStageScheduleInfo{.StageCost = stage.GetStageCost()});
+                    }
+                }
+            }
+            // assign task counts
+            if (!result.empty()) {
+                // allow use 2/3 of threads in single stage
+                ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
+                // total limit per mode is x2
+                ui32 maxTotalTaskCount = maxStageTaskCount * 2;
+                for (auto& [_, stageInfo] : result) {
+                    // schedule tasks evenly between nodes
+                    stageInfo.TaskCount =
+                        std::max<ui32>(
+                            std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
+                            , 1
+                        ) * resourceSnapshot.size();
+                }
+            }
+        }
+        return result;
+    }
+
     void BuildSysViewScanTasks(TStageInfo& stageInfo) {
         Y_DEBUG_ABORT_UNLESS(stageInfo.Meta.IsSysView());
 
@@ -923,7 +963,7 @@ protected:
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -935,6 +975,10 @@ protected:
         ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
 
         auto taskCountHint = stage.GetTaskCount();
+        if (taskCountHint == 0) {
+            taskCountHint = scheduledTaskCount;
+        }
+
         if (taskCountHint) {
             if (taskCount > taskCountHint) {
                 taskCount = taskCountHint;
@@ -1085,11 +1129,9 @@ protected:
 
             for (auto& keyColumn : keyTypes) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");
-                if (columnType.TypeInfo) {
-                    *settings->AddKeyColumnTypeInfos() = *columnType.TypeInfo;
-                } else {
-                    *settings->AddKeyColumnTypeInfos() = NKikimrProto::TTypeInfo();
-                }
+                *settings->AddKeyColumnTypeInfos() = columnType.TypeInfo ?
+                    *columnType.TypeInfo :
+                    NKikimrProto::TTypeInfo();
                 settings->AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
             }
 
@@ -1398,18 +1440,8 @@ protected:
             for (ui32 i = 0; i < resultColsCount; ++i) {
                 taskMeta.ReadInfo.ResultColumnsTypes.emplace_back();
                 auto memberType = resultStructType->GetMemberType(i);
-                if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Pg) {
-                    const auto memberPgType = static_cast<NKikimr::NMiniKQL::TPgType*>(memberType);
-                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(memberPgType->GetTypeId()));
-                } else {
-                    if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-                        memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
-                    }
-                    YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
-                        "Expected simple data types to be read from column shard");
-                    const auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
-                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(memberDataType->GetSchemeType());
-                }
+                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(memberType);
+                taskMeta.ReadInfo.ResultColumnsTypes.back() = typeInfo;
             }
         }
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
@@ -1840,7 +1872,7 @@ protected:
         IActor* proxy;
         if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
+                txResult.ColumnOrder, txResult.ColumnHints, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
         } else {
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
@@ -1886,7 +1918,7 @@ protected:
             if (Stats->CollectStatsByLongTasks) {
                 const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
                 if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << response.GetResult().GetStats());
+                    LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
             }
         }
@@ -2031,10 +2063,9 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
-    const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-    const bool useEvWrite, ui32 statementResultIndex,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const bool htapTx);
+    const TShardIdToTableInfoPtr& shardIdToTableInfo);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

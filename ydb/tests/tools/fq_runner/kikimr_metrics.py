@@ -31,7 +31,7 @@ class Sensors:
                 continue
             v = lbls.get(key_label, None)
             if v is not None:
-                result[v] = s["value"]
+                result[v] = s.get("value", None)
         return result
 
     def collect_non_zeros(self):

@@ -262,9 +262,9 @@ Get a string representation of a time using an arbitrary formatting string.
 
 ### List of functions
 
-* `DateTime::Format(String) -> (Resource<TM>{Flags:AutoMap}) -> String`
+* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM>{Flags:AutoMap}) -> String`
 
-A subset of specifiers similar to strptime is implemented for the formatting string.
+A set of specifiers is implemented for the formatting string:
 
 * `%%`: % character.
 * `%Y`: 4-digit year.
@@ -272,7 +272,7 @@ A subset of specifiers similar to strptime is implemented for the formatting str
 * `%d`: 2-digit day.
 * `%H`: 2-digit hour.
 * `%M`: 2-digit minutes.
-* `%S`: 2-digit seconds  -- or xx.xxxxxx  in the case of non-empty microseconds.
+* `%S`: 2-digit seconds  -- or xx.xxxxxx  in the case of non-empty microseconds (only if `alwaysWriteFractionalSeconds` is not set to `True`).
 * `%z`: +hhmm or -hhmm.
 * `%Z`: IANA name of the timezone.
 * `%b`: A short three-letter English name of the month (Jan).
@@ -327,6 +327,8 @@ SELECT
 ```
 
 For the common formats, wrappers around the corresponding util methods are supported. You can only get TM with components in the UTC timezone.
+
+## Parse specific formats
 
 ### List of functions
 
@@ -454,7 +456,7 @@ A CAST to Date or TzDate outputs a GMT date for a midnight, local time (for exam
 
 ```yql
 $x = DateTime("2019-10-21T21:00:00Z");
-select
+SELECT
     AddTimezone($x, "Europe/Moscow"), -- 2019-10-22T00:00:00,Europe/Moscow
     cast($x as TzDate), -- 2019-10-21,GMT
     cast(AddTimezone($x, "Europe/Moscow") as TzDate), -- 2019-10-21,Europe/Moscow

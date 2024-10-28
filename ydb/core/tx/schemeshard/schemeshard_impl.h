@@ -253,6 +253,7 @@ public:
     THashMap<TPathId, TExternalDataSourceInfo::TPtr> ExternalDataSources;
     THashMap<TPathId, TViewInfo::TPtr> Views;
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
+    THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
 
     TTempDirsState TempDirsState;
 
@@ -332,6 +333,7 @@ public:
     bool EnableResourcePoolsOnServerless = false;
     bool EnableVectorIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
+    bool EnableParameterizedDecimal = false;
 
     TShardDeleter ShardDeleter;
 
@@ -630,8 +632,8 @@ public:
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
     void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
     void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
-    auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId,
-        TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats);
+    auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId, ui32 followerId,
+        TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats, const TActorContext& ctx);
 
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
@@ -821,6 +823,10 @@ public:
     // ResourcePool
     void PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool);
     void PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId);
+
+    // BackupCollection
+    void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
+    void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 
@@ -1337,6 +1343,7 @@ public:
         struct TTxReplyProgress;
         struct TTxReplyRetry;
         struct TTxReplySampleK;
+        struct TTxReplyReshuffleKMeans;
         struct TTxReplyUpload;
 
         struct TTxPipeReset;
@@ -1354,6 +1361,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TTxId completedTxId);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
@@ -1366,6 +1374,7 @@ public:
 
     void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);

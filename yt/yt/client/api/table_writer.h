@@ -8,7 +8,7 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ITableWriter
-    : public IRowBatchWriter
+    : public virtual IRowBatchWriter
 {
     //! Returns the schema to be used for constructing rows.
     virtual const NTableClient::TTableSchemaPtr& GetSchema() const = 0;

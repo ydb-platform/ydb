@@ -113,7 +113,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -259,7 +259,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));

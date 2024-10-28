@@ -298,7 +298,8 @@ private:
     }
 
     TMaybe<TFieldsLineage> ScanExprLineage(const TExprNode& node, const TExprNode* arg, const TLineage* src,
-        TNodeMap<TMaybe<TFieldsLineage>>& visited) {
+        TNodeMap<TMaybe<TFieldsLineage>>& visited,
+        const THashMap<const TExprNode*, TString>& flattenColumns) {
         if (&node == arg) {
             return Nothing();
         }
@@ -306,6 +307,10 @@ private:
         auto [it, inserted] = visited.emplace(&node, Nothing());
         if (!inserted) {
             return it->second;
+        }
+
+        if (auto itFlatten = flattenColumns.find(&node); itFlatten != flattenColumns.end()) {
+            return it->second = *(*src->Fields).FindPtr(itFlatten->second);
         }
 
         if (node.IsCallable("Member")) {
@@ -325,7 +330,7 @@ private:
                 }
             }
 
-            auto inner = ScanExprLineage(node.Head(), arg, src, visited);
+            auto inner = ScanExprLineage(node.Head(), arg, src, visited, {});
             if (!inner) {
                 return Nothing();
             }
@@ -365,7 +370,7 @@ private:
                 continue;
             }
 
-            auto inner = ScanExprLineage(*child, arg, src, visited);
+            auto inner = ScanExprLineage(*child, arg, src, visited, {});
             if (!inner) {
                 return Nothing();
             }
@@ -392,10 +397,11 @@ private:
     }
 
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
-        TFieldLineageSet& dst, const TString& newTransforms = "") {
+        TFieldLineageSet& dst, const THashMap<const TExprNode*, TString>& flattenColumns,
+        const TString& newTransforms = "") {
 
         TNodeMap<TMaybe<TFieldsLineage>> visited;
-        auto res = ScanExprLineage(expr, &arg, &src, visited);
+        auto res = ScanExprLineage(expr, &arg, &src, visited, flattenColumns);
         if (!res) {
             for (const auto& f : *src.Fields) {
                 for (const auto& i: f.second.Items) {
@@ -410,7 +416,8 @@ private:
     }
 
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src,
-        TFieldsLineage& dst, bool produceStruct, const TString& newTransforms = "") {
+        TFieldsLineage& dst, bool produceStruct, const THashMap<const TExprNode*, TString>& flattenColumns,
+        const TString& newTransforms = "") {
         if (produceStruct) {
             auto root = &expr;
             while (root->IsCallable("Just")) {
@@ -427,7 +434,7 @@ private:
                 for (const auto& x : root->Children()) {
                     auto fieldName = x->Head().Content();
                     auto& s = (*dst.StructItems)[fieldName];
-                    MergeLineageFromUsedFields(x->Tail(), arg, src, s, newTransforms);
+                    MergeLineageFromUsedFields(x->Tail(), arg, src, s, flattenColumns, newTransforms);
                 }
             } else if (root->IsCallable("Member") && &root->Head() == &arg) {
                 auto fieldName = root->Tail().Content();
@@ -436,11 +443,11 @@ private:
             }
         }
 
-        MergeLineageFromUsedFields(expr, arg, src, dst.Items, newTransforms);
+        MergeLineageFromUsedFields(expr, arg, src, dst.Items, flattenColumns, newTransforms);
     }
 
     void FillStructLineage(TLineage& lineage, const TExprNode* value, const TExprNode& arg, const TLineage& innerLineage,
-        const TTypeAnnotationNode* extType) {
+        const TTypeAnnotationNode* extType, const THashMap<const TExprNode*, TString>& flattenColumns) {
         TMaybe<TString> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
             TString field(value->Tail().Content());
@@ -462,8 +469,8 @@ private:
             TLineage left, right;
             left.Fields.ConstructInPlace();
             right.Fields.ConstructInPlace();
-            FillStructLineage(left, value->Child(1), arg, innerLineage, extType);
-            FillStructLineage(right, value->Child(2), arg, innerLineage, extType);
+            FillStructLineage(left, value->Child(1), arg, innerLineage, extType, {});
+            FillStructLineage(right, value->Child(2), arg, innerLineage, extType, {});
             for (const auto& f : *left.Fields) {
                 auto& res = (*lineage.Fields)[f.first];
                 res.Items.insert(f.second.Items.begin(), f.second.Items.end());
@@ -483,7 +490,7 @@ private:
                 auto& res = (*lineage.Fields)[field];
                 const auto& expr = child->Tail();
                 TString newTransforms;
-                auto root = &expr;
+                const TExprNode* root = &expr;
                 while (root->IsCallable("Just")) {
                     root = &root->Head();
                 }
@@ -492,7 +499,7 @@ private:
                     newTransforms = "Copy";
                 }
 
-                MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, newTransforms);
+                MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, flattenColumns, newTransforms);
             }
 
             return;
@@ -526,13 +533,30 @@ private:
         const auto& lambda = node.Tail();
         const auto& arg = lambda.Head().Head();
         const auto& body = lambda.Tail();
-        const TExprNode* value;
+        THashMap<const TExprNode*, TString> flattenColumns;
+        const TExprNode* value = &body.Tail();
         if (body.IsCallable({"OptionalIf", "FlatListIf"})) {
             value = &body.Tail();
         } else if (body.IsCallable("Just")) {
             value = &body.Head();
         } else if (body.IsCallable({"FlatMap", "OrderedFlatMap"})) {
-            value = &body.Head();
+            if (lambda.GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
+                value = &body;
+                while(value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
+                    if (value->Head().IsCallable("Member") && &value->Head().Head() == &arg) {
+                        TString field(value->Head().Tail().Content());
+                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), field);
+                    }
+                    value = &value->Tail().Tail();
+                }
+                if (value->IsCallable("Just")) {
+                    value = &value->Head();
+                } else if (value->IsCallable({"OptionalIf", "FlatListIf"})) {
+                    value = &value->Tail();
+                }
+            } else {
+                value = &body.Head();
+            }
         } else {
             Warning(body);
             return;
@@ -544,7 +568,7 @@ private:
         }
 
         lineage.Fields.ConstructInPlace();
-        FillStructLineage(lineage, value, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()));
+        FillStructLineage(lineage, value, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()), flattenColumns);
     }
 
     void HandleAggregate(TLineage& lineage, const TExprNode& node) {
@@ -578,12 +602,12 @@ private:
                     // merge all used fields from init/update handlers
                     auto initHandler = payload->Child(1)->Child(1);
                     auto updateHandler = payload->Child(1)->Child(2);
-                    MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, source, false);
-                    MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, source, false);
+                    MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, source, false, {});
+                    MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, source, false, {});
                 } else if (payload->Child(1)->IsCallable("AggApply")) {
                     auto extractHandler = payload->Child(1)->Child(2);
                     bool produceStruct = payload->Child(1)->Head().Content() == "some";
-                    MergeLineageFromUsedFields(extractHandler->Tail(), extractHandler->Head().Head(), innerLineage, source, produceStruct);
+                    MergeLineageFromUsedFields(extractHandler->Tail(), extractHandler->Head().Head(), innerLineage, source, produceStruct, {});
                 } else {
                     Warning(*payload->Child(1));
                     lineage.Fields.Clear();
@@ -612,7 +636,7 @@ private:
         }
 
         lineage.Fields.ConstructInPlace();
-        FillStructLineage(lineage, nullptr, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()));
+        FillStructLineage(lineage, nullptr, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()), {});
     }
 
     void HandlePartitionByKeys(TLineage& lineage, const TExprNode& node) {
@@ -630,7 +654,7 @@ private:
         }
 
         lineage.Fields.ConstructInPlace();
-        FillStructLineage(lineage, nullptr, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()));
+        FillStructLineage(lineage, nullptr, arg, innerLineage, GetSeqItemType(body.GetTypeAnn()), {});
     }
 
     void HandleExtend(TLineage& lineage, const TExprNode& node) {
@@ -709,8 +733,8 @@ private:
                 auto& res = (*lineage.Fields)[sessionColumn->Content()];
                 const auto& initHandler = node.Child(4)->Child(2);
                 const auto& updateHandler = node.Child(4)->Child(2);
-                MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, res, false);
-                MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, res, false);
+                MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, res, false, {});
+                MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, res, false, {});
             }
         }
 
@@ -730,12 +754,12 @@ private:
                     } else if (list->Tail().IsCallable({"Lag","Lead","Rank","DenseRank","PercentRank"})) {
                         const auto& lambda = list->Tail().Child(1);
                         bool produceStruct = list->Tail().IsCallable({"Lag","Lead"});
-                        MergeLineageFromUsedFields(lambda->Tail(), lambda->Head().Head(), innerLineage, res, produceStruct);
+                        MergeLineageFromUsedFields(lambda->Tail(), lambda->Head().Head(), innerLineage, res, produceStruct, {});
                     } else if (list->Tail().IsCallable("WindowTraits")) {
                         const auto& initHandler = list->Tail().Child(1);
                         const auto& updateHandler = list->Tail().Child(2);
-                        MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, res, false);
-                        MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, res, false);
+                        MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, res, false, {});
+                        MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, res, false, {});
                     } else {
                         lineage.Fields.Clear();
                         return;
@@ -769,7 +793,7 @@ private:
                 continue;
             }
 
-            if (setting->Child(2)->Content().Empty()) {
+            if (setting->Child(2)->Content().empty()) {
                 continue;
             }
 
@@ -850,7 +874,7 @@ private:
             if (child->IsCallable("AsStruct")) {
                 for (const auto& f : child->Children()) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
-                    auto res = ScanExprLineage(f->Tail(), nullptr, nullptr, visited);
+                    auto res = ScanExprLineage(f->Tail(), nullptr, nullptr, visited, {});
                     if (res) {
                         auto name = f->Head().Content();
                         (*lineage.Fields)[name].MergeFrom(*res);
@@ -858,7 +882,7 @@ private:
                 }
             } else {
                 TNodeMap<TMaybe<TFieldsLineage>> visited;
-                auto res = ScanExprLineage(*child, nullptr, nullptr, visited);
+                auto res = ScanExprLineage(*child, nullptr, nullptr, visited, {});
                 if (res) {
                     for (const auto& i : structType->GetItems()) {
                         if (i->GetName().StartsWith("_yql_sys_")) {

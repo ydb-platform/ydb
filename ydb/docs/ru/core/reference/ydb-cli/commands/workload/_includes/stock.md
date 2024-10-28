@@ -1,5 +1,7 @@
 # Stock нагрузка
 
+{% include [not_allow_for_olap_note](../../../../../_includes/not_allow_for_olap_note.md) %}
+
 Симулирует работу склада интернет-магазина: создание заказов из нескольких товаров, получение списка заказов по клиенту.
 
 ## Виды нагрузки {#workload_types}
@@ -10,11 +12,11 @@
 * [rand-user-hist](#get-random-customer-history) - читает заданное количество заказов у случайно выбранного покупателя. Создается нагрузка на чтение из разных потоков.
 * [add-rand-order](#insert-random-order) - создает случайно сгенерированный заказ. Например, клиент создал заказ из 2 товаров, но еще не оплатил его, поэтому остатки товаров не снижаются. В БД записывается информация о заказе и товарах. Создается нагрузка на запись и чтение (insert перед вставкой проверяет есть ли уже запись).
 * [put-rand-order](#submit-random-order) - создает и обрабатывает случайно сгенерированный заказ. Например, покупатель создал и оплатил заказ из 2 товаров. В БД записывается информация о заказе, товарах, проверяется их наличие и уменьшаются остатки. Создается смешанная нагрузка.
-* [put-same-order](#submit-same-order) - создает заказы с одним и тем же набором товаров. Например, все покупатели покупают один и тот же набор товаров (только что вышедший телефон и заряжающее устройство). Создается нагрузка в виде конкурентного обновления одних и тех же строк в таблице.
+* [put-same-order](#submit-same-order) - создает заказы с одним и тем же набором товаров. Например, все покупатели покупают один и тот же набор товаров (только что вышедший телефон и заряжающее устройство). Создается нагрузка в виде конкурентного обновления одних и тех же строк в строковой таблице.
 
 ## Инициализация нагрузочного теста {#init}
 
-Для начала работы необходимо создать таблицы и заполнить их данными:
+Для начала работы необходимо создать строковую таблицы и заполнить их данными:
 
 ```bash
 {{ ydb-cli }} workload stock init [init options...]
@@ -38,12 +40,48 @@
 `--min-partitions <значение>` | - | Минимальное количество шардов для таблиц. Значение по умолчанию: 40.
 `--auto-partition <значение>` | - | Включение/выключение автошардирования. Возможные значения: 0 или 1. Значение по умолчанию: 1.
 
-Создаются 3 таблицы со следующими DDL:
+
+Создаются 3 строковые таблицы со следующими DDL:
 
 ```yql
-CREATE TABLE `stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>);
-CREATE TABLE `orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created)) WITH (READ_REPLICAS_SETTINGS = "per_az:1", AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
-CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>, UNIFORM_PARTITIONS = <min-partitions>, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000);
+CREATE TABLE `stock`(
+    product Utf8,
+    quantity Int64,
+    PRIMARY KEY(product)
+    )
+    WITH (
+        AUTO_PARTITIONING_BY_LOAD = ENABLED,
+        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>
+        );
+
+CREATE TABLE `orders`(
+    id Uint64,
+    customer Utf8,
+    created Datetime,
+    processed Datetime,
+    PRIMARY KEY(id),
+    INDEX ix_cust GLOBAL ON (customer, created)
+    )
+    WITH (
+        READ_REPLICAS_SETTINGS = "per_az:1",
+        AUTO_PARTITIONING_BY_LOAD = ENABLED,
+        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>,
+        UNIFORM_PARTITIONS = <min-partitions>,
+        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+        );
+
+CREATE TABLE `orderLines`(
+    id_order Uint64,
+    product Utf8,
+    quantity Int64,
+    PRIMARY KEY(id_order, product)
+    )
+    WITH (
+        AUTO_PARTITIONING_BY_LOAD = ENABLED,
+        AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min-partitions>,
+        UNIFORM_PARTITIONS = <min-partitions>,
+        AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+        );
 ```
 
 ### Примеры инициализации нагрузки {#init-stock-examples}
@@ -63,9 +101,11 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 ## Запуск нагрузочного теста {#run}
 
 Для запуска нагрузки необходимо выполнить команду:
+
 ```bash
 {{ ydb-cli }} workload stock run [workload type...] [global workload options...] [specific workload options...]
 ```
+
 В течение теста на экран выводится статистика по нагрузке для каждого временного окна.
 
 * `workload type` — [виды нагрузки](#workload_types).
@@ -92,7 +132,6 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 `--cancel-after` | - | [Таймаут отмены операции в миллисекундах](../../../../../dev/timeouts.md).
 `--window` | - | Длительность окна сбора статистики в секундах. Значение по умолчанию: 1.
 
-
 ## Нагрузка user-hist {#get-customer-history}
 
 Данный вид нагрузки читает заданное количество заказов покупателя с id = 10 000.
@@ -103,10 +142,11 @@ YQL запрос:
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
-SELECT id, customer, created FROM orders view ix_cust
-    WHERE customer = 'Name10000'
-    ORDER BY customer DESC, created DESC
-    LIMIT $limit;
+SELECT id, customer, created
+FROM orders VIEW ix_cust
+WHERE customer = 'Name10000'
+ORDER BY customer DESC, created DESC
+LIMIT $limit;
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
@@ -134,10 +174,11 @@ YQL запрос:
 DECLARE $cust AS Utf8;
 DECLARE $limit AS UInt32;
 
-SELECT id, customer, created FROM orders view ix_cust
-    WHERE customer = $cust
-    ORDER BY customer DESC, created DESC
-    LIMIT $limit;
+SELECT id, customer, created
+FROM orders VIEW ix_cust
+WHERE customer = $cust
+ORDER BY customer DESC, created DESC
+LIMIT $limit;
 ```
 
 Для запуска данного вида нагрузки необходимо выполнить команду:
@@ -150,6 +191,7 @@ SELECT id, customer, created FROM orders view ix_cust
 * `specific workload options` - [параметры конкретного вида нагрузки](#random_customer_history_options)
 
 ### Параметры для rand-user-hist {#random_customer_history_options}
+
 Имя параметра | Короткое имя | Описание параметра
 ---|---|---
 `--limit <значение>` | `-l <значение>` | Необходимое количество заказов. Значение по умолчанию: 10.

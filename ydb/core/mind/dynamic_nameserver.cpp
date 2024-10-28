@@ -4,6 +4,7 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 
 namespace NKikimr {
 namespace NNodeBroker {
@@ -132,12 +133,29 @@ void TDynamicNameserver::Bootstrap(const TActorContext &ctx)
         RequestEpochUpdate(domain->DomainUid, 1, ctx);
     }
 
-    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-        NKikimrConsole::TConfigItem::NameserviceConfigItem,
-        SelfId()
-    ));
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     Become(&TDynamicNameserver::StateFunc);
+}
+
+void TDynamicNameserver::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+    Y_ABORT_UNLESS(ev->Get()->Config);
+    const auto& config = *ev->Get()->Config;
+    if (config.GetBlobStorageConfig().HasAutoconfigSettings()) {
+        auto newStaticConfig = BuildNameserverTable(config);
+        if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
+            StaticConfig = std::move(newStaticConfig);
+            for (const auto& subscriber : StaticNodeChangeSubscribers) {
+                TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
+            }
+        }
+    } else if (!SubscribedToConsole) {
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+            NKikimrConsole::TConfigItem::NameserviceConfigItem,
+            SelfId()
+        ));
+        SubscribedToConsole = true;
+    }
 }
 
 void TDynamicNameserver::Die(const TActorContext &ctx)
@@ -474,6 +492,16 @@ TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrConfig::T
             location = TNodeLocation(node.GetLocation());
         }
         table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location);
+    }
+    return table;
+}
+
+TIntrusivePtr<TTableNameserverSetup> BuildNameserverTable(const NKikimrBlobStorage::TStorageConfig& config) {
+    auto table = MakeIntrusive<TTableNameserverSetup>();
+    for (const auto &node : config.GetAllNodes()) {
+        table->StaticNodeTable[node.GetNodeId()] = TTableNameserverSetup::TNodeInfo(
+            TString(), node.GetHost(), node.GetHost(), node.GetPort(), TNodeLocation(node.GetLocation())
+        );
     }
     return table;
 }

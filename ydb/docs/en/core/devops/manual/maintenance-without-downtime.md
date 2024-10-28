@@ -3,10 +3,10 @@
 A {{ ydb-short-name }} cluster periodically needs maintenance, such as upgrading its version or replacing broken disks. Maintenance can cause a cluster or its databases to become unavailable due to:
 
 - Going beyond the expectations of the affected [storage groups](../../concepts/glossary.md#storage-groups) failure model.
-- Going beyond the expectations of the [State Storage](../../deploy/configuration/config.md#domains-state) failure model.
-- Lack of computational resources due to stopping too many [dynamic nodes](../../concepts/cluster/common_scheme_ydb.md#nodes).
+- Going beyond the expectations of the [State Storage](../../reference/configuration/index.md#domains-state) failure model.
+- Lack of computational resources due to stopping too many [dynamic nodes](../../concepts/glossary.md#dynamic-node).
 
-To avoid such situations, {{ ydb-short-name }} has a system [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets) that monitors the state of the cluster - the *Cluster Management System (CMS)*. The CMS allows you to answer the question of whether a {{ ydb-short-name }} node or host running {{ ydb-short-name }} nodes can be safely taken out for maintenance. To do this, create a [maintenance task](#maintenance-task) in the CMS and specify in it to acquire exclusive locks on the nodes or hosts that will be involved in the maintenance. The cluster components on which the locks are acquired are considered unavailable from the CMS perspective and can be safely engaged in maintenance. The CMS will [check](#checking-algorithm) the current state of the cluster and acquire locks only if the maintenance complies with the [availability mode](#availability-mode) and [unavailable node limits](#unavailable-node-limits).
+To avoid such situations, {{ ydb-short-name }} has a system [tablet](../../concepts/glossary.md#tablet) that monitors the state of the cluster - the *Cluster Management System (CMS)*. The CMS allows you to answer the question of whether a {{ ydb-short-name }} node or host running {{ ydb-short-name }} nodes can be safely taken out for maintenance. To do this, create a [maintenance task](#maintenance-task) in the CMS and specify in it to acquire exclusive locks on the nodes or hosts that will be involved in the maintenance. The cluster components on which the locks are acquired are considered unavailable from the CMS perspective and can be safely engaged in maintenance. The CMS will [check](#checking-algorithm) the current state of the cluster and acquire locks only if the maintenance complies with the [availability mode](#availability-mode) and [unavailable node limits](#unavailable-node-limits).
 
 {% note warning "Failures during maintenance" %}
 
@@ -41,14 +41,12 @@ Completed actions are automatically removed from the task.
 In a maintenance task, you need to specify the cluster's availability mode to comply with when checking whether actions can be performed. The following modes are supported:
 
 - **Strong**: a mode that minimizes the risk of availability loss.
-
-  - No more than one unavailable [VDisk](../../concepts/cluster/distributed_storage.md#storage-groups) is allowed in each affected storage group.
-  - No more than one unavailable State Storage ring is allowed.
-
+    - No more than one unavailable [VDisk](../../concepts/glossary.md#vdisk) is allowed in each affected storage group.
+    - No more than one unavailable State Storage ring is allowed.
 - **Weak**: a mode that does not allow exceeding the failure model.
 
-  - For affected storage groups with the [block-4-2](../../deploy/configuration/config.md#reliability) scheme, no more than two unavailable VDisks are allowed.
-  - For affected storage groups with the [mirror-3-dc](../../deploy/configuration/config.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center.
+  - For affected storage groups with the [block-4-2](../../reference/configuration/index.md#reliability) scheme, no more than two unavailable VDisks are allowed.
+  - For affected storage groups with the [mirror-3-dc](../../reference/configuration/index.md#reliability) scheme, up to four unavailable VDisks are allowed, three of which must be in the same data center.
   - No more than `(nto_select - 1) / 2` unavailable State Storage rings are allowed.
 
 - **Force**: a forced mode, the failure model is ignored. *Not recommended for use.*
@@ -87,9 +85,11 @@ The [ydbops](https://github.com/ydb-platform/ydbops) utility tool uses CMS for c
 ### Rolling restart {##rolling-restart}
 
 To perform a rolling restart of the entire cluster, you can use the command:
-```
+
+```bash
 $ ydbops restart --endpoint grpc://<cluster-fqdn> --availability-mode strong
 ```
+
 If your systemd unit name is different from the default one, you may need to override it with `--systemd-unit` flag.
 
 The `ydbops` utility will automatically create a maintenance task to restart the entire cluster using the given availability mode. As it progresses, the `ydbops` will refresh the maintenance task and acquire exclusive locks on the nodes in the CMS until all nodes are restarted.

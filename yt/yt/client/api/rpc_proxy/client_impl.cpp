@@ -8,6 +8,7 @@
 #include "timestamp_provider.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/transaction.h>
@@ -471,17 +472,25 @@ TFuture<void> TClient::AlterTableReplica(
     if (options.Enabled) {
         req->set_enabled(*options.Enabled);
     }
+
     if (options.Mode) {
         req->set_mode(static_cast<NProto::ETableReplicaMode>(*options.Mode));
     }
+
     if (options.PreserveTimestamps) {
         req->set_preserve_timestamps(*options.PreserveTimestamps);
     }
+
     if (options.Atomicity) {
         req->set_atomicity(static_cast<NProto::EAtomicity>(*options.Atomicity));
     }
+
     if (options.EnableReplicatedTableTracker) {
         req->set_enable_replicated_table_tracker(*options.EnableReplicatedTableTracker);
+    }
+
+    if (options.ReplicaPath) {
+        req->set_replica_path(*options.ReplicaPath);
     }
 
     ToProto(req->mutable_mutating_options(), options);
@@ -744,12 +753,14 @@ TFuture<void> TClient::AlterReplicationCard(
     return req->Invoke().As<void>();
 }
 
-TFuture<ITableWriterPtr> TClient::CreateParticipantTableWriter(
-    const TDistributedWriteCookiePtr& cookie,
-    const TParticipantTableWriterOptions& options)
+TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options)
 {
+    using TRspPtr = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspWriteTableFragment>>;
+
     auto proxy = CreateApiServiceProxy();
-    auto req = proxy.ParticipantWriteTable();
+    auto req = proxy.WriteTableFragment();
     InitStreamingRequest(*req);
 
     FillRequest(req.Get(), cookie, options);
@@ -760,12 +771,15 @@ TFuture<ITableWriterPtr> TClient::CreateParticipantTableWriter(
         BIND ([=] (const TSharedRef& metaRef) {
             NApi::NRpcProxy::NProto::TWriteTableMeta meta;
             if (!TryDeserializeProto(&meta, metaRef)) {
-                THROW_ERROR_EXCEPTION("Failed to deserialize schema for participant table writer");
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for fragment table writer");
             }
 
             FromProto(schema.Get(), meta.schema());
+        }),
+        BIND([=] (TRspPtr&& rsp) mutable {
+            Deserialize(*cookie, ConvertToNode(TYsonString(rsp->cookie())));
         }))
-        .Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr outputStream) {
+        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
 }
@@ -1319,6 +1333,41 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
         return TGetJobStderrResponse::MakeJobStderr(rsp->Attachments().front(), options);
     }));
 }
+
+TFuture<std::vector<TJobTraceEvent>> TClient::GetJobTrace(
+    const TOperationIdOrAlias& operationIdOrAlias,
+    const TGetJobTraceOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetJobTrace();
+    SetTimeoutOptions(*req, options);
+
+    NScheduler::ToProto(req, operationIdOrAlias);
+    if (options.JobId) {
+        ToProto(req->mutable_job_id(), *options.JobId);
+    }
+    if (options.TraceId) {
+        ToProto(req->mutable_trace_id(), *options.TraceId);
+    }
+    if (options.FromTime) {
+        req->set_from_time(*options.FromTime);
+    }
+    if (options.ToTime) {
+        req->set_to_time(*options.ToTime);
+    }
+    if (options.FromEventIndex) {
+        req->set_from_event_index(*options.FromEventIndex);
+    }
+    if (options.ToEventIndex) {
+        req->set_to_event_index(*options.ToEventIndex);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobTracePtr& rsp) {
+        return FromProto<std::vector<TJobTraceEvent>>(rsp->events());
+    }));
+}
+
 
 TFuture<TSharedRef> TClient::GetJobFailContext(
     const TOperationIdOrAlias& operationIdOrAlias,

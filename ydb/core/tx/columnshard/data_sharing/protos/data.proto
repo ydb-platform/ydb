@@ -36,6 +36,8 @@ message TPortionInfo {
     repeated TIndexChunk Indexes = 7;
     repeated NKikimrColumnShardProto.TUnifiedBlobId BlobIds = 8;
     optional uint64 SchemaVersion = 9;
+    optional uint64 InsertWriteId = 10;
+    optional NKikimrColumnShardProto.TSnapshot CommitSnapshot = 11;
 }
 
 message TPathIdData {

@@ -170,7 +170,7 @@ static void submit_io(struct io_uring *ring, unsigned nr)
 	ret = io_uring_submit(ring);
 	unlink(template);
 	if (ret < 0) {
-		perror("io_uring_enter");
+		fprintf(stderr, "io_uring_queue_enter: %s\n", strerror(-ret));
 		exit(1);
 	}
 }
@@ -195,7 +195,7 @@ int main(int argc, char **argv)
 		ret = t_io_uring_init_sqarray(IORING_MAX_ENTRIES_FALLBACK,
 					      &ring, &p);
 	if (ret < 0) {
-		perror("io_uring_queue_init");
+		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
 		exit(T_EXIT_FAIL);
 	}
 	mask = sq->ring_mask;

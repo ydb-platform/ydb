@@ -54,7 +54,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
 
 `addColumn` - add a column to a table. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -100,7 +100,7 @@ The `dropTable` changeset - delete a table. For example: `<dropTable tableName="
 
 `createIndex` - create a secondary index. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -157,7 +157,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 `dropIndex` - drop a secondary index. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 
@@ -193,9 +193,9 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 `loadData`, `loadUpdateData` - upload data from a `CSV` file into a table. `loadUpdateData` loads data using the [{#T}](../../yql/reference/syntax/upsert_into.md) command.
 
-`insert` is a changeset that performs a single insert into a table using the [{#T}](../../yql/reference/syntax/insert_into.md) command. For example:
+`insert` is a changeset that performs a single insert into a table using the [INSERT INTO](../../yql/reference/syntax/insert_into.md) command. For example:
 
-{% list tabs %}
+{% list tabs group=format %}
 
 - xml
 

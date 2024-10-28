@@ -4,6 +4,8 @@
 
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 
+#include <ydb/library/yql/core/yql_type_annotation.h>
+
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 
@@ -34,7 +36,7 @@ private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
     NKikimr::NMiniKQL::TType* ResultType;
-    const TVector<ui32> ColumnOrder;
+    const TColumnOrder ColumnOrder;
 };
 
 } // NYql::NDqs

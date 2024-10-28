@@ -182,8 +182,8 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr RegisterOperation(
-        const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
+    TWriteOperation::TPtr RegisterOperation(const ui64 pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
+        const NEvWrite::EModificationType mType, const bool portionsWriting);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {
             return false;
@@ -206,6 +206,10 @@ public:
         } else {
             return nullptr;
         }
+    }
+
+    bool HasReadLocks(const ui64 pathId) const {
+        return InteractionsContext.HasReadIntervals(pathId);
     }
 
     TOperationsManager();

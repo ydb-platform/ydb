@@ -144,6 +144,18 @@ private:
                 return false;
             }
         }
+        for (const auto transformId: InputTransforms) {
+            const auto t = TaskRunner->GetInputTransform(transformId);
+            if (t) {
+                auto [_, transform] = *t;
+                if (!transform->Empty()) {
+                    return false;
+                }
+                if (transform->IsPending()) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
 
@@ -443,6 +455,7 @@ private:
         for (auto i = 0; i != inputs.size(); ++i) {
             if (auto t = TaskRunner->GetInputTransform(i)) {
                 inputTransforms[i] = *t;
+                InputTransforms.emplace(i);
             }
         }
 
@@ -490,6 +503,7 @@ private:
     const TTxId TxId;
     const ui64 TaskId;
     THashSet<ui32> Inputs;
+    THashSet<ui32> InputTransforms;
     THashSet<ui32> Sources;
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
     THashSet<ui32> InputChannelsWithDisabledCheckpoints;

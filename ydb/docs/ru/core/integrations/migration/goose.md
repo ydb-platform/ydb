@@ -148,7 +148,8 @@ $ goose ydb $YDB_CONNECTION_STRING up
 ```
 
 Проверим статус миграций `goose status`:
-```
+
+```bash
 $ goose ydb $YDB_CONNECTION_STRING status
 2024/01/12 11:56:00     Applied At                  Migration
 2024/01/12 11:56:00     =======================================
@@ -157,11 +158,11 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 Статус `Pending` заменился на временную отметку `Fri Jan 12 11:55:18 2024` - это означает, что миграция успешно применена. Мы также можем убедиться в этом и другими способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
-- Используя YDB UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
-  ![YDB UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
+  ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
 - Используя YDB CLI
 
@@ -249,11 +250,11 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 Обе миграции успешно применены. Убедимся в этом альтернативными способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
-- Используя YDB UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
-  ![YDB UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
+  ![{{ ydb-short-name }} UI after apply second migration](_assets/goose-ydb-ui-after-second-migration.png =450x)
 
 - Используя YDB CLI
 
@@ -313,13 +314,13 @@ $ goose ydb $YDB_CONNECTION_STRING status
 
 Статус `Fri Jan 12 12:04:56 2024` заменился на статус `Pending` - это означает, что последняя миграция успешно отменена. Мы также можем убедиться в этом и другими способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
-- Используя YDB UI по адресу http://localhost:8765
+- Используя {{ ydb-short-name }} UI по адресу `http://localhost:8765`
 
-  ![YDB UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
+  ![{{ ydb-short-name }} UI after apply first migration](_assets/goose-ydb-ui-after-first-migration.png =450x)
 
-- Используя YDB CLI
+- Используя {{ ydb-short-name }} CLI
 
   ```bash
   $ ydb -e grpc://localhost:2136 -d /local scheme describe users

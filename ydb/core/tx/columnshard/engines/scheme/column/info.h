@@ -1,11 +1,11 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
-#include <ydb/core/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/formats/arrow/transformer/abstract.h>
+#include <ydb/library/formats/arrow/transformer/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/defaults/common/scalar.h>
 
@@ -21,6 +21,7 @@ class IPortionDataChunk;
 class TSimpleColumnInfo {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
+    YDB_READONLY_DEF(std::optional<ui32>, PKColumnIndex);
     YDB_READONLY_DEF(TString, ColumnName);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ArrowField);
     YDB_READONLY(NArrow::NSerialization::TSerializerContainer, Serializer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
@@ -36,7 +37,7 @@ private:
 public:
     TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
         const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
-        const std::shared_ptr<arrow::Scalar>& defaultValue);
+        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex);
 
     TColumnSaver GetColumnSaver() const {
         NArrow::NTransformation::ITransformer::TPtr transformer = GetSaveTransformer();

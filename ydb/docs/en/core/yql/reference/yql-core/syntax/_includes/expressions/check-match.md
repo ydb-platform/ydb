@@ -10,6 +10,7 @@
   * `_`: Exactly one of any character.
 
 All other characters are literals that represent themselves.
+
 * As opposed to `REGEXP`, `LIKE` must be matched exactly. For example, to search a substring, add `%` at the beginning and end of the pattern.
 * `ILIKE` is a case-insensitive version of `LIKE`.
 * If `LIKE` is applied to the key column of the sorted table and the pattern doesn't start with a special character, filtering by prefix drills down directly to the cluster level, which in some cases lets you avoid the full table scan. This optimization is disabled for `ILIKE`.

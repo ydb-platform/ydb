@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_arrow_memory_pool.cpp
     kqp_compute.cpp
     kqp_effects.cpp
     kqp_output_stream.cpp
@@ -22,6 +23,7 @@ SRCS(
     kqp_stream_lookup_worker.h
     kqp_tasks_runner.cpp
     kqp_transport.cpp
+    kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp
 )

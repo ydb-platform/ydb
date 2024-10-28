@@ -1,10 +1,5 @@
 # External data sources
 
-{% note warning %}
-
-This functionality is in "Experimental" mode.
-
-{% endnote %}
 
 An external data source is an object in {{ ydb-full-name }} that describes the connection parameters to an external data source. For example, in the case of ClickHouse, the external data source describes the network address, login, and password for authentication in the ClickHouse cluster. In the case of S3 ({{ objstorage-name }}), it describes the access credentials and the path to the bucket.
 

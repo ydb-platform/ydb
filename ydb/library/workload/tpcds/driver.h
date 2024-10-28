@@ -1,9 +1,5 @@
 extern "C" {
 
-#ifndef LINUX
-    #define LINUX
-#endif
-
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/config.h>
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/porting.h>
 #include <ydb/library/benchmarks/gen/tpcds-dbgen/constants.h>

@@ -14,7 +14,7 @@ To aggregate disparate spans into traces, they are sent to a *collector*. This s
 
 ## Minimal configuration
 
-To enable tracing in {{ ydb-short-name }}, add the following section to the [configuration](../../../deploy/configuration/config.md):
+To enable tracing in {{ ydb-short-name }}, add the following section to the [configuration](../../../reference/configuration/index.md):
 
 ```yaml
 tracing_config:
@@ -50,6 +50,7 @@ tracing_config:
 This section describes the span collector. Currently, the only option is `opentelemetry`. Spans are pushed from the cluster node to the collector, requiring the collector to be [OTLP](https://opentelemetry.io/docs/specs/otlp/) compatible.
 
 In the `opentelemetry` section:
+
 * `collector_url` — the URL of the span collector. The scheme can be either `grpc://` for an insecure connection or `grpcs://` for a TLS connection.
 * `service_name` — the name under which all spans will be marked.
 
@@ -78,6 +79,7 @@ The uploader is a cluster node component responsible for sending spans to the co
 For optimization, the uploader sends spans in batches. Each batch contains no more than `max_spans_in_batch` spans with a total serialized size of no more than `max_bytes_in_batch` bytes. Each batch accumulates for no more than `max_batch_accumulation_milliseconds` milliseconds. Batches can be sent in parallel, with the maximum number of simultaneously sent batches controlled by the `max_export_requests_inflight` parameter. If more than `span_export_timeout_seconds` seconds have passed since the uploader received the span, the uploader may delete it to send fresher spans.
 
 Default values:
+
 * `max_exported_spans_per_second = inf` (no limits)
 * `max_spans_in_batch = 150`
 * `max_bytes_in_batch = 20000000`

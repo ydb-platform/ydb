@@ -6,9 +6,10 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 
@@ -220,6 +221,21 @@ namespace NKikimr {
         TControlWrapper EnableVPatch = true;
         TControlWrapper DefaultHugeGarbagePerMille;
         bool UseActorSystemTimeInBSQueue = false;
+
+        ///////////// BALANCING SETTINGS ////////////////////
+        bool BalancingEnableSend;
+        bool BalancingEnableDelete;
+        TDuration BalancingJobGranularity;
+        bool BalancingBalanceOnlyHugeBlobs;
+        ui64 BalancingBatchSize;
+        ui64 BalancingMaxToSendPerEpoch;
+        ui64 BalancingMaxToDeletePerEpoch;
+        TDuration BalancingReadBatchTimeout;
+        TDuration BalancingSendBatchTimeout;
+        TDuration BalancingRequestBlobsOnMainTimeout;
+        TDuration BalancingDeleteBatchTimeout;
+        TDuration BalancingEpochTimeout;
+        TDuration BalancingTimeToSleepIfNothingToDo;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

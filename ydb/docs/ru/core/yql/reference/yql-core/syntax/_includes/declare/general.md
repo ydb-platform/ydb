@@ -11,6 +11,7 @@
 ```yql
 DECLARE $named-node AS data_type;
 ```
+
 1. Ключевое слово `DECLARE`.
 1. `$named-node` — имя, по которому можно будет обращаться к переданному значению, должно начинаться с символа `$`.
 1. Ключевое слово `AS`.
@@ -23,9 +24,9 @@ DECLARE $named-node AS data_type;
 * [Контейнеры](../../../types/containers.md) за исключением `Stream<Type>`.
 * `Void` и `Null`— поддерживаемые [специальные типы](../../../types/special.md).
 
-**Пример**
+## Пример
 
-``` yql
+```yql
 DECLARE $x AS String;
 DECLARE $y AS String?;
 DECLARE $z AS List<String>;

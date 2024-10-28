@@ -15,7 +15,7 @@ set_property(TARGET {{ name }} PROPERTY {{ property.name }}
 
 {%- if (current_target.protoc_extra_outs is defined) and (current_target.protoc_extra_outs|length) %}
 set_property(TARGET {{ name }} PROPERTY PROTOC_EXTRA_OUTS
-{%-     for protoc_extra_out in current_target.protoc_extra_outs %}
+{%-     for protoc_extra_out in current_target.protoc_extra_outs|unique %}
   {{ protoc_extra_out }}
 {%-     endfor %}
 )

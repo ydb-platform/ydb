@@ -168,7 +168,7 @@ public:
 
     // Initialization data
     ui64 InitialSysLogWritePosition = 0;
-    EInitPhase InitPhase = EInitPhase::Uninitialized;
+    std::atomic<EInitPhase> InitPhase = EInitPhase::Uninitialized;
     TBuffer *InitialTailBuffer = nullptr;
     TLogPosition InitialLogPosition{0, 0};
     volatile ui64 InitialPreviousNonce = 0;
@@ -200,6 +200,8 @@ public:
 
     // Metadata storage
     NMeta::TInfo Meta;
+
+    NLWTrace::TOrbit UpdateCycleOrbit;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Initialization
@@ -292,8 +294,7 @@ public:
     void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason,
             NKikimrProto::EReplyStatus status);
     EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-            ui64 *reallyReadBytes, NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
-    void SplitChunkJobSize(ui32 totalSize, ui32 *outSmallJobSize, ui32 *outLargeJObSize, ui32 *outSmallJobCount);
+            NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk locking
     TVector<TChunkIdx> LockChunksForOwner(TOwner owner, const ui32 count, TString &errorReason);

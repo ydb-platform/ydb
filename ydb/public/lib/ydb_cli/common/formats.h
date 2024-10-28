@@ -36,5 +36,19 @@ enum class EMessagingFormat {
     JsonArray /* "json-array" */,
 };
 
+// EFramingFormat to be used in operations related to structured data
+enum class EFramingFormat {
+    Default /* "default" */,
+    NoFraming /* "no-framing" */,
+    NewlineDelimited /* "newline-delimited" */,
+};
+
+// EBinaryStringEncoding to be used in operations over binary strings
+enum class EBinaryStringEncodingFormat {
+    Default /* "default" */,
+    Unicode /* "unicode" */,
+    Base64 /* "base64" */,
+};
+
 }
 }

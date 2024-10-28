@@ -19,7 +19,7 @@
 
 ### Примеры
 
-``` yql
+```yql
 SELECT
   AsTuple(1, 2, "3") AS `tuple`,
   AsStruct(

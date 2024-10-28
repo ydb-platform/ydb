@@ -547,7 +547,7 @@ class TestYqStreaming(TestYdsBase):
         ]
         self.write_stream(data, self.input_topic)
 
-        read_data = self.read_stream(1)
+        read_data = self.read_stream(3)
         logging.info("Data was read: {}".format(read_data))
         assert len(read_data) == 3
 

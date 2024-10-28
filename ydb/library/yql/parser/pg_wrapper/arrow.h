@@ -1310,7 +1310,8 @@ private:
 
 TExecFunc FindExec(Oid oid);
 
-const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType, const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType);
+const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType,
+    const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType, ui32 hint = 0);
 
 }
 

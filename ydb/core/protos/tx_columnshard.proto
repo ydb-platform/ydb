@@ -3,7 +3,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
-import "ydb/core/formats/arrow/protos/fields.proto";
+import "ydb/library/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -249,7 +249,6 @@ message TTableVersionInfo {
     optional uint64 PathId = 1;
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
-    optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
     optional uint32 SchemaPresetId = 5;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 6;
     optional uint32 TtlSettingsPresetId = 7;
@@ -352,4 +351,6 @@ message TEvReadBlobRangesResult {
 message TInternalOperationData {
     repeated uint64 InternalWriteIds = 1;
     optional uint32 ModificationType = 2;
+    optional uint64 PathId = 3;
+    optional bool WritePortions = 4;
 }

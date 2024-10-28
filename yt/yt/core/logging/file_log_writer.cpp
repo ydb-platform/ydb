@@ -152,9 +152,26 @@ private:
 
             TFlags<EOpenModeFlag> openMode;
             if (Config_->EnableCompression) {
-                openMode = OpenAlways|RdWr|CloseOnExec;
+                switch (Config_->CompressionMethod) {
+                    case ECompressionMethod::Zstd:
+                        openMode = OpenAlways|RdWr|CloseOnExec;
+                        if (Config_->EnableNoReuse) {
+                            openMode = openMode|NoReuse;
+                        }
+                        break;
+
+                    case ECompressionMethod::Gzip:
+                        openMode = OpenAlways|RdWr|CloseOnExec;
+                        break;
+
+                    default:
+                        YT_ABORT();
+                }
             } else {
                 openMode = OpenAlways|ForAppend|WrOnly|Seq|CloseOnExec;
+                if (Config_->EnableNoReuse) {
+                    openMode = openMode|NoReuse;
+                }
             }
 
             // Generate filename.

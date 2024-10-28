@@ -115,17 +115,17 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
             return false;
         }
 
-        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
-            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
+            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
             return false;
         }
-        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
+        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
             // This isn't really needed, but it will be really strange to have column with such name but different meaning
-            explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+            explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
             return false;
         }
-        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn)) {
-            explain = TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentIdColumn;
+        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
+            explain = TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
             return false;
         }
     }
@@ -154,9 +154,9 @@ bool IsImplTable(std::string_view tableName) {
     return Contains(ImplTables, tableName);
 }
 
-bool IsTmpImplTable(std::string_view tableName) {
-    // all impl tables that ends with "tmp" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with("tmp");
+bool IsBuildImplTable(std::string_view tableName) {
+    // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
+    return tableName.ends_with("build");
 }
 
 }

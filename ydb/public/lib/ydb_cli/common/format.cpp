@@ -8,53 +8,52 @@
 
 #include <iomanip>
 #include <strstream>
+#include <regex>
 
 namespace NYdb {
 namespace NConsoleClient {
 
 namespace {
-    THashMap<EDataFormat, TString> InputFormatDescriptions = {
+    THashMap<EDataFormat, TString> DefaultInputFormatDescriptions = {
+        { EDataFormat::Json, "Input in json format, to set binary string encoding use --input-binary-strings option" },
         { EDataFormat::JsonUnicode, "Input in json format, binary strings are decoded with unicode characters" },
         { EDataFormat::JsonBase64, "Input in json format, binary strings are decoded with base64" },
         { EDataFormat::Csv, "Input in csv format" },
         { EDataFormat::Tsv, "Input in tsv format" },
     };
 
-    THashMap<EDataFormat, TString> StdinFormatDescriptions = {
-        { EDataFormat::JsonUnicode, "Parameter names and values in json unicode format" },
-        { EDataFormat::JsonBase64, "Parameter names and values in json unicode format, binary string parameter values are base64-encoded" },
-        { EDataFormat::Csv, "Parameter names and values in csv format" },
-        { EDataFormat::Tsv, "Parameter names and values in tsv format" },
-        { EDataFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
-                                            "processing in accordance to \"batch\" option" },
-        { EDataFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"stdin-par\" option" },
-        { EDataFormat::NoFraming, "Data from stdin is taken as a single set of parameters" },
+    THashMap<EFramingFormat, TString> InputFramingDescriptions = {
+        { EFramingFormat::NewlineDelimited, "Newline character delimits parameter sets on the input and triggers "
+                                            "processing in accordance to \"--input-batch\" option" },
+        { EFramingFormat::NoFraming, "Data from input is taken as a single set of parameters" },
+    };
+
+    THashMap<EBinaryStringEncodingFormat, TString> BinaryStringEncodingFormatDescriptions = {
+        { EBinaryStringEncodingFormat::Unicode, "Every byte in binary strings that is not a printable ASCII symbol (codes 32-126) should be encoded as utf-8" },
+        { EBinaryStringEncodingFormat::Base64, "Binary strings should be fully encoded with base64" },
     };
 
     THashMap<EDataFormat, TString> FormatDescriptions = {
         { EDataFormat::Pretty, "Human readable output" },
         { EDataFormat::PrettyTable, "Human readable table output" },
-        { EDataFormat::Json, "Output in json format" },
-        { EDataFormat::JsonUnicode, "Output in json format, binary strings are encoded with unicode characters. "
-                                      "Every row is a separate json on a separate line." },
-        { EDataFormat::JsonUnicodeArray, "Output in json format, binary strings are encoded with unicode characters. "
+        { EDataFormat::Json, "Json format" },
+        { EDataFormat::JsonUnicode, "Json format, binary strings are encoded with unicode characters." },
+        { EDataFormat::JsonUnicodeArray, "Json format, binary strings are encoded with unicode characters. "
                                            "Every resultset is a json array of rows. "
                                            "Every row is a separate json on a separate line." },
-        { EDataFormat::JsonBase64, "Output in json format, binary strings are encoded with base64. "
-                                     "Every row is a separate json on a separate line." },
-        { EDataFormat::JsonBase64Simplify, "Output in json format, binary strings are encoded with base64. "
-                                     "Every row is a separate json on a separate line. " 
-                                     "Output only basic information about plan." },
-        { EDataFormat::JsonBase64Array, "Output in json format, binary strings are encoded with base64. "
+        { EDataFormat::JsonBase64, "Json format, binary strings are encoded with base64." },
+        { EDataFormat::JsonBase64Simplify, "Json format, binary strings are encoded with base64. "
+                                     "Only basic information about plan." },
+        { EDataFormat::JsonBase64Array, "Json format, binary strings are encoded with base64. "
                                            "Every resultset is a json array of rows. "
                                            "Every row is a separate json on a separate line." },
-        { EDataFormat::JsonRawArray, "Output in json format, binary strings are not encoded."
+        { EDataFormat::JsonRawArray, "Json format, binary strings are not encoded."
                                         "Every resultset is a json array of rows. "
                                         "Every row is a separate binary data on a separate line"},
-        { EDataFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
-        { EDataFormat::Csv, "Output in csv format" },
-        { EDataFormat::Tsv, "Output in tsv format" },
-        { EDataFormat::Parquet, "Output in parquet format" },
+        { EDataFormat::ProtoJsonBase64, "Protobuf in json format, binary strings are encoded with base64" },
+        { EDataFormat::Csv, "CSV format" },
+        { EDataFormat::Tsv, "TSV format" },
+        { EDataFormat::Parquet, "Parquet format" },
     };
 
     THashMap<EMessagingFormat, TString> MessagingFormatDescriptions = {
@@ -90,69 +89,153 @@ void TCommandWithResponseHeaders::PrintResponseHeaderPretty(const TStatus& statu
 
 const TString TCommandWithResponseHeaders::ResponseHeadersHelp = "Show response metadata for ydb call";
 
+
+bool TCommandWithFormat::IsIoCommand(){
+    return HasInput() && HasOutput();
+}
+
+bool TCommandWithFormat::HasInput() {
+    return false;
+}
+
+bool TCommandWithFormat::HasOutput() {
+    return false;
+}
+
+void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config, 
+                                         const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
+    TStringStream description;
+    description << "Input format. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
+        "Couldn't find default input format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+    auto& inputFormatDescriptions = GetInputFormatDescriptions();
+    for (const auto& format : allowedFormats) {
+        auto findResult = inputFormatDescriptions.find(format);
+        Y_ABORT_UNLESS(findResult != inputFormatDescriptions.end(),
+            "Couldn't find description for %s input format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
+        Y_ABORT_UNLESS(!AllowedInputFormats.contains(format),
+            "%s input format is added twice", (TStringBuilder() << format).c_str());
+        AllowedInputFormats.insert(format);
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        description << Endl << "Use -hh option to see all options relevant to input format.";
+    }
+    config.Opts->AddLongOption("input-format", description.Str())
+        .RequiredArgument("STRING").StoreResult(&InputFormat);
+}
+
+void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
+        const TVector<EFramingFormat>& allowedFormats, EFramingFormat defaultFormat) {
+    TStringStream description;
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
+        "Couldn't find default framing format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+    description << "Input framing format. Defines how parameter sets are delimited on the input. Available options: ";
+    for (const auto& format : allowedFormats) {
+        auto findResult = InputFramingDescriptions.find(format);
+        Y_ABORT_UNLESS(findResult != InputFramingDescriptions.end(),
+                 "Couldn't find description for %s framing format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+                    << "\n    " << findResult->second;
+        Y_ABORT_UNLESS(!AllowedInputFramingFormats.contains(format),
+            "%s input framing format is added twice", (TStringBuilder() << format).c_str());
+        AllowedInputFramingFormats.insert(format);
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    auto& inputFraming = config.Opts->AddLongOption("input-framing", description.Str())
+            .RequiredArgument("STRING").StoreResult(&InputFramingFormat);
+    if (config.HelpCommandVerbosiltyLevel <= 1) {
+        inputFraming.Hidden();
+    }
+}
+
+void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TConfig& config,
+        const TVector<EBinaryStringEncodingFormat>& allowedFormats, EBinaryStringEncodingFormat defaultFormat) {
+    TStringStream description;
+    description << "Input binary strings encoding format. Sets how binary strings in the input should be interterpreted. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
+        "Couldn't find default binary string format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+    for (const auto& format : allowedFormats) {
+        auto findResult = BinaryStringEncodingFormatDescriptions.find(format);
+        Y_ABORT_UNLESS(findResult != BinaryStringEncodingFormatDescriptions.end(),
+            "Couldn't find description for %s binary string format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
+        Y_ABORT_UNLESS(!AllowedBinaryStringEncodingFormats.contains(format),
+            "%s binary string format is added twice", (TStringBuilder() << format).c_str());
+        AllowedBinaryStringEncodingFormats.insert(format);
+    }
+    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
+    config.Opts->AddLongOption("input-binary-strings", description.Str())
+
+        .RequiredArgument("STRING").StoreResult(&InputBinaryStringEncodingFormat);
+}
+
+void TCommandWithInput::AddLegacyInputFormats(TClientCommand::TConfig& config, const TString& legacyName,
+        const TVector<TString>& newNames, const TVector<EDataFormat>& allowedFormats) {
+    for (const auto& format : allowedFormats) {
+        Y_ABORT_UNLESS(!AllowedInputFormats.contains(format),
+            "%s legacy input format is already added to allowed input formats", (TStringBuilder() << format).c_str());
+        AllowedInputFormats.insert(format);
+    }
+    config.Opts->AddLongOption(legacyName)
+            .RequiredArgument("STRING").AppendTo(&LegacyInputFormats)
+            .Hidden();
+    for (const auto& newName : newNames) {
+        config.Opts->MutuallyExclusive(legacyName, newName);
+    }
+}
+
+void TCommandWithInput::AddLegacyJsonInputFormats(TClientCommand::TConfig& config) {
+    AddInputBinaryStringEncodingFormats(config, {
+        EBinaryStringEncodingFormat::Unicode,
+        EBinaryStringEncodingFormat::Base64,
+    });
+    for (const auto& format : { EDataFormat::JsonUnicode, EDataFormat::JsonBase64}) {
+        Y_ABORT_UNLESS(!AllowedInputFormats.contains(format),
+            "%s legacy input format is already added to allowed input formats", (TStringBuilder() << format).c_str());
+        AllowedInputFormats.insert(format);
+    }
+    config.Opts->AddLongOption("input-format")
+        .RequiredArgument("STRING").StoreResult(&InputFormat)
+        .Hidden();
+    config.Opts->MutuallyExclusive("input-format", "input-binary-strings");
+}
+
+THashMap<EDataFormat, TString>& TCommandWithInput::GetInputFormatDescriptions() {
+    return DefaultInputFormatDescriptions;
+}
+
+bool TCommandWithInput::HasInput() {
+    return true;
+}
+
+void TCommandWithInput::AddInputFileOption(TClientCommand::TConfig& config, bool allowMultiple,
+        const TString& description) {
+    AllowMultipleInputFiles = allowMultiple;
+    config.Opts->AddLongOption('i', "input-file", description)
+        .RequiredArgument("PATH").AppendTo(&InputFiles);
+}
+
 // Deprecated
-void TCommandWithFormat::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
+void TCommandWithOutput::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
     config.Opts->AddLongOption("json", description).NoArgument()
         .StoreValue(&OutputFormat, EDataFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
         .Hidden();
 }
 
-void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, 
-                                         const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
-    TStringStream description;
-    description << "Input format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
-        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
-    for (const auto& format : allowedFormats) {
-        auto findResult = InputFormatDescriptions.find(format);
-        Y_ABORT_UNLESS(findResult != InputFormatDescriptions.end(),
-            "Couldn't find description for %s input format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-            << "\n    " << findResult->second;
-    }
-    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("input-format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&InputFormat);
-    AllowedInputFormats = allowedFormats;
-}
-
-void TCommandWithFormat::AddStdinFormats(TClientCommand::TConfig &config, const TVector<EDataFormat>& allowedStdinFormats,
-                                         const TVector<EDataFormat>& allowedFramingFormats) {
-    TStringStream description;
-    description << "Stdin parameters format and framing. Specify this option twice to select both.\n"
-                << "1. Parameters format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    for (const auto& format : allowedStdinFormats) {
-        auto findResult = StdinFormatDescriptions.find(format);
-        Y_ABORT_UNLESS(findResult != StdinFormatDescriptions.end(),
-                 "Couldn't find description for %s stdin format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-                    << "\n    " << findResult->second;
-    }
-    description << "\nDefault: " << colors.CyanColor() << "\"json-unicode\"" << colors.OldColor() << ".";
-    description << "\n2. Framing: defines how parameter sets are delimited on the stdin. Available options: ";
-    for (const auto& format : allowedFramingFormats) {
-        auto findResult = StdinFormatDescriptions.find(format);
-        Y_ABORT_UNLESS(findResult != StdinFormatDescriptions.end(),
-                 "Couldn't find description for %s framing format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-                    << "\n    " << findResult->second;
-    }
-    description << "\nDefault: " << colors.CyanColor() << "\"no-framing\"" << colors.OldColor() << ".";
-    config.Opts->AddLongOption("stdin-format", description.Str())
-            .RequiredArgument("STRING").AppendTo(&StdinFormats);
-    AllowedStdinFormats = allowedStdinFormats;
-    AllowedFramingFormats = allowedFramingFormats;
-}
-
-void TCommandWithFormat::AddOutputFormats(TClientCommand::TConfig& config, 
+void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config, 
                                     const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Output format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(), 
-        "Couldn't find default format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
+        "Couldn't find default output format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
         auto findResult = FormatDescriptions.find(format);
         Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
@@ -166,7 +249,78 @@ void TCommandWithFormat::AddOutputFormats(TClientCommand::TConfig& config,
     AllowedFormats = allowedFormats;
 }
 
-void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats) {
+void TCommandWithInput::ParseInputFormats() {
+    if (InputFormat != EDataFormat::Default
+            && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
+        throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
+    }
+
+    if (!LegacyInputFormats.empty()) {
+        for (const auto& format : LegacyInputFormats) {
+            switch (format) {
+                case EDataFormat::NoFraming:
+                case EDataFormat::NewlineDelimited:
+                {
+                    EFramingFormat framingFormat = format == EDataFormat::NoFraming ? EFramingFormat::NoFraming : EFramingFormat::NewlineDelimited;
+                    if (AllowedInputFramingFormats.contains(framingFormat)) {
+                        if (InputFramingFormat != EFramingFormat::Default) {
+                            throw TMisuseException() << "Input framing format can be set only once";
+                        }
+                        InputFramingFormat = framingFormat;
+                    } else {
+                        throw TMisuseException() << "Stdin framing format " << format << " is not allowed.";
+                    }
+                    break;
+                }
+                default:
+                    if (AllowedInputFormats.contains(format)) {
+                        if (InputFormat != EDataFormat::Default) {
+                            throw TMisuseException() << "Stdin format " << format << " is not allowed.";
+                        }
+                        InputFormat = format;
+                    }
+                    break;
+            }
+        }
+    }
+
+    switch (InputBinaryStringEncodingFormat) {
+        case EBinaryStringEncodingFormat::Default:
+            switch(InputFormat) {
+                case EDataFormat::JsonBase64:
+                    InputBinaryStringEncoding = EBinaryStringEncoding::Base64;
+                    break;
+                case EDataFormat::JsonUnicode:
+                default:
+                    InputBinaryStringEncoding = EBinaryStringEncoding::Unicode;
+                    break;
+            }
+            break;
+        case EBinaryStringEncodingFormat::Unicode:
+            InputBinaryStringEncoding = EBinaryStringEncoding::Unicode;
+            break;
+        case EBinaryStringEncodingFormat::Base64:
+            InputBinaryStringEncoding = EBinaryStringEncoding::Base64;
+            break;
+        default:
+            throw TMisuseException() << "Unknown binary string encoding format: " << InputBinaryStringEncodingFormat;
+    }
+
+    if (InputFiles.size() > 1 && !AllowMultipleInputFiles) {
+        throw TMisuseException() << "Multiple input files are not allowed for this command";
+    }
+}
+
+void TCommandWithOutput::ParseOutputFormats() {
+    if (OutputFormat == EDataFormat::Default || DeprecatedOptionUsed) {
+        return;
+    }
+    if (std::find(AllowedFormats.begin(), AllowedFormats.end(), OutputFormat) == AllowedFormats.end()) {
+        throw TMisuseException() << "Output format " << OutputFormat << " is not available for this command";
+    }
+}
+
+void TCommandWithMessagingFormat::AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats) {
     TStringStream description;
     description << "Client-side format. Available options: ";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -183,59 +337,12 @@ void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, co
     AllowedMessagingFormats = allowedFormats;
 }
 
-void TCommandWithFormat::ParseFormats() {
-    if (InputFormat != EDataFormat::Default
-            && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
-        throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
-    }
-
-    if (!StdinFormats.empty()) {
-        for (const auto& format : AllowedInputFormats) {
-            Y_ABORT_UNLESS(std::find(AllowedStdinFormats.begin(), AllowedStdinFormats.end(), format) != AllowedStdinFormats.end(), 
-                     "Allowed stdin formats should contain all allowed input formats");
-        }
-        for (const auto& format : StdinFormats) {
-            if (format == EDataFormat::Default) {
-                IsStdinFormatSet = true;
-                IsFramingFormatSet = true;
-            } else if (std::find(AllowedStdinFormats.begin(), AllowedStdinFormats.end(), format) != AllowedStdinFormats.end()) {
-                if (IsStdinFormatSet) {
-                    throw TMisuseException() << "Formats " << StdinFormat << " and " << format
-                                             << " are mutually exclusive, choose only one of them.";
-                }
-                StdinFormat = format;
-                IsStdinFormatSet = true;
-            } else if (std::find(AllowedFramingFormats.begin(), AllowedFramingFormats.end(), format) != AllowedFramingFormats.end()) {
-                if (IsFramingFormatSet) {
-                    throw TMisuseException() << "Formats " << FramingFormat << " and " << format
-                                             << " are mutually exclusive, choose only one of them.";
-                }
-                FramingFormat = format;
-                IsFramingFormatSet = true;
-            } else {
-                throw TMisuseException() << "Stdin format " << format << " is not available for this command";
-            }
-        }
-        if (!IsStdinFormatSet) {
-            StdinFormat = InputFormat;
-        }
-    }
-
-    if (OutputFormat == EDataFormat::Default || DeprecatedOptionUsed) {
-        return;
-    }
-    if (std::find(AllowedFormats.begin(), AllowedFormats.end(), OutputFormat) == AllowedFormats.end()) {
-        throw TMisuseException() << "Output format " << OutputFormat << " is not available for this command";
-    }
-}
-
-void TCommandWithFormat::ParseMessagingFormats() {
+void TCommandWithMessagingFormat::ParseMessagingFormats() {
     if (MessagingFormat != EMessagingFormat::SingleMessage
             && std::find(AllowedMessagingFormats.begin(), AllowedMessagingFormats.end(), MessagingFormat) == AllowedMessagingFormats.end()) {
         throw TMisuseException() << "Messaging format " << MessagingFormat << " is not available for this command";
     }
 }
-
 
 void TQueryPlanPrinter::Print(const TString& plan) {
     switch (Format) {
@@ -485,15 +592,18 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else if (key == "E-Size") {
                     eSize = FormatPrettyTableDouble(value.GetString());
                 } else if (key != "Name") {
+                    std::string valueWithoutInnerVars = JsonToString(value);
+                    valueWithoutInnerVars = std::regex_replace(valueWithoutInnerVars, std::regex(R"((\b(item|state)\.\b))"), "");
+
                     if (key == "SsaProgram") {
                         // skip this attribute
                     }
                     else if (key == "Predicate" || key == "Condition" || key == "SortBy") {
-                        info.emplace_back(TStringBuilder() << ReplaceAll(ReplaceAll(JsonToString(value), "item.", ""), "state.", ""));
+                        info.emplace_back(TStringBuilder() << valueWithoutInnerVars);
                     } else if (key == "Table") {
-                        info.insert(info.begin(), TStringBuilder() << colors.LightYellow() << key << colors.Default() << ":" << colors.LightGreen() << " " << ReplaceAll(ReplaceAll(JsonToString(value), "item.", ""), "state.", "") << colors.Default());
+                        info.insert(info.begin(), TStringBuilder() << colors.LightYellow() << key << colors.Default() << ":" << colors.LightGreen() << " " << valueWithoutInnerVars << colors.Default());
                     } else {
-                        info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << ReplaceAll(ReplaceAll(JsonToString(value), "item.", ""), "state.", ""));
+                        info.emplace_back(TStringBuilder() << colors.LightYellow() << key << colors.Default() << ": " << valueWithoutInnerVars);
                     }
                 }
             }

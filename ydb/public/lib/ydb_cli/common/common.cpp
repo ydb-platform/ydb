@@ -59,7 +59,7 @@ void TProfileConfig::ReadFromFile() {
     InMemory = true;
 }
 
-bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& output, bool allowEmpty) {
+TFsPath GetFsPath(TString& filePath) {
     if (filePath.StartsWith("~")) {
         filePath = HomeDir + filePath.substr(1);
     }
@@ -68,6 +68,11 @@ bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& o
         correctpath(filePath);
         fsPath = TFsPath(filePath);
     }
+    return fsPath;
+}
+
+bool ReadFromFileIfExists(TString& filePath, const TString& fileName, TString& output, bool allowEmpty) {
+    TFsPath fsPath = GetFsPath(filePath);
     TString content;
     if (fsPath.Exists()) {
         content = Strip(TUnbufferedFileInput(fsPath).ReadAll());
@@ -98,6 +103,14 @@ TString ReadFromFile(TString& filePath, const TString& fileName, bool allowEmpty
 TString ReadFromFile(const TString& filePath, const TString& fileName, bool allowEmpty) {
     TString fpCopy = filePath;
     return ReadFromFile(fpCopy, fileName, allowEmpty);
+}
+
+TFsPath GetExistingFsPath(TString& filePath, const TString& fileName) {
+    TFsPath fsPath = GetFsPath(filePath);
+    if (fsPath.Exists()) {
+        return fsPath;
+    }
+    throw yexception() << "Can't find " << fileName << " file \"" << filePath << "\".";
 }
 
 TString InputPassword() {

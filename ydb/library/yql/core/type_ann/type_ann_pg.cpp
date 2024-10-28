@@ -1629,7 +1629,7 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
             args[2] = ConvertToMultiLambda(lambda, ctx.Expr);
         }
 
-        output = ctx.Expr.NewCallable(input->Pos(), input->Content().substr(0, input->Content().Size() - 5), std::move(args));
+        output = ctx.Expr.NewCallable(input->Pos(), input->Content().substr(0, input->Content().size() - 5), std::move(args));
         //ctx.Expr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
         //return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
         return IGraphTransformer::TStatus::Repeat;
@@ -2505,8 +2505,8 @@ ui64 CalculateExprHash(const TExprNode& root, TNodeMap<ui64>& visited) {
     ui64 hash = 0;
     switch (root.Type()) {
     case TExprNode::EType::Callable:
-        hash = CseeHash(root.Content().Size(), hash);
-        hash = CseeHash(root.Content().Data(), root.Content().Size(), hash);
+        hash = CseeHash(root.Content().size(), hash);
+        hash = CseeHash(root.Content().data(), root.Content().size(), hash);
         [[fallthrough]];
     case TExprNode::EType::List:
         hash = CseeHash(root.ChildrenSize(), hash);
@@ -2516,8 +2516,8 @@ ui64 CalculateExprHash(const TExprNode& root, TNodeMap<ui64>& visited) {
 
         break;
     case TExprNode::EType::Atom:
-        hash = CseeHash(root.Content().Size(), hash);
-        hash = CseeHash(root.Content().Data(), root.Content().Size(), hash);
+        hash = CseeHash(root.Content().size(), hash);
+        hash = CseeHash(root.Content().data(), root.Content().size(), hash);
         hash = CseeHash(root.GetFlagsToCompare(), hash);
         break;
     case TExprNode::EType::World:
@@ -2886,7 +2886,7 @@ bool ReplaceProjectionRefs(TExprNode::TPtr& lambda, const TStringBuf& scope, con
                         return lambda.TailPtr();
                     }
 
-                    if (!result || alias.Empty()) {
+                    if (!result || alias.empty()) {
                         return ctx.Builder(node->Pos())
                             .Callable("PgColumnRef")
                                 .Atom(0, column)

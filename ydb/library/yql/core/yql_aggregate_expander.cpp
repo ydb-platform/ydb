@@ -32,7 +32,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     auto settings = Node->Child(3);
 
     bool allTraitsCollected = CollectTraits();
-    // YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here."); // TODO(YQ-3661): uncomment
+    YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here.");
 
     HaveDistinct = AnyOf(AggregatedColumns->ChildrenList(),
         [](const auto& child) { return child->ChildrenSize() == 3; });
@@ -699,7 +699,8 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     } else {
         stream = AggList;
     }
-    auto blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false);
+    
+    TExprNode::TPtr blocks = MakeInputBlocks(stream, keyIdxs, outputColumns, aggs, false, false);
     if (!blocks) {
         return nullptr;
     }
@@ -708,22 +709,30 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
     if (hashed) {
         aggWideFlow = Ctx.Builder(Node->Pos())
             .Callable("WideFromBlocks")
-                .Callable(0, "BlockCombineHashed")
-                    .Add(0, blocks)
-                    .Callable(1, "Void")
+                .Callable(0, "ToFlow")
+                    .Callable(0, "BlockCombineHashed")
+                        .Callable(0, "FromFlow")
+                            .Add(0, blocks)
+                            .Seal()
+                        .Callable(1, "Void")
+                        .Seal()
+                        .Add(2, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                        .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
                     .Seal()
-                    .Add(2, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                    .Add(3, Ctx.NewList(Node->Pos(), std::move(aggs)))
                 .Seal()
             .Seal()
             .Build();
     } else {
         aggWideFlow = Ctx.Builder(Node->Pos())
-            .Callable("BlockCombineAll")
-                .Add(0, blocks)
-                .Callable(1, "Void")
+            .Callable("ToFlow")
+                .Callable(0, "BlockCombineAll")
+                    .Callable(0, "FromFlow")
+                        .Add(0, blocks)
+                        .Seal()
+                    .Callable(1, "Void")
+                    .Seal()
+                    .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
                 .Seal()
-                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
             .Seal()
             .Build();
     }
@@ -2523,9 +2532,20 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Seal()
                 .Build();
 
+            auto name = TString(originalTrait->ChildPtr(0)->Content());
+            if (name.StartsWith("pg_")) {
+                auto func = name.substr(3);
+                TVector<ui32> argTypes;
+                bool needRetype = false;
+                auto status = ExtractPgTypesFromMultiLambda(originalTrait->ChildRef(2), argTypes, needRetype, Ctx);
+                YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+                const NPg::TAggregateDesc& aggDesc = NPg::LookupAggregation(TString(func), argTypes);
+                name = "pg_" + aggDesc.Name + "#" + ToString(aggDesc.AggId);
+            }
+
             mergeTraits.push_back(Ctx.Builder(Node->Pos())
                 .Callable(many ? "AggApplyManyState" : "AggApplyState")
-                    .Add(0, originalTrait->ChildPtr(0))
+                    .Atom(0, name)
                     .Add(1, extractorTypeNode)
                     .Add(2, extractor)
                     .Add(3, originalExtractorTypeNode)
@@ -2880,10 +2900,14 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
     TExprNode::TPtr aggBlocks;
     if (!isMany) {
         aggBlocks = Ctx.Builder(Node->Pos())
-            .Callable("BlockMergeFinalizeHashed")
-                .Add(0, blocks)
-                .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+            .Callable("ToFlow")
+                .Callable(0, "BlockMergeFinalizeHashed")
+                    .Callable(0, "FromFlow")
+                        .Add(0, blocks)
+                    .Seal()
+                    .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                    .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                .Seal()
             .Seal()
             .Build();
     } else {
@@ -2891,12 +2915,16 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
         YQL_ENSURE(manyStreamsSetting, "Missing many_streams setting");
 
         aggBlocks = Ctx.Builder(Node->Pos())
-            .Callable("BlockMergeManyFinalizeHashed")
-                .Add(0, blocks)
-                .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
-                .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
-                .Atom(3, ToString(streamIdxColumn))
-                .Add(4, manyStreamsSetting->TailPtr())
+            .Callable("ToFlow")
+                .Callable(0, "BlockMergeManyFinalizeHashed")
+                    .Callable(0, "FromFlow")
+                        .Add(0, blocks)
+                    .Seal()
+                    .Add(1, Ctx.NewList(Node->Pos(), std::move(keyIdxs)))
+                    .Add(2, Ctx.NewList(Node->Pos(), std::move(aggs)))
+                    .Atom(3, ToString(streamIdxColumn))
+                    .Add(4, manyStreamsSetting->TailPtr())
+                .Seal()
             .Seal()
             .Build();
     }

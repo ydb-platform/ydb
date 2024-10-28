@@ -8,6 +8,7 @@ PY_SRCS(
     docker_compose.py
     generate.py
     log.py
+    one_time_waiter.py
     schema.py
     settings.py
     sql.py

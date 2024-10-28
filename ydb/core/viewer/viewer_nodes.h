@@ -28,6 +28,7 @@ enum class ENodeFields : ui8 {
     Version,
     Uptime,
     Memory,
+    MemoryDetailed,
     CPU,
     LoadAverage,
     Missing,
@@ -260,11 +261,18 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         void CalcCpuUsage() {
-            float usage = 0;
-            int threads = 0;
-            for (const auto& pool : SystemState.GetPoolStats()) {
-                usage += pool.GetUsage() * pool.GetThreads();
-                threads += pool.GetThreads();
+            float usage = SystemState.GetCoresUsed();
+            int threads = SystemState.GetCoresTotal();
+            if (threads == 0) {
+                for (const auto& pool : SystemState.GetPoolStats()) {
+                    ui32 usageThreads = pool.GetLimit() ? pool.GetLimit() : pool.GetThreads();
+                    usage += pool.GetUsage() * usageThreads;
+                    if (pool.GetName() != "IO") {
+                        threads += pool.GetThreads();
+                    }
+                }
+                SystemState.SetCoresUsed(usage);
+                SystemState.SetCoresTotal(threads);
             }
             CpuUsage = usage / threads;
         }
@@ -482,6 +490,9 @@ class TJsonNodes : public TViewerPipeClient {
                 case ENodeFields::Version:
                     groupName = GetVersionForGroup();
                     break;
+                case ENodeFields::SystemState:
+                    groupName = NKikimrWhiteboard::EFlag_Name(GetOverall());
+                    break;
                 default:
                     break;
             }
@@ -507,6 +518,8 @@ class TJsonNodes : public TViewerPipeClient {
                     return MissingDisks;
                 case ENodeFields::Uptime:
                     return UptimeSeconds;
+                case ENodeFields::SystemState:
+                    return static_cast<int>(GetOverall());
                 default:
                     return TString();
             }
@@ -586,6 +599,7 @@ class TJsonNodes : public TViewerPipeClient {
         { ENodeFields::LoadAverage, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Database, TFieldsType().set(+ENodeFields::SystemState) },
         { ENodeFields::Missing, TFieldsType().set(+ENodeFields::PDisks) },
+        { ENodeFields::MemoryDetailed, TFieldsType().set(+ENodeFields::SystemState) },
     };
 
     bool FieldsNeeded(TFieldsType fields) const {
@@ -634,6 +648,8 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::Uptime;
         } else if (field == "Memory") {
             result = ENodeFields::Memory;
+        } else if (field == "MemoryDetailed") {
+            result = ENodeFields::MemoryDetailed;
         } else if (field == "CPU") {
             result = ENodeFields::CPU;
         } else if (field == "LoadAverage") {
@@ -1104,18 +1120,19 @@ public:
                 case ENodeFields::DiskSpaceUsage:
                 case ENodeFields::Missing:
                 case ENodeFields::Version:
+                case ENodeFields::SystemState:
                     GroupCollection();
                     SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; }, true);
                     NeedGroup = false;
                     break;
                 case ENodeFields::NodeInfo:
-                case ENodeFields::SystemState:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
                 case ENodeFields::SubDomainKey:
                 case ENodeFields::COUNT:
                 case ENodeFields::Memory:
+                case ENodeFields::MemoryDetailed:
                 case ENodeFields::CPU:
                 case ENodeFields::LoadAverage:
                 case ENodeFields::DisconnectTime:
@@ -1157,6 +1174,7 @@ public:
                     NeedSort = false;
                     break;
                 case ENodeFields::Memory:
+                case ENodeFields::MemoryDetailed:
                     SortCollection(NodeView, [](const TNode* node) { return node->SystemState.GetMemoryUsed(); }, ReverseSort);
                     NeedSort = false;
                     break;
@@ -1180,8 +1198,11 @@ public:
                     SortCollection(NodeView, [](const TNode* node) { return node->Database; }, ReverseSort);
                     NeedSort = false;
                     break;
-                case ENodeFields::NodeInfo:
                 case ENodeFields::SystemState:
+                    SortCollection(NodeView, [](const TNode* node) { return static_cast<int>(node->GetOverall()); }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::NodeInfo:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
@@ -1709,6 +1730,20 @@ public:
         }
     }
 
+    template<>
+    void InitWhiteboardRequest(NKikimrWhiteboard::TEvSystemStateRequest* request) {
+        if (AllWhiteboardFields) {
+            request->AddFieldsRequired(-1);
+        } else {
+            request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+            request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
+            if (FieldsRequired.test(+ENodeFields::MemoryDetailed)) {
+                request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+            }
+        }
+    }
+
     void SendWhiteboardSystemAndTabletsBatch(TNodeBatch& batch) {
         TNodeId nodeId = OffloadMerge ? batch.ChooseNodeId() : 0;
         if (batch.HasStaticNodes && (FieldsNeeded(FieldsVDisks) || FieldsNeeded(FieldsPDisks))) {
@@ -1798,6 +1833,7 @@ public:
     void ProcessWhiteboard() {
         if (FieldsNeeded(FieldsSystemState)) {
             TInstant now = TInstant::Now();
+            bool hasMemoryDetailed = false;
             std::unordered_set<TNodeId> removeNodes;
             for (const auto& [responseNodeId, response] : SystemViewerResponse) {
                 if (response.IsOk()) {
@@ -1818,6 +1854,7 @@ public:
                                 }
                             }
                         }
+                        hasMemoryDetailed |= systemInfo.HasMemoryStats();
                     }
                     for (auto nodeId : nodesWithoutData) {
                         TNode* node = FindNode(nodeId);
@@ -1845,6 +1882,7 @@ public:
                                 }
                             }
                         }
+                        hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
                     TNode* node = FindNode(nodeId);
@@ -1860,6 +1898,9 @@ public:
             }
             FieldsAvailable |= FieldsSystemState;
             FieldsAvailable.set(+ENodeFields::Database);
+            if (hasMemoryDetailed) {
+                FieldsAvailable.set(+ENodeFields::MemoryDetailed);
+            }
         }
         if (FieldsNeeded(FieldsTablets)) {
             for (auto& [nodeId, response] : TabletViewerResponse) {
@@ -2477,12 +2518,13 @@ public:
                           * `Rack`
                           * `Version`
                           * `Uptime`
-                          * `Memory`
+                          * `Memory` / `MemoryDetailed`
                           * `CPU`
                           * `LoadAverage`
                           * `Missing`
                           * `DiskSpaceUsage`
                           * `Database`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: group
@@ -2499,6 +2541,7 @@ public:
                           * `Missing`
                           * `Uptime`
                           * `Version`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: filter_group_by
@@ -2515,6 +2558,7 @@ public:
                           * `Missing`
                           * `Uptime`
                           * `Version`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: filter_group
@@ -2538,6 +2582,7 @@ public:
                           * `Version`
                           * `Uptime`
                           * `Memory`
+                          * `MemoryDetailed`
                           * `CPU`
                           * `LoadAverage`
                           * `Missing`

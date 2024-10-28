@@ -199,6 +199,7 @@ private:
     EStage Stage = EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
+    const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
 
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
@@ -219,7 +220,6 @@ protected:
 
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 
-    const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
     std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
@@ -288,7 +288,7 @@ public:
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();
-        Y_ABORT_UNLESS(result.size());
+//        Y_ABORT_UNLESS(result.size());
         return result;
     }
     virtual TString TypeString() const = 0;

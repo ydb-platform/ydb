@@ -60,6 +60,8 @@ public:
 
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
+            GetDefaultPqEndpoint(),
+            GetDefaultPqDatabase(),
             Config,
             RowDispatcherActorId,
             0,
@@ -98,8 +100,8 @@ public:
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
         settings.AddColumns("value");
-        settings.AddColumnTypes("Uint64");
-        settings.AddColumnTypes("String");
+        settings.AddColumnTypes("[DataType; Uint64]");
+        settings.AddColumnTypes("[DataType; String]");
         if (!emptyPredicate) {
             settings.SetPredicate("WHERE true");
         }
@@ -385,7 +387,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto source1 = BuildSource(topicName);
         auto source2 = BuildSource(topicName);
         source2.AddColumns("field1");
-        source2.AddColumnTypes("String");
+        source2.AddColumnTypes("[DataType; String]");
 
         StartSession(ReadActorId1, source1);
         StartSession(ReadActorId2, source2);
@@ -393,7 +395,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         TString json1 = "{\"dt\":101,\"value\":\"value1\", \"field1\":\"field1\"}";
         TString json2 = "{\"dt\":102,\"value\":\"value2\", \"field1\":\"field2\"}";
 
-        Sleep(TDuration::Seconds(3));
         PQWrite({ json1, json2 }, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value1\"}", "{\"dt\":102,\"value\":\"value2\"}" });
@@ -401,7 +402,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         auto source3 = BuildSource(topicName);
         source3.AddColumns("field2");
-        source3.AddColumnTypes("String");
+        source3.AddColumnTypes("[DataType; String]");
         auto readActorId3 = Runtime.AllocateEdgeActor();
         StartSession(readActorId3, source3);
 

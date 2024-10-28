@@ -140,7 +140,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             }
             batchSlices.emplace_back(portionColumns, schemaDetails, Context.Counters.SplitterCounters);
         }
-        NArrow::NSplitter::TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
+        NArrow::NSplitter::TSimilarPacker slicer(PortionExpectedSize);
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;

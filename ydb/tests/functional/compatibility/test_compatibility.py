@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.library.common import yatest_common
+import yatest
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
@@ -10,7 +10,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 class TestCompatibility(object):
     @classmethod
     def setup_class(cls):
-        last_stable_path = yatest_common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+        last_stable_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
         binary_paths = [kikimr_driver_path(), last_stable_path]
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC, binary_paths=binary_paths))
         cls.cluster.start()

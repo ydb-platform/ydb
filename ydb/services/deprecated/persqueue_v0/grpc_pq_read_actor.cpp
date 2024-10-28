@@ -14,6 +14,8 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
+
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
 #include <util/string/strip.h>
@@ -655,6 +657,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     Session = session;
     ProtocolVersion = init.GetProtocolVersion();
     CommitsDisabled = init.GetCommitsDisabled();
+    UserAgent = init.GetVersion();
 
     if (ProtocolVersion >= NPersQueue::TReadRequest::ReadParamsInInit) {
         ReadSettingsInited = true;
@@ -835,6 +838,14 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
     }
 }
 
+void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", "pqv0")
+        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("user_agent", V1::CleanupCounterValueString(UserAgent))
+        ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
+}
 
 void TReadSessionActor::SetupCounters()
 {
@@ -864,6 +875,8 @@ void TReadSessionActor::SetupCounters()
     if (ProtocolVersion < NPersQueue::TReadRequest::Batching) {
         ++(*SessionsWithOldBatchingVersion);
     }
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 
@@ -1525,6 +1538,9 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
 
     Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
     i64 diff = formedResponse->Response.ByteSize();
+
+    BytesReadByUserAgent->Add(diff);
+
     const bool hasMessages = HasMessages(formedResponse->Response.GetBatchedData());
     if (hasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign read id " << ReadIdToResponse << " to read request " << formedResponse->Guid);

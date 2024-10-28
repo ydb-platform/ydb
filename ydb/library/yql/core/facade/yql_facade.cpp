@@ -312,6 +312,11 @@ TProgram::TProgram(
         QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
     } else if (QContext_.CanRead()) {
         Credentials_ = MakeIntrusive<TCredentials>();
+        Credentials_->SetUserCredentials({
+            .OauthToken = "REPLAY_OAUTH",
+            .BlackboxSessionIdCookie = "REPLAY_SESSIONID"
+        });
+
         for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
             auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
             if (item) {

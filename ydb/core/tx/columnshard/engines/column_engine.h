@@ -8,6 +8,7 @@
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
+#include <ydb/core/tx/columnshard/counters/common_data.h>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
@@ -263,6 +264,34 @@ protected:
     virtual void DoRegisterTable(const ui64 pathId) = 0;
 
 public:
+    class TSchemaInitializationData {
+    private:
+        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchema>, Schema);
+        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>, Diff);
+
+    public:
+        const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
+            AFL_VERIFY(Schema);
+            return *Schema;
+        }
+
+        TSchemaInitializationData(
+            const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, const std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>& diff)
+            : Schema(schema)
+            , Diff(diff) {
+            AFL_VERIFY(Schema || Diff);
+        }
+
+        TSchemaInitializationData(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+            if (info.HasSchema()) {
+                Schema = info.GetSchema();
+            }
+            if (info.HasDiff()) {
+                Diff = info.GetDiff();
+            }
+        }
+    };
+
     static ui64 GetMetadataLimit();
 
     virtual ~IColumnEngine() = default;
@@ -283,13 +312,16 @@ public:
         ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const = 0;
     virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual ui64 GetCompactionPriority(
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds, const std::optional<ui64> waitingPriority) noexcept = 0;
+    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot,
+    const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<ui64>& pathsToDrop) noexcept = 0;
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const {

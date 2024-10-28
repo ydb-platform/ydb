@@ -6,7 +6,7 @@ import time
 import pytest
 from hamcrest import assert_that, none, is_not, is_, raises
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_sqs_client_path, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
 from ydb.tests.library.sqs.test_base import TABLES_FORMAT_PARAMS
@@ -30,8 +30,8 @@ class SqsACLTest(KikimrSqsTestBase):
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
             try:
-                yatest_common.execute(cmd)
-            except yatest_common.ExecutionError as ex:
+                yatest.common.execute(cmd)
+            except yatest.common.ExecutionError as ex:
                 logging.debug("Modify permissions failed: {}. Retrying".format(ex))
                 retries_count -= 1
                 time.sleep(3)
@@ -49,8 +49,8 @@ class SqsACLTest(KikimrSqsTestBase):
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
             try:
-                execute = yatest_common.execute(cmd)
-            except yatest_common.ExecutionError as ex:
+                execute = yatest.common.execute(cmd)
+            except yatest.common.ExecutionError as ex:
                 logging.debug("List permissions failed: {}. Retrying".format(ex))
                 retries_count -= 1
                 time.sleep(3)

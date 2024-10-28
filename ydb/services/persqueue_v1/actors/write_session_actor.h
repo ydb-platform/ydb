@@ -61,8 +61,8 @@ class TWriteSessionActor
     // Codec ID size in bytes
     static constexpr ui32 CODEC_ID_SIZE = 1;
 
-    //TODO: get user agent from headers
-    static constexpr auto UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
+    TString UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
+    TString SdkBuildInfo;
     static constexpr auto ProtoName = UseMigrationProtocol ? "v1" : "topic";
 
 public:
@@ -162,8 +162,9 @@ private:
     void PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx);
     void SendWriteRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
 
+    void SetupBytesWrittenByUserAgentCounter(const TString& topicPath);
     void SetupCounters();
-    void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
+    void SetupCounters(const TActorContext& ctx, const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
 private:
     void CreatePartitionWriterCache(const TActorContext& ctx);
@@ -234,6 +235,8 @@ private:
 
     NKikimr::NPQ::TMultiCounter Errors;
     std::vector<NKikimr::NPQ::TMultiCounter> CodecCounters;
+
+    NYdb::NPersQueue::TCounterPtr BytesWrittenByUserAgent;
 
     TIntrusiveConstPtr<NACLib::TUserToken> Token;
     TString Auth;

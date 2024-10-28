@@ -338,6 +338,8 @@ namespace {
         Cout << Endl << "MeteringMode: " << (TStringBuilder() << topicDescription.GetMeteringMode());
         if (!topicDescription.GetSupportedCodecs().empty()) {
             Cout << Endl << "SupportedCodecs: " << FormatCodecs(topicDescription.GetSupportedCodecs()) << Endl;
+        } else {
+            Cout << Endl;
         }
     }
 
@@ -352,6 +354,8 @@ namespace {
                 Cout << Endl << "DownUtilizationPercent: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent();
                 Cout << Endl << "UpUtilizationPercent: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent();
                 Cout << Endl << "StabilizationWindowSeconds: " << topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds() << Endl;
+            } else {
+                Cout << Endl;
             }
         }
     }

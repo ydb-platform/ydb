@@ -61,6 +61,12 @@ public:
         Optimized = 1 /* "optimized" */
     };
 private:
+    ui64 PrecalculatedColumnRawBytes = 0;
+    ui64 PrecalculatedColumnBlobBytes = 0;
+    bool Precalculated = false;
+
+    void Precalculate();
+
     friend class TPortionInfoConstructor;
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
@@ -82,7 +88,7 @@ private:
     YDB_READONLY_DEF(std::vector<TIndexChunk>, Indexes);
     YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
     std::vector<TUnifiedBlobId> BlobIds;
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
@@ -127,9 +133,17 @@ private:
         }
     }
 public:
+    ui32 GetCompactionLevel() const {
+        return GetMeta().GetCompactionLevel();
+    }
+
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
+
+    ui64 GetChunksCount() const {
+        return Records.size() + Indexes.size();
+    }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(
         const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
@@ -280,7 +294,7 @@ public:
         return defaultTierName;
     }
 
-    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info);
+    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     std::vector<TPage> BuildPages() const;
@@ -482,8 +496,6 @@ public:
         return visible;
     }
 
-    std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;
-
     const NArrow::TReplaceKey& IndexKeyStart() const {
         return Meta.IndexKeyStart;
     }
@@ -593,10 +605,10 @@ public:
     }
 
     ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnRawBytes(const bool validation = true) const;
+    ui64 GetColumnRawBytes() const;
 
     ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
-    ui64 GetColumnBlobBytes(const bool validation = true) const;
+    ui64 GetColumnBlobBytes() const;
 
     ui64 GetTotalBlobBytes() const noexcept {
         return GetIndexBlobBytes() + GetColumnBlobBytes();
@@ -656,7 +668,7 @@ public:
             return DefaultRowsCount && !Data;
         }
 
-        std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildRecordBatch(const TColumnLoader& loader) const;
+        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
         NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
     };
 
@@ -684,7 +696,7 @@ public:
         }
 
         std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> AssembleForSeqAccess() const;
-        std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleAccessor() const;
+        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
     };
 
     class TPreparedBatchData {
@@ -743,7 +755,7 @@ public:
             , RowsCount(rowsCount) {
         }
 
-        std::shared_ptr<NArrow::TGeneralContainer> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
+        TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
     };
 
     class TColumnAssemblingInfo {

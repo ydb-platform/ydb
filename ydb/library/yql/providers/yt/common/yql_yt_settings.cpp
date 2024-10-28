@@ -54,7 +54,7 @@ void MediaValidator(const NYT::TNode& value) {
     }
 }
 
-TYtConfiguration::TYtConfiguration()
+TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -188,7 +188,7 @@ TYtConfiguration::TYtConfiguration()
             }
         });
     REGISTER_SETTING(*this, ExpirationDeadline)
-        .Lower(Now())
+        .Lower(typeCtx.QContext.CanRead() ? TInstant::Zero() : Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
         });
@@ -463,6 +463,17 @@ TYtConfiguration::TYtConfiguration()
             }
             return res;
         });
+    REGISTER_SETTING(*this, JobBlockInputSupportedTypes);
+    REGISTER_SETTING(*this, JobBlockInputSupportedDataTypes)
+        .Parser([](const TString& v) {
+            TSet<TString> vec;
+            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            TSet<NUdf::EDataSlot> res;
+            for (auto& s: vec) {
+                res.emplace(NUdf::GetDataSlot(s));
+            }
+            return res;
+        });
     REGISTER_SETTING(*this, MaxCpuUsageToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, ApplyStoredConstraints)
@@ -487,6 +498,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
+    REGISTER_SETTING(*this, JobBlockInput);
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
 }
 

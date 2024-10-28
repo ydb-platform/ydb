@@ -8,12 +8,12 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class TpcdsSuiteBase(LoadSuiteBase):
-    size: int = 0
     workload_type: WorkloadType = WorkloadType.TPC_DS
     iterations: int = 3
     tables_size: dict[str, int] = {}
 
-    def _get_tables_size(self) -> dict[str, int]:
+    @classmethod
+    def _get_tables_size(cls) -> dict[str, int]:
         result: dict[str, int] = {
             'customer_demographics': 1920800,
             'date_dim': 73049,
@@ -22,20 +22,22 @@ class TpcdsSuiteBase(LoadSuiteBase):
             'ship_mode': 20,
             'time_dim': 86400,
         }
-        result.update(self.tables_size)
+        result.update(cls.tables_size)
         return result
 
-    def _get_path(self, full: bool = True) -> str:
+    @classmethod
+    def _get_path(cls, full: bool = True) -> str:
         if full:
             tpcds_path = get_external_param('table-path-tpcds', f'{YdbCluster.tables_path}/tpcds')
         else:
             tpcds_path = 'tpcds'
-        return get_external_param(f'table-path-{self.suite}', f'{tpcds_path}/s{self.size}')
+        return get_external_param(f'table-path-{cls.suite()}', f'{tpcds_path}/s{cls.scale}')
 
-    def do_setup_class(self):
-        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{self.size}'):
+    @classmethod
+    def do_setup_class(cls):
+        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
             return
-        self.check_tables_size(self, folder=self._get_path(self, False), tables=self._get_tables_size(self))
+        cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
     @pytest.mark.parametrize('query_num', [i for i in range(1, 100)])
     def test_tpcds(self, query_num: int):
@@ -43,7 +45,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
 
 
 class TestTpcds1(TpcdsSuiteBase):
-    size: int = 1
+    scale: int = 1
     tables_size: dict[str, int] = {
         'call_center': 6,
         'catalog_page': 11718,
@@ -67,7 +69,7 @@ class TestTpcds1(TpcdsSuiteBase):
 
 
 class TestTpcds10(TpcdsSuiteBase):
-    size: int = 10
+    scale: int = 10
     timeout = max(TpcdsSuiteBase.timeout, 300.)
     tables_size: dict[str, int] = {
         'call_center': 24,
@@ -92,7 +94,7 @@ class TestTpcds10(TpcdsSuiteBase):
 
 
 class TestTpcds100(TpcdsSuiteBase):
-    size: int = 100
+    scale: int = 100
     iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     query_settings = {
@@ -122,6 +124,6 @@ class TestTpcds100(TpcdsSuiteBase):
 
 
 class TestTpcds1000(TpcdsSuiteBase):
-    size: int = 1000
+    scale: int = 1000
     iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3*3600.)

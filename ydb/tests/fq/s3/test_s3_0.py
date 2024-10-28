@@ -8,7 +8,7 @@ import pytest
 import time
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-import ydb.tests.library.common.yatest_common as yatest_common
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_v2, yq_all
 from google.protobuf.struct_pb2 import NullValue
@@ -1092,13 +1092,13 @@ Pear,15,33'''
 
         # Check that checkpointing is finished
         def wait_checkpoints(require_query_is_on=False):
-            deadline = time.time() + yatest_common.plain_or_under_sanitizer(300, 900)
+            deadline = time.time() + plain_or_under_sanitizer(300, 900)
             while True:
                 completed = kikimr.control_plane.get_completed_checkpoints(query_id, require_query_is_on)
                 if completed >= 3:
                     break
                 assert time.time() < deadline, "Completed: {}".format(completed)
-                time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+                time.sleep(plain_or_under_sanitizer(0.5, 2))
 
         logging.debug("Wait checkpoints")
         wait_checkpoints(True)

@@ -89,13 +89,18 @@ struct TYtState : public TThrRefBase {
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
     bool HybridTakesTooLong() const;
+    
+    TYtState(TTypeAnnotationContext* types) {
+        Types = types;
+        Configuration = MakeIntrusive<TYtVersionedConfiguration>(*types);
+    }
 
     TString SessionId;
     IYtGateway::TPtr Gateway;
     TTypeAnnotationContext* Types = nullptr;
     TMaybe<std::pair<ui32, size_t>> LoadEpochMetadata; // Epoch being committed, settings versions
     THashMap<ui32, TSet<std::pair<TString, TString>>> EpochDependencies; // List of tables, which have to be updated after committing specific epoch
-    TYtVersionedConfiguration::TPtr Configuration = MakeIntrusive<TYtVersionedConfiguration>();
+    TYtVersionedConfiguration::TPtr Configuration;
     TYtTablesData::TPtr TablesData = MakeIntrusive<TYtTablesData>();
     THashMap<std::pair<TString, TString>, TString> AnonymousLabels; // cluster + label -> name
     std::unordered_map<ui64, TString> NodeHash; // unique id -> hash

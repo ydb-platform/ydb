@@ -111,7 +111,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
                 dataColumnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
             }
             for (auto&& i : SwitchedPortions) {
-                stats->Merge(i.GetSerializationStat(*resultSchema));
+                stats->Merge(TPortionDataAccessor(i).GetSerializationStat(*resultSchema));
                 if (i.GetMeta().GetDeletionsCount()) {
                     dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
                 }

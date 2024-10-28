@@ -253,11 +253,24 @@ void TPortionInfo::Precalculate() {
     {
         PrecalculatedColumnRawBytes = 0;
         PrecalculatedColumnBlobBytes = 0;
+        PrecalculatedRecordsCount = 0;
         const auto aggr = [&](const TColumnRecord& r) {
             PrecalculatedColumnRawBytes += r.GetMeta().GetRawBytes();
             PrecalculatedColumnBlobBytes += r.BlobRange.GetSize();
+            if (r.GetColumnId() == Records.front().GetColumnId()) {
+                PrecalculatedRecordsCount = r.GetMeta().GetRecordsCount();
+            }
         };
         TPortionDataAccessor::AggregateIndexChunksData(aggr, Records, nullptr, true);
+    }
+    {
+        PrecalculatedIndexRawBytes = 0;
+        PrecalculatedIndexBlobBytes = 0;
+        const auto aggr = [&](const TIndexChunk& r) {
+            PrecalculatedIndexRawBytes += r.GetRawBytes();
+            PrecalculatedIndexBlobBytes += r.GetDataSize();
+        };
+        TPortionDataAccessor::AggregateIndexChunksData(aggr, Indexes, nullptr, true);
     }
 }
 

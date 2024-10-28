@@ -65,6 +65,9 @@ private:
 
     ui64 PrecalculatedColumnRawBytes = 0;
     ui64 PrecalculatedColumnBlobBytes = 0;
+    ui64 PrecalculatedRecordsCount = 0;
+    ui64 PrecalculatedIndexBlobBytes = 0;
+    ui64 PrecalculatedIndexRawBytes = 0;
     bool Precalculated = false;
 
     void Precalculate();
@@ -281,16 +284,6 @@ public:
 
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
-    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
-        NArrow::NSplitter::TSerializationStats result;
-        for (auto&& i : Records) {
-            if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
-                result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
-            }
-        }
-        return result;
-    }
-
     const TPortionMeta& GetMeta() const {
         return Meta;
     }
@@ -435,33 +428,18 @@ public:
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
     ui32 GetRecordsCount() const {
-        ui32 result = 0;
-        std::optional<ui32> columnIdFirst;
-        for (auto&& i : Records) {
-            if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetRecordsCount();
-                columnIdFirst = i.ColumnId;
-            } else {
-                break;
-            }
-        }
-        return result;
+        AFL_VERIFY(Precalculated);
+        return PrecalculatedRecordsCount;
     }
 
     ui64 GetIndexBlobBytes() const noexcept {
-        ui64 sum = 0;
-        for (const auto& rec : Indexes) {
-            sum += rec.GetDataSize();
-        }
-        return sum;
+        AFL_VERIFY(Precalculated);
+        return PrecalculatedIndexBlobBytes;
     }
 
     ui64 GetIndexRawBytes() const noexcept {
-        ui64 sum = 0;
-        for (const auto& rec : Indexes) {
-            sum += rec.GetRawBytes();
-        }
-        return sum;
+        AFL_VERIFY(Precalculated);
+        return PrecalculatedIndexRawBytes;
     }
 
     ui64 GetColumnRawBytes() const;

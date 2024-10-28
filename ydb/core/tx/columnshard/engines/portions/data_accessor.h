@@ -75,6 +75,16 @@ public:
         return result;
     }
 
+    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
+        NArrow::NSplitter::TSerializationStats result;
+        for (auto&& i : PortionInfo->Records) {
+            if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
+                result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
+            }
+        }
+        return result;
+    }
+
     ui64 GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetIndexRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;

@@ -52,8 +52,8 @@ public:
     }
 
     bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) override {
-        TKqpLock lock(lockProto);
         Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
+        TKqpLock lock(lockProto);
         bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
         bool isInvalidated = (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
                             || (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
@@ -88,24 +88,21 @@ public:
                 LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE);
                 return false;
             } else if (isInvalidated) {
-                TStringBuilder message;
-                message << "Transaction locks invalidated. Tables: ";
-                bool first = true;
-                // TODO: add error by pathid
-                for (const auto& path : shardInfo.Pathes) {
-                    if (!first) {
-                        message << ", ";
-                        first = false;
-                    }
-                    message << "`" << path << "`";
-                }
-                LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+                MakeLocksIssue(shardInfo);
                 return false;
             }
             AFL_ENSURE(false);
         }
 
         return true;
+    }
+
+    void BreakLock(ui64 shardId) override {
+        if (LocksIssue) {
+            return;
+        }
+        auto& shardInfo = ShardsInfo.at(shardId);
+        MakeLocksIssue(shardInfo);
     }
 
     TTableInfo GetShardTableInfo(ui64 shardId) const override {
@@ -358,6 +355,21 @@ private:
         bool IsOlap = false;
         THashSet<TStringBuf> Pathes;
     };
+
+    void MakeLocksIssue(const TShardInfo& shardInfo) {
+        TStringBuilder message;
+        message << "Transaction locks invalidated. Tables: ";
+        bool first = true;
+        // TODO: add error by pathid
+        for (const auto& path : shardInfo.Pathes) {
+            if (!first) {
+                message << ", ";
+                first = false;
+            }
+            message << "`" << path << "`";
+        }
+        LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+    }
 
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;

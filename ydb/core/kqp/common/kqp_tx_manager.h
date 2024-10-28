@@ -39,6 +39,8 @@ public:
     virtual void AddAction(ui64 shardId, ui8 action) = 0;
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) = 0;
 
+    virtual void BreakLock(ui64 shardId) = 0;
+
     virtual TTableInfo GetShardTableInfo(ui64 shardId) const = 0;
 
     virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;

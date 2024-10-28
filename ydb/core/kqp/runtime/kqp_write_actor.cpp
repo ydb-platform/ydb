@@ -496,7 +496,7 @@ public:
                     << getIssues().ToOneLineString());
             RuntimeError(
                 TStringBuilder() << "Unspecified error for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << TablePath << "`. "
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::UNSPECIFIED,
                 getIssues());
@@ -518,7 +518,7 @@ public:
                     << getIssues().ToOneLineString());
             RuntimeError(
                 TStringBuilder() << "Aborted for table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << TablePath << "`. "
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
@@ -538,7 +538,7 @@ public:
             } else {
                 RuntimeError(
                     TStringBuilder() << "Internal error for table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << TablePath << "`. "
                         << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                     getIssues());
@@ -554,7 +554,7 @@ public:
             
         RuntimeError(
             TStringBuilder() << "Disk space exhausted for table `"
-                << SchemeEntry->TableId.PathId.ToString() << "`. "
+                << TablePath << "`. "
                 << getIssues().ToOneLineString(),
             NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             getIssues());
@@ -571,7 +571,7 @@ public:
             if (!InconsistentTx)  {
                 RuntimeError(
                     TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << TablePath << "`. "
                         << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::OVERLOADED,
                     getIssues());
@@ -586,7 +586,7 @@ public:
                     << getIssues().ToOneLineString());
             RuntimeError(
                 TStringBuilder() << "Cancelled request to table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << TablePath << "`."
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::CANCELLED,
                 getIssues());
@@ -600,7 +600,7 @@ public:
                     << getIssues().ToOneLineString());
             RuntimeError(
                 TStringBuilder() << "Bad request. Table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << TablePath << "`. "
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 getIssues());
@@ -618,7 +618,7 @@ public:
             } else {
                 RuntimeError(
                     TStringBuilder() << "Scheme changed. Table `"
-                        << SchemeEntry->TableId.PathId.ToString() << "`. "
+                        << TablePath << "`. "
                         << getIssues().ToOneLineString(),
                     NYql::NDqProto::StatusIds::SCHEME_ERROR,
                     getIssues());
@@ -631,9 +631,12 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+
+            TxManager->BreakLock(ev->Get()->Record.GetOrigin());
+            YQL_ENSURE(TxManager->BrokenLocks());
             RuntimeError(
                 TStringBuilder() << "Transaction locks invalidated. Table `"
-                    << SchemeEntry->TableId.PathId.ToString() << "`. "
+                    << TablePath << "`. "
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());
@@ -1731,7 +1734,7 @@ public:
                 << getIssues().ToOneLineString());
             // TODO: support waiting
             ReplyErrorAndDie(
-                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table. "
+                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded."
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 getIssues());
@@ -1755,7 +1758,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             ReplyErrorAndDie(
-                TStringBuilder() << "Bad request. Table. "
+                TStringBuilder() << "Bad request. "
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 getIssues());
@@ -1767,7 +1770,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             ReplyErrorAndDie(
-                TStringBuilder() << "Scheme changed. Table. "
+                TStringBuilder() << "Scheme changed. "
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::SCHEME_ERROR,
                 getIssues());
@@ -1778,8 +1781,11 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+
+            TxManager->BreakLock(ev->Get()->Record.GetOrigin());
+            YQL_ENSURE(TxManager->BrokenLocks());
             ReplyErrorAndDie(
-                TStringBuilder() << "Transaction locks invalidated.. "
+                TStringBuilder() << "Transaction locks invalidated."
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
                 getIssues());

@@ -13,6 +13,6 @@ message TSharedCacheConfig {
     optional uint64 AsyncQueueInFlyLimit = 3 [default = 536870912];
     optional uint32 ActivePagesReservationPercent = 4;
     optional uint32 MemTableReservationPercent = 5;
-    optional TReplacementPolicy ReplacementPolicy = 6 [default = ThreeLeveledLRU];
+    optional TReplacementPolicy ReplacementPolicy = 6 [default = S3FIFO];
     reserved 7;
 }

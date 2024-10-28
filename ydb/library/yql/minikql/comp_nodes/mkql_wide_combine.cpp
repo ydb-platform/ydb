@@ -274,7 +274,14 @@ public:
             Tongue = CurrentPage->data() + CurrentPosition;
         }
         Throat = States.GetKey(itInsert) + KeyWidth;
-        if (isNew && !IsOutOfMemory) {
+        if (isNew) {
+            SafeGrow();
+        }
+        return isNew;
+    }
+
+    void SafeGrow() {
+        if (!IsOutOfMemory) {
             try {
                 States.CheckGrow();
             } catch (const TMemoryLimitExceededException& e) {
@@ -282,7 +289,6 @@ public:
                 IsOutOfMemory = true;
             }
         }
-        return isNew;
     }
 
     bool CheckIsOutOfMemory() const {
@@ -848,7 +854,6 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
         return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
 

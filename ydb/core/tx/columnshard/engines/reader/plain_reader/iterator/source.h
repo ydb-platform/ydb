@@ -269,7 +269,7 @@ private:
     mutable THashMap<ui64, ui64> FingerprintedData;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
-        THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
+        THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(

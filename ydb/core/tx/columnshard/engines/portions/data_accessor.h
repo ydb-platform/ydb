@@ -1,0 +1,222 @@
+#pragma once
+#include "portion_info.h"
+
+#include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
+
+#include <ydb/library/accessor/accessor.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
+
+namespace NKikimr::NOlap {
+
+class TPortionDataAccessor {
+private:
+    const TPortionInfo* PortionInfo;
+
+public:
+    TPortionDataAccessor(const TPortionInfo& portionInfo)
+        : PortionInfo(&portionInfo)
+    {
+
+    }
+
+    const std::vector<TColumnRecord>& GetRecords() const {
+        return PortionInfo->Records;
+    }
+
+    class TAssembleBlobInfo {
+    private:
+        YDB_READONLY_DEF(std::optional<ui32>, ExpectedRowsCount);
+        ui32 DefaultRowsCount = 0;
+        std::shared_ptr<arrow::Scalar> DefaultValue;
+        TString Data;
+        const bool NeedCache = true;
+
+    public:
+        ui32 GetExpectedRowsCountVerified() const {
+            AFL_VERIFY(ExpectedRowsCount);
+            return *ExpectedRowsCount;
+        }
+
+        void SetExpectedRecordsCount(const ui32 expectedRowsCount) {
+            AFL_VERIFY(!ExpectedRowsCount);
+            ExpectedRowsCount = expectedRowsCount;
+            if (!Data) {
+                AFL_VERIFY(*ExpectedRowsCount == DefaultRowsCount);
+            }
+        }
+
+        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue, const bool needCache = true)
+            : DefaultRowsCount(rowsCount)
+            , DefaultValue(defValue)
+            , NeedCache(needCache) {
+            AFL_VERIFY(DefaultRowsCount);
+        }
+
+        TAssembleBlobInfo(const TString& data)
+            : Data(data) {
+            AFL_VERIFY(!!Data);
+        }
+
+        ui32 GetDefaultRowsCount() const noexcept {
+            return DefaultRowsCount;
+        }
+
+        const TString& GetData() const noexcept {
+            return Data;
+        }
+
+        bool IsBlob() const {
+            return !DefaultRowsCount && !!Data;
+        }
+
+        bool IsDefault() const {
+            return DefaultRowsCount && !Data;
+        }
+
+        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
+        NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
+    };
+
+    class TPreparedColumn {
+    private:
+        std::shared_ptr<TColumnLoader> Loader;
+        std::vector<TAssembleBlobInfo> Blobs;
+
+    public:
+        ui32 GetColumnId() const {
+            return Loader->GetColumnId();
+        }
+
+        const std::string& GetName() const {
+            return Loader->GetField()->name();
+        }
+
+        std::shared_ptr<arrow::Field> GetField() const {
+            return Loader->GetField();
+        }
+
+        TPreparedColumn(std::vector<TAssembleBlobInfo>&& blobs, const std::shared_ptr<TColumnLoader>& loader)
+            : Loader(loader)
+            , Blobs(std::move(blobs)) {
+            AFL_VERIFY(Loader);
+        }
+
+        std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> AssembleForSeqAccess() const;
+        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
+    };
+
+    class TPreparedBatchData {
+    private:
+        std::vector<TPreparedColumn> Columns;
+        size_t RowsCount = 0;
+
+    public:
+        struct TAssembleOptions {
+            std::optional<std::set<ui32>> IncludedColumnIds;
+            std::optional<std::set<ui32>> ExcludedColumnIds;
+            std::map<ui32, std::shared_ptr<arrow::Scalar>> ConstantColumnIds;
+
+            bool IsConstantColumn(const ui32 columnId, std::shared_ptr<arrow::Scalar>& scalar) const {
+                if (ConstantColumnIds.empty()) {
+                    return false;
+                }
+                auto it = ConstantColumnIds.find(columnId);
+                if (it == ConstantColumnIds.end()) {
+                    return false;
+                }
+                scalar = it->second;
+                return true;
+            }
+
+            bool IsAcceptedColumn(const ui32 columnId) const {
+                if (IncludedColumnIds && !IncludedColumnIds->contains(columnId)) {
+                    return false;
+                }
+                if (ExcludedColumnIds && ExcludedColumnIds->contains(columnId)) {
+                    return false;
+                }
+                return true;
+            }
+        };
+
+        std::shared_ptr<arrow::Field> GetFieldVerified(const ui32 columnId) const {
+            for (auto&& i : Columns) {
+                if (i.GetColumnId() == columnId) {
+                    return i.GetField();
+                }
+            }
+            AFL_VERIFY(false);
+            return nullptr;
+        }
+
+        size_t GetColumnsCount() const {
+            return Columns.size();
+        }
+
+        size_t GetRowsCount() const {
+            return RowsCount;
+        }
+
+        TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
+            : Columns(std::move(columns))
+            , RowsCount(rowsCount) {
+        }
+
+        TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
+    };
+
+    class TColumnAssemblingInfo {
+    private:
+        std::vector<TAssembleBlobInfo> BlobsInfo;
+        YDB_READONLY(ui32, ColumnId, 0);
+        const ui32 NumRows;
+        ui32 NumRowsByChunks = 0;
+        const std::shared_ptr<TColumnLoader> DataLoader;
+        const std::shared_ptr<TColumnLoader> ResultLoader;
+
+    public:
+        TColumnAssemblingInfo(
+            const ui32 numRows, const std::shared_ptr<TColumnLoader>& dataLoader, const std::shared_ptr<TColumnLoader>& resultLoader)
+            : ColumnId(resultLoader->GetColumnId())
+            , NumRows(numRows)
+            , DataLoader(dataLoader)
+            , ResultLoader(resultLoader) {
+            AFL_VERIFY(ResultLoader);
+            if (DataLoader) {
+                AFL_VERIFY(ResultLoader->GetColumnId() == DataLoader->GetColumnId());
+                AFL_VERIFY(DataLoader->GetField()->IsCompatibleWith(ResultLoader->GetField()))("data", DataLoader->GetField()->ToString())(
+                    "result", ResultLoader->GetField()->ToString());
+            }
+        }
+
+        const std::shared_ptr<arrow::Field>& GetField() const {
+            return ResultLoader->GetField();
+        }
+
+        void AddBlobInfo(const ui32 expectedChunkIdx, const ui32 expectedRecordsCount, TAssembleBlobInfo&& info) {
+            AFL_VERIFY(expectedChunkIdx == BlobsInfo.size());
+            info.SetExpectedRecordsCount(expectedRecordsCount);
+            NumRowsByChunks += expectedRecordsCount;
+            BlobsInfo.emplace_back(std::move(info));
+        }
+
+        TPreparedColumn Compile() {
+            if (BlobsInfo.empty()) {
+                BlobsInfo.emplace_back(TAssembleBlobInfo(NumRows, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
+                return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
+            } else {
+                AFL_VERIFY(NumRowsByChunks == NumRows)("by_chunks", NumRowsByChunks)("expected", NumRows);
+                AFL_VERIFY(DataLoader);
+                return TPreparedColumn(std::move(BlobsInfo), DataLoader);
+            }
+        }
+    };
+
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
+    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
+};
+
+}   // namespace NKikimr::NOlap

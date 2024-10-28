@@ -1,5 +1,7 @@
+#include "data_accessor.h"
 #include "read_with_blobs.h"
 #include "write_with_blobs.h"
+
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -20,12 +22,14 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlob
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
-    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs).AssembleToGeneralContainer(seqColumns);
+    return TPortionDataAccessor(PortionInfo).PrepareForAssemble(data, resultSchema, blobs).AssembleToGeneralContainer(seqColumns);
 }
 
-NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
+NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
+    const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
     TReadPortionInfoWithBlobs result(portion);
-    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> records = result.PortionInfo.RestoreEntityChunks(blobs, indexInfo);
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> records =
+        result.PortionInfo.RestoreEntityChunks(blobs, indexInfo);
     for (auto&& [storageId, chunksByAddress] : records) {
         for (auto&& [_, chunk] : chunksByAddress) {
             result.RestoreChunk(chunk);
@@ -34,8 +38,8 @@ NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePort
     return result;
 }
 
-std::vector<NKikimr::NOlap::TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(const std::vector<TPortionInfo>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
-    const TVersionedIndex& tables) {
+std::vector<NKikimr::NOlap::TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
+    const std::vector<TPortionInfo>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TVersionedIndex& tables) {
     std::vector<TReadPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
         const auto schema = i.GetSchema(tables);
@@ -59,7 +63,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TReadPortionInfoWithBlobs::GetEn
     return result;
 }
 
-bool TReadPortionInfoWithBlobs::ExtractColumnChunks(const ui32 entityId, std::vector<const TColumnRecord*>& records, std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
+bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
+    const ui32 entityId, std::vector<const TColumnRecord*>& records, std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
     records = GetPortionInfo().GetColumnChunksPointers(entityId);
     if (records.empty()) {
         return false;
@@ -79,8 +84,8 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(const ui32 entityId, std::ve
 }
 
 std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
-    const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
-    std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
+    const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier,
+    const std::shared_ptr<IStoragesManager>& storages, std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
     if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "we don't need sync portion");
         return {};
@@ -133,4 +138,4 @@ const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 co
     return it->second->GetData();
 }
 
-}
+}   // namespace NKikimr::NOlap

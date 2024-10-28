@@ -31,13 +31,13 @@ public:
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override final;
 
 protected:
-    void PatchQuery(TString& query) const;
     virtual TVector<TString> GetTablesList() const = 0;
 
 private:
     const TTpcBaseWorkloadParams& Params;
-    TString FilterHeader(TStringBuf header, const TString& query) const;
-    void PatchHeader(TString& header) const;
+    void PatchQuery(TString& query) const;
+    void FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const;
+    TString GetHeader(const TString& query) const;
 };
 
 template<class T>

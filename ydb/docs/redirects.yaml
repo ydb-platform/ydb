@@ -229,6 +229,8 @@ common:
     to: /contributor/general-schema.md
   - from: /concepts/clusters/distributed_storage.md
     to: /contributor/distributed-storage.md
+  - from: /concepts/cluster/distributed_storage.md
+    to: /contributor/distributed-storage.md
 
 # Redirects for ydb-dstool
   - from: /administration/ydb-dstool-device-list.md

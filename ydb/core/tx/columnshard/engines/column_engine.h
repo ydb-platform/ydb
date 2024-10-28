@@ -264,6 +264,34 @@ protected:
     virtual void DoRegisterTable(const ui64 pathId) = 0;
 
 public:
+    class TSchemaInitializationData {
+    private:
+        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchema>, Schema);
+        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>, Diff);
+
+    public:
+        const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
+            AFL_VERIFY(Schema);
+            return *Schema;
+        }
+
+        TSchemaInitializationData(
+            const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, const std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>& diff)
+            : Schema(schema)
+            , Diff(diff) {
+            AFL_VERIFY(Schema || Diff);
+        }
+
+        TSchemaInitializationData(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+            if (info.HasSchema()) {
+                Schema = info.GetSchema();
+            }
+            if (info.HasDiff()) {
+                Diff = info.GetDiff();
+            }
+        }
+    };
+
     static ui64 GetMetadataLimit();
 
     virtual ~IColumnEngine() = default;
@@ -293,7 +321,7 @@ public:
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const {

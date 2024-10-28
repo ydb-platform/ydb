@@ -402,7 +402,6 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
 
 void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns, const std::vector<NArrow::NTest::TTestColumn>& pk,
     const TTableSpecials& specials, NKikimrSchemeOp::TColumnTableSchema* schema) {
-    schema->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
 
     for (ui32 i = 0; i < columns.size(); ++i) {
         *schema->MutableColumns()->Add() = columns[i].CreateColumn(i + 1);

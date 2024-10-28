@@ -37,15 +37,6 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
         return false;
     }
 
-    if (!HasEngine()) {
-        Engine = schemaUpdate.GetEngineDef(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-    } else {
-        if (schemaUpdate.HasEngine()) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, "No engine updates supported");
-            return false;
-        }
-    }
-
     ++Version;
     return true;
 }
@@ -53,8 +44,6 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
     Version = tableSchema.GetVersion();
-    Y_ABORT_UNLESS(tableSchema.HasEngine());
-    Engine = tableSchema.GetEngine();
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
@@ -65,9 +54,6 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
     NKikimrSchemeOp::TColumnTableSchema resultLocal;
     resultLocal.SetNextColumnId(NextColumnId);
     resultLocal.SetVersion(Version);
-
-    Y_ABORT_UNLESS(HasEngine());
-    resultLocal.SetEngine(GetEngineUnsafe());
 
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);
@@ -85,11 +71,6 @@ bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, 
     }
 
     if (!Options.Validate(opSchema, errors)) {
-        return false;
-    }
-
-    if (opSchema.GetEngine() != Engine) {
-        errors.AddError("Specified schema engine does not match schema preset");
         return false;
     }
     return true;

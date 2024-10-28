@@ -249,7 +249,7 @@ public:
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetNumRows();
+                result += i.GetMeta().GetRecordsCount();
                 columnIdFirst = i.ColumnId;
             }
         }

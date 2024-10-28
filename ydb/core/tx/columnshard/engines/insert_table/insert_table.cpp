@@ -30,7 +30,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
             continue;
         }
 
-        counters.Rows += data->GetMeta().GetNumRows();
+        counters.Rows += data->GetMeta().GetRecordsCount();
         counters.RawBytes += data->GetMeta().GetRawBytes();
         counters.Bytes += data->BlobSize();
 
@@ -59,7 +59,7 @@ TInsertionSummary::TCounters TInsertTable::Commit(
 
 TInsertionSummary::TCounters TInsertTable::CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data) {
     TInsertionSummary::TCounters counters;
-    counters.Rows += data.GetMeta().GetNumRows();
+    counters.Rows += data.GetMeta().GetRecordsCount();
     counters.RawBytes += data.GetMeta().GetRawBytes();
     counters.Bytes += data.BlobSize();
 
@@ -156,7 +156,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
             if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {
                 continue;
             }
-            result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetInsertWriteId(), data.GetSchemaVersion(), data.GetMeta().GetNumRows(),
+            result.emplace_back(TCommittedBlob(data.GetBlobRange(), data.GetSnapshot(), data.GetInsertWriteId(), data.GetSchemaVersion(), data.GetMeta().GetRecordsCount(),
                 start, finish, data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }
@@ -170,7 +170,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const std::optional<
             if (pkRangesFilter && pkRangesFilter->IsPortionInPartialUsage(start, finish) == TPKRangeFilter::EUsageClass::DontUsage) {
                 continue;
             }
-            result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetNumRows(), start, finish,
+            result.emplace_back(TCommittedBlob(data.GetBlobRange(), writeId, data.GetSchemaVersion(), data.GetMeta().GetRecordsCount(), start, finish,
                 data.GetMeta().GetModificationType() == NEvWrite::EModificationType::Delete, data.GetMeta().GetSchemaSubset()));
         }
     }

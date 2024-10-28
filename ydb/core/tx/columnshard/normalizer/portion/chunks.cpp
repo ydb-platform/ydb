@@ -23,7 +23,7 @@ public:
 
         for (auto&& chunkInfo : Chunks) {
             NKikimrTxColumnShard::TIndexColumnMeta metaProto = chunkInfo.GetMetaProto();
-            metaProto.SetNumRows(chunkInfo.GetUpdate().GetNumRows());
+            metaProto.SetNumRows(chunkInfo.GetUpdate().GetRecordsCount());
             metaProto.SetRawBytes(chunkInfo.GetUpdate().GetRawBytes());
 
             const auto& key = chunkInfo.GetKey();
@@ -64,7 +64,7 @@ protected:
             auto batch = assembleBlob.BuildRecordBatch(*columnLoader).DetachResult();
             Y_ABORT_UNLESS(!!batch);
 
-            chunkInfo.MutableUpdate().SetNumRows(batch->GetRecordsCount());
+            chunkInfo.MutableUpdate().SetRecordsCount(batch->GetRecordsCount());
             chunkInfo.MutableUpdate().SetRawBytes(batch->GetRawSizeVerified());
         }
 

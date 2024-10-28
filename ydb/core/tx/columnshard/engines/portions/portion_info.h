@@ -78,7 +78,7 @@ private:
     std::optional<TInsertWriteId> InsertWriteId;
 
     ui64 PathId = 0;
-    ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in pathId
+    ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
     std::optional<ui64> SchemaVersion;
@@ -342,12 +342,12 @@ public:
     }
 
     ui64 GetPortionId() const {
-        return Portion;
+        return PortionId;
     }
 
     NJson::TJsonValue SerializeToJsonVisual() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("id", Portion);
+        result.InsertValue("id", PortionId);
         result.InsertValue("s_max", RecordSnapshotMax().GetPlanStep() / 1000);
         /*
         result.InsertValue("s_min", RecordSnapshotMin().GetPlanStep());
@@ -420,7 +420,7 @@ public:
         return false;
     }
 
-    bool ValidSnapshotInfo() const { return MinSnapshotDeprecated.Valid() && PathId && Portion; }
+    bool ValidSnapshotInfo() const { return MinSnapshotDeprecated.Valid() && PathId && PortionId; }
     size_t NumChunks() const { return Records.size(); }
 
     TString DebugString(const bool withDetails = false) const;
@@ -445,12 +445,8 @@ public:
         return HasRemoveSnapshot();
     }
 
-    ui64 GetPortion() const {
-        return Portion;
-    }
-
     TPortionAddress GetAddress() const {
-        return TPortionAddress(PathId, Portion);
+        return TPortionAddress(PathId, PortionId);
     }
 
     void ResetShardingVersion() {
@@ -461,8 +457,8 @@ public:
         PathId = pathId;
     }
 
-    void SetPortion(const ui64 portion) {
-        Portion = portion;
+    void SetPortionId(const ui64 id) {
+        PortionId = id;
     }
 
 

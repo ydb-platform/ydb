@@ -65,7 +65,7 @@ ui64 TPortionInfo::GetIndexRawBytes(const bool validation) const {
 
 TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
-    sb << "(portion_id:" << Portion << ";" <<
+    sb << "(portion_id:" << PortionId << ";" <<
         "path_id:" << PathId << ";records_count:" << NumRows() << ";"
         "min_schema_snapshot:(" << MinSnapshotDeprecated.DebugString() << ");"
         "schema_version:" << SchemaVersion.value_or(0) << ";"
@@ -213,7 +213,7 @@ ui64 TPortionInfo::GetTxVolume() const {
 
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
     proto.SetPathId(PathId);
-    proto.SetPortionId(Portion);
+    proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
     *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
     if (!RemoveSnapshot.IsZero()) {
@@ -236,7 +236,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
     PathId = proto.GetPathId();
-    Portion = proto.GetPortionId();
+    PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
     for (auto&& i : proto.GetBlobIds()) {
         auto blobId = TUnifiedBlobId::BuildFromProto(i);
@@ -502,7 +502,7 @@ void TPortionInfo::FullValidation() const {
     CheckChunksOrder(Records);
     CheckChunksOrder(Indexes);
     AFL_VERIFY(PathId);
-    AFL_VERIFY(Portion);
+    AFL_VERIFY(PortionId);
     AFL_VERIFY(MinSnapshotDeprecated.Valid());
     std::set<ui32> blobIdxs;
     for (auto&& i : Records) {

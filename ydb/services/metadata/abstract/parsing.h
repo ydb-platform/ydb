@@ -98,6 +98,7 @@ public:
 
     NKqpProto::TKqpPhyMetadataObjectSettings SerializeToProto() const {
         NKqpProto::TKqpPhyMetadataObjectSettings serialized;
+        serialized.SetObjectId(ObjectId);
         serialized.SetExistingOk(ExistingOk);
         serialized.SetMissingOk(MissingOk);
         serialized.SetReplaceIfExists(ReplaceIfExists);
@@ -114,6 +115,7 @@ public:
     }
 
     bool ParseFromProto(const NKqpProto::TKqpPhyMetadataObjectSettings& serialized) {
+        ObjectId = serialized.GetObjectId();
         ExistingOk = serialized.GetExistingOk();
         MissingOk = serialized.GetMissingOk();
         ReplaceIfExists = serialized.GetReplaceIfExists();

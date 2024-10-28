@@ -121,7 +121,7 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
 
-        const TString pathString = NMetadataObject::GetDestinationPath(Transaction);
+        const TString pathString = JoinPath({Transaction.GetWorkingDir(), Transaction.GetCreateMetadataObject().GetName()});
         LOG_N("TAlterMetadataObject Propose: opId# " << OperationId << ", path# " << pathString);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,

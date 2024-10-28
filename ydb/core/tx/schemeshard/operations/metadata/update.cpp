@@ -15,7 +15,7 @@ TConclusionStatus TMetadataUpdateCreate::DoInitializeImpl(const TUpdateInitializ
 
     Behaviour.reset(IMetadataUpdateBehaviour::TFactoryByPropertiesImpl::Construct(request.GetProperties().GetPropertiesImplCase()));
     if (!Behaviour) {
-        return TConclusionStatus::Fail("Updates are not supported for given object");
+        return TConclusionStatus::Fail("Metadata updates are not supported for given object");
     }
     const auto validator = Behaviour->MakeValidator(
         TPath::Resolve(modification->GetWorkingDir(), context.GetSSOperationContext()->SS), request.GetName(), *context.GetSSOperationContext());
@@ -50,7 +50,7 @@ TConclusionStatus TMetadataUpdateAlter::DoInitializeImpl(const TUpdateInitializa
 
     Behaviour.reset(IMetadataUpdateBehaviour::TFactoryByPropertiesImpl::Construct(request.GetProperties().GetPropertiesImplCase()));
     if (!Behaviour) {
-        return TConclusionStatus::Fail("Updates are not supported for given object");
+        return TConclusionStatus::Fail("Metadata updates are not supported for given object");
     }
     const auto validator = Behaviour->MakeValidator(
         TPath::Resolve(modification->GetWorkingDir(), context.GetSSOperationContext()->SS), request.GetName(), *context.GetSSOperationContext());
@@ -82,7 +82,7 @@ TConclusionStatus TMetadataUpdateDrop::DoInitializeImpl(const TUpdateInitializat
     const auto& modification = context.GetModification();
     const auto& request = modification->GetDrop();
     const auto& originalEntity = context.GetOriginalEntityAsVerified<TMetadataEntity>();
-    const TPath objectPath = TPath::Resolve(modification->GetWorkingDir(), context.GetSSOperationContext()->SS);
+    const TPath objectPath = TPath::Init(originalEntity.GetPathId(), context.GetSSOperationContext()->SS);
 
     if (!objectPath.IsResolved()) {
         return TConclusionStatus::Fail("Object not found at " + objectPath.PathString());
@@ -90,7 +90,7 @@ TConclusionStatus TMetadataUpdateDrop::DoInitializeImpl(const TUpdateInitializat
 
     Behaviour.reset(IMetadataUpdateBehaviour::TFactoryByPath::Construct(objectPath->PathType));
     if (!Behaviour) {
-        return TConclusionStatus::Fail("Updates are not supported for given object");
+        return TConclusionStatus::Fail(TStringBuilder() << "Metadata updates are not supported for this object: " << objectPath->PathType);
     }
     const auto validator = Behaviour->MakeValidator(objectPath, request.GetName(), *context.GetSSOperationContext());
 

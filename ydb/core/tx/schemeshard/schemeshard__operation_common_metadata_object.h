@@ -25,6 +25,4 @@ void AdvanceTransactionStateToPropose(const TOperationId& operationId, const TOp
 void PersistOperation(const TOperationId& operationId, const TOperationContext& context, NIceDb::TNiceDb& db,
     const TPathElement::TPtr& objectPath, const TString& acl, const bool created);
 
-TString GetDestinationPath(const NKikimrSchemeOp::TModifyScheme& transaction);
-
 }   // namespace NKikimr::NSchemeShard::NMetadataObject

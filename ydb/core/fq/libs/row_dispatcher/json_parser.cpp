@@ -372,6 +372,7 @@ public:
     ~TImpl() {
         with_lock (Alloc) {
             ClearColumns(0);
+            ParsedValues.clear();
             Columns.clear();
             TypeEnv.reset();
         }

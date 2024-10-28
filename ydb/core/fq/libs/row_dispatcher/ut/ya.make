@@ -16,11 +16,8 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher
     ydb/core/testlib
     ydb/core/testlib/actors
-    ydb/library/yql/udfs/common/json2
-    ydb/library/yql/udfs/common/yson2
     ydb/tests/fq/pq_async_io
     ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/udfs/common/clickhouse/client
 )
 
 SIZE(MEDIUM)

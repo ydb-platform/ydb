@@ -1,3 +1,5 @@
+#include <ydb/core/base/backtrace.h>
+
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
@@ -22,7 +24,16 @@ public:
     TFixture()
     : Runtime(true) {}
 
+    static void SegmentationFaultHandler(int) {
+        Cerr << "segmentation fault call stack:" << Endl;
+        FormatBackTrace(&Cerr);
+        abort();
+    }
+
     void SetUp(NUnitTest::TTestContext&) override {
+        NKikimr::EnableYDBBacktraceFormat();
+        signal(SIGSEGV, &SegmentationFaultHandler);
+
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.SetLogBackend(CreateStderrBackend());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);

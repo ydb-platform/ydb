@@ -422,7 +422,7 @@ public:
 
         for (const auto& shardStats : Proto_.table_stats().partition_stats()) {
             PartitionStats_.emplace_back(
-                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size()}
+                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id()}
             );
         }
 

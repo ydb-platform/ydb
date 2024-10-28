@@ -732,6 +732,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
+        return true;
         return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
 

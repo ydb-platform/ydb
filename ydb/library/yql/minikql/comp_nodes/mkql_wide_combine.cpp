@@ -274,10 +274,19 @@ public:
             Tongue = CurrentPage->data() + CurrentPosition;
         }
         Throat = States.GetKey(itInsert) + KeyWidth;
-        if (isNew) {
-            States.CheckGrow();
+        if (isNew && !IsOutOfMemory) {
+            try {
+                States.CheckGrow();
+            } catch (const TMemoryLimitExceededException& e) {
+                Cerr << "State " << (void *)this << " no longer growing\n";
+                IsOutOfMemory = true;
+            }
         }
         return isNew;
+    }
+
+    bool CheckIsOutOfMemory() const {
+        return IsOutOfMemory;
     }
 
     template<bool SkipYields>
@@ -331,6 +340,7 @@ public:
 private:
     std::optional<TStorageIterator> ExtractIt;
     const ui32 KeyWidth, StateWidth;
+    bool IsOutOfMemory = false;
     ui64 CurrentPosition = 0;
     TRow* CurrentPage = nullptr;
     TStorage Storage;
@@ -451,6 +461,9 @@ public:
     ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
+            if (InMemoryProcessingState.CheckIsOutOfMemory()) {
+                StateWantsToSpill = true;
+            }
             Throat = InMemoryProcessingState.Throat;
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
@@ -649,7 +662,11 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
-        if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+        if (!(AllowSpilling && Ctx.SpillerFactory)) {
+            return false;
+        }
+        if (StateWantsToSpill || IsSwitchToSpillingModeCondition()) {
+            StateWantsToSpill = false;
             LogMemoryUsage();
 
             SwitchMode(EOperatingMode::SplittingState);
@@ -831,6 +848,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
+        return false;
         return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
 
@@ -840,6 +858,7 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
 private:
+    bool StateWantsToSpill = false;
     bool IsEverythingExtracted = false;
 
     TState InMemoryProcessingState;

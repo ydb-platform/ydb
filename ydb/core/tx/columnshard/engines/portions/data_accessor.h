@@ -320,6 +320,14 @@ public:
         }
     };
 
+    const std::vector<TColumnRecord>& GetRecords() const {
+        return PortionInfo->Records;
+    }
+
+    const std::vector<TIndexChunk>& GetIndexes() const {
+        return PortionInfo->Indexes;
+    }
+
     std::vector<TPage> BuildPages() const;
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
 };

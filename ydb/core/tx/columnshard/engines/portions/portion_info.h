@@ -316,9 +316,6 @@ public:
     bool ValidSnapshotInfo() const {
         return MinSnapshotDeprecated.Valid() && PathId && PortionId;
     }
-    size_t NumChunks() const {
-        return Records.size();
-    }
 
     TString DebugString(const bool withDetails = false) const;
 

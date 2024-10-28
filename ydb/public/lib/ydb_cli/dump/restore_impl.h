@@ -9,6 +9,8 @@
 
 #include <util/folder/path.h>
 #include <util/generic/hash_set.h>
+#include <util/stream/fwd.h>
+#include <util/string/builder.h>
 
 namespace NYdb {
 namespace NDump {
@@ -18,19 +20,91 @@ extern const char DOC_API_REQUEST_TYPE[22];
 
 namespace NPrivate {
 
+class TBatch;
+
+class TLocation {
+    friend class TBatch;
+    TStringBuf File;
+    ui64 LineNo;
+
+public:
+    explicit TLocation(TStringBuf file, ui64 lineNo);
+    void Out(IOutputStream& out) const;
+};
+
+class TLine {
+    TString Data;
+    TLocation Location;
+
+public:
+    explicit TLine(TString&& data, TStringBuf file, ui64 lineNo);
+    explicit TLine(TString&& data, const TLocation& location);
+
+    inline const TString& GetData() const {
+        return Data;
+    }
+
+    inline const TLocation& GetLocation() const {
+        return Location;
+    }
+
+    inline operator TString() const {
+        return Data;
+    }
+
+    inline operator TStringBuf() const {
+        return Data;
+    }
+
+    inline auto size() const {
+        return Data.size();
+    }
+};
+
+class TBatch {
+    TStringBuilder Data;
+    TVector<TLocation> Locations;
+
+public:
+    void Add(const TLine& line);
+    TString GetLocation() const;
+
+    inline const TString& GetData() const {
+        return Data;
+    }
+
+    inline const TLocation& GetLocation(ui32 index) const {
+        return Locations.at(index);
+    }
+
+    inline operator TString() const {
+        return Data;
+    }
+
+    inline auto size() const {
+        return Data.size();
+    }
+};
+
 class IDataAccumulator {
 public:
+    enum EStatus {
+        OK,
+        FULL,
+        ERROR,
+    };
+
     virtual ~IDataAccumulator() = default;
-    virtual bool Fits(const TString& line) const = 0;
-    virtual void Feed(TString&& line) = 0;
+    virtual EStatus Check(const TLine& line) const = 0;
+    virtual void Feed(TLine&& line) = 0;
     virtual bool Ready(bool force = false) const = 0;
-    virtual TString GetData(bool force = false) = 0;
+    virtual TBatch GetData(bool force = false) = 0;
 };
 
 class IDataWriter {
 public:
     virtual ~IDataWriter() = default;
-    virtual bool Push(TString&& data) = 0;
+    virtual bool Push(TBatch&& data) = 0;
     virtual void Wait() = 0;
 };
 

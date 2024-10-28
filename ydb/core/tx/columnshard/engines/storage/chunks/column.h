@@ -62,8 +62,10 @@ public:
         , Record(address, column)
         , ColumnInfo(columnInfo) {
         Y_ABORT_UNLESS(column->GetRecordsCount());
-        First = column->GetScalar(0);
-        Last = column->GetScalar(column->GetRecordsCount() - 1);
+        if (ColumnInfo.GetPKColumnIndex()) {
+            First = column->GetScalar(0);
+            Last = column->GetScalar(column->GetRecordsCount() - 1);
+        }
         Record.BlobRange.Size = data.size();
     }
 };

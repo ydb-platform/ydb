@@ -15,9 +15,6 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
     AFL_VERIFY(info.GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.DebugString())("path_id", GetPathId());
 
     AFL_VERIFY(info.ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info.DebugString());
-    for (auto& record : info.Records) {
-        AFL_VERIFY(record.Valid())("event", "incorrect_record")("record", record.DebugString())("portion", info.DebugString());
-    }
 
     if (it == Portions.end()) {
         OnBeforeChangePortion(nullptr);

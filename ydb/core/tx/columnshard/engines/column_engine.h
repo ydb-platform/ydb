@@ -75,8 +75,6 @@ public:
         i64 Rows = 0;
         i64 Bytes = 0;
         i64 RawBytes = 0;
-        THashMap<ui32, size_t> BytesByColumn;
-        THashMap<ui32, size_t> RawBytesByColumn;
 
         TString DebugString() const {
             return TStringBuilder() << "portions=" << Portions << ";blobs=" << Blobs << ";rows=" << Rows << ";bytes=" << Bytes << ";raw_bytes=" << RawBytes << ";";
@@ -94,14 +92,6 @@ public:
             result.Rows = kff * Rows;
             result.Bytes = kff * Bytes;
             result.RawBytes = kff * RawBytes;
-
-            for (auto&& i : BytesByColumn) {
-                result.BytesByColumn[i.first] = kff * i.second;
-            }
-
-            for (auto&& i : RawBytesByColumn) {
-                result.RawBytesByColumn[i.first] = kff * i.second;
-            }
             return result;
         }
 
@@ -115,21 +105,11 @@ public:
             Rows = SumVerifiedPositive(Rows, item.Rows);
             Bytes = SumVerifiedPositive(Bytes, item.Bytes);
             RawBytes = SumVerifiedPositive(RawBytes, item.RawBytes);
-            for (auto&& i : item.BytesByColumn) {
-                auto& v = BytesByColumn[i.first];
-                v = SumVerifiedPositive(v, i.second);
-            }
-
-            for (auto&& i : item.RawBytesByColumn) {
-                auto& v = RawBytesByColumn[i.first];
-                v = SumVerifiedPositive(v, i.second);
-            }
             return *this;
         }
     };
 
     i64 Tables{};
-    i64 ColumnRecords{};
     THashMap<TPortionMeta::EProduced, TPortionsStats> StatsByType;
 
     std::vector<ui32> GetKinds() const {

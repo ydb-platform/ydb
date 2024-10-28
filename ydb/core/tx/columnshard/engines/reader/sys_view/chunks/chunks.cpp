@@ -21,7 +21,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     auto& entityStorages = EntityStorageNames[portion.GetMeta().GetTierName()];
     {
         std::vector<const TColumnRecord*> records;
-        for (auto&& r : portion.Records) {
+        for (auto&& r : portion.GetRecords()) {
             records.emplace_back(&r);
         }
         if (Reverse) {

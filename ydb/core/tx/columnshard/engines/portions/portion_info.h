@@ -132,6 +132,8 @@ private:
             }
         }
     }
+    std::vector<TColumnRecord> Records;
+
 public:
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
@@ -298,8 +300,6 @@ public:
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     std::vector<TPage> BuildPages() const;
-
-    std::vector<TColumnRecord> Records;
 
     const std::vector<TColumnRecord>& GetRecords() const {
         return Records;

@@ -41,8 +41,8 @@ TSelectInfo::TStats TSelectInfo::Stats() const {
     for (auto& portionInfo : PortionsOrderedPK) {
         out.Records += portionInfo->NumChunks();
         out.Rows += portionInfo->NumRows();
-        for (auto& rec : portionInfo->Records) {
-            out.Bytes += rec.BlobRange.Size;
+        for (auto& blobId : portionInfo->GetBlobIds()) {
+            out.Bytes += blobId.BlobSize();
         }
         out.Blobs += portionInfo->GetBlobIdsCount();
     }

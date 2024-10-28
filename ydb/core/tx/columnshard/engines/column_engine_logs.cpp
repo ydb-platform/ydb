@@ -81,10 +81,6 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
 TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
     TColumnEngineStats::TPortionsStats deltaStats;
     deltaStats.Bytes = 0;
-    for (auto& rec : portionInfo.Records) {
-        deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
-        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes();
-    }
     deltaStats.Rows = portionInfo.NumRows();
     deltaStats.Bytes = portionInfo.GetTotalBlobBytes();
     deltaStats.RawBytes = portionInfo.GetTotalRawBytes();
@@ -96,7 +92,6 @@ TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo) {
 void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
                                               EStatsUpdateType updateType,
                                               const TPortionInfo* exPortionInfo) const {
-    ui64 columnRecords = portionInfo.Records.size();
     TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo);
 
     Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
@@ -115,20 +110,14 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     const bool isAdd = updateType == EStatsUpdateType::ADD;
 
     if (isErase) { // PortionsToDrop
-        engineStats.ColumnRecords -= columnRecords;
-
         stats -= deltaStats;
     } else if (isAdd) { // Load || AppendedPortions
-        engineStats.ColumnRecords += columnRecords;
-
         stats += deltaStats;
     } else if (&srcStats != &stats || exPortionInfo) { // SwitchedPortions || PortionsToEvict
         stats += deltaStats;
 
         if (exPortionInfo) {
             srcStats -= DeltaStats(*exPortionInfo);
-
-            engineStats.ColumnRecords += columnRecords - exPortionInfo->Records.size();
         } else {
             srcStats -= deltaStats;
         }

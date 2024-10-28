@@ -21,28 +21,14 @@ class TColumnChunkLoadContext;
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
     friend class TGranuleMeta;
-    THashMap<ui32, NArrow::NSplitter::TSimpleSerializationStat> ColumnStats;
 
 public:
-    const THashMap<ui32, NArrow::NSplitter::TSimpleSerializationStat>& GetColumnStats() const {
-        return ColumnStats;
-    }
-
     void AddPortion(const TPortionInfo& info) {
         ColumnPortionsSize += info.GetColumnBlobBytes();
         TotalPortionsSize += info.GetTotalBlobBytes();
         MetadataMemoryPortionsSize += info.GetMetadataMemorySize();
         RecordsCount += info.NumRows();
         ++PortionsCount;
-
-        for (auto&& c : info.Records) {
-            auto it = ColumnStats.find(c.ColumnId);
-            if (it == ColumnStats.end()) {
-                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
-            } else {
-                it->second.AddStat(c.GetSerializationStat());
-            }
-        }
     }
 
     void RemovePortion(const TPortionInfo& info) {
@@ -56,15 +42,6 @@ public:
         Y_ABORT_UNLESS(RecordsCount >= 0);
         --PortionsCount;
         Y_ABORT_UNLESS(PortionsCount >= 0);
-
-        for (auto&& c : info.Records) {
-            auto it = ColumnStats.find(c.ColumnId);
-            if (it == ColumnStats.end()) {
-                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
-            } else {
-                it->second.RemoveStat(c.GetSerializationStat());
-            }
-        }
     }
 };
 
@@ -295,17 +272,6 @@ public:
         for (auto&& i : Portions) {
             OnAfterChangePortion(i.second, &g);
         }
-    }
-
-    std::shared_ptr<NArrow::NSplitter::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
-        auto result = std::make_shared<NArrow::NSplitter::TSerializationStats>();
-        for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
-            auto field = schema->GetFieldByColumnIdVerified(i.first);
-            NArrow::NSplitter::TColumnSerializationStat columnInfo(i.first, field->name());
-            columnInfo.Merge(i.second);
-            result->AddStat(columnInfo);
-        }
-        return result;
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

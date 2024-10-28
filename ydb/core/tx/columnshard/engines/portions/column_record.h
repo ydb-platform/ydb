@@ -153,10 +153,6 @@ public:
         return ColumnId == item.ColumnId && Chunk == item.Chunk;
     }
 
-    bool Valid() const {
-        return ColumnId && BlobRange.IsValid();
-    }
-
     TString DebugString() const {
         return TStringBuilder() << "column_id:" << ColumnId << ";"
                                 << "chunk_idx:" << Chunk << ";"

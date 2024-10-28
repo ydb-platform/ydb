@@ -1557,6 +1557,7 @@ message THiveConfig {
     optional double NodeUsageRangeToKick = 75 [default = 0.2];
     optional bool LessSystemTabletsMoves = 77 [default = true];
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
+    optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
 }
 
 message TBlobCacheConfig {

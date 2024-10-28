@@ -7054,4 +7054,79 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         UNIT_ASSERT_LE(bsc.GetOccupancyStDev("def1"), 0.1);
     }
 }
+
+Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
+    using namespace NTestSuiteTHiveTest;
+
+    void AssertScaleRecommencation(TTestBasicRuntime& runtime, NKikimrProto::EReplyStatus expectedStatus, ui32 expectedNodes = 0) {
+        const auto sender = runtime.AllocateEdgeActor();
+        
+        const auto hiveId = MakeDefaultHiveID();
+        const TSubDomainKey subdomainKey(TTestTxConfig::SchemeShard, 1);
+        runtime.SendToPipe(hiveId, sender, new TEvHive::TEvRequestScaleRecommendation(subdomainKey));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseScaleRecommendation>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), expectedStatus);
+        if (expectedNodes) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetRecommendedNodes(), expectedNodes);
+        }
+    }
+
+    void WaitRefreshScaleRecommendation(TTestBasicRuntime& runtime, size_t count = 1) {
+        for (size_t i = 0; i < count; ++i) {
+            runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRefreshScaleRecommendation);
+            runtime.DispatchEvents(options);
+        }
+    }
+
+    TTestActorRuntime::TEventObserver SetCpuUsageOnNode(TTestBasicRuntime& runtime, double cpuUsage) {
+        return runtime.SetObserverFunc([cpuUsage](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvHive::EvTabletMetrics) {
+                auto& record = event->Get<TEvHive::TEvTabletMetrics>()->Record;
+                record.SetTotalNodeCpuUsage(cpuUsage);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+    }
+
+    constexpr double LOW_CPU_USAGE = 0.2;
+    constexpr double HIGH_CPU_USAGE = 0.95;
+
+    Y_UNIT_TEST(BasicTest) {
+        // Setup test runtime with single node
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+
+        // Setup hive
+        const auto hiveTablet = MakeDefaultHiveID();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        CreateLocal(runtime, 0);
+
+        // No data yet
+        AssertScaleRecommencation(runtime, NKikimrProto::NOTREADY);
+
+        // Set low CPU usage on Node
+        SetCpuUsageOnNode(runtime, LOW_CPU_USAGE);
+
+        // Need time to fill window with data
+        WaitRefreshScaleRecommendation(runtime, 15);
+
+        // Check scale recommendation for low CPU usage
+        AssertScaleRecommencation(runtime, NKikimrProto::OK, 1);
+
+        // Set high CPU usage on Node
+        SetCpuUsageOnNode(runtime, HIGH_CPU_USAGE);
+
+        // Need time to fill window with new data
+        WaitRefreshScaleRecommendation(runtime, 15);
+
+        // Check scale recommendation for high CPU usage
+        AssertScaleRecommencation(runtime, NKikimrProto::OK, 2);
+    }
+}
+
 }

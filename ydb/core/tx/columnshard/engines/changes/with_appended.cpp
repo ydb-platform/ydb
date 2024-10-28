@@ -100,7 +100,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         for (auto& [_, portionInfo] : PortionsToRemove) {
             context.EngineLogs.AddCleanupPortion(portionInfo);
             const TPortionInfo& oldInfo =
-                context.EngineLogs.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
+                context.EngineLogs.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortionId());
             context.EngineLogs.UpsertPortion(portionInfo, &oldInfo);
         }
         for (auto& portionBuilder : AppendedPortions) {

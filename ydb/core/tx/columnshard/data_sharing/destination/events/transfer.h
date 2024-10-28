@@ -55,7 +55,7 @@ public:
     void InitPortionIds(ui64* lastPortionId, const std::optional<ui64> pathId = {}) {
         AFL_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
-            i.SetPortion(++*lastPortionId);
+            i.SetPortionId(++*lastPortionId);
             if (pathId) {
                 i.SetPathId(*pathId);
             }

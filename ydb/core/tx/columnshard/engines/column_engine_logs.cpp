@@ -502,7 +502,7 @@ void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const 
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
-    const ui64 portion = portionInfo.GetPortion();
+    const ui64 portion = portionInfo.GetPortionId();
     auto& spg = MutableGranuleVerified(portionInfo.GetPathId());
     auto p = spg.GetPortionOptional(portion);
 

@@ -110,11 +110,11 @@ public:
         if (!itInsertInfo.second) {
             itInsertInfo.first->second = loadContext;
         }
-        auto it = data.find(portion.GetPortion());
+        auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortion(), TPortionInfoConstructor(portion, false, true)).first;
+            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, false, true)).first;
         } else {
-            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortionIdVerified());
+            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortionId() == it->second.GetPortionIdVerified());
         }
         it->second.SetMinSnapshotDeprecated(portion.GetMinSnapshotDeprecated());
         if (portion.HasRemoveSnapshot()) {
@@ -140,7 +140,7 @@ public:
 
     void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) override {
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        auto it = data.find(portion.GetPortion());
+        auto it = data.find(portion.GetPortionId());
         Y_ABORT_UNLESS(it != data.end());
         auto& portionLocal = it->second;
 

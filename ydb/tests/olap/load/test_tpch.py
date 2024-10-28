@@ -8,7 +8,6 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 class TpchSuiteBase(LoadSuiteBase):
-    size: int = 0
     workload_type: WorkloadType = WorkloadType.TPC_H
     iterations: int = 3
     tables_size: dict[str, int] = {}
@@ -16,13 +15,13 @@ class TpchSuiteBase(LoadSuiteBase):
     @classmethod
     def _get_tables_size(cls) -> dict[str, int]:
         result: dict[str, int] = {
-            'customer': 150000 * cls.size,
+            'customer': 150000 * cls.scale,
             'nation': 25,
-            'orders': 1500000 * cls.size,
-            'part': 200000 * cls.size,
-            'partsupp': 800000 * cls.size,
+            'orders': 1500000 * cls.scale,
+            'part': 200000 * cls.scale,
+            'partsupp': 800000 * cls.scale,
             'region': 5,
-            'supplier': 10000 * cls.size,
+            'supplier': 10000 * cls.scale,
         }
         result.update(cls.tables_size)
         return result
@@ -33,11 +32,11 @@ class TpchSuiteBase(LoadSuiteBase):
             tpch_path = get_external_param('table-path-tpch', f'{YdbCluster.tables_path}/tpch')
         else:
             tpch_path = 'tpch'
-        return get_external_param(f'table-path-{cls.suite()}', f'{tpch_path}/s{cls.size}')
+        return get_external_param(f'table-path-{cls.suite()}', f'{tpch_path}/s{cls.scale}')
 
     @classmethod
     def do_setup_class(cls):
-        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.size}'):
+        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
             return
         cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
@@ -50,7 +49,7 @@ class TestTpch1(TpchSuiteBase):
     tables_size: dict[str, int] = {
         'lineitem': 6001215,
     }
-    size: int = 1
+    scale: int = 1
     check_canonical: bool = True
 
 
@@ -58,19 +57,19 @@ class TestTpch10(TpchSuiteBase):
     tables_size: dict[str, int] = {
         'lineitem': 59986052,
     }
-    size: int = 10
+    scale: int = 10
 
 
 class TestTpch100(TpchSuiteBase):
     tables_size: dict[str, int] = {
         'lineitem': 600037902,
     }
-    size: int = 100
+    scale: int = 100
     timeout = max(TpchSuiteBase.timeout, 300.)
 
 
 class TestTpch1000(TpchSuiteBase):
-    size: int = 1000
+    scale: int = 1000
     timeout = max(TpchSuiteBase.timeout, 1000.)
     query_settings = {
         9: LoadSuiteBase.QuerySettings(timeout=max(TpchSuiteBase.timeout, 3600.)),
@@ -78,5 +77,5 @@ class TestTpch1000(TpchSuiteBase):
 
 
 class TestTpch10000(TpchSuiteBase):
-    size: int = 10000
+    scale: int = 10000
     timeout = max(TpchSuiteBase.timeout, 3600.)

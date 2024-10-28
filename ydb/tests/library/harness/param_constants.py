@@ -13,7 +13,7 @@ def _get_param(name, default):
 
 config_name = _get_param("kikimr.ci.cluster_name", None)
 ssh_username = _get_param("kikimr.ci.ssh_username", os.getenv('NEMESIS_USER', 'robot-nemesis'))
-deploy_cluster = _get_param("kikimr.ci.deploy_cluster", "true") == "true"
+deploy_cluster = _get_param("kikimr.ci.deploy_cluster", "false") == "true"
 use_packages = _get_param('kikimr.ci.packages', "false") == "true"
 
 log_level = int(_get_param('kikimr.ci.driver.log_level', 5))

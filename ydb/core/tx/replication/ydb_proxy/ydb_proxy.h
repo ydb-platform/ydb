@@ -6,7 +6,6 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <util/string/join.h>
 
 namespace NKikimrReplication {
     class TStaticCredentials;
@@ -217,10 +216,10 @@ struct TEvYdbProxy {
     };
 
     struct TEndTopicPartitionResult {
-        explicit TEndTopicPartitionResult(const NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
-            PartitionId = event.GetPartitionSession()->GetPartitionId();
-            AdjacentPartitionsIds.insert(AdjacentPartitionsIds.end(), event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end());
-            ChildPartitionsIds.insert(ChildPartitionsIds.end(), event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end());
+        explicit TEndTopicPartitionResult(const NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event)
+            : PartitionId(event.GetPartitionSession()->GetPartitionId())
+            , AdjacentPartitionsIds(event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end())
+            , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end()) {
         }
 
         void Out(IOutputStream& out) const;

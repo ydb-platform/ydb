@@ -8,6 +8,7 @@ class TZeroLevelPortions: public IPortionsLevel {
 private:
     using TBase = IPortionsLevel;
     const TLevelCounters LevelCounters;
+    const TDuration DurationToDrop;
     class TOrderedPortion {
     private:
         YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
@@ -87,9 +88,11 @@ private:
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
 public:
-    TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters)
+    TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters, const TDuration durationToDrop)
         : TBase(levelIdx, nextLevel)
-        , LevelCounters(levelCounters) {
+        , LevelCounters(levelCounters)
+        , DurationToDrop(durationToDrop)
+    {
     }
 };
 

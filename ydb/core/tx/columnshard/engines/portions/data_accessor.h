@@ -9,20 +9,55 @@
 
 namespace NKikimr::NOlap {
 
+namespace NBlobOperations::NRead {
+class TCompositeReadBlobs;
+}
+
 class TPortionDataAccessor {
 private:
     const TPortionInfo* PortionInfo;
 
 public:
     TPortionDataAccessor(const TPortionInfo& portionInfo)
-        : PortionInfo(&portionInfo)
-    {
-
+        : PortionInfo(&portionInfo) {
     }
 
     const std::vector<TColumnRecord>& GetRecords() const {
         return PortionInfo->Records;
     }
+
+    void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const;
+    void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const;
+    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const;
+    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const;
+
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(
+        NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+
+    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+
+    THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
+        THashMap<TString, THashSet<TUnifiedBlobId>> result;
+        FillBlobIdsByStorage(result, indexInfo);
+        return result;
+    }
+
+    const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const;
+
+    bool HasEntityAddress(const TChunkAddress& address) const;
+
+    bool HasIndexes(const std::set<ui32>& ids) const {
+        auto idsCopy = ids;
+        for (auto&& i : PortionInfo->Indexes) {
+            idsCopy.erase(i.GetIndexId());
+            if (idsCopy.empty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    TString DebugString() const;
 
     class TAssembleBlobInfo {
     private:

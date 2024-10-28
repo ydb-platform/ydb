@@ -47,20 +47,6 @@ public:
     }
     using TBase::TBase;
 
-    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
-    private:
-        ui64 SumMemory = 0;
-
-    public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            for (auto&& i : portionInfo.GetRecords()) {
-                SumMemory += i.BlobRange.Size;
-                SumMemory += 2 * i.GetMeta().GetRawBytes();
-            }
-            return SumMemory;
-        }
-    };
-
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
         ui64 SumMemoryDelta = 0;

@@ -327,11 +327,11 @@ public:
     }
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
-        return Portion->HasIndexes(indexIds);
+        return TPortionDataAccessor(*Portion).HasIndexes(indexIds);
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
-        return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
+        return TPortionDataAccessor(*Portion).DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
     virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const override {

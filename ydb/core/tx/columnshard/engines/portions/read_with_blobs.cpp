@@ -11,7 +11,7 @@ namespace NKikimr::NOlap {
 
 void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
     auto address = chunk->GetChunkAddressVerified();
-    AFL_VERIFY(GetPortionInfo().HasEntityAddress(address))("address", address.DebugString());
+    AFL_VERIFY(TPortionDataAccessor(PortionInfo).HasEntityAddress(address))("address", address.DebugString());
     AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
 }
 
@@ -29,7 +29,7 @@ NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePort
     const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
     TReadPortionInfoWithBlobs result(portion);
     THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> records =
-        result.PortionInfo.RestoreEntityChunks(blobs, indexInfo);
+        TPortionDataAccessor(result.PortionInfo).RestoreEntityChunks(blobs, indexInfo);
     for (auto&& [storageId, chunksByAddress] : records) {
         for (auto&& [_, chunk] : chunksByAddress) {
             result.RestoreChunk(chunk);

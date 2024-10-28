@@ -244,22 +244,7 @@ public:
     }
 
     void FullValidation() const;
-
-    bool HasIndexes(const std::set<ui32>& ids) const {
-        auto idsCopy = ids;
-        for (auto&& i : Indexes) {
-            idsCopy.erase(i.GetIndexId());
-            if (idsCopy.empty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void ReorderChunks();
-
-    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(
-        NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -273,8 +258,6 @@ public:
     ui32 GetBlobIdsCount() const {
         return BlobIds.size();
     }
-
-    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
     const TString& GetIndexStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
@@ -394,36 +377,6 @@ public:
         return Meta;
     }
 
-    const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const {
-        auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
-            return item.GetAddress() < address;
-        });
-        if (it != Records.end() && it->GetAddress() == address) {
-            return &*it;
-        }
-        return nullptr;
-    }
-
-    bool HasEntityAddress(const TChunkAddress& address) const {
-        {
-            auto it = std::lower_bound(Records.begin(), Records.end(), address, [](const TColumnRecord& item, const TChunkAddress& address) {
-                return item.GetAddress() < address;
-            });
-            if (it != Records.end() && it->GetAddress() == address) {
-                return true;
-            }
-        }
-        {
-            auto it = std::lower_bound(Indexes.begin(), Indexes.end(), address, [](const TIndexChunk& item, const TChunkAddress& address) {
-                return item.GetAddress() < address;
-            });
-            if (it != Indexes.end() && it->GetAddress() == address) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     bool ValidSnapshotInfo() const {
         return MinSnapshotDeprecated.Valid() && PathId && PortionId;
     }
@@ -538,12 +491,6 @@ public:
         }
     }
 
-    THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
-        THashMap<TString, THashSet<TUnifiedBlobId>> result;
-        FillBlobIdsByStorage(result, indexInfo);
-        return result;
-    }
-
     class TSchemaCursor {
         const NOlap::TVersionedIndex& VersionedIndex;
         ISnapshotSchema::TPtr CurrentSchema;
@@ -568,12 +515,6 @@ public:
 
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
-    void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const;
-    void FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TVersionedIndex& index) const;
-
-    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const;
-    void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const;
-
     ui32 GetRecordsCount() const {
         ui32 result = 0;
         std::optional<ui32> columnIdFirst;
@@ -590,16 +531,6 @@ public:
 
     ui32 NumRows() const {
         return GetRecordsCount();
-    }
-
-    ui32 NumRows(const ui32 columnId) const {
-        ui32 result = 0;
-        for (auto&& i : Records) {
-            if (columnId == i.ColumnId) {
-                result += i.GetMeta().GetNumRows();
-            }
-        }
-        return result;
     }
 
     ui64 GetIndexRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;

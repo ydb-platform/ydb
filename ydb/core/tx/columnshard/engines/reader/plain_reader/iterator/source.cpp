@@ -63,7 +63,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         if (columnChunks.empty()) {
             continue;
         }
-        auto itFilter = cFilter.GetIterator(false, Portion->NumRows(i));
+        auto itFilter = cFilter.GetIterator(false, Portion->NumRows());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
@@ -79,7 +79,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             }
             itFinished = !itFilter.Next(c->GetMeta().GetNumRows());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows(i));
+        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows());
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
         "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());

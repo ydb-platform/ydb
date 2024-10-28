@@ -1,10 +1,12 @@
 #include "ttl.h"
-#include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 
 namespace NKikimr::NOlap {
 
@@ -19,7 +21,7 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     auto& index = engine.GetVersionedIndex();
     for (const auto& p : PortionsToEvict) {
-        p.GetPortionInfo().FillBlobRangesByStorage(blobRanges, index);
+        TPortionDataAccessor(p.GetPortionInfo()).FillBlobRangesByStorage(blobRanges, index);
     }
     for (auto&& i : blobRanges) {
         auto action = BlobsAction.GetReading(i.first);
@@ -45,17 +47,18 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     }
 }
 
-std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
-    TConstructionContext& context) const
-{
+std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateEvictedPortion(
+    TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs, TConstructionContext& context) const {
     const TPortionInfo& portionInfo = info.GetPortionInfo();
     auto& evictFeatures = info.GetFeatures();
     auto blobSchema = portionInfo.GetSchema(context.SchemaVersions);
-    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() || blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
+    Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() ||
+                   blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
 
     auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(portionInfo, srcBlobs, blobSchema->GetIndexInfo());
-    std::optional<TWritePortionInfoWithBlobsResult> result = TReadPortionInfoWithBlobs::SyncPortion(
-        std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(), evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
+    std::optional<TWritePortionInfoWithBlobsResult> result =
+        TReadPortionInfoWithBlobs::SyncPortion(std::move(portionWithBlobs), blobSchema, evictFeatures.GetTargetScheme(),
+            evictFeatures.GetTargetTierName(), SaverContext.GetStoragesManager(), context.Counters.SplitterCounters);
     return std::move(result);
 }
 
@@ -78,4 +81,4 @@ NColumnShard::ECumulativeCounters TTTLColumnEngineChanges::GetCounterIndex(const
     return isSuccess ? NColumnShard::COUNTER_TTL_SUCCESS : NColumnShard::COUNTER_TTL_FAIL;
 }
 
-}
+}   // namespace NKikimr::NOlap

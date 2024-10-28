@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
@@ -163,7 +164,7 @@ INormalizerTask::TPtr TNormalizer::BuildTask(
     for (auto&& portion : portions) {
         auto schemaPtr = schemas->FindPtr(portion->GetPortionId());
         THashMap<TString, THashSet<TBlobRange>> blobsByStorage;
-        portion->FillBlobRangesByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
+        TPortionDataAccessor(*portion).FillBlobRangesByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
         if (blobsByStorage.size() > 1 || !blobsByStorage.contains(NBlobOperations::TGlobal::DefaultStorageId)) {
             continue;
         }

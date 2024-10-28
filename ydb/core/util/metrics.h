@@ -294,6 +294,11 @@ public:
         return AccumulatorCount >= MaxCount / 2;
     }
 
+    void Clear() {
+        AccumulatorValue = ValueType();
+        AccumulatorCount = 0;
+    }
+
 protected:
     ValueType AccumulatorValue;
     size_t AccumulatorCount;
@@ -378,7 +383,7 @@ public:
         return MaximumValue;
     }
 
-    void InitiaizeFrom(const TProto& proto) {
+    void InitializeFrom(const TProto& proto) {
         TProto::CopyFrom(proto);
         if (TProto::ValuesSize() > 0) {
             MaximumValue = *std::max_element(TProto::GetValues().begin(), TProto::GetValues().end());
@@ -440,7 +445,7 @@ public:
     }
 
     void AdvanceTime(TInstant now) {
-        // Nothing changed, last value is stiil relevant
+        // Nothing changed, last value is still relevant
         TType lastValue = {};
         if (!TProto::GetValues().empty()) {
             lastValue = *std::prev(TProto::MutableValues()->end());
@@ -452,7 +457,7 @@ public:
         return MaximumValue;
     }
 
-    void InitiaizeFrom(const TProto& proto) {
+    void InitializeFrom(const TProto& proto) {
         TProto::CopyFrom(proto);
         if (TProto::ValuesSize() > 0) {
             MaximumValue = *std::max_element(TProto::GetValues().begin(), TProto::GetValues().end());

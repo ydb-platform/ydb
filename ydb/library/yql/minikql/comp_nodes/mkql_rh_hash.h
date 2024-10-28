@@ -5,6 +5,7 @@
 #include <util/generic/yexception.h>
 #include <vector>
 #include <span>
+#include <functional>
 
 #include <ydb/library/yql/utils/prefetch.h>
 
@@ -45,6 +46,8 @@ class TRobinHoodHashBase {
 public:
     using iterator = char*;
     using const_iterator = const char*;
+
+    using TIsLowMemoryCallback = std::function<bool()>;
 protected:
     THash HashLocal;
     TEqual EqualLocal;
@@ -75,13 +78,14 @@ protected:
 
     using TPSLStorage = TPSLStorageImpl<CacheHash>;
 
-    explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
+    explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal, TIsLowMemoryCallback isLowMemoryCallback = nullptr)
         : HashLocal(std::move(hash))
         , EqualLocal(std::move(equal))
         , Capacity(initialCapacity)
         , CapacityShift(64 - MostSignificantBit(initialCapacity))
         , Allocator()
         , SelfHash(GetSelfHash(this))
+        , IsLowMemoryCallback(isLowMemoryCallback)
     {
         Y_ENSURE((Capacity & (Capacity - 1)) == 0);
     }
@@ -283,7 +287,11 @@ private:
         }
     }
 
-    Y_NO_INLINE void Grow() {
+    ui64 GetNewCapacity() {
+        if (IsLowMemoryCallback && IsLowMemoryCallback()) {
+            return Capacity + Size / 4;
+        }
+
         ui64 growFactor;
         if (Capacity < 100'000) {
             growFactor = 8;
@@ -292,7 +300,12 @@ private:
         } else {
             growFactor = 2;
         }
-        auto newCapacity = Capacity * growFactor;
+        return Capacity * growFactor;
+
+    }
+
+    Y_NO_INLINE void Grow() {
+        auto newCapacity = GetNewCapacity();
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
@@ -387,6 +400,8 @@ private:
     const ui64 SelfHash;
     char* Data = nullptr;
     char* DataEnd = nullptr;
+
+    TIsLowMemoryCallback IsLowMemoryCallback = nullptr;
 };
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
@@ -512,13 +527,13 @@ public:
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
-    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity, hash, equal) {
+    explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8, TBase::TIsLowMemoryCallback isLowMemoryCallback = nullptr)
+        : TBase(initialCapacity, hash, equal, isLowMemoryCallback) {
         TBase::Init();
     }
 
     explicit TRobinHoodHashSet(ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity, THash(), TEqual()) {
+        : TBase(initialCapacity, THash(), TEqual(), nullptr) {
         TBase::Init();
     }
 

@@ -13,30 +13,33 @@ class TpchSuiteBase(LoadSuiteBase):
     iterations: int = 3
     tables_size: dict[str, int] = {}
 
-    def _get_tables_size(self) -> dict[str, int]:
+    @classmethod
+    def _get_tables_size(cls) -> dict[str, int]:
         result: dict[str, int] = {
-            'customer': 150000 * self.size,
+            'customer': 150000 * cls.size,
             'nation': 25,
-            'orders': 1500000 * self.size,
-            'part': 200000 * self.size,
-            'partsupp': 800000 * self.size,
+            'orders': 1500000 * cls.size,
+            'part': 200000 * cls.size,
+            'partsupp': 800000 * cls.size,
             'region': 5,
-            'supplier': 10000 * self.size,
+            'supplier': 10000 * cls.size,
         }
-        result.update(self.tables_size)
+        result.update(cls.tables_size)
         return result
 
-    def _get_path(self, full: bool = True) -> str:
+    @classmethod
+    def _get_path(cls, full: bool = True) -> str:
         if full:
             tpch_path = get_external_param('table-path-tpch', f'{YdbCluster.tables_path}/tpch')
         else:
             tpch_path = 'tpch'
-        return get_external_param(f'table-path-{self.suite}', f'{tpch_path}/s{self.size}')
+        return get_external_param(f'table-path-{cls.suite()}', f'{tpch_path}/s{cls.size}')
 
-    def do_setup_class(self):
-        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{self.size}'):
+    @classmethod
+    def do_setup_class(cls):
+        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.size}'):
             return
-        self.check_tables_size(self, folder=self._get_path(self, False), tables=self._get_tables_size(self))
+        cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
     @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
     def test_tpch(self, query_num: int):

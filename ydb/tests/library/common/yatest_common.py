@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# TODO (2024): remove this file, it is not needed. See KIKIMR-16114 for details
 import os
 
 import yatest.common as ya_common

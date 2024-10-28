@@ -459,18 +459,30 @@ bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected) {
     return valResult > (1 - relativeFloatPrecession) * valExpected && valResult < (1 + relativeFloatPrecession) * valExpected;
 }
 
+template <>
+bool CompareValueImpl<float>(const float& valResult, TStringBuf vExpected) {
+    return CompareValueImplFloat(valResult, vExpected);
+}
+
+template <>
+bool CompareValueImpl<double>(const double& valResult, TStringBuf vExpected) {
+    return CompareValueImplFloat(valResult, vExpected);
+}
+
 bool CompareValueImplDecimal(const NYdb::TDecimalValue& valResult, TStringBuf vExpected) {
-    constexpr double relativeFloatPrecession = 0.0001;
     auto resInt = NYql::NDecimal::FromHalfs(valResult.Low_, valResult.Hi_);
     TStringBuf precesionStr;
     vExpected.Split("+-", vExpected, precesionStr);
-    auto expectedInt = NYql::NDecimal::FromString(vExpected, 22, 9);
+    auto expectedInt = NYql::NDecimal::FromString(vExpected, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
 
     if (precesionStr) {
-        auto precInt = NYql::NDecimal::FromString(precesionStr, 22, 9);
+        auto precInt = NYql::NDecimal::FromString(precesionStr, valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
         return resInt >= expectedInt - precInt && resInt <= expectedInt + precInt;
     }
-    return resInt > (1 - relativeFloatPrecession) * expectedInt && resInt < (1 + relativeFloatPrecession) * expectedInt;
+    const auto from = NYql::NDecimal::FromString("0.9999", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
+    const auto to = NYql::NDecimal::FromString("1.0001", valResult.DecimalType_.Precision, valResult.DecimalType_.Scale);
+    const auto devider = NYql::NDecimal::GetDivider(valResult.DecimalType_.Scale);
+    return resInt > NYql::NDecimal::MulAndDivNormalDivider(from, expectedInt, devider) && resInt < NYql::NDecimal::MulAndDivNormalDivider(to, expectedInt, devider);
 }
 
 bool CompareValueImplDatetime(const TInstant& valResult, TStringBuf vExpected, TDuration unit) {
@@ -500,19 +512,49 @@ bool CompareValueImplDatetime64(const T& valResult, TStringBuf vExpected, TDurat
     return valResult == valExpected;
 }
 
-bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
-    TValueParser vp(v);
-    TTypeParser tp(v.GetType());
-    if (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
-        if (vp.IsNull()) {
-            return vExpected == "";
+template<class T>
+bool CompareValuePgImpl(const NYdb::TPgValue& v, TStringBuf vExpected) {
+    if (v.IsText()) {
+        T value;
+        if (!TryFromString(v.Content_, value)) {
+            Cerr << "cannot parse value as " << typeid(value).name() << "(" << v.Content_ << ")" << Endl;
+            return false;
         }
-        vp.OpenOptional();
-        tp.OpenOptional();
+        return CompareValueImpl(value, vExpected);
     }
-    if (tp.GetKind() == TTypeParser::ETypeKind::Decimal) {
-        return  CompareValueImplDecimal(vp.GetDecimal(), vExpected);
+    const T* value = reinterpret_cast<const T*>(v.Content_.data());
+    return CompareValueImpl(*value, vExpected);
+}
+
+bool CompareValuePg(const NYdb::TPgValue& v, TStringBuf vExpected) {
+    if (v.IsNull()) {
+        return vExpected == "";
     }
+    if (v.PgType_.TypeName == "pgint2") {
+        return CompareValuePgImpl<i16>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgint4") {
+        return CompareValuePgImpl<i32>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgint8") {
+        return CompareValuePgImpl<i64>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgfloat4") {
+        return CompareValuePgImpl<float>(v, vExpected);
+    }
+    if (v.PgType_.TypeName == "pgfloat8") {
+        return CompareValuePgImpl<double>(v, vExpected);
+    }
+    if (IsIn({"pgbytea", "pgtext"}, v.PgType_.TypeName)) {
+        return vExpected == v.Content_;
+    }
+    Cerr << "Unsupported pg type: typename=" << v.PgType_.TypeName
+        << "; type_mod=" << v.PgType_.TypeModifier
+        << Endl;
+    return false;
+}
+
+bool CompareValuePrimitive(const NYdb::TValue& v, const TValueParser& vp, const TTypeParser& tp, TStringBuf vExpected) {
     switch (tp.GetPrimitive()) {
     case EPrimitiveType::Bool:
         return CompareValueImpl(vp.GetBool(), vExpected);
@@ -533,9 +575,9 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
     case EPrimitiveType::Uint64:
         return CompareValueImpl(vp.GetUint64(), vExpected);
     case EPrimitiveType::Float:
-        return CompareValueImplFloat(vp.GetFloat(), vExpected);
+        return CompareValueImpl(vp.GetFloat(), vExpected);
     case EPrimitiveType::Double:
-        return CompareValueImplFloat(vp.GetDouble(), vExpected);
+        return CompareValueImpl(vp.GetDouble(), vExpected);
     case EPrimitiveType::Date:
         return CompareValueImplDatetime(vp.GetDate(), vExpected, TDuration::Days(1));
     case EPrimitiveType::Datetime:
@@ -562,6 +604,28 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
     }
 }
 
+bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
+    TValueParser vp(v);
+    TTypeParser tp(v.GetType());
+    while (tp.GetKind() == TTypeParser::ETypeKind::Optional) {
+        if (vp.IsNull()) {
+            return vExpected == "";
+        }
+        vp.OpenOptional();
+        tp.OpenOptional();
+    }
+    switch (tp.GetKind()) {
+    case TTypeParser::ETypeKind::Decimal:
+        return  CompareValueImplDecimal(vp.GetDecimal(), vExpected);
+    case TTypeParser::ETypeKind::Primitive:
+        return CompareValuePrimitive(v, vp, tp, vExpected);
+    case TTypeParser::ETypeKind::Pg:
+        return CompareValuePg(vp.GetPg(), vExpected);
+    default:
+        Cerr  << "Unsupported value type kind: " << tp.GetKind() << Endl;
+        return false;
+    }
+}
 
 bool TQueryResultInfo::IsExpected(std::string_view expected) const {
     if (expected.empty()) {

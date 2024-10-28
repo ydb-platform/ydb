@@ -13,7 +13,8 @@ class TpcdsSuiteBase(LoadSuiteBase):
     iterations: int = 3
     tables_size: dict[str, int] = {}
 
-    def _get_tables_size(self) -> dict[str, int]:
+    @classmethod
+    def _get_tables_size(cls) -> dict[str, int]:
         result: dict[str, int] = {
             'customer_demographics': 1920800,
             'date_dim': 73049,
@@ -22,20 +23,22 @@ class TpcdsSuiteBase(LoadSuiteBase):
             'ship_mode': 20,
             'time_dim': 86400,
         }
-        result.update(self.tables_size)
+        result.update(cls.tables_size)
         return result
 
-    def _get_path(self, full: bool = True) -> str:
+    @classmethod
+    def _get_path(cls, full: bool = True) -> str:
         if full:
             tpcds_path = get_external_param('table-path-tpcds', f'{YdbCluster.tables_path}/tpcds')
         else:
             tpcds_path = 'tpcds'
-        return get_external_param(f'table-path-{self.suite}', f'{tpcds_path}/s{self.size}')
+        return get_external_param(f'table-path-{cls.suite()}', f'{tpcds_path}/s{cls.size}')
 
-    def do_setup_class(self):
-        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{self.size}'):
+    @classmethod
+    def do_setup_class(cls):
+        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.size}'):
             return
-        self.check_tables_size(self, folder=self._get_path(self, False), tables=self._get_tables_size(self))
+        cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
     @pytest.mark.parametrize('query_num', [i for i in range(1, 100)])
     def test_tpcds(self, query_num: int):

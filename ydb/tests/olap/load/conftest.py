@@ -23,11 +23,12 @@ class LoadSuiteBase:
     timeout: float = 1800.
     refference: str = ''
     check_canonical: bool = False
+    query_syntax: str = ''
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
 
-    @property
-    def suite(self) -> str:
-        result = type(self).__name__
+    @classmethod
+    def suite(cls) -> str:
+        result = cls.__name__
         if result.startswith('Test'):
             return result[4:]
         return result
@@ -46,8 +47,9 @@ class LoadSuiteBase:
     def _test_name(cls, query_num: int) -> str:
         return f'Query{query_num:02d}'
 
+    @classmethod
     @allure.step('check tables size')
-    def check_tables_size(self, folder: Optional[str], tables: dict[str, int]):
+    def check_tables_size(cls, folder: Optional[str], tables: dict[str, int]):
         sth = ScenarioTestHelper(None)
         errors: list[str] = []
         for table, expected_size in tables.items():
@@ -64,12 +66,17 @@ class LoadSuiteBase:
             msg = "\n".join(errors)
             pytest.fail(f'Unexpected tables size in `{folder}`:\n {msg}')
 
-    def process_query_result(self, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
+    @classmethod
+    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
         def _get_duraton(stats, field):
             if stats is None:
                 return None
             result = stats.get(field)
             return float(result) / 1e3 if result is not None else None
+
+        def _duration_text(duration: float | int):
+            s = f'{int(duration)}s ' if duration >= 1 else ''
+            return f'{s}{int(duration * 1000) % 1000}ms'
 
         def _attach_plans(plan: YdbCliHelper.QueryPlan) -> None:
             if plan.plan is not None:
@@ -81,7 +88,7 @@ class LoadSuiteBase:
             if plan.svg is not None:
                 allure.attach(plan.svg, 'Plan svg', attachment_type=allure.attachment_type.SVG)
 
-        test = self._test_name(query_num)
+        test = cls._test_name(query_num)
         stats = result.stats.get(test)
         if stats is not None:
             allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
@@ -95,10 +102,15 @@ class LoadSuiteBase:
                 _attach_plans(result.explain_plan)
 
         if result.plans is not None:
-            for i in range(self._get_iterations(query_num)):
+            for i in range(iterations):
+                s = allure.step(f'Iteration {i}')
+                if i in result.time_by_iter:
+                    s.params['duration'] = _duration_text(result.time_by_iter[i])
                 try:
-                    with allure.step(f'Iteration {i}'):
+                    with s:
                         _attach_plans(result.plans[i])
+                        if i in result.time_by_iter:
+                            allure.dynamic.parameter('duration', _duration_text(result.time_by_iter[i]))
                         if i in result.errors_by_iter:
                             pytest.fail(result.errors_by_iter[i])
                 except BaseException:
@@ -120,9 +132,7 @@ class LoadSuiteBase:
             allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
         for p in ['Mean']:
             if p in stats:
-                value = int(stats[p])
-                s = f'{int(value / 1000)}s ' if value >= 1000 else ''
-                allure.dynamic.parameter(p, f'{s}{value % 1000}ms')
+                allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
         error_message = ''
         success = True
         if not result.success:
@@ -134,7 +144,7 @@ class LoadSuiteBase:
         if upload:
             ResultsProcessor.upload_results(
                 kind='Load',
-                suite=self.suite,
+                suite=cls.suite(),
                 test=test,
                 timestamp=time(),
                 is_successful=success,
@@ -150,20 +160,21 @@ class LoadSuiteBase:
                 exc = exc.with_traceback(result.traceback)
             raise exc
 
-    def setup_class(self) -> None:
-        if not hasattr(self, 'do_setup_class'):
+    @classmethod
+    def setup_class(cls) -> None:
+        if not hasattr(cls, 'do_setup_class'):
             return
         error = None
         tb = None
         start_time = time()
         try:
-            self.do_setup_class(self)
+            cls.do_setup_class()
         except BaseException as e:
             error = str(e)
             tb = e.__traceback__
         ResultsProcessor.upload_results(
             kind='Load',
-            suite=self.suite,
+            suite=cls.suite(),
             test='_Verification',
             timestamp=start_time,
             is_successful=(error is None)
@@ -188,7 +199,8 @@ class LoadSuiteBase:
             iterations=self._get_iterations(query_num),
             workload_type=self.workload_type,
             timeout=self._get_timeout(query_num),
-            check_canonical=self.check_canonical
+            check_canonical=self.check_canonical,
+            query_syntax=self.query_syntax
         )
-        allure_test_description(self.suite, self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
-        self.process_query_result(result, query_num, self.iterations, True)
+        allure_test_description(self.suite(), self._test_name(query_num), refference_set=self.refference, start_time=start_time, end_time=time())
+        self.process_query_result(result, query_num, self._get_iterations(query_num), True)

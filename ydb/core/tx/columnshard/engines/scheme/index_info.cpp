@@ -141,10 +141,10 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
     return GetColumnFeaturesVerified(columnId).GetColumnSaver();
 }
 
-std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
+const std::shared_ptr<TColumnLoader>& TIndexInfo::GetColumnLoaderOptional(const ui32 columnId) const {
     const auto& cFeatures = GetColumnFeaturesOptional(columnId);
     if (!cFeatures) {
-        return nullptr;
+        return Default<std::shared_ptr<TColumnLoader>>();
     } else {
         return cFeatures->GetLoader();
     }

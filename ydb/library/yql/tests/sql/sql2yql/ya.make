@@ -5,7 +5,7 @@ PY3TEST()
         test_sql_format.py
     )
 
-IF (SANITIZER_TYPE OR NOT OPENSOURCE)
+IF (NOT OPENSOURCE)
     REQUIREMENTS(ram:12)
 ENDIF()
 

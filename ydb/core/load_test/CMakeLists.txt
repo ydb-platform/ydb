@@ -19,6 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(ut)
 add_subdirectory(ut_ycsb)
 
 add_library(ydb-core-load_test)

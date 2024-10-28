@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         }
     }
 
-    Y_UNIT_TEST(NonUniformClusterNew) {
+    Y_UNIT_TEST(NonUniformClusterDifferentSlotsPerDisk) {
         std::vector<std::tuple<ui32, ui32, ui32, ui32, ui32>> disks;
         for (ui32 rack = 0; rack < 12; ++rack) {
             disks.emplace_back(1, 1, rack, 1, 1);
@@ -649,27 +649,19 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
         context.PopulateGroupMapper(mapper, 8, {}, {}, std::nullopt, false);
         for (ui32 i = 0; i < 16; ++i) {
-            Cerr << i << "/" << context.GetTotalDisks() << Endl;
+            Ctest << i << "/" << 16 << Endl;
             TGroupMapper::TGroupDefinition group;
             context.AllocateGroup(mapper, group);
-            for (ui32 x = 0; x < group.size(); ++x) {
-            for (ui32 y = 0; y < group[x].size(); ++y) {
-            for (ui32 z = 0; z < group[x][y].size(); ++z) {
-                Cerr << x << " " << y << " " << z << ",";
-            }
-            }
-            }
-            Cerr << Endl;
             context.CheckGroupErasure(group);
         }
         TVector<ui32> slots = context.GetSlots();
         ui64 slots_total = 0;
         for (ui32 numSlots : slots) {
-            slots_total +=  numSlots;
-            Cerr << "slots " << numSlots << " ";
-            // UNIT_ASSERT_VALUES_EQUAL(8, numSlots);
+            slots_total += numSlots;
+            Ctest << "slots " << numSlots << " ";
         }
-        Cerr << slots_total << Endl;
+        Ctest << slots_total << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(slots_total, 8 * 8 + 4 * 16);
     }
 
     Y_UNIT_TEST(NonUniformCluster2) {

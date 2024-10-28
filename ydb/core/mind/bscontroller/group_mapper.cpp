@@ -45,9 +45,8 @@ namespace NKikimr::NBsController {
                 return i32(MaxSlots) - NumSlots;
             }
 
-            i32 GetPickerScore() const {
-                // Cerr << NumSlots << ", " << MaxSlots << Endl;
-                return -FreeSlots();
+            double GetPickerScore() const {
+                return double(NumSlots) / MaxSlots;
             }
         };
 
@@ -165,7 +164,7 @@ namespace NKikimr::NBsController {
                 return true;
             }
 
-            TPDiskByPosition SetupMatchingDisks(i32 maxScore) {
+            TPDiskByPosition SetupMatchingDisks(double maxScore) {
                 TPDiskByPosition res;
                 res.reserve(Self.PDiskByPosition.size());
 
@@ -309,7 +308,7 @@ namespace NKikimr::NBsController {
             {
             }
 
-            bool FillInGroup(i32 maxScore, TUndoLog& undo, TGroup& group, const TGroupConstraints& constraints) {
+            bool FillInGroup(double maxScore, TUndoLog& undo, TGroup& group, const TGroupConstraints& constraints) {
                 // determine PDisks that fit our requirements (including score)
                 auto v = SetupMatchingDisks(maxScore);
 
@@ -581,7 +580,7 @@ namespace NKikimr::NBsController {
             }
 
             bool SetupNavigation(const TGroup& group) {
-                TPDiskByPosition matchingDisks = SetupMatchingDisks(::Max<i32>());
+                TPDiskByPosition matchingDisks = SetupMatchingDisks(::Max<double>());
                 const ui32 totalFailRealmsNum = Topology.GetTotalFailRealmsNum();
                 const ui32 numFailDomainsPerFailRealm = Topology.GetNumFailDomainsPerFailRealm();
                 const ui32 numDisksPerFailRealm = numFailDomainsPerFailRealm * Topology.GetNumVDisksPerFailDomain();
@@ -690,7 +689,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            void SetupCandidates(i32 maxScore) {
+            void SetupCandidates(double maxScore) {
                 TPDiskByPosition matchingDisks = SetupMatchingDisks(maxScore);
                 DomainCandidates.clear();
                 DiskCandidates.clear();
@@ -812,7 +811,7 @@ namespace NKikimr::NBsController {
                 return {failLevel, misplacedVDisks};
             }
 
-            std::optional<TPDiskId> TargetMisplacedVDisk(i32 maxScore, const TGroup& group, const TVDiskIdShort& vdisk) {
+            std::optional<TPDiskId> TargetMisplacedVDisk(double maxScore, const TGroup& group, const TVDiskIdShort& vdisk) {
                 for (ui32 orderNumber = 0; orderNumber < group.size(); ++orderNumber) {
                     if (!group[orderNumber] && orderNumber != Topology.GetOrderNumber(vdisk)) {
                         return std::nullopt;
@@ -972,7 +971,7 @@ namespace NKikimr::NBsController {
             }
 
             // calculate score table
-            std::vector<i32> scores;
+            std::vector<double> scores;
             for (const auto& [pdiskId, pdisk] : PDisks) {
                 if (allocator.DiskIsUsable(pdisk)) {
                     scores.push_back(pdisk.GetPickerScore());
@@ -1039,7 +1038,7 @@ namespace NKikimr::NBsController {
                 return TMisplacedVDisks(EFailLevel::INCORRECT_LAYOUT, {}, "Cannot map failRealms to pRealms");
             }
 
-            sanitizer.SetupCandidates(::Max<i32>());
+            sanitizer.SetupCandidates(::Max<double>());
             auto [failLevel, misplacedVDiskNums] = sanitizer.FindMisplacedVDisks(group);
             std::vector<TVDiskIdShort> misplacedVDisks;
             for (ui32 orderNum : misplacedVDiskNums) {
@@ -1073,7 +1072,7 @@ namespace NKikimr::NBsController {
             }
 
             // calculate score table
-            std::vector<i32> scores;
+            std::vector<double> scores;
             for (const auto& [pdiskId, pdisk] : PDisks) {
                 if (sanitizer.DiskIsUsable(pdisk)) {
                     scores.push_back(pdisk.GetPickerScore());
@@ -1083,7 +1082,7 @@ namespace NKikimr::NBsController {
             scores.erase(std::unique(scores.begin(), scores.end()), scores.end());
 
             // bisect scores to find optimal working one
-            sanitizer.SetupCandidates(::Max<i32>());
+            sanitizer.SetupCandidates(::Max<double>());
 
             std::optional<TPDiskId> result;
 

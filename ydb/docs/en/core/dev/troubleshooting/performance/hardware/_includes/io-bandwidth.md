@@ -1,12 +1,12 @@
-1. Open the **DB overview** dashboard in Grafana.
+1. Open the **Distributed Storage Overview** dashboard in Grafana.
 
-1. On the **Cost and DiskTimeAvailable relation** chart, see if the **Disk cost** spikes cross the **DiskTimeAvailable** level.
+1. On the **DiskTimeAvailable and total Cost relation** chart, see if the **Total Cost** spikes cross the **DiskTimeAvailable** level.
 
     ![](../_assets/disk-time-available--disk-cost.png)
 
-    This chart shows the estimated total bandwith capacity of the storage system in conventional units (green) and the average usage cost (blue). When the average usage cost exceeds the total bandwidth capacity, the storage system of {{ ydb-short-name }} gets overloaded, which results in higher latencies.
+    This chart shows the estimated total bandwith capacity of the storage system in conventional units (green) and the total usage cost (blue). When the total usage cost exceeds the total bandwidth capacity, the storage system of {{ ydb-short-name }} gets overloaded, which results in higher latencies.
 
-1. On the **Burst duration, ms** chart, check for any spikes of the load on the storage system. This chart shows microbursts of the load on the storage system, in microseconds.
+1. On the **Total burst duration** chart, check for any spikes of the load on the storage system. This chart shows microbursts of the load on the storage system, in microseconds.
 
     ![](../_assets/microbursts.png)
 

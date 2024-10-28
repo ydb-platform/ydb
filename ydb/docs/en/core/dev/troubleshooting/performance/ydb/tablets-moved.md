@@ -2,8 +2,9 @@
 
 {{ ydb-short-name }} automatically balances the load by moving tablets from overloaded nodes to other nodes. This process is managed by [Hive](../../../../concepts/glossary.md#hive). When Hive moves tablets, queries affecting those tablets might experience increased latencies while they wait for the tablet to get initialized on the new node.
 
-<!-- This information is taken from a draft topic Concepts > Hive. -->
-<!-- TODO: When the above-mentioned topic is merged, remove the info from here and add a link.  -->
+[//]: # (This information is taken from a draft topic Concepts > Hive.)
+[//]: # (TODO: When the above-mentioned topic is merged, remove the info from here and add a link.)
+
 {{ ydb-short-name }} considers usage of the following hardware resources for balancing nodes:
 
 - CPU

@@ -10,17 +10,15 @@ You can also use the **Healthcheck** in [Embedded UI](../../../../reference/embe
 
 - **Storage issues**
 
-    On the **Storage** tab, select the **Degraded** filter to list storage groups or nodes that contain degraded or failed storage.
+    1. On the **Storage** tab, select the **Degraded** filter to list storage groups or nodes that contain degraded or failed storage.
+
+    1. Check for any degradation in the storage system performance on the **Distributed Storage Overview** and **PDisk Device single disk** dashboards in Grafana.
 
 - **Network issues**
 
     <!-- The include is added to allow partial overrides in overlays  -->
     {% include notitle [network issues](./_includes/network.md) %}
 
-- **Availability of nodes on racks**
-
-    On the **Nodes** tab, see if nodes on specific racks are not available. Analyze the health indicators in the **Host** and **Rack** columns.
-
 ## Recommendations
 
-Contact the support team of your data center.
+Contact the responsible party for the affected hardware to resolve the underlying issue. If you are part of a larger organization, this could be an in-house team managing low-level infrastructure. Otherwise, contact the cloud service or hosting provider's support service.

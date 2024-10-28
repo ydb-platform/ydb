@@ -9,23 +9,25 @@
 
 1. Check whether the user load increased when the tablet splits and merges spiked.
 
-    <!-- TODO: Add user load charts -->
+    [//]: # (TODO: Add user load charts)
 
     - Review the diagrams on the **DataShard** dashboard in Grafana for any changes in the volume of data read or written by queries.
 
     - Examine the **Requests** chart on the **Query engine** dashboard in Grafana for any spikes in the number of requests.
 
-1. To identify recently split or merged tables, follow these steps:
+1. To identify recently split or merged tablets, follow these steps:
 
-    1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), go to the **Nodes** tab and select a node.
+    1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), click the **Developer UI** link in the upper right corner.
 
-    1. Open the **Tablets** tab.
+    1. Navigate to **Node Table Monitor** > **All tablets of the cluster**.
 
-    1. Sort the tablets by the **Uptime** column and review tablets, which uptime values coincide with the spikes on the **Split / Merge partitions** chart.
+    1. To show only data shard tablets, in the **TabletType** filter, specify `DataShard`.
 
-    1. To identify the table associated with the DataShard, hover over the Tablet link in the DataShard row and click the **Developer UI** icon.
+        ![](../_assets/node-tablet-monitor-data-shard.png)
 
-        ![](../_assets/splits-merges-tablets-devui.png)
+    1. Sort the tablets by the **ChangeTime** column and review tablets, which change time values coincide with the spikes on the **Split / Merge partitions** chart.
+
+    1. To identify the table associated with the data shard, in the data shard row, click the link in the **TabletID** column.
 
     1. On the **Tablets** page, click the **App** link.
 

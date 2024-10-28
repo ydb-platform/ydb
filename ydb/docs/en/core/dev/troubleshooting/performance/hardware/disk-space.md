@@ -4,8 +4,6 @@ A lack of available disk space can prevent the database from storing new data, r
 
 ## Diagnostics
 
-<!-- TODO: Mention the limits metric, if it's operational -->
-
 1. See if the **DB overview > Storage** charts in Grafana show any spikes.
 
 1. In [Embedded UI](../../../../reference/embedded-ui/index.md), on the **Storage** tab, analyze the list of available storage groups and nodes and their disk usage.
@@ -20,7 +18,7 @@ A lack of available disk space can prevent the database from storing new data, r
 
 {% note info %}
 
-You can also use the [Healthcheck API](../../../../reference/ydb-sdk/health-check-api.md) in your application to get this information.
+It is also recommended to use the [Healthcheck API](../../../../reference/ydb-sdk/health-check-api.md) to get this information.
 
 {% endnote %}
 

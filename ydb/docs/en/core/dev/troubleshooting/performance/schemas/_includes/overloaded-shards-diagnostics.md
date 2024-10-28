@@ -1,3 +1,10 @@
+{% note info %}
+
+This procedure applies only to row-oriented tables.
+
+{% endnote %}
+
+
 1. Analyze the **Overloaded shard count** chart in the **DB overview** Grafana dashboard.
 
     ![](../_assets/overloaded-shards-dashboard.png)
@@ -42,6 +49,12 @@
 
         If the table does not have these options, see [Recommendations for table configuration](../overloaded-shards.md#table-config).
 
-2. Analyze whether primary key values increment monotonically.
+1. Analyze whether primary key values increment monotonically:
 
-    If they do, see [Recommendations for the imbalanced primary key](../overloaded-shards.md#pk-recommendations).
+    - Check the data type of the primary key column. {{ ydb-short-name }} `serial` data types are used for autoincrementing values.
+
+    - Check the application logic.
+
+    - Calculate the difference between the minimum and maximum values of the primary key column. Then compare this value to the number of rows in a given table. If these values match, the primary key might be incrementing monotonically.
+
+    If primary key values do increase monotonically, see [Recommendations for the imbalanced primary key](../overloaded-shards.md#pk-recommendations).

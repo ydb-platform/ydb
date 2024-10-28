@@ -25,7 +25,7 @@ Database performance issues can be classified into several categories based on t
 
 - **Hardware infrastructure issues**.
 
-    - **[Network issues](infrastructure/network.md)**. Insufficient bandwidth or network congestion in data centers can significantly affect {{ ydb-short-name }} performance.
+    - **[Network issues](infrastructure/network.md)**. Network congestion in data centers and especially between data centers can significantly affect {{ ydb-short-name }} performance.
 
     - **[Data center outages](infrastructure/dc-outage.md)**: Disruptions in data center operations that can cause service or data unavailability. These outages may result from various factors, such as power failures, natural disasters, or cyber-attacks. A common fault-tolerant setup for {{ ydb-short-name }} spans three data centers or availability zones (AZs). {{ ydb-short-name }} can continue operating without interruption, even if one data center and a server rack in another are lost. However, it will initiate the relocation of tablets from the offline AZ to the remaining online nodes, temporarily leading to higher query latencies. Distributed transactions involving tablets that are moving to other nodes might experience increased latencies.
 
@@ -33,7 +33,7 @@ Database performance issues can be classified into several categories based on t
 
     - **[Server hardware issues](infrastructure/hardware.md)**. Malfunctioning CPU, memory modules, and network cards, until replaced, significantly impact database performance up to the total unavailability of the affected server.
 
-- **Insufficient resources**. These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database.
+- **Insufficient resources**. These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database. In some cases, suboptimal allocation of resources, for example poorly configured control groups (cgroups), may also result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
 
     - **[CPU bottlenecks](hardware/cpu-bottleneck.md)**. High CPU usage can result in slow query processing and increased response times. When CPU resources are limited, the database may struggle to handle complex queries or large transaction loads.
 
@@ -45,21 +45,20 @@ Database performance issues can be classified into several categories based on t
 
 - **OS issues**
 
-    - **Hardware resource allocation issues**. Suboptimal allocation of resources, for example poorly configured control groups (cgroups), may result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
 
     - **[System clock drift](system/system-clock-drift.md)**. If the system clocks on the {{ ydb-short-name }} servers start to drift apart, it will lead to increased distributed transaction latencies. In severe cases, {{ ydb-short-name }} might even refuse to process distributed transactions and return errors.
 
-    - Other processes running on the same nodes as YDB, such as antiviruses, observability agents, etc.
+    - Other processes running on the same servers or virtual machines as {{ ydb-short-name }}, such as antiviruses, observability agents, etc.
 
     - Kernel misconfiguration.
 
-- **YDB-related issues**
+- **{{ ydb-short-name }}-related issues**
 
-    - **[Rolling restart](system/ydb-updates.md)**. {{ ydb-short-name }} is a distributed system that supports rolling restart, when database administrators update {{ ydb-short-name }} nodes one by one. This helps keep the {{ ydb-short-name }} cluster up and running during the update process or some {{ ydb-short-name }} configuration changes. However, when a YDB node is being restarted, Hive moves the tables that run on this node to other nodes, and that may lead to increased latencies for queries that are processed by the moving tables.
+    - **[Rolling restart](ydb/ydb-updates.md)**. Database administrators (DBAs) can keep the {{ ydb-short-name }} cluster up and running during the update process or some {{ ydb-short-name }} configuration changes. This is possible because {{ ydb-short-name }} is a distributed system that supports rolling restart, and DBAs can update {{ ydb-short-name }} nodes one by one. However, when a {{ ydb-short-name }} node is being restarted, [Hive](../../../concepts/glossary.md#hive) moves the tablets that run on this node to other nodes, and that may lead to increased latencies for queries that are processed by the moving tablets.
 
     - Actor system pools misconfiguration.
 
-    - SDK usage issues (maybe worth being a separate category).
+    - SDK usage issues.
 
 - **Schema design issues**. These issues stem from inefficient decisions made during the creation of tables and indices. They can significantly impact query performance.
 
@@ -73,15 +72,13 @@ If any known changes occurred in the system around the time the performance issu
 
 1. [Overloaded shards](schemas/overloaded-shards.md)
 1. [Excessive tablet splits and merges](schemas/splits-merges.md)
-1. [Frequent tablet moves between nodes](system/tablets-moved.md)
+1. [Frequent tablet moves between nodes](ydb/tablets-moved.md)
 1. Insufficient hardware resources:
     - [Disk I/O bandwidth](hardware/io-bandwidth.md)
     - [Disk space](hardware/disk-space.md)
     - [Insufficient CPU](hardware/cpu-bottleneck.md)
 1. [Hardware issues](infrastructure/hardware.md) and [data center outages](infrastructure/dc-outage.md)
 1. [Network issues](infrastructure/network.md)
-1. [{{ ydb-short-name }} updates](system/ydb-updates.md)
+1. [{{ ydb-short-name }} updates](ydb/ydb-updates.md)
 1. [System clock drift](system/system-clock-drift.md)
-
-
 

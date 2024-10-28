@@ -7,7 +7,8 @@ The CPU resources are mainly used by the actor system. Depending on the type, al
 - **System**: A pool that is designed for running quick internal operations in YDB (it serves system tablets, state storage, distributed storage I/O, and erasure coding).
 
 - **User**: A pool that serves the user load (user tablets, queries run in the Query Processor).
-Batch: A pool that serves tasks with no strict limit on the execution time, background operations like garbage collection and heavy queries run in the Query Processor.
+
+- **Batch**: A pool that serves tasks with no strict limit on the execution time, background operations like backups, garbage collection, and heavy queries run in the Query Processor.
 
 - **IO**: A pool responsible for performing any tasks with blocking operations (such as authentication or writing logs to a file).
 

@@ -17,21 +17,6 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
-    std::shared_ptr<arrow::Scalar> result;
-    for (auto&& i : Records) {
-        if (i.ColumnId == columnId) {
-            if (!i.GetMeta().GetMax()) {
-                return nullptr;
-            }
-            if (!result || NArrow::ScalarCompare(result, i.GetMeta().GetMax()) < 0) {
-                result = i.GetMeta().GetMax();
-            }
-        }
-    }
-    return result;
-}
-
 ui64 TPortionInfo::GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation) const {
     ui64 sum = 0;
     const auto aggr = [&](const TColumnRecord& r) {
@@ -249,7 +234,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     }
 }
 
-TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
+TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
     PathId = proto.GetPathId();
     Portion = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
@@ -273,7 +258,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         }
     }
     for (auto&& i : proto.GetRecords()) {
-        auto parse = TColumnRecord::BuildFromProto(i, info.GetColumnFeaturesVerified(i.GetColumnId()));
+        auto parse = TColumnRecord::BuildFromProto(i);
         if (!parse) {
             return parse;
         }
@@ -290,13 +275,14 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     return TConclusionStatus::Success();
 }
 
-TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& info) {
+TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(
+    const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo) {
     TPortionMetaConstructor constructor;
-    if (!constructor.LoadMetadata(proto.GetMeta(), info)) {
+    if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo)) {
         return TConclusionStatus::Fail("cannot parse meta");
     }
     TPortionInfo result(constructor.Build());
-    auto parse = result.DeserializeFromProto(proto, info);
+    auto parse = result.DeserializeFromProto(proto);
     if (!parse) {
         return parse;
     }

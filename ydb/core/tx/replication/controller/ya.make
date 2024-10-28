@@ -20,6 +20,7 @@ SRCS(
     dst_alterer.cpp
     dst_creator.cpp
     dst_remover.cpp
+    event_util.cpp
     lag_provider.cpp
     logging.cpp
     nodes_manager.cpp

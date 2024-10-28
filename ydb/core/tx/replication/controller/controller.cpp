@@ -1,5 +1,6 @@
 #include "controller.h"
 #include "controller_impl.h"
+#include "event_util.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/discovery/discovery.h>
@@ -68,6 +69,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvStatus, Handle);
         HFunc(TEvService::TEvWorkerStatus, Handle);
         HFunc(TEvService::TEvRunWorker, Handle);
+        HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
@@ -454,6 +456,43 @@ void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext
     }
 
     ScheduleProcessQueues();
+}
+
+void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+    auto worker = GetOrCreateWorker(id);
+    worker->SetDataEnded(true);
+
+    auto allParentsEnded = AllOf(record.GetAdjacentPartitionsIds(), [&](auto partitionId) {
+        auto worker = Workers.find(TWorkerId{id.ReplicationId(), id.TargetId(), partitionId});
+        if (worker == Workers.end()) {
+            return false;
+        }
+        return worker->second.IsDataEnded();
+    });
+
+    if (allParentsEnded) {
+        auto replication = Replications.at(id.ReplicationId());
+        const auto* target = replication->FindTarget(id.TargetId());
+
+        if (!target) {
+            Y_VERIFY_DEBUG(target);
+            CLOG_E(ctx, "Resolve target error " <<  id.TargetId() << ": " << ev->Get()->ToString());
+            return;
+        }
+        for (auto partitionId: record.GetChildPartitionsIds()) {
+            auto ev = MakeTEvRunWorker(replication, *target, partitionId);
+            Send(SelfId(), std::move(ev));
+        }
+    }
 }
 
 bool TController::IsValidWorker(const TWorkerId& id) const {

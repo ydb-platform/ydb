@@ -53,6 +53,7 @@ target_sources(tx-replication-controller PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_alterer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_creator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_remover.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/event_util.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/lag_provider.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/logging.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/nodes_manager.cpp

@@ -652,6 +652,10 @@ std::tuple<ui64, ui64> TRuntimeFeatureFlags::BitsFromProto_slot4(const NKikimrCo
         bits |= flags.GetEnableFollowerStats() ? 3145728ULL : 1048576ULL;
         mask |= 3145728ULL;
     }
+    if (flags.HasEnableTopicAutopartitioningForReplication()) {
+        bits |= flags.GetEnableTopicAutopartitioningForReplication() ? 12582912ULL : 4194304ULL;
+        mask |= 12582912ULL;
+    }
     return { bits, mask };
 }
 
@@ -756,7 +760,7 @@ void TRuntimeFeatureFlags::CopyRuntimeFrom(const NKikimrConfig::TFeatureFlags& f
     Update_slot1(slot1 & 18446744073709536255ULL, 18446744073709536255ULL);
     Update_slot2(slot2 & 18216849385675816959ULL, 18216849385675816959ULL);
     Update_slot3(slot3 & 18446744073457893375ULL, 18446744073457893375ULL);
-    Update_slot4(slot4 & 4194303ULL, 4194303ULL);
+    Update_slot4(slot4 & 16777215ULL, 16777215ULL);
 }
 
 TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
@@ -1182,6 +1186,9 @@ TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
     }
     if (slot4 & 1048576ULL) {
         flags.SetEnableFollowerStats(bool(slot4 & 2097152ULL));
+    }
+    if (slot4 & 4194304ULL) {
+        flags.SetEnableTopicAutopartitioningForReplication(bool(slot4 & 8388608ULL));
     }
     return flags;
 }
@@ -3409,6 +3416,22 @@ void TRuntimeFeatureFlags::SetEnableFollowerStats(bool value) {
 
 void TRuntimeFeatureFlags::ClearEnableFollowerStats() {
     Update_slot4(0ULL, 3145728ULL);
+}
+
+bool TRuntimeFeatureFlags::HasEnableTopicAutopartitioningForReplication() const {
+    return slot4_.load(std::memory_order_relaxed) & 4194304ULL;
+}
+
+bool TRuntimeFeatureFlags::GetEnableTopicAutopartitioningForReplication() const {
+    return slot4_.load(std::memory_order_relaxed) & 8388608ULL;
+}
+
+void TRuntimeFeatureFlags::SetEnableTopicAutopartitioningForReplication(bool value) {
+    Update_slot4(value ? 12582912ULL : 4194304ULL, 12582912ULL);
+}
+
+void TRuntimeFeatureFlags::ClearEnableTopicAutopartitioningForReplication() {
+    Update_slot4(0ULL, 12582912ULL);
 }
 
 

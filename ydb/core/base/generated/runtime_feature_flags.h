@@ -870,6 +870,12 @@ public:
     void SetEnableFollowerStats(bool value);
     void ClearEnableFollowerStats();
 
+    // Feature flag EnableTopicAutopartitioningForReplication
+    bool HasEnableTopicAutopartitioningForReplication() const;
+    bool GetEnableTopicAutopartitioningForReplication() const;
+    void SetEnableTopicAutopartitioningForReplication(bool value);
+    void ClearEnableTopicAutopartitioningForReplication();
+
 
 private:
     static std::tuple<ui64, ui64> BitsFromProto_slot0(const NKikimrConfig::TFeatureFlags& flags);

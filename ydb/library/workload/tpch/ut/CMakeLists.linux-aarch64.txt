@@ -12,35 +12,27 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(ydb-core-tx-replication-ydb_proxy-ut)
+add_executable(ydb-library-workload-tpch-ut)
 
 
-target_compile_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
+target_include_directories(ydb-library-workload-tpch-ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch
 )
 
-target_include_directories(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy
-)
-
-target_link_libraries(ydb-core-tx-replication-ydb_proxy-ut PUBLIC
+target_link_libraries(ydb-library-workload-tpch-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-cpuid_check
   cpp-testing-unittest_main
-  tx-replication-ydb_proxy
-  tx-replication-ut_helpers
-  cpp-client-ydb_topic
-  cpp-testing-unittest
+  library-workload-tpch
+  cpp-regex-pcre
 )
 
-target_allocator(ydb-core-tx-replication-ydb_proxy-ut
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
+target_allocator(ydb-library-workload-tpch-ut
+  cpp-malloc-jemalloc
 )
 
-target_link_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
+target_link_options(ydb-library-workload-tpch-ut PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -49,28 +41,26 @@ target_link_options(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
   -lpthread
   -lrt
   -ldl
-  -lutil
 )
 
-target_sources(ydb-core-tx-replication-ydb_proxy-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/partition_end_watcher_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy_ut.cpp
+target_sources(ydb-library-workload-tpch-ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/ut/queries_ut.cpp
 )
 
 
 set_property(
   TARGET
-  ydb-core-tx-replication-ydb_proxy-ut
+  ydb-library-workload-tpch-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 
 add_yunittest(
   NAME
-  ydb-core-tx-replication-ydb_proxy-ut
+  ydb-library-workload-tpch-ut
   TEST_TARGET
-  ydb-core-tx-replication-ydb_proxy-ut
+  ydb-library-workload-tpch-ut
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -81,32 +71,24 @@ add_yunittest(
 
 set_yunittest_property(
   TEST
-  ydb-core-tx-replication-ydb_proxy-ut
+  ydb-library-workload-tpch-ut
   PROPERTY
   LABELS
-  MEDIUM
+  SMALL
 )
 
 set_yunittest_property(
   TEST
-  ydb-core-tx-replication-ydb_proxy-ut
+  ydb-library-workload-tpch-ut
   PROPERTY
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-tx-replication-ydb_proxy-ut
-  PROPERTY
-  TIMEOUT
-  600
-)
-
-vcs_info(ydb-core-tx-replication-ydb_proxy-ut)
+vcs_info(ydb-library-workload-tpch-ut)
 
 set_yunittest_property(
   TEST
-  ydb-core-tx-replication-ydb_proxy-ut
+  ydb-library-workload-tpch-ut
   PROPERTY
   PROCESSORS
   1

@@ -19,6 +19,8 @@ get_built_tool_path(
   rescompiler
 )
 
+add_subdirectory(ut)
+
 add_library(library-workload-tpch)
 
 

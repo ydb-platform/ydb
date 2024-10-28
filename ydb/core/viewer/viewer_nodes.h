@@ -2010,9 +2010,10 @@ public:
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
-        HiveNodeStats[ev->Cookie].Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (HiveNodeStats[ev->Cookie].Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void WhiteboardRequestDone() {
@@ -2025,40 +2026,46 @@ public:
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        SystemStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (SystemStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        VDiskStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (VDiskStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (PDiskStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        TabletStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (TabletStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->Record.Response_case()) {
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse:
-                SystemViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (SystemViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kTabletResponse:
-                TabletViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (TabletViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             default:
                 break;
@@ -2091,27 +2098,31 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
-        StoragePoolsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (StoragePoolsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
-        GroupsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (GroupsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        VSlotsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (VSlotsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        PDisksResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (PDisksResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {

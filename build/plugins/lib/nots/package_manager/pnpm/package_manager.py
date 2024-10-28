@@ -8,7 +8,15 @@ from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 from ..base.node_modules_bundler import bundle_node_modules
 from ..base.timeit import timeit
-from ..base.utils import b_rooted, build_nm_bundle_path, build_pj_path, home_dir, s_rooted
+from ..base.utils import (
+    b_rooted,
+    build_nm_bundle_path,
+    build_nm_path,
+    build_nm_store_path,
+    build_pj_path,
+    home_dir,
+    s_rooted,
+)
 
 
 class PnpmPackageManager(BasePackageManager):
@@ -55,8 +63,10 @@ class PnpmPackageManager(BasePackageManager):
         if local_cli:
             # Use single CAS for all the projects built locally
             store_dir = self.get_local_pnpm_store()
-            # It's a default value of pnpm itself. But it should be defined explicitly for not using values from the lockfiles or from the previous installations.
-            virtual_store_dir = self._nm_path('.pnpm')
+
+            nm_store_path = build_nm_store_path(self.module_path)
+            # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm/virtual-store
+            virtual_store_dir = os.path.join(build_nm_path(nm_store_path), self._VSTORE_NM_PATH)
 
         self._run_pnpm_install(store_dir, virtual_store_dir)
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)

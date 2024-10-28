@@ -80,7 +80,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     }
     {
         std::vector<const TIndexChunk*> indexes;
-        for (auto&& r : portion.GetIndexes()) {
+        for (auto&& r : TPortionDataAccessor(portion).GetIndexes()) {
             indexes.emplace_back(&r);
         }
         if (Reverse) {

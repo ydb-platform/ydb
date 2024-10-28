@@ -16,7 +16,13 @@ namespace NKikimr {
             "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_FEATURE_FLAGS)");
 
         struct TEvSubscribe : public TEventLocal<TEvSubscribe, EvSubscribe> {
+            TString Description;
+
             TEvSubscribe() = default;
+
+            explicit TEvSubscribe(const TString& description)
+                : Description(description)
+            {}
         };
 
         struct TEvUnsubscribe : public TEventLocal<TEvUnsubscribe, EvUnsubscribe> {

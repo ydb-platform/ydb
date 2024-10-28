@@ -1098,7 +1098,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 }
 
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
-        const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic) {
+        const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic, const TMap<ui64, ui64>& nodeMap) {
 
     auto stats = out.mutable_table_stats();
 
@@ -1107,6 +1107,21 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
             auto partition = stats->add_partition_stats();
             partition->set_rows_estimate(tablePartitionStat.GetRowCount());
             partition->set_store_size(tablePartitionStat.GetDataSize() + tablePartitionStat.GetIndexSize());
+        }
+    }
+
+    if (!nodeMap.empty()) {
+        size_t id = 0;
+        if ((size_t)stats->partition_stats_size() != in.TablePartitionsSize()) {
+            ythrow yexception() << "malformed TPathDescription.";
+        }
+
+        for (const auto& part : in.GetTablePartitions()) {
+            auto it = nodeMap.find(part.GetDatashardId());
+            if (it == nodeMap.end()) {
+                ythrow yexception() << "unknown datashardId to fill DescribeTableResult";
+            }
+            stats->mutable_partition_stats(id++)->set_leader_node_id(it->second);
         }
     }
 

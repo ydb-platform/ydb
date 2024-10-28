@@ -15,15 +15,39 @@
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (Grace)",
+                          "op_name":"TableFullScan",
+                          "table":"test\/ds\/catalog_sales"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"test\/ds\/catalog_returns"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"test\/ds\/store_returns"
+                  }
+                ]
+            },
+            {
+              "op_name":"InnerJoin (MapJoin)",
+              "args":
+                [
+                  {
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"InnerJoin (MapJoin)",
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (Grace)",
+                                      "op_name":"InnerJoin (MapJoin)",
                                       "args":
                                         [
                                           {
@@ -35,7 +59,7 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (Grace)",
+                                                        "op_name":"InnerJoin (MapJoin)",
                                                         "args":
                                                           [
                                                             {
@@ -129,62 +153,12 @@
                             ]
                         },
                         {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/promotion"
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"InnerJoin (Grace)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/household_demographics"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/income_band"
-                        }
-                      ]
-                  }
-                ]
-            },
-            {
-              "op_name":"InnerJoin (Grace)",
-              "args":
-                [
-                  {
-                    "op_name":"InnerJoin (Grace)",
-                    "args":
-                      [
-                        {
-                          "op_name":"InnerJoin (Grace)",
+                          "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"InnerJoin (Grace)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"test\/ds\/customer"
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"test\/ds\/customer_demographics"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"test\/ds\/customer_address"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"test\/ds\/household_demographics"
                               },
                               {
                                 "op_name":"TableFullScan",
@@ -195,7 +169,7 @@
                       ]
                   },
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
                         {
@@ -225,15 +199,39 @@
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (Grace)",
+                          "op_name":"TableFullScan",
+                          "table":"test\/ds\/catalog_sales"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"test\/ds\/catalog_returns"
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"test\/ds\/store_returns"
+                  }
+                ]
+            },
+            {
+              "op_name":"InnerJoin (MapJoin)",
+              "args":
+                [
+                  {
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"InnerJoin (MapJoin)",
                                 "args":
                                   [
                                     {
-                                      "op_name":"InnerJoin (Grace)",
+                                      "op_name":"InnerJoin (MapJoin)",
                                       "args":
                                         [
                                           {
@@ -245,7 +243,7 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (Grace)",
+                                                        "op_name":"InnerJoin (MapJoin)",
                                                         "args":
                                                           [
                                                             {
@@ -339,62 +337,12 @@
                             ]
                         },
                         {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/promotion"
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"InnerJoin (Grace)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/household_demographics"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/income_band"
-                        }
-                      ]
-                  }
-                ]
-            },
-            {
-              "op_name":"InnerJoin (Grace)",
-              "args":
-                [
-                  {
-                    "op_name":"InnerJoin (Grace)",
-                    "args":
-                      [
-                        {
-                          "op_name":"InnerJoin (Grace)",
+                          "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"InnerJoin (Grace)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"test\/ds\/customer"
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"test\/ds\/customer_demographics"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"test\/ds\/customer_address"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"test\/ds\/household_demographics"
                               },
                               {
                                 "op_name":"TableFullScan",
@@ -405,7 +353,7 @@
                       ]
                   },
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
                         {

@@ -49,20 +49,6 @@
                 ]
             }
           ]
-      },
-      {
-        "op_name":"InnerJoin (Grace)",
-        "args":
-          [
-            {
-              "op_name":"TableFullScan",
-              "table":"supplier"
-            },
-            {
-              "op_name":"TableFullScan",
-              "table":"nation"
-            }
-          ]
       }
     ]
 }

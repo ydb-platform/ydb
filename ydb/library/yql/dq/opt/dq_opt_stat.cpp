@@ -345,7 +345,7 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     auto joinAlgo = EJoinAlgoType::GraceJoin;
     for (size_t i=0; i<join.Flags().Size(); i++) {
-        if (join.Flags().Item(i).StringValue() == "broadcast") {
+        if (join.Flags().Item(i).StringValue() == "Broadcast") {
             joinAlgo = EJoinAlgoType::MapJoin;
             break;
         }

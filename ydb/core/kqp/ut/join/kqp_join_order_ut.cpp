@@ -426,8 +426,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint, StreamLookupJoin, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin, ColumnStore);
+    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHin1, StreamLookupJoin, ColumnStore) {
+        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin, ColumnStore);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
@@ -520,11 +520,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint1, StreamLookupJoin, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, StreamLookupJoin, ColumnStore);
     }
-
-    Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinHint2, StreamLookupJoin, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, StreamLookupJoin, ColumnStore);
-    }
-
 
     class TFindJoinWithLabels {
     public:

@@ -377,7 +377,7 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
 
     if (useGraceCore) {
         auto flags = Build<TCoAtomList>(ctx, join.Pos())
-            .Add<TCoAtom>().Value("broadcast").Build()
+            .Add<TCoAtom>().Value("Broadcast").Build()
             .Done();
 
         return Build<TDqPhyGraceJoin>(ctx, join.Pos())

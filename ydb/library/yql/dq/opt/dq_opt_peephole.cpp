@@ -257,8 +257,7 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
             .LeftKeysColumnNames(graceJoin.LeftJoinKeyNames())
             .RightKeysColumnNames(graceJoin.RightJoinKeyNames())
             .Flags(ctx.NewList(pos, std::move(flags)))
-            .Build()
-        .Done();
+    .Done();
 
     auto graceNode = ctx.Builder(pos)
         .Callable("NarrowMap")

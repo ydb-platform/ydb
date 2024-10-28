@@ -49,8 +49,8 @@
  *
  * Parameters:
  *
- * user[in]         - The username.
- * host[in]         - The hostname.
+ * user[in]         - The user name.
+ * host[in]         - The host name.
  * port[in]         - The port(when not Port 80).
  * bearer[in]       - The bearer token.
  * out[out]         - The result storage.
@@ -87,7 +87,7 @@ CURLcode Curl_auth_create_oauth_bearer_message(const char *user,
  *
  * Parameters:
  *
- * user[in]         - The username.
+ * user[in]         - The user name.
  * bearer[in]       - The bearer token.
  * out[out]         - The result storage.
  *

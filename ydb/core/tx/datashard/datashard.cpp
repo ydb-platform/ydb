@@ -151,6 +151,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , TtlReadAheadHi(0, 0, 128*1024*1024)
     , IncrementalRestoreReadAheadLo(0, 0, 64*1024*1024)
     , IncrementalRestoreReadAheadHi(0, 0, 128*1024*1024)
+    , CdcInitialScanReadAheadLo(0, 0, 64*1024*1024)
+    , CdcInitialScanReadAheadHi(0, 0, 128*1024*1024)
     , EnableLockedWrites(1, 0, 1)
     , MaxLockedWritesPerKey(1000, 0, 1000000)
     , EnableLeaderLeases(1, 0, 1)
@@ -328,6 +330,9 @@ void TDataShard::IcbRegister() {
         appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadLo, "DataShardControls.IncrementalRestoreReadAheadLo");
         appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadHi, "DataShardControls.IncrementalRestoreReadAheadHi");
 
+        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadLo, "DataShardControls.CdcInitialScanReadAheadLo");
+        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadHi, "DataShardControls.CdcInitialScanReadAheadHi");
+
         IcbRegistered = true;
     }
 }
@@ -358,7 +363,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AllocCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "datashard");
 
-    if (!Executor()->GetStats().IsFollower) {
+    if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
     } else {
@@ -368,6 +373,9 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
+        if (AppData(ctx)->FeatureFlags.GetEnableFollowerStats()) {
+            DoPeriodicTasks(ctx);
+        }
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Follower switched to work state: " << TabletID());
     }
 }
@@ -2215,12 +2223,12 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
     if (const auto& action = cgi.Get("action")) {
         if (action == "cleanup-borrowed-parts") {
-            Execute(CreateTxMonitoringCleanupBorrowedParts(this, ev), ctx);
+            HandleMonCleanupBorrowedParts(ev);
             return true;
         }
 
         if (action == "reset-schema-version") {
-            Execute(CreateTxMonitoringResetSchemaVersion(this, ev), ctx);
+            HandleMonResetSchemaVersion(ev);
             return true;
         }
 
@@ -2246,13 +2254,16 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
                 ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Change sender is not running"));
                 return true;
             }
+        } else if (page == "volatile-txs") {
+            HandleMonVolatileTxs(ev);
+            return true;
         } else {
             ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
             return true;
         }
     }
 
-    Execute(CreateTxMonitoring(this, ev), ctx);
+    HandleMonIndexPage(ev);
     return true;
 }
 
@@ -3620,7 +3631,7 @@ void TDataShard::RestartPipeRS(ui64 tabletId, TPersistentTablet& state, const TA
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server connected at "
-        << (Executor()->GetStats().IsFollower ? "follower " : "leader ")
+        << (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")
         << "tablet# " << ev->Get()->TabletId
         << ", clientId# " << ev->Get()->ClientId
         << ", serverId# " << ev->Get()->ServerId
@@ -3638,7 +3649,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActo
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Server disconnected at "
-        << (Executor()->GetStats().IsFollower ? "follower " : "leader ")
+        << (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")
         << "tablet# " << ev->Get()->TabletId
         << ", clientId# " << ev->Get()->ClientId
         << ", serverId# " << ev->Get()->ServerId
@@ -4173,60 +4184,6 @@ void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const 
     Execute(new TTxStoreTablePath(this, pathId, rec.GetPath()), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr &ev,
-                               const TActorContext &ctx)
-{
-    Execute(CreateTxGetInfo(this, ev), ctx);
-}
-
-void TDataShard::Handle(TEvDataShard::TEvListOperationsRequest::TPtr &ev,
-                               const TActorContext &ctx)
-{
-    Execute(CreateTxListOperations(this, ev), ctx);
-}
-
-void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr &ev,
-                               const TActorContext &ctx)
-{
-    Execute(CreateTxGetOperation(this, ev), ctx);
-}
-
-void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr &ev,
-                               const TActorContext &ctx)
-{
-    auto *response = new TEvDataShard::TEvGetDataHistogramResponse;
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
-    const auto& rec = ev->Get()->Record;
-
-    if (rec.GetCollectKeySampleMs() > 0) {
-        EnableKeyAccessSampling(ctx,
-            AppData(ctx)->TimeProvider->Now() + TDuration::MilliSeconds(rec.GetCollectKeySampleMs()));
-    }
-
-    if (rec.GetActualData()) {
-        if (CurrentKeySampler == DisabledKeySampler) {
-            // datashard stores expired stats
-            ctx.Send(ev->Sender, response);
-            return;
-        }
-    }
-
-    for (const auto &pr : TableInfos) {
-        const auto &tinfo = *pr.second;
-        const NTable::TStats &stats = tinfo.Stats.DataStats;
-
-        auto &hist = *response->Record.AddTableHistograms();
-        hist.SetTableName(pr.second->Name);
-        for (ui32 ki : tinfo.KeyColumnIds)
-            hist.AddKeyNames(tinfo.Columns.FindPtr(ki)->Name);
-        SerializeHistogram(tinfo, stats.DataSizeHistogram, *hist.MutableSizeHistogram());
-        SerializeHistogram(tinfo, stats.RowCountHistogram, *hist.MutableCountHistogram());
-        SerializeKeySample(tinfo, tinfo.Stats.AccessStats, *hist.MutableKeyAccessSample());
-    }
-
-    ctx.Send(ev->Sender, response);
-}
-
 void TDataShard::Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr &ev,
                                const TActorContext &ctx)
 {
@@ -4319,60 +4276,6 @@ void TDataShard::Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &e
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
     ctx.Send(ev->Forward(tx->GetStreamSink()));
-}
-
-void TDataShard::Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr &ev,
-                               const TActorContext &ctx)
-{
-    auto *response = new TEvDataShard::TEvGetRSInfoResponse;
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
-
-    for (auto &pr : OutReadSets.CurrentReadSets) {
-        auto &rs = *response->Record.AddOutReadSets();
-        rs.SetTxId(pr.second.TxId);
-        rs.SetOrigin(pr.second.Origin);
-        rs.SetSource(pr.second.From);
-        rs.SetDestination(pr.second.To);
-        rs.SetSeqNo(pr.first);
-    }
-
-    for (auto &p : OutReadSets.ReadSetAcks) {
-        auto &rec = p->Record;
-        auto &ack = *response->Record.AddOutRSAcks();
-        ack.SetTxId(rec.GetTxId());
-        ack.SetStep(rec.GetStep());
-        ack.SetOrigin(rec.GetTabletConsumer());
-        ack.SetSource(rec.GetTabletSource());
-        ack.SetDestination(rec.GetTabletDest());
-        ack.SetSeqNo(rec.GetSeqno());
-    }
-
-    for (auto &pr : Pipeline.GetDelayedAcks()) {
-        for (auto &ack : pr.second) {
-            auto *ev = ack->CastAsLocal<TEvTxProcessing::TEvReadSetAck>();
-            if (ev) {
-                auto &rec = ev->Record;
-                auto &ack = *response->Record.AddDelayedRSAcks();
-                ack.SetTxId(rec.GetTxId());
-                ack.SetStep(rec.GetStep());
-                ack.SetOrigin(rec.GetTabletConsumer());
-                ack.SetSource(rec.GetTabletSource());
-                ack.SetDestination(rec.GetTabletDest());
-                ack.SetSeqNo(rec.GetSeqno());
-            }
-        }
-    }
-
-    ctx.Send(ev->Sender, response);
-}
-
-void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr &ev,
-                               const TActorContext &ctx)
-{
-    auto *response = new TEvDataShard::TEvGetSlowOpProfilesResponse;
-    response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
-    Pipeline.FillStoredExecutionProfiles(response->Record);
-    ctx.Send(ev->Sender, response);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx) {

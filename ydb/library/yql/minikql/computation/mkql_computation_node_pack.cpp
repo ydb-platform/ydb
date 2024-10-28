@@ -11,7 +11,7 @@
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/rope/rope_over_buffer.h>
 #include <library/cpp/resource/resource.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 

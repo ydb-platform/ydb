@@ -570,6 +570,11 @@ NYT::TFormat TMkqlIOSpecs::MakeOutputFormat(size_t tableIndex) const {
 }
 
 NYT::TFormat TMkqlIOSpecs::MakeInputFormat(const THashSet<TString>& auxColumns) const {
+    if (UseBlockInput_) {
+        YQL_ENSURE(auxColumns.empty());
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
+
     if (!UseSkiff_ || Inputs.empty()) {
         return NYT::TFormat::YsonBinary();
     }
@@ -608,6 +613,11 @@ NYT::TFormat TMkqlIOSpecs::MakeInputFormat(const THashSet<TString>& auxColumns) 
 
 NYT::TFormat TMkqlIOSpecs::MakeInputFormat(size_t tableIndex) const {
     Y_ENSURE(tableIndex < Inputs.size(), "Invalid output table index: " << tableIndex);
+
+    if (UseBlockInput_) {
+        YQL_ENSURE(tableIndex == 0);
+        return NYT::TFormat(NYT::TNode("arrow"));
+    }
 
     if (!UseSkiff_) {
         return NYT::TFormat::YsonBinary();

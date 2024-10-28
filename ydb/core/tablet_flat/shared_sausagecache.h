@@ -48,7 +48,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
 
-    TCounterPtr ReplacementPolicy(TReplacementPolicy policy);
+    TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);
 };
 
 // TODO: use protobuf configs
@@ -61,7 +61,7 @@ struct TSharedPageCacheConfig {
     TIntrusivePtr<TSharedPageCacheCounters> Counters;
     ui32 ActivePagesReservationPercent = 50;
 
-    TReplacementPolicy ReplacementPolicy = TReplacementPolicy::ThreeLeveledLRU;
+    TReplacementPolicy ReplacementPolicy = TReplacementPolicy::S3FIFO;
 };
 
 IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config);

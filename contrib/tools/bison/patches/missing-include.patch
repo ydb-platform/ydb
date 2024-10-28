@@ -1,5 +1,5 @@
---- contrib/tools/bison/lib/hard-locale.c	(index)
-+++ contrib/tools/bison/lib/hard-locale.c	(working tree)
+--- a/lib/hard-locale.c	(index)
++++ b/lib/hard-locale.c	(working tree)
 @@ -19,6 +19,7 @@
  #include <config.h>
  

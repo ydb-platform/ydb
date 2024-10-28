@@ -78,8 +78,9 @@ struct Schema : NIceDb::Schema {
         struct LastTtlRunTime       : Column<24, NScheme::NTypeIds::Timestamp> {};
         struct LastTtlRowsProcessed : Column<25, NScheme::NTypeIds::Uint64> {};
         struct LastTtlRowsErased    : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct FollowerId           : Column<27, NScheme::NTypeIds::Uint32> {};
 
-        using TKey = TableKey<OwnerId, PathId, PartIdx>;
+        using TKey = TableKey<OwnerId, PathId, PartIdx, FollowerId>;
         using TColumns = TableColumns<
             OwnerId,
             PathId,
@@ -106,7 +107,8 @@ struct Schema : NIceDb::Schema {
             TxRejectedByOutOfStorage,
             LastTtlRunTime,
             LastTtlRowsProcessed,
-            LastTtlRowsErased>;
+            LastTtlRowsErased,
+            FollowerId>;
     };
 
     struct Nodes : Table<2> {
@@ -468,6 +470,7 @@ struct Schema : NIceDb::Schema {
         struct RowCount        : Column<9, NScheme::NTypeIds::Uint64> {};
         struct IndexSize       : Column<10, NScheme::NTypeIds::Uint64> {};
         struct InFlightTxCount : Column<11, NScheme::NTypeIds::Uint32> {};
+        struct FollowerId      : Column<12, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -481,7 +484,8 @@ struct Schema : NIceDb::Schema {
             DataSize,
             RowCount,
             IndexSize,
-            InFlightTxCount>;
+            InFlightTxCount,
+            FollowerId>;
     };
 
     struct QuerySessions : Table<13> {
@@ -532,6 +536,8 @@ struct Schema : NIceDb::Schema {
         struct TierName: Column<11, NScheme::NTypeIds::Utf8> {};
         struct Stats: Column<12, NScheme::NTypeIds::Utf8> {};
         struct Optimized: Column<13, NScheme::NTypeIds::Uint8> {};
+        struct CompactionLevel: Column<14, NScheme::NTypeIds::Uint64> {};
+        struct Details: Column<15, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId>;
         using TColumns = TableColumns<
@@ -547,7 +553,9 @@ struct Schema : NIceDb::Schema {
             Activity,
             TierName,
             Stats,
-            Optimized
+            Optimized,
+            CompactionLevel,
+            Details
         >;
     };
 

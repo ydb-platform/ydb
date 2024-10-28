@@ -1,14 +1,34 @@
 #include "util.h"
 
-#include <util/generic/yexception.h>
-#include <util/string/builder.h>
-#include <util/string/cast.h>
 #include <util/generic/map.h>
+#include <util/generic/singleton.h>
+#include <util/generic/yexception.h>
 #include <util/generic/ymath.h>
+#include <util/string/cast.h>
 
 #include <ctype.h>
 
 namespace NYdb {
+
+namespace NBackup {
+
+struct TLog {
+    std::shared_ptr<::TLog> Log;
+
+    TLog()
+        : Log(std::make_shared<::TLog>(CreateLogBackend("cerr")))
+    {}
+};
+
+void SetLog(const std::shared_ptr<::TLog>& log) {
+    Singleton<TLog>()->Log = log;
+}
+
+const std::shared_ptr<::TLog>& GetLog() {
+    return Singleton<TLog>()->Log;
+}
+
+} // NBackup
 
 TString RelPathFromAbsolute(TString db, TString path) {
     if (!db.StartsWith('/')) {
@@ -76,22 +96,5 @@ ui64 SizeFromString(TStringBuf s) {
     Y_ENSURE(it != SizeSuffix.end(), "Cannot parse string, unknown suffix# " << TString{suffix}.Quote());
     return FromString<ui64>(number) * it->second;
 }
-
-namespace {
-
-struct TIsVerbosePrint {
-    bool IsVerbose = false;
-};
-
-}
-
-void SetVerbosity(bool isVerbose) {
-    Singleton<TIsVerbosePrint>()->IsVerbose = isVerbose;
-}
-
-bool GetVerbosity() {
-    return Singleton<TIsVerbosePrint>()->IsVerbose;
-}
-
 
 }

@@ -4924,21 +4924,53 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
         collectionType = collectionType->Cast<TOptionalExprType>()->GetItemType();
     }
 
+    auto lookupType = node.Lookup().Ref().GetTypeAnn();
+
     const auto collectionKind = collectionType->GetKind();
     bool result = false;
     switch (collectionKind) {
         case ETypeAnnotationKind::Tuple:
         {
             const auto tupleType = collectionType->Cast<TTupleExprType>();
-            result = AnyOf(tupleType->GetItems(), [](const auto& item) { return item->HasOptionalOrNull(); } );
+            for (const auto& item : tupleType->GetItems()) {
+                if (item->HasOptionalOrNull()) {
+                    result = true;
+                    break;
+                }
+
+                auto cmp = CanCompare<true>(lookupType, item);
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                    break;
+                }
+            }
+            
             break;
         }
-        case ETypeAnnotationKind::Dict:
-            result = collectionType->Cast<TDictExprType>()->GetKeyType()->HasOptionalOrNull();
+        case ETypeAnnotationKind::Dict: {
+            if (collectionType->Cast<TDictExprType>()->GetKeyType()->HasOptionalOrNull()) {
+                result = true;
+            } else {
+                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TDictExprType>()->GetKeyType());
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                }
+            }
+
             break;
-        case ETypeAnnotationKind::List:
-            result = collectionType->Cast<TListExprType>()->GetItemType()->HasOptionalOrNull();
+        }
+        case ETypeAnnotationKind::List: {
+            if (collectionType->Cast<TListExprType>()->GetItemType()->HasOptionalOrNull()) {
+                result = true;
+            } else {
+                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TListExprType>()->GetItemType());
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                }
+            }
+
             break;
+        }
         case ETypeAnnotationKind::EmptyDict:
         case ETypeAnnotationKind::EmptyList:
         case ETypeAnnotationKind::Null:

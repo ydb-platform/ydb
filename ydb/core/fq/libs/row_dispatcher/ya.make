@@ -31,6 +31,10 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
 )
 
+CFLAGS(
+    -Wno-assume
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

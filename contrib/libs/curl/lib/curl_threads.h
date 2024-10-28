@@ -52,13 +52,8 @@
 
 #if defined(USE_THREADS_POSIX) || defined(USE_THREADS_WIN32)
 
-curl_thread_t Curl_thread_create(
-#if defined(_WIN32_WCE) || defined(CURL_WINDOWS_APP)
-                                 DWORD
-#else
-                                 unsigned int
-#endif
-                                 (CURL_STDCALL *func) (void *),
+/* !checksrc! disable SPACEBEFOREPAREN 1 */
+curl_thread_t Curl_thread_create(unsigned int (CURL_STDCALL *func) (void *),
                                  void *arg);
 
 void Curl_thread_destroy(curl_thread_t hnd);

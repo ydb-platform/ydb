@@ -127,6 +127,8 @@ struct TPartitionFamily {
     void InactivatePartition(ui32 partitionId);
 
     bool PossibleForBalance(TSession* session);
+    template<typename TCollection>
+    bool CanAttach(const TCollection& partitionsIds);
 
     TString DebugStr() const;
 
@@ -186,6 +188,7 @@ struct TConsumer {
     // All reading sessions in which the family is currently being read.
     std::unordered_map<TActorId, TSession*> Sessions;
     std::optional<TOrderedSessions> OrderedSessions;
+    bool WithCommonSessions;
 
     // Families is not reading now.
     std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
@@ -226,7 +229,7 @@ struct TConsumer {
     bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
 
     bool SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie);
-    bool ProccessReadingFinished(ui32 partitionId, const TActorContext& ctx);
+    bool ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx);
     void StartReading(ui32 partitionId, const TActorContext& ctx);
     void FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx);
 

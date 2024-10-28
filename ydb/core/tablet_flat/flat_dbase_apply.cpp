@@ -260,7 +260,7 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
 
     NScheme::TTypeInfo typeInfo;
     TString pgTypeMod;
-    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));    
+    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
     switch ((NScheme::TTypeId)type) {
     case NScheme::NTypeIds::Pg: {
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
@@ -272,11 +272,11 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(type, &*typeInfoProto);
         typeInfo = typeInfoMod.TypeInfo;
         break;
-    } 
+    }
     default: {
         typeInfo = NScheme::TTypeInfo(type);
         break;
-    }   
+    }
     }
 
     // We verify ids and types match when column with the same name already exists
@@ -384,7 +384,7 @@ bool TSchemeModifier::SetExecutorResourceProfile(const TString &name)
     return ChangeExecutorSetting(Scheme.Executor.ResourceProfile, name);
 }
 
-bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto)
+bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCompactionPolicy &proto)
 {
     auto *table = Table(tid);
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));

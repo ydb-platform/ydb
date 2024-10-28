@@ -1,6 +1,6 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/compaction.proto";
 import "ydb/library/actors/protos/actors.proto";
 
 package NKikimrExecutorFlat;
@@ -68,7 +68,7 @@ message TBundleDelta {
 }
 
 message TBundleMove {
-    optional NKikimrProto.TLogoBlobID Label = 1; 
+    optional NKikimrProto.TLogoBlobID Label = 1;
     optional int64 RebasedEpoch = 2;
     optional uint32 SourceTable = 3;
 }
@@ -158,7 +158,7 @@ message TCompactionState {
     }
 
     optional uint32 Table = 1;
-    optional NKikimrSchemeOp.ECompactionStrategy Strategy = 2;
+    optional NKikimrCompaction.ECompactionStrategy Strategy = 2;
     repeated TKeyValue KeyValues = 3; // Key/value mapping (updates or snapshot)
 }
 

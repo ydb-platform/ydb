@@ -22,6 +22,7 @@ namespace NYql::NDq {
                 genericClient,
                 credentialsFactory,
                 std::move(args.ParentId),
+                args.TaskCounters,
                 args.Alloc,
                 args.KeyTypeHelper,
                 std::move(lookupSource),

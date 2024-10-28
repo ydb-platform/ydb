@@ -65,8 +65,13 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready & Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToKeep>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::InsertTable>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::IndexCounters>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::SharedBlobIds>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::BorrowedBlobIds>(db, txc.DB.GetScheme());
 
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);

@@ -103,12 +103,16 @@ SRCS(
     schemeshard__operation_blob_depot.cpp
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_cansel_build_index.cpp
-    schemeshard__operation_common.cpp
     schemeshard__operation_common.h
+    schemeshard__operation_common.cpp
+    schemeshard__operation_common_pq.cpp
+    schemeshard__operation_common_bsv.cpp
+    schemeshard__operation_common_cdc_stream.cpp
     schemeshard__operation_common_external_data_source.cpp
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_resource_pool.cpp
     schemeshard__operation_common_subdomain.h
+    schemeshard__operation_common_subdomain.cpp
     schemeshard__operation_consistent_copy_tables.cpp
     schemeshard__operation_copy_sequence.cpp
     schemeshard__operation_copy_table.cpp
@@ -198,6 +202,7 @@ SRCS(
     schemeshard_build_index__list.cpp
     schemeshard_build_index__progress.cpp
     schemeshard_build_index_tx_base.cpp
+    schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
     schemeshard_domain_links.cpp
     schemeshard_domain_links.h

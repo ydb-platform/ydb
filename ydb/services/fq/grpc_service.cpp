@@ -19,19 +19,6 @@ void TGRpcFederatedQueryService::InitService(grpc::ServerCompletionQueue *cq, NY
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGRpcFederatedQueryService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcFederatedQueryService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcFederatedQueryService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGRpcFederatedQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 #ifdef ADD_REQUEST

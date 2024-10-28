@@ -67,7 +67,7 @@ extern "C" void YtCodecReadJsonDocument(void* vbuf, void* vpod) {
     buf.ReadMany(json.AsStringRef().Data(), size);
 
     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(json.AsStringRef());
-    if (!binaryJson.Defined()) {
+    if (binaryJson.IsFail()) {
         YQL_ENSURE(false, "Invalid JSON stored for JsonDocument type");
     }
 

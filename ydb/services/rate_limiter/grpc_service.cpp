@@ -20,18 +20,6 @@ void TRateLimiterGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbG
     SetupIncomingRequests(std::move(logger));
 }
 
-void TRateLimiterGRpcService::SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) {
-    Limiter = limiter;
-}
-
-bool TRateLimiterGRpcService::IncRequest() {
-    return Limiter->Inc();
-}
-
-void TRateLimiterGRpcService::DecRequest() {
-    Limiter->Dec();
-}
-
 void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
     using namespace NGRpcService;

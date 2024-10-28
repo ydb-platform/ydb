@@ -106,6 +106,7 @@ public:
 
     void AfterOptimize(TTransformationPipeline* pipeline) const final {
         pipeline->Add(CreateYtWideFlowTransformer(nullptr), "WideFlow");
+        pipeline->Add(CreateYtBlockInputTransformer(nullptr), "BlockInput");
         pipeline->Add(MakePeepholeOptimization(pipeline->GetTypeAnnotationContext()), "PeepHole");
     }
 };

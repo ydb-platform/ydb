@@ -33,6 +33,7 @@ public:
     TLog& GetLog();
 
     TTopicClient MakeClient() const;
+    NYdb::NTable::TTableClient MakeTableClient() const;
 
     TDriver MakeDriver() const;
     TDriver MakeDriver(const TDriverConfig& config) const;

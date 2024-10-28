@@ -93,7 +93,7 @@ The user can transfer the connection string to the database using standard Terra
 
 {% endnote %}
 
-If you are using the creation of `ydb_table_changefeed` or `ydb_topic` resources and authorization is not enabled on the {{ ydb-short-name }} server, then in the DB config [config.yaml](../deploy/configuration/config.md) you need to specify:
+If you are using the creation of `ydb_table_changefeed` or `ydb_topic` resources and authorization is not enabled on the {{ ydb-short-name }} server, then in the DB config [config.yaml](../reference/configuration/index.md) you need to specify:
 
 ```yaml
 ...

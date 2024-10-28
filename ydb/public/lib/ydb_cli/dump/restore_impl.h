@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <util/folder/path.h>
+#include <util/generic/hash_set.h>
 
 namespace NYdb {
 namespace NDump {
@@ -46,19 +47,16 @@ class TRestoreClient {
     TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
 
 public:
-    explicit TRestoreClient(
-        NImport::TImportClient& importClient,
-        NOperation::TOperationClient& operationClient,
-        NScheme::TSchemeClient& SchemeClient,
-        NTable::TTableClient& tableClient);
+    explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings = {});
 
 private:
-    NImport::TImportClient& ImportClient;
-    NOperation::TOperationClient& OperationClient;
-    NScheme::TSchemeClient& SchemeClient;
-    NTable::TTableClient& TableClient;
+    NImport::TImportClient ImportClient;
+    NOperation::TOperationClient OperationClient;
+    NScheme::TSchemeClient SchemeClient;
+    NTable::TTableClient TableClient;
+    std::shared_ptr<TLog> Log;
 
 }; // TRestoreClient
 

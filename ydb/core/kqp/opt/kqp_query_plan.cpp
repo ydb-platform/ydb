@@ -720,15 +720,17 @@ private:
             }
         }
         for (const auto& child : node->Children()) {
-            std::shared_ptr<TOptimizerStatistics> result;
             if (child->IsLambda()) {
-                auto lambda = TExprBase(child).Cast<TCoLambda>();
-                result = FindWrapStats(lambda.Body().Ptr(), dataSourceNode);
+                // support wide lambda as well
+                for (size_t bodyIndex = 1; bodyIndex < child->ChildrenSize(); ++bodyIndex) {
+                    if (auto result = FindWrapStats(child->ChildPtr(bodyIndex), dataSourceNode)) {
+                        return result;
+                    }
+                }
             } else {
-                result = FindWrapStats(child, dataSourceNode);
-            }
-            if (result) {
-                return result;
+                if (auto result = FindWrapStats(child, dataSourceNode)) {
+                    return result;
+                }
             }
         }
         return nullptr;

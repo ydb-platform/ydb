@@ -309,6 +309,7 @@ void TYtState::Reset() {
     Checkpoints.clear();
     WalkFoldersState.clear();
     NextEpochId = 1;
+    FlowDependsOnId = 0;
 }
 
 void TYtState::EnterEvaluation(ui64 id) {
@@ -336,10 +337,9 @@ void TYtState::LeaveEvaluation(ui64 id) {
 }
 
 std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId, const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx) {
-    auto ytState = MakeIntrusive<TYtState>();
+    auto ytState = MakeIntrusive<TYtState>(typeCtx.Get());
     ytState->SessionId = sessionId;
     ytState->Gateway = gateway;
-    ytState->Types = typeCtx.Get();
     ytState->DqIntegration_ = CreateYtDqIntegration(ytState.Get());
 
     if (ytGatewayConfig) {

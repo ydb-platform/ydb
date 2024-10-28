@@ -3283,6 +3283,7 @@ private:
 
     static TFuture<void> ExecMap(
         bool ordered,
+        bool blockInput,
         const TMaybe<ui64>& jobCount,
         const TMaybe<ui64>& limit,
         const TVector<TString>& sortLimitBy,
@@ -3293,7 +3294,7 @@ private:
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
-        return ret.Apply([ordered, jobCount, limit, sortLimitBy, mapLambda,
+        return ret.Apply([ordered, blockInput, jobCount, limit, sortLimitBy, mapLambda,
                           inputType, extraUsage, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -3390,6 +3391,7 @@ private:
 
             job->SetYamrInput(execCtx->YamrInput);
             job->SetUseSkiff(useSkiff, testRun ? TMkqlIOSpecs::ESystemField(0) : TMkqlIOSpecs::ESystemField::RowIndex);
+            job->SetUseBlockInput(blockInput);
 
             auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
@@ -3468,6 +3470,8 @@ private:
 
     TFuture<void> DoMap(TYtMap map, const TExecContext<TRunOptions>::TPtr& execCtx, TExprContext& ctx) {
         const bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
+        const bool blockInput = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
+
         TMaybe<ui64> jobCount;
         if (auto setting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::JobCount)) {
             jobCount = FromString<ui64>(setting->Child(1)->Content());
@@ -3490,10 +3494,10 @@ private:
         auto extraUsage = execCtx->ScanExtraResourceUsage(map.Mapper().Body().Ref(), true);
         TString inputType = NCommon::WriteTypeToYson(GetSequenceItemType(map.Input().Size() == 1U ? TExprBase(map.Input().Item(0)) : TExprBase(map.Mapper().Args().Arg(0)), true));
 
-        return execCtx->Session_->Queue_->Async([ordered, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx]() {
+        return execCtx->Session_->Queue_->Async([ordered, blockInput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecMap(ordered, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx);
+            return ExecMap(ordered, blockInput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx);
         });
     }
 
@@ -3720,13 +3724,14 @@ private:
         const TExpressionResorceUsage& reduceExtraUsage,
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
+        const NYT::TNode& intermediateStreams,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -3940,6 +3945,9 @@ private:
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
             FillSpec(spec, *execCtx, entry, mapExtraUsage.Cpu, reduceExtraUsage.Cpu,
                 EYtOpProp::IntermediateData | EYtOpProp::WithMapper | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            if (!intermediateStreams.IsUndefined()) {
+                spec["mapper"]["output_streams"] = intermediateStreams;
+            }
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -3961,12 +3969,13 @@ private:
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
         const NYT::TNode& intermediateSchema,
+        bool useIntermediateStreams,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4010,7 +4019,7 @@ private:
             const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
 
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, intermediateSchema.IsUndefined() ? 0ul : nativeTypeCompat, true)); // Explicitly disable native types for intermediate data because of YT limitations
+            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, !useIntermediateStreams));
             reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
 
             mapReduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
@@ -4080,6 +4089,9 @@ private:
             NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
             FillSpec(spec, *execCtx, entry, 0., reduceExtraUsage.Cpu,
                 EYtOpProp::IntermediateData | EYtOpProp::WithReducer | EYtOpProp::WithUserJobs | EYtOpProp::AllowSampling);
+            if (useIntermediateStreams) {
+                spec["reducer"]["enable_input_table_index"] = true;
+            }
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4097,16 +4109,26 @@ private:
         auto sortBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::SortBy);
 
         const bool useNativeTypes = execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
-        const bool useIntermediateSchema = execCtx->Options_.Config()->UseIntermediateSchema.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_SCHEMA);
         const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+        const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
 
         NYT::TNode intermediateMeta;
         NYT::TNode intermediateSchema;
+        NYT::TNode intermediateStreams;
         TString mapLambda;
         TExpressionResorceUsage mapExtraUsage;
         TString mapInputType;
         size_t mapDirectOutputs = 0;
         if (!mapReduce.Mapper().Maybe<TCoVoid>()) {
+            auto createRowSpec = [](const TTypeAnnotationNode* itemType, bool useNativeTypes, ui64 nativeTypeCompat) -> NYT::TNode {
+                auto spec = NYT::TNode::CreateMap();
+                spec[RowSpecAttrType] = NCommon::TypeToYsonNode(itemType);
+                spec[RowSpecAttrNativeYtTypeFlags] = useNativeTypes
+                    ? (GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>()) & nativeTypeCompat)
+                    : 0ul;
+                return spec;
+            };
+
             const auto mapTypeSet = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::MapOutputType);
             auto mapResultItem = mapTypeSet ?
                 mapTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType():
@@ -4117,15 +4139,36 @@ private:
                 YQL_ENSURE(!items.empty());
                 mapDirectOutputs = items.size() - 1;
                 mapResultItem = items.front();
+
+                if (useIntermediateStreams) {
+                    intermediateStreams = NYT::TNode::CreateList();
+                    bool front = true;
+                    for (auto itemType: items) {
+                        auto ytSchema = RowSpecToYTSchema(createRowSpec(itemType, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                        if (front) {
+                            ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
+                            front = false;
+                        }
+                        intermediateStreams.Add(
+                            NYT::TNode::CreateMap()("schema", ytSchema.ToNode())
+                        );
+                    }
+                }
+            } else {
+                if (useIntermediateStreams) {
+                    intermediateStreams = NYT::TNode::CreateList();
+                    auto ytSchema = RowSpecToYTSchema(createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                    ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
+                    intermediateStreams.Add(
+                        NYT::TNode::CreateMap()("schema", ytSchema.ToNode())
+                    );
+                }
             }
 
             intermediateMeta = NYT::TNode::CreateMap();
-            intermediateMeta[YqlRowSpecAttribute][RowSpecAttrType] = NCommon::TypeToYsonNode(mapResultItem);
-            if (useIntermediateSchema && useNativeTypes) {
-                intermediateMeta[YqlRowSpecAttribute][RowSpecAttrNativeYtTypeFlags] = (GetNativeYtTypeFlags(*mapResultItem->Cast<TStructExprType>()) & nativeTypeCompat);
+            intermediateMeta[YqlRowSpecAttribute] = createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat);
+            if (useNativeTypes && !useIntermediateStreams) {
                 intermediateSchema = RowSpecToYTSchema(intermediateMeta[YqlRowSpecAttribute], nativeTypeCompat).ToNode();
-            } else {
-                intermediateMeta[YqlRowSpecAttribute][RowSpecAttrNativeYtTypeFlags] = 0ul; // Explicitly disable native types for intermediate data because of YT limitations
             }
             if (NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::KeySwitch)) {
                 intermediateMeta[YqlSysColumnPrefix].Add("keyswitch");
@@ -4139,7 +4182,7 @@ private:
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
             mapInputType = NCommon::WriteTypeToYson(GetSequenceItemType(mapReduce.Input().Size() == 1U ?
                 TExprBase(mapReduce.Input().Item(0)) : TExprBase(mapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0)), true));
-        } else if (useIntermediateSchema && useNativeTypes) {
+        } else if (useNativeTypes && !useIntermediateStreams) {
             YQL_ENSURE(mapReduce.Input().Size() == 1);
             const TTypeAnnotationNode* itemType = GetSequenceItemType(mapReduce.Input().Item(0), false);
             if (auto flags = GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>())) {
@@ -4171,14 +4214,17 @@ private:
             limit.Clear();
         }
 
-        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, execCtx]() {
+        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
+        {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
             } else {
-                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema, execCtx);
+                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
+                    useIntermediateStreams, execCtx);
             }
         });
     }

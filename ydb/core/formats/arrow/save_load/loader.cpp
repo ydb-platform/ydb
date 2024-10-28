@@ -55,6 +55,17 @@ TChunkConstructionData TColumnLoader::BuildAccessorContext(const ui32 recordsCou
     return TChunkConstructionData(recordsCount, DefaultValue, ResultField->type());
 }
 
+TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::ApplyConclusion(const TString& dataStr, const ui32 recordsCount) const {
+    auto result = Apply(dataStr);
+    if (result.ok()) {
+        return BuildAccessor(*result, BuildAccessorContext(recordsCount));
+    } else {
+        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse_blob")("data_size", dataStr.size())(
+            "expected_records_count", recordsCount)("problem", result.status().ToString());
+        return TConclusionStatus::Fail(result.status().ToString());
+    }
+}
+
 std::shared_ptr<IChunkedArray> TColumnLoader::ApplyVerified(const TString& dataStr, const ui32 recordsCount) const {
     auto data = TStatusValidator::GetValid(Apply(dataStr));
     return BuildAccessor(data, BuildAccessorContext(recordsCount));

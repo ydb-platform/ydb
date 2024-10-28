@@ -78,13 +78,19 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
 
     //this block is located before pattern block in grammar,
     // but depends on it, so it is processed after pattern block
-    std::pair<TPosition, TAfterMatchSkipTo> skipTo { pos, TAfterMatchSkipTo{EAfterMatchSkipTo::NextRow, TString()} };
+    std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo> skipTo {
+            pos,
+            NYql::NMatchRecognize::TAfterMatchSkipTo{
+                    NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow,
+                    TString()
+            }
+    };
     if (commonSyntax.HasBlock1()){
         skipTo = ParseAfterMatchSkipTo(commonSyntax.GetBlock1().GetRule_row_pattern_skip_to3());
         const auto varRequired =
-                EAfterMatchSkipTo::ToFirst == skipTo.second.To ||
-                EAfterMatchSkipTo::ToLast == skipTo.second.To ||
-                EAfterMatchSkipTo::To == skipTo.second.To;
+                NYql::NMatchRecognize::EAfterMatchSkipTo::ToFirst == skipTo.second.To ||
+                NYql::NMatchRecognize::EAfterMatchSkipTo::ToLast == skipTo.second.To ||
+                NYql::NMatchRecognize::EAfterMatchSkipTo::To == skipTo.second.To;
         if (varRequired) {
             const auto& allVars = NYql::NMatchRecognize::GetPatternVars(pattern);
             if (allVars.find(skipTo.second.Var) == allVars.cend()) {
@@ -186,39 +192,39 @@ std::pair<TPosition, ERowsPerMatch> TSqlMatchRecognizeClause::ParseRowsPerMatch(
     }
 }
 
-std::pair<TPosition, TAfterMatchSkipTo> TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(const TRule_row_pattern_skip_to& skipToClause) {
+std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo> TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(const TRule_row_pattern_skip_to& skipToClause) {
     switch (skipToClause.GetAltCase()) {
         case TRule_row_pattern_skip_to::kAltRowPatternSkipTo1:
             return std::pair{
                     TokenPosition(skipToClause.GetAlt_row_pattern_skip_to1().GetToken1()),
-                    TAfterMatchSkipTo{EAfterMatchSkipTo::NextRow}
+                    NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""}
             };
         case TRule_row_pattern_skip_to::kAltRowPatternSkipTo2:
             return std::pair{
                     TokenPosition(skipToClause.GetAlt_row_pattern_skip_to2().GetToken1()),
-                    TAfterMatchSkipTo{EAfterMatchSkipTo::PastLastRow}
+                    NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, ""}
             };
         case TRule_row_pattern_skip_to::kAltRowPatternSkipTo3:
             return std::pair{
                     TokenPosition(skipToClause.GetAlt_row_pattern_skip_to3().GetToken1()),
-                    TAfterMatchSkipTo{
-                            EAfterMatchSkipTo::ToFirst,
+                    NYql::NMatchRecognize::TAfterMatchSkipTo{
+                            NYql::NMatchRecognize::EAfterMatchSkipTo::ToFirst,
                             skipToClause.GetAlt_row_pattern_skip_to3().GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1().GetToken1().GetValue()
                     }
             };
         case TRule_row_pattern_skip_to::kAltRowPatternSkipTo4:
             return std::pair{
                     TokenPosition(skipToClause.GetAlt_row_pattern_skip_to4().GetToken1()),
-                    TAfterMatchSkipTo{
-                            EAfterMatchSkipTo::ToLast,
+                    NYql::NMatchRecognize::TAfterMatchSkipTo{
+                            NYql::NMatchRecognize::EAfterMatchSkipTo::ToLast,
                             skipToClause.GetAlt_row_pattern_skip_to4().GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1().GetToken1().GetValue()
                     }
             };
         case TRule_row_pattern_skip_to::kAltRowPatternSkipTo5:
             return std::pair{
                     TokenPosition(skipToClause.GetAlt_row_pattern_skip_to5().GetToken1()),
-                    TAfterMatchSkipTo{
-                            EAfterMatchSkipTo::To,
+                    NYql::NMatchRecognize::TAfterMatchSkipTo{
+                            NYql::NMatchRecognize::EAfterMatchSkipTo::To,
                             skipToClause.GetAlt_row_pattern_skip_to5().GetRule_row_pattern_skip_to_variable_name3().GetRule_row_pattern_variable_name1().GetRule_identifier1().GetToken1().GetValue()
                     }
             };

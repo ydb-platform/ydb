@@ -18,6 +18,7 @@ from ydb.library.yql.providers.generic.connector.tests.utils.schema import (
     DataSourceType,
     SelectWhat,
     SelectWhere,
+    makeYdbTypeFromTypeID,
 )
 
 from ydb.library.yql.providers.generic.connector.tests.common_test_cases.base import BaseTestCase
@@ -246,46 +247,65 @@ class Factory:
         schema = Schema(
             columns=ColumnList(
                 Column(
-                    name='col_01_int64',
-                    ydb_type=Type.INT64,
-                    data_source_type=DataSourceType(ch=clickhouse.Int32(), pg=postgresql.Int8()),
+                    name='col_00_int32',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ch=clickhouse.Int64(), pg=postgresql.Int8()),
                 ),
                 Column(
-                    name='col_02_utf8',
-                    ydb_type=Type.UTF8,
+                    name='col_01_string',
+                    ydb_type=makeYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(ch=clickhouse.String(), pg=postgresql.Text()),
                 ),
             )
         )
 
-        data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
+        data_source_kinds = (
+            EDataSourceKind.CLICKHOUSE,
+            EDataSourceKind.POSTGRESQL,
+        )
 
-        # Assuming that request will look something like:
-        #
-        # SELECT * FROM table WHERE id = (SELECT MAX(id) FROM table)
-        #
-        # We expect last line to be the answer
-        data_out = [data_in[-1]]
-
-        data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
-
-        test_case_name = 'large_table'
-
+        test_case_name = 'large'
         test_cases = []
+
         for data_source_kind in data_source_kinds:
-            tc = TestCase(
-                name_=test_case_name,
-                data_source_kind=data_source_kind,
-                protocol=EProtocol.NATIVE,
-                data_in=data_in,
-                data_out_=data_out,
-                select_what=SelectWhat.asterisk(schema.columns),
-                select_where=SelectWhere(
-                    expression_='col_01_int64 IN (SELECT MAX(col_01_int64) FROM {cluster_name}.{table_name})'
-                ),
-                schema=schema,
-                pragmas=dict(),
-            )
+            match data_source_kind:
+                case EDataSourceKind.CLICKHOUSE:
+                    tc = TestCase(
+                        name_=test_case_name,
+                        data_source_kind=data_source_kind,
+                        protocol=EProtocol.NATIVE,
+                        data_in=None,
+                        data_out_=[[999999]],  # We put 1M of rows in the large table
+                        select_what=SelectWhat(SelectWhat.Item(name='MAX(col_00_int32)', kind='expr')),
+                        select_where=None,
+                        schema=schema,
+                        pragmas=dict(),
+                    )
+
+                case EDataSourceKind.POSTGRESQL:
+                    # Assuming that request will look something like:
+                    # `SELECT * FROM table WHERE id = (SELECT MAX(id) FROM table)`
+                    # We expect last line to be the answer
+                    data_in = generate_table_data(schema=schema, bytes_soft_limit=table_size)
+                    data_out = [data_in[-1]]
+                    data_source_kinds = [EDataSourceKind.CLICKHOUSE, EDataSourceKind.POSTGRESQL]
+
+                    tc = TestCase(
+                        name_=test_case_name,
+                        data_source_kind=data_source_kind,
+                        protocol=EProtocol.NATIVE,
+                        data_in=data_in,
+                        data_out_=data_out,
+                        select_what=SelectWhat.asterisk(schema.columns),
+                        select_where=SelectWhere(
+                            expression_='col_00_int32 IN (SELECT MAX(col_00_int32) FROM {cluster_name}.{table_name})'
+                        ),
+                        schema=schema,
+                        pragmas=dict(),
+                    )
+
+                case _:
+                    raise ValueError(f'Unknown data source kind: {data_source_kind}')
 
             test_cases.append(tc)
 

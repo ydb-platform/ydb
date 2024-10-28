@@ -44,7 +44,7 @@ namespace NTable {
         bool SetExecutorLogFlushPeriod(TDuration flushPeriod);
         bool SetExecutorLimitInFlyTx(ui32 limitTxInFly);
         bool SetExecutorResourceProfile(const TString &name);
-        bool SetCompactionPolicy(ui32 tableId, const NKikimrSchemeOp::TCompactionPolicy& newPolicy);
+        bool SetCompactionPolicy(ui32 tableId, const NKikimrCompaction::TCompactionPolicy& newPolicy);
 
         TTable* Table(ui32 tid) const noexcept
         {

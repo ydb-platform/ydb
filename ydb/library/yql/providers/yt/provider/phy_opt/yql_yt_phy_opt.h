@@ -129,8 +129,6 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> MapToMerge(NNodes::TExprBase node, TExprContext& ctx) const;
 
-    NNodes::TMaybeNode<NNodes::TExprBase> AddTrivialMapperForNativeYtTypes(NNodes::TExprBase node, TExprContext& ctx) const;
-
     NNodes::TMaybeNode<NNodes::TExprBase> YtDqWrite(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> PushDownYtMapOverSortedMerge(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;

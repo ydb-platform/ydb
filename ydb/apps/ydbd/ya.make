@@ -1,6 +1,6 @@
 PROGRAM(ydbd)
 
-IF (NOT SANITIZER_TYPE AND NOT PROFILE_MEMORY_ALLOCATIONS)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
+IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
     NO_EXPORT_DYNAMIC_SYMBOLS()
 ENDIF()
 

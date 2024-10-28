@@ -61,11 +61,10 @@ Y_UNIT_TEST_SUITE(TYqlCBO) {
 
 Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
     const TString cluster("ut_cluster");
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     TYtJoinNodeOp::TPtr tree = nullptr;
     TYtJoinNodeOp::TPtr optimizedTree;
-    TTypeAnnotationContext typeCtx;
-    state->Types = &typeCtx;
 
     TExprContext ctx;
 
@@ -74,9 +73,8 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
 }
 
 Y_UNIT_TEST(NonReordable) {
-    auto stat = std::make_shared<TOptimizerStatistics>();
-    auto left = std::make_shared<TRelOptimizerNode>("a", stat);
-    auto right = std::make_shared<TRelOptimizerNode>("a", stat);
+    auto left = std::make_shared<TRelOptimizerNode>("a", TOptimizerStatistics());
+    auto right = std::make_shared<TRelOptimizerNode>("a", TOptimizerStatistics());
 
     TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn{"a", "b"}};
     TVector<NDq::TJoinColumn> rightKeys = {NDq::TJoinColumn{"a","c"}};
@@ -90,18 +88,19 @@ Y_UNIT_TEST(NonReordable) {
     // Join tree is built from scratch with DPhyp, check the structure by comapring with Stats 
     UNIT_ASSERT(root->LeftArg->Kind == RelNodeType);
     UNIT_ASSERT(
-        std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == left->Stats
+        &std::static_pointer_cast<TRelOptimizerNode>(root->LeftArg)->Stats == &left->Stats
     );
 
     UNIT_ASSERT(root->RightArg->Kind == RelNodeType);
     UNIT_ASSERT(
-        std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == right->Stats
+        &std::static_pointer_cast<TRelOptimizerNode>(root->RightArg)->Stats == &right->Stats
     );
 }
 
 Y_UNIT_TEST(BuildOptimizerTree2Tables) {
     const TString cluster("ut_cluster");
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
@@ -109,7 +108,8 @@ Y_UNIT_TEST(BuildOptimizerTree2Tables) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     UNIT_ASSERT(resultTree->Kind == JoinNodeType);
     auto root = std::static_pointer_cast<TJoinOptimizerNode>(resultTree);
@@ -121,13 +121,14 @@ Y_UNIT_TEST(BuildOptimizerTree2Tables) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 100000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 1000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 100000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 1000);
 }
 
 Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
     const TString cluster("ut_cluster");
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
@@ -135,7 +136,8 @@ Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     UNIT_ASSERT(resultTree->Kind == JoinNodeType);
     auto root = std::static_pointer_cast<TJoinOptimizerNode>(resultTree);
@@ -147,13 +149,14 @@ Y_UNIT_TEST(BuildOptimizerTree2TablesComplexLabel) {
 
     UNIT_ASSERT_VALUES_EQUAL(left->Label, "c");
     UNIT_ASSERT_VALUES_EQUAL(right->Label, "n");
-    UNIT_ASSERT_VALUES_EQUAL(left->Stats->Nrows, 1000000);
-    UNIT_ASSERT_VALUES_EQUAL(right->Stats->Nrows, 10000);
+    UNIT_ASSERT_VALUES_EQUAL(left->Stats.Nrows, 1000000);
+    UNIT_ASSERT_VALUES_EQUAL(right->Stats.Nrows, 10000);
 }
 
 Y_UNIT_TEST(BuildYtJoinTree2Tables) {
     const TString cluster("ut_cluster");
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
@@ -161,7 +164,8 @@ Y_UNIT_TEST(BuildYtJoinTree2Tables) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
@@ -170,7 +174,8 @@ Y_UNIT_TEST(BuildYtJoinTree2Tables) {
 
 Y_UNIT_TEST(BuildYtJoinTree2TablesForceMergeJoib) {
     const TString cluster("ut_cluster");
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
@@ -179,7 +184,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesForceMergeJoib) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
 
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
@@ -188,7 +194,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesForceMergeJoib) {
 
 Y_UNIT_TEST(BuildYtJoinTree2TablesComplexLabel) {
     const TString cluster("ut_cluster");
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
@@ -196,7 +203,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesComplexLabel) {
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
     UNIT_ASSERT(AreSimilarTrees(joinTree, tree));
@@ -205,7 +213,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesComplexLabel) {
 Y_UNIT_TEST(BuildYtJoinTree2TablesTableIn2Rels)
 {
     const TString cluster("ut_cluster");
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    TTypeAnnotationContext typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "c"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
@@ -213,7 +222,8 @@ Y_UNIT_TEST(BuildYtJoinTree2TablesTableIn2Rels)
 
     std::shared_ptr<IBaseOptimizerNode> resultTree;
     std::shared_ptr<IProviderContext> resultCtx;
-    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, tree, exprCtx);
+    TOptimizerLinkSettings linkSettings;
+    BuildOptimizerJoinTree(state, cluster, resultTree, resultCtx, linkSettings, tree, exprCtx);
     auto joinTree = BuildYtJoinTree(resultTree, exprCtx, {});
 
     UNIT_ASSERT(AreSimilarTrees(joinTree, tree));
@@ -234,10 +244,9 @@ void OrderJoins2Tables(auto optimizerType) {
     tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
     tree->Right = MakeLeaf({"n"}, {"n"}, 1000, 1233, exprCtx);
 
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
     TTypeAnnotationContext typeCtx;
     typeCtx.CostBasedOptimizer = optimizerType;
-    state->Types = &typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     auto optimizedTree = OrderJoins(tree, state, cluster, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
     UNIT_ASSERT(optimizedTree->Left);
@@ -264,9 +273,8 @@ void OrderJoins2TablesComplexLabel(auto optimizerType)
     tree->Right = MakeLeaf({"n"}, {"n", "e"}, 10000, 12333, exprCtx);
 
     TTypeAnnotationContext typeCtx;
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
     typeCtx.CostBasedOptimizer = optimizerType;
-    state->Types = &typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     auto optimizedTree = OrderJoins(tree, state, cluster, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
 }
@@ -282,9 +290,8 @@ void OrderJoins2TablesTableIn2Rels(auto optimizerType)
     tree->Right = MakeLeaf({"n"}, {"n", "c"}, 10000, 12333, exprCtx);
 
     TTypeAnnotationContext typeCtx;
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
     typeCtx.CostBasedOptimizer = optimizerType;
-    state->Types = &typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     auto optimizedTree = OrderJoins(tree, state, cluster, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
 }
@@ -301,9 +308,8 @@ Y_UNIT_TEST(OrderLeftJoin)
     tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Left");
 
     TTypeAnnotationContext typeCtx;
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
     typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
-    state->Types = &typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     auto optimizedTree = OrderJoins(tree, state, cluster, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
     UNIT_ASSERT_STRINGS_EQUAL("Left", optimizedTree->JoinKind->Content());
@@ -319,9 +325,8 @@ Y_UNIT_TEST(UnsupportedJoin)
     tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "RightSemi");
 
     TTypeAnnotationContext typeCtx;
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
     typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
-    state->Types = &typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     auto optimizedTree = OrderJoins(tree, state, cluster, exprCtx, true);
     UNIT_ASSERT(optimizedTree == tree);
 }
@@ -335,9 +340,8 @@ Y_UNIT_TEST(OrderJoinSinglePass) {
     tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Left");
 
     TTypeAnnotationContext typeCtx;
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
     typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
-    state->Types = &typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     auto optimizedTree = OrderJoins(tree, state, cluster, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
     UNIT_ASSERT(optimizedTree->CostBasedOptPassed);
@@ -353,9 +357,8 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBOAlreadyPassed) {
     tree->CostBasedOptPassed = true;
 
     TTypeAnnotationContext typeCtx;
-    TYtState::TPtr state = MakeIntrusive<TYtState>();
     typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
-    state->Types = &typeCtx;
+    TYtState::TPtr state = MakeIntrusive<TYtState>(&typeCtx);
     auto optimizedTree = OrderJoins(tree, state, cluster, exprCtx, true);
     UNIT_ASSERT(optimizedTree == tree);
 }

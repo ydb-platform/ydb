@@ -8,8 +8,9 @@ import itertools
 from importlib_resources import read_binary
 from google.protobuf import text_format
 
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
 from . import param_constants
@@ -25,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_unique_path_for_current_test(output_path, sub_folder):
-    test_name = yatest_common.context.test_name or ""
+    # TODO: remove yatest dependency from harness
+    try:
+        test_name = yatest.common.context.test_name
+    except AttributeError:
+        test_name = ""
     test_name = test_name.replace(':', '_')
 
     return os.path.join(output_path, test_name, sub_folder)
@@ -279,8 +284,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         logger.debug("Executing command = {}".format(full_command))
         try:
-            return yatest_common.execute(full_command)
-        except yatest_common.ExecutionError as e:
+            return yatest.common.execute(full_command)
+        except yatest.common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
                 e=str(e),
@@ -516,7 +521,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
 
     def _bs_config_invoke(self, request):
-        timeout = yatest_common.plain_or_under_sanitizer(120, 240)
+        timeout = plain_or_under_sanitizer(120, 240)
         sleep = 5
         retries, success = timeout / sleep, False
         while retries > 0 and not success:
@@ -569,7 +574,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = yatest_common.plain_or_under_sanitizer(120, 240)
+        timeout_seconds = plain_or_under_sanitizer(120, 240)
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
@@ -606,6 +611,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         if self._can_update is None:
             choices = self.ssh_command('ls %s*' % param_constants.kikimr_binary_deploy_path, raise_on_error=True)
             choices = choices.split()
+            choices = [path.decode("utf-8", errors="replace") for path in choices]
             self.logger.error("Current available choices are: %s" % choices)
             self._can_update = True
             for version in self.versions:

@@ -3294,9 +3294,9 @@ tx_meta {
 
 namespace {
 
-NKikimrSchemeOp::TCompactionPolicy DEFAULT_COMPACTION_POLICY;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY1;
-NKikimrSchemeOp::TCompactionPolicy COMPACTION_POLICY2;
+NKikimrCompaction::TCompactionPolicy DEFAULT_COMPACTION_POLICY;
+NKikimrCompaction::TCompactionPolicy COMPACTION_POLICY1;
+NKikimrCompaction::TCompactionPolicy COMPACTION_POLICY2;
 NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG1;
 NKikimrSchemeOp::TPipelineConfig PIPELINE_CONFIG2;
 NKikimrSchemeOp::TStorageConfig STORAGE_CONFIG1;
@@ -3702,7 +3702,7 @@ void CheckTablePartitions(const TKikimrWithGrpcAndRootSchema &server,
     }
 }
 
-void Apply(const NKikimrSchemeOp::TCompactionPolicy &policy,
+void Apply(const NKikimrCompaction::TCompactionPolicy &policy,
            NKikimrSchemeOp::TTableDescription &description)
 {
     description.MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(policy);

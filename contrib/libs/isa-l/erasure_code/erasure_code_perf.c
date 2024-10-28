@@ -33,22 +33,25 @@
 #include "erasure_code.h"
 #include "test.h"
 
-//#define CACHED_TEST
-#ifdef CACHED_TEST
+#ifndef GT_L3_CACHE
+# define GT_L3_CACHE  32*1024*1024	/* some number > last level cache */
+#endif
+
+#if !defined(COLD_TEST) && !defined(TEST_CUSTOM)
 // Cached test, loop many times over small dataset
 # define TEST_SOURCES 32
 # define TEST_LEN(m)  ((128*1024 / m) & ~(64-1))
 # define TEST_TYPE_STR "_warm"
-#else
-# ifndef TEST_CUSTOM
+#elif defined (COLD_TEST)
 // Uncached test.  Pull from large mem base.
-#  define TEST_SOURCES 32
-#  define GT_L3_CACHE  32*1024*1024	/* some number > last level cache */
-#  define TEST_LEN(m)  ((GT_L3_CACHE / m) & ~(64-1))
-#  define TEST_TYPE_STR "_cold"
-# else
-#  define TEST_TYPE_STR "_cus"
-# endif
+# define TEST_SOURCES 32
+# define TEST_LEN(m)  ((GT_L3_CACHE / m) & ~(64-1))
+# define TEST_TYPE_STR "_cold"
+#elif defined (TEST_CUSTOM)
+# define TEST_TYPE_STR "_cus"
+#endif
+#ifndef TEST_SEED
+# define TEST_SEED 0x1234
 #endif
 
 #define MMAX TEST_SOURCES
@@ -58,14 +61,26 @@
 
 typedef unsigned char u8;
 
-void ec_encode_perf(int m, int k, u8 * a, u8 * g_tbls, u8 ** buffs)
+void usage(const char *app_name)
+{
+	fprintf(stderr,
+		"Usage: %s [options]\n"
+		"  -h        Help\n"
+		"  -k <val>  Number of source buffers\n"
+		"  -p <val>  Number of parity buffers\n"
+		"  -e <val>  Number of simulated buffers with errors (cannot be higher than p or k)\n",
+		app_name);
+}
+
+void ec_encode_perf(int m, int k, u8 * a, u8 * g_tbls, u8 ** buffs, struct perf *start)
 {
 	ec_init_tables(k, m - k, &a[k * k], g_tbls);
-	ec_encode_data(TEST_LEN(m), k, m - k, g_tbls, buffs, &buffs[k]);
+	BENCHMARK(start, BENCHMARK_TIME,
+		  ec_encode_data(TEST_LEN(m), k, m - k, g_tbls, buffs, &buffs[k]));
 }
 
 int ec_decode_perf(int m, int k, u8 * a, u8 * g_tbls, u8 ** buffs, u8 * src_in_err,
-		   u8 * src_err_list, int nerrs, u8 ** temp_buffs)
+		   u8 * src_err_list, int nerrs, u8 ** temp_buffs, struct perf *start)
 {
 	int i, j, r;
 	u8 b[MMAX * KMAX], c[MMAX * KMAX], d[MMAX * KMAX];
@@ -89,33 +104,108 @@ int ec_decode_perf(int m, int k, u8 * a, u8 * g_tbls, u8 ** buffs, u8 * src_in_e
 
 	// Recover data
 	ec_init_tables(k, nerrs, c, g_tbls);
-	ec_encode_data(TEST_LEN(m), k, nerrs, g_tbls, recov, temp_buffs);
+	BENCHMARK(start, BENCHMARK_TIME,
+		  ec_encode_data(TEST_LEN(m), k, nerrs, g_tbls, recov, temp_buffs));
 
 	return 0;
 }
 
 int main(int argc, char *argv[])
 {
-	int i, j, m, k, nerrs, check;
+	int i, j, m, k, p, nerrs, check, ret = -1;
 	void *buf;
-	u8 *temp_buffs[TEST_SOURCES], *buffs[TEST_SOURCES];
+	u8 *temp_buffs[TEST_SOURCES] = { NULL };
+	u8 *buffs[TEST_SOURCES] = { NULL };
 	u8 a[MMAX * KMAX];
 	u8 g_tbls[KMAX * TEST_SOURCES * 32], src_in_err[TEST_SOURCES];
 	u8 src_err_list[TEST_SOURCES];
 	struct perf start;
 
-	// Pick test parameters
-	m = 14;
-	k = 10;
+	/* Set default parameters */
+	k = 8;
+	p = 6;
 	nerrs = 4;
-	const u8 err_list[] = { 2, 4, 5, 7 };
 
-	printf("erasure_code_perf: %dx%d %d\n", m, TEST_LEN(m), nerrs);
+	/* Parse arguments */
+	for (i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-k") == 0) {
+			k = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-p") == 0) {
+			p = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-e") == 0) {
+			nerrs = atoi(argv[++i]);
+		} else if (strcmp(argv[i], "-h") == 0) {
+			usage(argv[0]);
+			return 0;
+		} else {
+			usage(argv[0]);
+			return -1;
+		}
+	}
 
-	if (m > MMAX || k > KMAX || nerrs > (m - k)) {
-		printf(" Input test parameter error\n");
+	if (nerrs > k) {
+		printf
+		    ("Number of errors (%d) cannot be higher than number of data buffers (%d)\n",
+		     nerrs, k);
 		return -1;
 	}
+
+	if (k <= 0) {
+		printf("Number of source buffers (%d) must be > 0\n", k);
+		return -1;
+	}
+
+	if (p <= 0) {
+		printf("Number of parity buffers (%d) must be > 0\n", p);
+		return -1;
+	}
+
+	if (nerrs <= 0) {
+		printf("Number of errors (%d) must be > 0\n", nerrs);
+		return -1;
+	}
+
+	if (nerrs > p) {
+		printf
+		    ("Number of errors (%d) cannot be higher than number of parity buffers (%d)\n",
+		     nerrs, p);
+		return -1;
+	}
+
+	m = k + p;
+
+	if (m > MMAX) {
+		printf("Number of total buffers (data and parity) cannot be higher than %d\n",
+		       MMAX);
+		return -1;
+	}
+
+	u8 *err_list = malloc((size_t)nerrs);
+	if (err_list == NULL) {
+		printf("Error allocating list of array of error indices\n");
+		return -1;
+	}
+
+	srand(TEST_SEED);
+
+	for (i = 0; i < nerrs;) {
+		u8 next_err = rand() % k;
+		for (j = 0; j < i; j++)
+			if (next_err == err_list[j])
+				break;
+		if (j != i)
+			continue;
+		err_list[i++] = next_err;
+	}
+
+	printf("Testing with %u data buffers and %u parity buffers (num errors = %u, in [ ", k,
+	       p, nerrs);
+	for (i = 0; i < nerrs; i++)
+		printf("%d ", (int)err_list[i]);
+
+	printf("])\n");
+
+	printf("erasure_code_perf: %dx%d %d\n", m, TEST_LEN(m), nerrs);
 
 	memcpy(src_err_list, err_list, nerrs);
 	memset(src_in_err, 0, TEST_SOURCES);
@@ -125,16 +215,16 @@ int main(int argc, char *argv[])
 	// Allocate the arrays
 	for (i = 0; i < m; i++) {
 		if (posix_memalign(&buf, 64, TEST_LEN(m))) {
-			printf("alloc error: Fail\n");
-			return -1;
+			printf("Error allocating buffers\n");
+			goto exit;
 		}
 		buffs[i] = buf;
 	}
 
-	for (i = 0; i < (m - k); i++) {
+	for (i = 0; i < p; i++) {
 		if (posix_memalign(&buf, 64, TEST_LEN(m))) {
-			printf("alloc error: Fail\n");
-			return -1;
+			printf("Error allocating buffers\n");
+			goto exit;
 		}
 		temp_buffs[i] = buf;
 	}
@@ -147,24 +237,24 @@ int main(int argc, char *argv[])
 	gf_gen_rs_matrix(a, m, k);
 
 	// Start encode test
-	BENCHMARK(&start, BENCHMARK_TIME, ec_encode_perf(m, k, a, g_tbls, buffs));
+	ec_encode_perf(m, k, a, g_tbls, buffs, &start);
 	printf("erasure_code_encode" TEST_TYPE_STR ": ");
 	perf_print(start, (long long)(TEST_LEN(m)) * (m));
 
 	// Start decode test
-	BENCHMARK(&start, BENCHMARK_TIME, check =
-		  ec_decode_perf(m, k, a, g_tbls, buffs, src_in_err, src_err_list, nerrs,
-				 temp_buffs));
+	check = ec_decode_perf(m, k, a, g_tbls, buffs, src_in_err, src_err_list, nerrs,
+			       temp_buffs, &start);
 
 	if (check == BAD_MATRIX) {
 		printf("BAD MATRIX\n");
-		return check;
+		ret = check;
+		goto exit;
 	}
 
 	for (i = 0; i < nerrs; i++) {
 		if (0 != memcmp(temp_buffs[i], buffs[src_err_list[i]], TEST_LEN(m))) {
 			printf("Fail error recovery (%d, %d, %d) - ", m, k, nerrs);
-			return -1;
+			goto exit;
 		}
 	}
 
@@ -172,5 +262,14 @@ int main(int argc, char *argv[])
 	perf_print(start, (long long)(TEST_LEN(m)) * (k + nerrs));
 
 	printf("done all: Pass\n");
-	return 0;
+
+	ret = 0;
+
+      exit:
+	free(err_list);
+	for (i = 0; i < TEST_SOURCES; i++) {
+		free(buffs[i]);
+		free(temp_buffs[i]);
+	}
+	return ret;
 }

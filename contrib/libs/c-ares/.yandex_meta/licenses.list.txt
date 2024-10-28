@@ -146,6 +146,10 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2024 Brad house
+
+
+====================COPYRIGHT====================
  * Copyright (c) 2024 The c-ares project and its contributors
 
 

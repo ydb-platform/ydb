@@ -544,6 +544,46 @@ private:
         ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
     }
 
+    void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        Y_ASSERT(buildInfo.IsBuildVectorIndex());
+        auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
+        ev->Record.SetId(ui64(BuildId));
+
+        PathIdFromPathId(buildInfo.TablePathId, ev->Record.MutablePathId());        
+        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+            buildInfo.SpecializedIndexDescription).GetSettings().settings();
+        ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
+        ev->Record.SetParent(buildInfo.KMeans.Parent);
+        ev->Record.SetChild(buildInfo.KMeans.ChildBegin);
+
+        auto& clusters = *ev->Record.MutableClusters();
+        clusters.Reserve(buildInfo.Sample.Rows.size());
+        for (const auto& [_, row] : buildInfo.Sample.Rows) {
+            *clusters.Add() = row;
+        }
+
+        auto path = TPath::Init(buildInfo.TablePathId, Self).Dive(buildInfo.IndexName);
+        if (buildInfo.KMeans.GetUpload() == NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_MAIN_TO_POSTING
+            || buildInfo.KMeans.GetUpload() == NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING) {
+            path.Dive(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable);
+        } else if (buildInfo.KMeans.Level % 2 == 0) {
+            path.Dive(NTableIndex::NTableVectorKmeansTreeIndex::BuildPostingTableSuffix0);
+        } else {
+            path.Dive(NTableIndex::NTableVectorKmeansTreeIndex::BuildPostingTableSuffix1);
+        }
+        ev->Record.SetPostingName(path.PathString());
+
+        ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns[0]);
+        *ev->Record.MutableDataColumns() = {
+            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
+        };
+
+        auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
+        LOG_D("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ev->Record.ShortDebugString());
+
+        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+    }
+
     void SendBuildIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
         ev->Record.SetBuildIndexId(ui64(BuildId));
@@ -695,6 +735,10 @@ private:
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendSampleKRequest(shardIdx, buildInfo); });
     }
 
+    bool SendKMeansReshuffle(TIndexBuildInfo& buildInfo) {
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansReshuffleRequest(shardIdx, buildInfo); });
+    }
+
     bool SendVectorIndex(TIndexBuildInfo& buildInfo) {
         switch (buildInfo.KMeans.State) {
             case TIndexBuildInfo::TKMeans::Sample:
@@ -702,9 +746,8 @@ private:
             // TODO(mbkkt)
             // case TIndexBuildInfo::TKMeans::Recompute:
             //     return SendKMeansRecompute(buildInfo);
-            // TODO(mbkkt)
-            // case TIndexBuildInfo::TKMeans::Reshuffle:
-            //     return SendKMeansReshuffle(buildInfo);
+            case TIndexBuildInfo::TKMeans::Reshuffle:
+                return SendKMeansReshuffle(buildInfo);
             // TODO(mbkkt)
             // case TIndexBuildInfo::TKMeans::Local:
             //     return SendKMeansLocal(buildInfo);
@@ -1293,6 +1336,138 @@ public:
         case TIndexBuildInfo::EState::Rejection_Unlocking:
         case TIndexBuildInfo::EState::Rejected:
             LOG_D("TTxReply : TEvSampleKResponse"
+                  << " superfluous message " << record.ShortDebugString());
+            break;
+        }
+
+        return true;
+    }
+};
+
+struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TSchemeShard::TIndexBuilder::TTxReply {
+private:
+    TEvDataShard::TEvReshuffleKMeansResponse::TPtr Reshuffle;
+
+public:
+    explicit TTxReplyReshuffleKMeans(TSelf* self, TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle)
+        : TTxReply(self)
+        , Reshuffle(reshuffle)
+    {
+    }
+
+    bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
+        auto& record = Reshuffle->Get()->Record;
+
+        LOG_I("TTxReply : TEvReshuffleKMeansResponse, Id# " << record.GetId());
+
+        const auto buildId = TIndexBuildId(record.GetId());
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
+        if (!buildInfoPtr) {
+            return true;
+        }
+        auto& buildInfo = *buildInfoPtr->Get();
+        LOG_D("TTxReply : TEvReshuffleKMeansResponse"
+              << ", TIndexBuildInfo: " << buildInfo
+              << ", record: " << record.ShortDebugString());
+
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        if (!Self->TabletIdToShardIdx.contains(shardId)) {
+            return true;
+        }
+
+        TShardIdx shardIdx = Self->TabletIdToShardIdx.at(shardId);
+        if (!buildInfo.Shards.contains(shardIdx)) {
+            return true;
+        }
+
+        switch (const auto state = buildInfo.State; state) {
+        case TIndexBuildInfo::EState::Filling:
+        {
+            TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+
+            auto actualSeqNo = std::pair<ui64, ui64>(Self->Generation(), shardStatus.SeqNoRound);
+            auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
+
+            if (actualSeqNo != recordSeqNo) {
+                LOG_D("TTxReply : TEvReshuffleKMeansResponse"
+                      << " ignore progress message by seqNo"
+                      << ", TIndexBuildInfo: " << buildInfo
+                      << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
+                      << ", record: " << record.ShortDebugString());
+                Y_ABORT_UNLESS(actualSeqNo > recordSeqNo);
+                return true;
+            }
+
+            // TODO(mbkkt) add billing
+
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            shardStatus.DebugMessage = issues.ToString();
+
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexUploadProgress(db, buildInfo, shardIdx);
+            shardStatus.Status = record.GetStatus();
+
+            switch (shardStatus.Status) {
+            case  NKikimrIndexBuilder::EBuildStatus::DONE:
+                if (buildInfo.InProgressShards.erase(shardIdx)) {
+                    ++buildInfo.DoneShardsSize;
+
+                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
+
+                    Progress(buildId);
+                }
+                break;
+
+            case  NKikimrIndexBuilder::EBuildStatus::ABORTED:
+                // datashard gracefully rebooted, reschedule shard
+                if (buildInfo.InProgressShards.erase(shardIdx)) {
+                    buildInfo.ToUploadShards.emplace_front(shardIdx);
+
+                    Self->IndexBuildPipes.Close(buildId, shardId, ctx);
+
+                    Progress(buildId);
+                }
+                break;
+
+            case  NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR:
+            case  NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST:
+                buildInfo.Issue += TStringBuilder()
+                    << "One of the shards report "<< shardStatus.Status 
+                    << " at Filling stage, process has to be canceled"
+                    << ", shardId: " << shardId
+                    << ", shardIdx: " << shardIdx;
+                Self->PersistBuildIndexIssue(db, buildInfo);
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+
+                Progress(buildId);
+                break;
+
+            case  NKikimrIndexBuilder::EBuildStatus::INVALID:
+            case  NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
+            case  NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
+                Y_ABORT("Unreachable");
+            }
+            break;
+        }
+        case TIndexBuildInfo::EState::AlterMainTable:
+        case TIndexBuildInfo::EState::Invalid:
+        case TIndexBuildInfo::EState::Locking:
+        case TIndexBuildInfo::EState::GatheringStatistics:
+        case TIndexBuildInfo::EState::Initiating:
+        case TIndexBuildInfo::EState::DropBuild:
+        case TIndexBuildInfo::EState::CreateBuild:
+        case TIndexBuildInfo::EState::Applying:
+        case TIndexBuildInfo::EState::Unlocking:
+        case TIndexBuildInfo::EState::Done:
+            Y_FAIL_S("Unreachable " << Name(state));
+        case TIndexBuildInfo::EState::Cancellation_Applying:
+        case TIndexBuildInfo::EState::Cancellation_Unlocking:
+        case TIndexBuildInfo::EState::Cancelled:
+        case TIndexBuildInfo::EState::Rejection_Applying:
+        case TIndexBuildInfo::EState::Rejection_Unlocking:
+        case TIndexBuildInfo::EState::Rejected:
+            LOG_D("TTxReply : TEvReshuffleKMeansResponse"
                   << " superfluous message " << record.ShortDebugString());
             break;
         }
@@ -1937,6 +2112,10 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildIndexProgressRes
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK) {
     return new TIndexBuilder::TTxReplySampleK(this, sampleK);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle) {
+    return new TIndexBuilder::TTxReplyReshuffleKMeans(this, reshuffle);
 }
 
 ITransaction* TSchemeShard::CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload) {

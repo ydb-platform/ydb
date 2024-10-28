@@ -123,14 +123,14 @@ inline TObjectId MakeSequoiaId(
 inline TObjectId MakeWellKnownId(
     EObjectType type,
     TCellTag cellTag,
-    ui64 counter /*= 0xffffffffffffffff*/)
+    ui64 counter)
 {
     YT_VERIFY(counter & WellKnownCounterMask);
     return MakeId(
         type,
         cellTag,
         counter,
-        static_cast<ui32>(cellTag.Underlying() * 901517) ^ 0x140a8383);
+        static_cast<ui32>(static_cast<ui32>(cellTag.Underlying()) * 901517ULL ^ 0x140a8383ULL));
 }
 
 inline TObjectId MakeSchemaObjectId(

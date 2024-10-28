@@ -114,21 +114,21 @@ IComputationNode* WrapDqYtRead(TCallable& callable, NKikimr::NMiniKQL::IStatsReg
                 inputGroups, static_cast<TType*>(callable.GetInput(5).GetNode()), tableNames, std::move(tables), jobStats,
                 inflight, timeout, tableOffsets);
         } else {
-            return new TDqYtReadWrapperBase<TDqYtReadWrapperRPC, TParallelFileInputState>(ctx, clusterName, token,
+            return new TDqYtReadWrapperRPC(ctx, clusterName, token,
                 NYT::NodeFromYsonString(inputSpec), samplingSpec ? NYT::NodeFromYsonString(samplingSpec) : NYT::TNode(),
                 inputGroups, static_cast<TType*>(callable.GetInput(5).GetNode()), tableNames, std::move(tables), jobStats,
                 inflight, timeout, tableOffsets);
         }
     } else {
         YQL_ENSURE(!useBlocks);
-        return new TDqYtReadWrapperBase<TDqYtReadWrapperHttp, TFileInputState>(ctx, clusterName, token,
+        return new TDqYtReadWrapperHttp(ctx, clusterName, token,
             NYT::NodeFromYsonString(inputSpec), samplingSpec ? NYT::NodeFromYsonString(samplingSpec) : NYT::TNode(),
             inputGroups, static_cast<TType*>(callable.GetInput(5).GetNode()), tableNames, std::move(tables), jobStats,
             inflight, timeout, tableOffsets);
     }
 #else
     YQL_ENSURE(!useBlocks);
-    return new TDqYtReadWrapperBase<TDqYtReadWrapperHttp, TFileInputState>(ctx, clusterName, token,
+    return new TDqYtReadWrapperHttp(ctx, clusterName, token,
         NYT::NodeFromYsonString(inputSpec), samplingSpec ? NYT::NodeFromYsonString(samplingSpec) : NYT::TNode(),
         inputGroups, static_cast<TType*>(callable.GetInput(5).GetNode()), tableNames, std::move(tables), jobStats, 0, timeout,
         tableOffsets);

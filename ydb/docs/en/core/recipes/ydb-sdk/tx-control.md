@@ -1,8 +1,3 @@
----
-title: "Overview of the code recipe for setting up the transaction execution mode in {{ ydb-short-name }}"
-description: "In this article, you will learn how to set up the transaction execution mode in different SDKs to execute queries against {{ ydb-short-name }}."
----
-
 # Setting up the transaction execution mode
 
 To run your queries, first you need to specify the [transaction execution mode](../../concepts/transactions.md#modes) in the {{ ydb-short-name }} SDK.
@@ -13,7 +8,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Serializable {#serializable}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -74,7 +69,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       'iam_config'  => [
           // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
       ],
-      
+
       'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
   ];
 
@@ -88,7 +83,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Online Read-Only {#online-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -136,7 +131,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Stale Read-Only {#stale-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 
@@ -184,7 +179,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 ## Snapshot Read-Only {#snapshot-read-only}
 
-{% list tabs %}
+{% list tabs group=lang %}
 
 - Go (native)
 

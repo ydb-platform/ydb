@@ -5,6 +5,8 @@ WITHOUT_LICENSE_TEXTS()
 # Proxy library
 LICENSE(Not-Applicable)
 
+VERSION(Service-proxy-version)
+
 NO_PLATFORM()
 
 IF (NOT USE_STL_SYSTEM)

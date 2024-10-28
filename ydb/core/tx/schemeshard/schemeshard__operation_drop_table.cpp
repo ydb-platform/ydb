@@ -530,9 +530,14 @@ public:
                 if (parent.Base()->IsTableIndex()) {
                     checks
                         .IsTableIndex()
-                        .IsInsideTableIndexPath()
-                        .IsUnderDeleting()
-                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of drop base table
+                        .IsInsideTableIndexPath();
+                    // Not build index impl tables can be dropped only as part of drop index
+                    // build index impl tables dropped multiple times during index construction
+                    if (!NTableIndex::IsBuildImplTable(name)) {
+                        checks
+                            .IsUnderDeleting()
+                            .IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
                 } else {
                     checks
                         .IsLikeDirectory()

@@ -14,6 +14,8 @@
 
 #include "y_absl/strings/internal/cordz_info.h"
 
+#include <cstdint>
+
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/spinlock.h"
 #include "y_absl/container/inlined_vector.h"
@@ -247,10 +249,12 @@ CordzInfo* CordzInfo::Next(const CordzSnapshot& snapshot) const {
   return next;
 }
 
-void CordzInfo::TrackCord(InlineData& cord, MethodIdentifier method) {
+void CordzInfo::TrackCord(InlineData& cord, MethodIdentifier method,
+                          int64_t sampling_stride) {
   assert(cord.is_tree());
   assert(!cord.is_profiled());
-  CordzInfo* cordz_info = new CordzInfo(cord.as_tree(), nullptr, method);
+  CordzInfo* cordz_info =
+      new CordzInfo(cord.as_tree(), nullptr, method, sampling_stride);
   cord.set_cordz_info(cordz_info);
   cordz_info->Track();
 }
@@ -266,7 +270,8 @@ void CordzInfo::TrackCord(InlineData& cord, const InlineData& src,
   if (cordz_info != nullptr) cordz_info->Untrack();
 
   // Start new cord sample
-  cordz_info = new CordzInfo(cord.as_tree(), src.cordz_info(), method);
+  cordz_info = new CordzInfo(cord.as_tree(), src.cordz_info(), method,
+                             src.cordz_info()->sampling_stride());
   cord.set_cordz_info(cordz_info);
   cordz_info->Track();
 }
@@ -298,18 +303,23 @@ size_t CordzInfo::FillParentStack(const CordzInfo* src, void** stack) {
   return src->stack_depth_;
 }
 
-CordzInfo::CordzInfo(CordRep* rep,
-                     const CordzInfo* src,
-                     MethodIdentifier method)
+CordzInfo::CordzInfo(CordRep* rep, const CordzInfo* src,
+                     MethodIdentifier method, int64_t sampling_stride)
     : rep_(rep),
       stack_depth_(
+#ifdef Y_ABSL_DONT_USE_DEBUG_LIBRARY
+          0
+#else 
           static_cast<size_t>(y_absl::GetStackTrace(stack_,
                                                   /*max_depth=*/kMaxStackDepth,
-                                                  /*skip_count=*/1))),
+                                                  /*skip_count=*/1))
+#endif
+      ),
       parent_stack_depth_(FillParentStack(src, parent_stack_)),
       method_(method),
       parent_method_(GetParentMethod(src)),
-      create_time_(y_absl::Now()) {
+      create_time_(y_absl::Now()),
+      sampling_stride_(sampling_stride) {
   update_tracker_.LossyAdd(method);
   if (src) {
     // Copy parent counters.

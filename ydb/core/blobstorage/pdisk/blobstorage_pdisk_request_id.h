@@ -83,6 +83,12 @@ struct TReqId {
         ReleaseChunks = 64,
         StopDevice = 65,
         ChunkForget = 66,
+        ReadMetadata = 67,
+        InitialReadMetadataResult = 68,
+        WriteMetadata = 69,
+        WriteMetadataResult = 70,
+        PushUnformattedMetadataSector = 71,
+        ContinueReadMetadata = 72,
     };
 
     // 56 bit idx, 8 bit source
@@ -141,6 +147,12 @@ enum class ERequestType {
     RequestReleaseChunks,
     RequestStopDevice,
     RequestChunkForget,
+    RequestReadMetadata,
+    RequestInitialReadMetadataResult,
+    RequestWriteMetadata,
+    RequestWriteMetadataResult,
+    RequestPushUnformattedMetadataSector,
+    RequestContinueReadMetadata,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

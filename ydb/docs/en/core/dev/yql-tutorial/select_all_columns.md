@@ -4,7 +4,7 @@ Select all columns from the table using [SELECT](../../yql/reference/syntax/sele
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 SELECT         -- Data selection operator.
 
     *          -- Select all columns from the table.

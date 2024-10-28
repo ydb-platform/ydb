@@ -437,6 +437,9 @@ TVector<TWorkerInfo::TPtr> TWorkersStorage::TryAllocate(const NDq::IScheduler::T
             if (workerInfo->Stopping) {
                 continue;
             }
+            if (!filter.MatchHost(workerInfo)) {
+                continue;
+            }
             filter.Visit([&](const auto& file) {
                 if (workerInfo->AddToDownloadList(file.GetObjectId(), file)) {
                     YQL_CLOG(TRACE, ProviderDq) << "Added " << file.GetName() << "|" << file.GetObjectId() << " to worker's " << GetGuidAsString(workerInfo->WorkerId) << " download list" ;

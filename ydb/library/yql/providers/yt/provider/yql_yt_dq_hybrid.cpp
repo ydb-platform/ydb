@@ -78,6 +78,11 @@ private:
         if (operation.Ref().StartsExecution() || operation.Ref().HasResult())
             return false;
 
+        if (!State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
+            PushSkipStat("FalseSystemColumns", nodeName);
+            return false;
+        }
+
         if (operation.Output().Size() != 1U) {
             PushSkipStat("MultipleOutputs", nodeName);
             return false;
@@ -118,10 +123,6 @@ private:
         }
         if (HasNonEmptyKeyFilter(section)) {
             PushSkipStat("NonEmptyKeyFilter", nodeName);
-            return false;
-        }
-        auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
-        if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
             return false;
         }
         ui64 dataSize = 0ULL, dataChunks = 0ULL;

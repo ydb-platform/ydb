@@ -16,6 +16,7 @@ public:
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0;
     virtual TVector<TStringBuf> FindClientCert() const = 0;
     virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
+    virtual TString GetPeerName() const = 0;
 };
 
 class TBusMessageContext::TImplMessageBus
@@ -61,6 +62,13 @@ public:
         return {};
     }
 
+    TString GetPeerName() const override {
+        TStringBuilder ret;
+        if (IsConnectionAlive()) {
+            ret << GetPeerAddrNetAddr();
+        }
+        return std::move(ret);
+    }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
@@ -95,12 +103,6 @@ public:
             MTYPE(TBusHiveCreateTablet)
             MTYPE(TBusOldHiveCreateTablet)
             MTYPE(TBusHiveCreateTabletResult)
-            MTYPE(TBusLocalEnumerateTablets)
-            MTYPE(TBusOldLocalEnumerateTablets)
-            MTYPE(TBusLocalEnumerateTabletsResult)
-            MTYPE(TBusKeyValue)
-            MTYPE(TBusOldKeyValue)
-            MTYPE(TBusKeyValueResponse)
             MTYPE(TBusPersQueue)
             MTYPE(TBusTabletKillRequest)
             MTYPE(TBusTabletStateRequest)
@@ -181,6 +183,10 @@ public:
     };
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+
+    TString GetPeerName() const override {
+        return RequestContext->GetPeer();
+    }
 };
 
 TBusMessageContext::TBusMessageContext()
@@ -226,6 +232,8 @@ void TBusMessageContext::Swap(TBusMessageContext &msg) {
 }
 
 TVector<TStringBuf> TBusMessageContext::FindClientCert() const { return Impl->FindClientCert(); }
+
+TString TBusMessageContext::GetPeerName() const { return Impl->GetPeerName(); }
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
     Y_ABORT_UNLESS(Impl);
@@ -497,12 +505,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
-    case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
-    case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
-        return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
-    case MTYPE_CLIENT_KEYVALUE:
-    case MTYPE_CLIENT_OLD_KEYVALUE:
-        return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:
         return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
     case MTYPE_CLIENT_CHOOSE_PROXY:

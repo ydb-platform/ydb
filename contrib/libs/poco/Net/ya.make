@@ -2,6 +2,8 @@
 
 LIBRARY()
 
+VERSION(1.9.4)
+
 LICENSE(
     BSL-1.0 AND
     Custom-punycode

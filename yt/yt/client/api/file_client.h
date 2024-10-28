@@ -23,6 +23,7 @@ struct TFileWriterOptions
 {
     bool ComputeMD5 = false;
     TFileWriterConfigPtr Config;
+    NConcurrency::IThroughputThrottlerPtr Throttler;
 };
 
 struct TGetFileFromCacheOptions

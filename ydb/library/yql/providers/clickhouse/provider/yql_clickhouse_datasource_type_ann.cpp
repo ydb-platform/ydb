@@ -25,7 +25,11 @@ public:
     }
 
     TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 3U, ctx)) {
+        if (!EnsureArgsCount(*input, 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input->Child(TClSourceSettings::idx_World), ctx)) {
             return TStatus::Error;
         }
 
@@ -108,7 +112,7 @@ public:
             ctx.MakeType<TListExprType>(itemType)
         }));
 
-        return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
+        return State_->Types->SetColumnOrder(*input, TColumnOrder(columnOrder), ctx);
     }
 
 private:

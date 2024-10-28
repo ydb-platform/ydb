@@ -582,12 +582,10 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "OLAP schema operations are not supported");
-                return result;
-            }
+        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->ColumnTables.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
+            return result;
         }
 
         if (createDescription.GetSharding().GetColumnShards().size()) {
@@ -683,11 +681,23 @@ public:
         TProposeErrorCollector errors(*result);
         TColumnTableInfo::TPtr tableInfo;
         bool needUpdateObject = false;
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
         if (storeInfo) {
             TOlapPresetConstructor tableConstructor(*storeInfo);
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
             needUpdateObject = tableConstructor.GetNeedUpdateObject();
         } else {
+            ui64 columnCount = createDescription.schema().columns().size();
+            if (columnCount > limits.MaxColumnTableColumns) {
+                TString errStr = TStringBuilder()
+                    << "Too many columns"
+                    << ". new: " << columnCount
+                    << ". Limit: " << limits.MaxColumnTableColumns;
+                result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+                return result;
+            }
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }

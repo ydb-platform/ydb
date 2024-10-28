@@ -12,7 +12,7 @@ from math import fabs, inf, isinf, isnan, nan, sqrt
 from sys import float_info
 
 
-def cathetus(h, a):
+def cathetus(h: float, a: float) -> float:
     """Given the lengths of the hypotenuse and a side of a right triangle,
     return the length of the other side.
 
@@ -27,7 +27,7 @@ def cathetus(h, a):
     may be inaccurate up to a relative error of (around) floating-point
     epsilon.
 
-    Based on the C99 implementation https://github.com/jjgreen/cathetus
+    Based on the C99 implementation https://gitlab.com/jjg/cathetus
     """
     if isnan(h):
         return nan

@@ -56,7 +56,7 @@ static void NullSerializeReadTableResponse(const TString& input, Ydb::StatusIds:
         snapshot->set_tx_id(txId);
     }
 
-    readTableResponse.mutable_result()->set_result_set(input.Data(), input.Size());
+    readTableResponse.mutable_result()->set_result_set(input.data(), input.size());
     Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
 }
 

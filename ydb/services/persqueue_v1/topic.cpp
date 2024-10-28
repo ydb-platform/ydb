@@ -42,6 +42,35 @@ void TGRpcTopicService::DoUpdateOffsetsInTransaction(std::unique_ptr<IRequestOpC
     TActivationContext::AsActorContext().Register(new TUpdateOffsetsInTransactionActor(p.release()));
 }
 
+namespace {
+
+using namespace NKikimr;
+
+void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, NGRpcService::ICheckerIface* checker) {
+    static const std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
+    //full list of permissions for compatibility. remove old permissions later.
+    static const TVector<TString> permissions = {
+        "ydb.databases.list",
+        "ydb.databases.create",
+        "ydb.databases.connect",
+        "ydb.tables.select",
+        "ydb.schemas.getMetadata",
+        "ydb.streams.write"
+    };
+    TVector<std::pair<TString, TString>> attributes;
+    attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
+    for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+        if (std::find(allowedAttributes.begin(), allowedAttributes.end(), attr.GetKey()) != allowedAttributes.end()) {
+            attributes.emplace_back(attr.GetKey(), attr.GetValue());
+        }
+    }
+    if (!attributes.empty()) {
+        checker->SetEntries({{permissions, attributes}});
+    }
+}
+
+}
+
 void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     using namespace std::placeholders;
@@ -145,7 +174,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     })
 
     ADD_REQUEST(DescribePartition, TopicService, DescribePartitionRequest, DescribePartitionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribePartitionRequest(ctx, &DoDescribePartitionRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Off}));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribePartitionRequest(ctx, &DoDescribePartitionRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), YdsProcessAttr, TAuditMode::Off}));
     })
 #undef ADD_REQUEST
 

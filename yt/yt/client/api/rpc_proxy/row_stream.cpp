@@ -42,7 +42,7 @@ std::tuple<TSharedRef, TMutableRef> SerializeRowStreamBlockEnvelope(
     if (statistics) {
         totalSize += sizeof (i32); // partCount
         totalSize += sizeof (i64) * 2; // partLength * 2
-        totalSize += statistics->ByteSize();
+        totalSize += statistics->ByteSizeLong();
     }
 
     struct TSerializedRowStreamBlockTag { };
@@ -82,7 +82,7 @@ std::tuple<TSharedRef, TMutableRef> SerializeRowStreamBlockEnvelope(
     skipPayload();
 
     if (statistics) {
-        writeInt64(statistics->ByteSize()); // partLength
+        writeInt64(statistics->ByteSizeLong()); // partLength
         writeProto(*statistics);
     }
 

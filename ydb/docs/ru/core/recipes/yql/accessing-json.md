@@ -1,4 +1,3 @@
-```markdown
 # Доступ к значениям в JSON с помощью YQL
 
 YQL предоставляет два основных способа извлечения значений из JSON:
@@ -61,7 +60,7 @@ $has_name = ListAny(
 $get_age = $containers.friends[0].age;
 $get_first_friend = Yson::SerializeJson(Yson::From($containers.friends[0]));
 
-SELECT 
+SELECT
     $has_name, -- True
     $get_age, -- 35
     $get_first_friend; -- {"name": "James Holden", "age": 35}
@@ -93,7 +92,7 @@ $has_name = ListAny(
 $get_age = Yson::ConvertToInt64($json.friends[0].age);
 $get_first_friend = Yson::SerializeJson($json.friends[0]);
 
-SELECT 
+SELECT
     $has_name, -- True
     $get_age, -- 35
     $get_first_friend; -- {"name": "James Holden", "age": 35}
@@ -102,4 +101,3 @@ SELECT
 ## Смотрите также
 
 - [{#T}](modifying-json.md)
-```

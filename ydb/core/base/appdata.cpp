@@ -18,11 +18,14 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/shared_cache.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <ydb/library/actors/interconnect/poller_tcp.h>
@@ -61,6 +64,8 @@ struct TAppData::TImpl {
     NKikimrConfig::TGraphConfig GraphConfig;
     NKikimrSharedCache::TSharedCacheConfig SharedCacheConfig;
     NKikimrConfig::TMetadataCacheConfig MetadataCacheConfig;
+    NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
+    NKikimrReplication::TReplicationDefaults ReplicationConfig;
 };
 
 TAppData::TAppData(
@@ -113,11 +118,21 @@ TAppData::TAppData(
     , GraphConfig(Impl->GraphConfig)
     , SharedCacheConfig(Impl->SharedCacheConfig)
     , MetadataCacheConfig(Impl->MetadataCacheConfig)
+    , MemoryControllerConfig(Impl->MemoryControllerConfig)
+    , ReplicationConfig(Impl->ReplicationConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 
 TAppData::~TAppData()
 {}
+
+void TAppData::InitFeatureFlags(const NKikimrConfig::TFeatureFlags& flags) {
+    Impl->FeatureFlags = flags;
+}
+
+void TAppData::UpdateRuntimeFlags(const NKikimrConfig::TFeatureFlags& flags) {
+    Impl->FeatureFlags.CopyRuntimeFrom(flags);
+}
 
 TIntrusivePtr<IRandomProvider> TAppData::RandomProvider = CreateDefaultRandomProvider();
 TIntrusivePtr<ITimeProvider> TAppData::TimeProvider = CreateDefaultTimeProvider();

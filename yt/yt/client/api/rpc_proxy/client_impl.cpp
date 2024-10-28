@@ -4,9 +4,11 @@
 #include "helpers.h"
 #include "private.h"
 #include "table_mount_cache.h"
+#include "table_writer.h"
 #include "timestamp_provider.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/transaction.h>
@@ -51,10 +53,11 @@ using NYT::FromProto;
 using namespace NAuth;
 using namespace NChaosClient;
 using namespace NChunkClient;
+using namespace NConcurrency;
 using namespace NObjectClient;
+using namespace NQueueClient;
 using namespace NRpc;
 using namespace NScheduler;
-using namespace NQueueClient;
 using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
@@ -117,7 +120,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(NRpc::IChannelPtr channel
         }));
 }
 
-IChannelPtr TClient::CreateNonRetryingChannelByAddress(const TString& address) const
+IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
     return CreateCredentialsInjectingChannel(
         Connection_->CreateChannelByAddress(address),
@@ -343,7 +346,7 @@ TFuture<void> TClient::ReshardTable(
     for (const auto& pivotKey : pivotKeys) {
         keys.push_back(pivotKey);
     }
-    writer->WriteRowset(MakeRange(keys));
+    writer->WriteRowset(TRange(keys));
     req->Attachments() = writer->Finish();
 
     ToProto(req->mutable_mutating_options(), options);
@@ -469,17 +472,25 @@ TFuture<void> TClient::AlterTableReplica(
     if (options.Enabled) {
         req->set_enabled(*options.Enabled);
     }
+
     if (options.Mode) {
         req->set_mode(static_cast<NProto::ETableReplicaMode>(*options.Mode));
     }
+
     if (options.PreserveTimestamps) {
         req->set_preserve_timestamps(*options.PreserveTimestamps);
     }
+
     if (options.Atomicity) {
         req->set_atomicity(static_cast<NProto::EAtomicity>(*options.Atomicity));
     }
+
     if (options.EnableReplicatedTableTracker) {
         req->set_enable_replicated_table_tracker(*options.EnableReplicatedTableTracker);
+    }
+
+    if (options.ReplicaPath) {
+        req->set_replica_path(*options.ReplicaPath);
     }
 
     ToProto(req->mutable_mutating_options(), options);
@@ -735,8 +746,42 @@ TFuture<void> TClient::AlterReplicationCard(
     if (options.ReplicationCardCollocationId) {
         ToProto(req->mutable_replication_card_collocation_id(), *options.ReplicationCardCollocationId);
     }
+    if (options.CollocationOptions) {
+        req->set_collocation_options(ConvertToYsonString(options.CollocationOptions).ToString());
+    }
 
     return req->Invoke().As<void>();
+}
+
+TFuture<ITableWriterPtr> TClient::CreateFragmentTableWriter(
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options)
+{
+    using TRspPtr = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspWriteTableFragment>>;
+
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.WriteTableFragment();
+    InitStreamingRequest(*req);
+
+    FillRequest(req.Get(), cookie, options);
+
+    auto schema = New<TTableSchema>();
+    return NRpc::CreateRpcClientOutputStream(
+        std::move(req),
+        BIND ([=] (const TSharedRef& metaRef) {
+            NApi::NRpcProxy::NProto::TWriteTableMeta meta;
+            if (!TryDeserializeProto(&meta, metaRef)) {
+                THROW_ERROR_EXCEPTION("Failed to deserialize schema for fragment table writer");
+            }
+
+            FromProto(schema.Get(), meta.schema());
+        }),
+        BIND([=] (TRspPtr&& rsp) mutable {
+            Deserialize(*cookie, ConvertToNode(TYsonString(rsp->cookie())));
+        }))
+        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
+            return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
+        })).As<ITableWriterPtr>();
 }
 
 TFuture<IQueueRowsetPtr> TClient::PullQueue(
@@ -961,7 +1006,7 @@ TFuture<void> TClient::RemoveMember(
 }
 
 TFuture<TCheckPermissionResponse> TClient::CheckPermission(
-    const TString& user,
+    const std::string& user,
     const TYPath& path,
     EPermission permission,
     const TCheckPermissionOptions& options)
@@ -971,7 +1016,7 @@ TFuture<TCheckPermissionResponse> TClient::CheckPermission(
     auto req = proxy.CheckPermission();
     SetTimeoutOptions(*req, options);
 
-    req->set_user(user);
+    req->set_user(ToProto<TProtobufString>(user));
     req->set_path(path);
     req->set_permission(static_cast<int>(permission));
     if (options.Columns) {
@@ -997,7 +1042,7 @@ TFuture<TCheckPermissionResponse> TClient::CheckPermission(
 }
 
 TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
-    const std::optional<TString>& user,
+    const std::optional<std::string>& user,
     EPermission permission,
     INodePtr acl,
     const TCheckPermissionByAclOptions& options)
@@ -1008,7 +1053,7 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
     SetTimeoutOptions(*req, options);
 
     if (user) {
-        req->set_user(*user);
+        req->set_user(ToProto<TProtobufString>(*user));
     }
     req->set_permission(static_cast<int>(permission));
     req->set_acl(ConvertToYsonString(acl).ToString());
@@ -1263,7 +1308,7 @@ TFuture<TYsonString> TClient::GetJobSpec(
     }));
 }
 
-TFuture<TSharedRef> TClient::GetJobStderr(
+TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
     const TOperationIdOrAlias& operationIdOrAlias,
     NJobTrackerClient::TJobId jobId,
     const TGetJobStderrOptions& options)
@@ -1275,12 +1320,54 @@ TFuture<TSharedRef> TClient::GetJobStderr(
 
     NScheduler::ToProto(req, operationIdOrAlias);
     ToProto(req->mutable_job_id(), jobId);
+    if (options.Limit) {
+        req->set_limit(*options.Limit);
+    }
+    if (options.Offset) {
+        req->set_offset(*options.Offset);
+    }
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
+    return req->Invoke().Apply(BIND([req = req](const TApiServiceProxy::TRspGetJobStderrPtr& rsp) {
         YT_VERIFY(rsp->Attachments().size() == 1);
-        return rsp->Attachments().front();
+        TGetJobStderrOptions options{.Limit = req->limit(), .Offset = req->offset()};
+        return TGetJobStderrResponse::MakeJobStderr(rsp->Attachments().front(), options);
     }));
 }
+
+TFuture<std::vector<TJobTraceEvent>> TClient::GetJobTrace(
+    const TOperationIdOrAlias& operationIdOrAlias,
+    const TGetJobTraceOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetJobTrace();
+    SetTimeoutOptions(*req, options);
+
+    NScheduler::ToProto(req, operationIdOrAlias);
+    if (options.JobId) {
+        ToProto(req->mutable_job_id(), *options.JobId);
+    }
+    if (options.TraceId) {
+        ToProto(req->mutable_trace_id(), *options.TraceId);
+    }
+    if (options.FromTime) {
+        req->set_from_time(*options.FromTime);
+    }
+    if (options.ToTime) {
+        req->set_to_time(*options.ToTime);
+    }
+    if (options.FromEventIndex) {
+        req->set_from_event_index(*options.FromEventIndex);
+    }
+    if (options.ToEventIndex) {
+        req->set_to_event_index(*options.ToEventIndex);
+    }
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobTracePtr& rsp) {
+        return FromProto<std::vector<TJobTraceEvent>>(rsp->events());
+    }));
+}
+
 
 TFuture<TSharedRef> TClient::GetJobFailContext(
     const TOperationIdOrAlias& operationIdOrAlias,
@@ -1757,7 +1844,7 @@ TFuture<void> TClient::DiscombobulateNonvotingPeers(
 
 TFuture<void> TClient::SwitchLeader(
     NHydra::TCellId /*cellId*/,
-    const TString& /*newLeaderAddress*/,
+    const std::string& /*newLeaderAddress*/,
     const TSwitchLeaderOptions& /*options*/)
 {
     ThrowUnimplemented("SwitchLeader");
@@ -1783,21 +1870,21 @@ TFuture<void> TClient::GCCollect(const TGCCollectOptions& options)
 }
 
 TFuture<void> TClient::KillProcess(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const TKillProcessOptions& /*options*/)
 {
     ThrowUnimplemented("KillProcess");
 }
 
 TFuture<TString> TClient::WriteCoreDump(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const TWriteCoreDumpOptions& /*options*/)
 {
     ThrowUnimplemented("WriteCoreDump");
 }
 
 TFuture<TGuid> TClient::WriteLogBarrier(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const TWriteLogBarrierOptions& /*options*/)
 {
     ThrowUnimplemented("WriteLogBarrier");
@@ -1811,7 +1898,7 @@ TFuture<TString> TClient::WriteOperationControllerCoreDump(
 }
 
 TFuture<void> TClient::HealExecNode(
-    const TString& /*address*/,
+    const std::string& /*address*/,
     const THealExecNodeOptions& /*options*/)
 {
     ThrowUnimplemented("HealExecNode");
@@ -1905,7 +1992,7 @@ NProto::EMaintenanceType ConvertMaintenanceTypeToProto(EMaintenanceType type)
 
 TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     EMaintenanceComponent component,
-    const TString& address,
+    const std::string& address,
     EMaintenanceType type,
     const TString& comment,
     const TAddMaintenanceOptions& options)
@@ -1918,7 +2005,7 @@ TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
     SetTimeoutOptions(*req, options);
 
     req->set_component(ConvertMaintenanceComponentToProto(component));
-    req->set_address(address);
+    req->set_address(ToProto<TProtobufString>(address));
     req->set_type(ConvertMaintenanceTypeToProto(type));
     req->set_comment(comment);
     req->set_supports_per_target_response(true);
@@ -1944,7 +2031,7 @@ TFuture<TMaintenanceIdPerTarget> TClient::AddMaintenance(
 
 TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
     EMaintenanceComponent component,
-    const TString& address,
+    const std::string& address,
     const TMaintenanceFilter& filter,
     const TRemoveMaintenanceOptions& options)
 {
@@ -1954,7 +2041,7 @@ TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
     SetTimeoutOptions(*req, options);
 
     req->set_component(ConvertMaintenanceComponentToProto(component));
-    req->set_address(address);
+    req->set_address(ToProto<TProtobufString>(address));
 
     ToProto(req->mutable_ids(), filter.Ids);
 
@@ -1968,8 +2055,8 @@ TFuture<TMaintenanceCountsPerTarget> TClient::RemoveMaintenance(
         [&] (TByUser::TMine) {
             req->set_mine(true);
         },
-        [&] (const TString& user) {
-            req->set_user(user);
+        [&] (const std::string& user) {
+            req->set_user(ToProto<TProtobufString>(user));
         });
 
     req->set_supports_per_target_response(true);
@@ -2057,7 +2144,7 @@ TFuture<void> TClient::ResumeTabletCells(
 }
 
 TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     const std::vector<TGuid>& locationUuids,
     const TDisableChunkLocationsOptions& /*options*/)
 {
@@ -2076,7 +2163,7 @@ TFuture<TDisableChunkLocationsResult> TClient::DisableChunkLocations(
 }
 
 TFuture<TDestroyChunkLocationsResult> TClient::DestroyChunkLocations(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     bool recoverUnlinkedDisks,
     const std::vector<TGuid>& locationUuids,
     const TDestroyChunkLocationsOptions& /*options*/)
@@ -2097,7 +2184,7 @@ TFuture<TDestroyChunkLocationsResult> TClient::DestroyChunkLocations(
 }
 
 TFuture<TResurrectChunkLocationsResult> TClient::ResurrectChunkLocations(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     const std::vector<TGuid>& locationUuids,
     const TResurrectChunkLocationsOptions& /*options*/)
 {
@@ -2116,7 +2203,7 @@ TFuture<TResurrectChunkLocationsResult> TClient::ResurrectChunkLocations(
 }
 
 TFuture<TRequestRestartResult> TClient::RequestRestart(
-    const TString& nodeAddress,
+    const std::string& nodeAddress,
     const TRequestRestartOptions& /*options*/)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2368,6 +2455,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
+            .QueryTrackerStage = rsp->query_tracker_stage(),
             .ClusterName = rsp->cluster_name(),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
@@ -2391,7 +2479,7 @@ TFuture<void> TClient::SetBundleConfig(
 }
 
 TFuture<void> TClient::SetUserPassword(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*currentPasswordSha256*/,
     const TString& /*newPasswordSha256*/,
     const TSetUserPasswordOptions& /*options*/)
@@ -2400,7 +2488,7 @@ TFuture<void> TClient::SetUserPassword(
 }
 
 TFuture<TIssueTokenResult> TClient::IssueToken(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*passwordSha256*/,
     const TIssueTokenOptions& /*options*/)
 {
@@ -2408,7 +2496,7 @@ TFuture<TIssueTokenResult> TClient::IssueToken(
 }
 
 TFuture<void> TClient::RevokeToken(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*passwordSha256*/,
     const TString& /*tokenSha256*/,
     const TRevokeTokenOptions& /*options*/)
@@ -2417,7 +2505,7 @@ TFuture<void> TClient::RevokeToken(
 }
 
 TFuture<TListUserTokensResult> TClient::ListUserTokens(
-    const TString& /*user*/,
+    const std::string& /*user*/,
     const TString& /*passwordSha256*/,
     const TListUserTokensOptions& /*options*/)
 {
@@ -2589,6 +2677,37 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
     }));
 }
 
+TFuture<TShuffleHandlePtr> TClient::StartShuffle(
+    const TString& /*account*/,
+    int /*partitionCount*/,
+    const TStartShuffleOptions& /*options*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
+TFuture<void> TClient::FinishShuffle(
+    const TShuffleHandlePtr& /*shuffleHandle*/,
+    const TFinishShuffleOptions& /*options*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
+TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
+    const TShuffleHandlePtr& /*shuffleHandle*/,
+    int /*partitionIndex*/,
+    const TTableReaderConfigPtr& /*config*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
+TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
+    const TShuffleHandlePtr& /*shuffleHandle*/,
+    const TString& /*partitionColumn*/,
+    const TTableWriterConfigPtr& /*config*/)
+{
+    YT_UNIMPLEMENTED();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NRpcProxy
+} // namespace NYT::NApi::NRpcProxy

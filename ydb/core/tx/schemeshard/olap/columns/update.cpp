@@ -1,4 +1,5 @@
 #include "update.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
@@ -47,30 +48,26 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(TypeName); typeName.StartsWith("pg")) {
-            const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-            if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
-                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+        TString errStr;
+        Y_ABORT_UNLESS(AppData()->TypeRegistry);
+        if (!GetTypeInfo(AppData()->TypeRegistry->GetType(TypeName), columnSchema.GetTypeInfo(), TypeName, Name, Type, errStr)) {
+            errors.AddError(errStr);
+            return false;
+        }
+
+        if (Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+            if (!TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()))) {
+                errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
                 return false;
             }
-            Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
         } else {
-            Y_ABORT_UNLESS(AppData()->TypeRegistry);
-            const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
-            if (!type) {
-                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-                return false;
-            }
-            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
-                return false;;
-            }
-            Type = NScheme::TTypeInfo(type->GetTypeId());
-            if (!IsAllowedType(type->GetTypeId())){
-                errors.AddError(TStringBuilder() << "Type '" << typeName << "' specified for column '" << Name << "' is not supported");
+            if (!IsAllowedType(Type.GetTypeId())){
+                errors.AddError(TStringBuilder() << "Type '" << TypeName << "' specified for column '" << Name << "' is not supported");
                 return false;
             }
         }
+
+
         auto arrowTypeResult = NArrow::GetArrowType(Type);
         const auto arrowTypeStatus = arrowTypeResult.status();
         if (!arrowTypeStatus.ok()) {
@@ -119,6 +116,11 @@ namespace NKikimr::NSchemeShard {
             serializer.DeserializeFromProto(columnSchema.GetCompression()).Validate();
             Serializer = serializer;
         }
+        if (columnSchema.HasDataAccessorConstructor()) {
+            NArrow::NAccessor::TConstructorContainer container;
+            AFL_VERIFY(container.DeserializeFromProto(columnSchema.GetDataAccessorConstructor()));
+            AccessorConstructor = container;
+        }
         if (columnSchema.HasDictionaryEncoding()) {
             auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnSchema.GetDictionaryEncoding());
             Y_ABORT_UNLESS(settings.IsSuccess());
@@ -140,6 +142,9 @@ namespace NKikimr::NSchemeShard {
         if (Serializer) {
             Serializer->SerializeToProto(*columnSchema.MutableSerializer());
         }
+        if (AccessorConstructor) {
+            *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
+        }
         if (DictionaryEncoding) {
             *columnSchema.MutableDictionaryEncoding() = DictionaryEncoding->SerializeToProto();
         }
@@ -159,6 +164,14 @@ namespace NKikimr::NSchemeShard {
                 errors.AddError(conclusion.GetErrorMessage());
                 return false;
             }
+        }
+        if (!!diffColumn.GetAccessorConstructor()) {
+            auto conclusion = diffColumn.GetAccessorConstructor()->BuildConstructor();
+            if (conclusion.IsFail()) {
+                errors.AddError(conclusion.GetErrorMessage());
+                return false;
+            }
+            AccessorConstructor = conclusion.DetachResult();
         }
         if (diffColumn.GetStorageId()) {
             StorageId = *diffColumn.GetStorageId();

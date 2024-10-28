@@ -9,7 +9,6 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
@@ -287,6 +286,7 @@ public:
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
+                        .World(s3ReadObject.World())
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
@@ -332,6 +332,7 @@ public:
                 auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
+                        .World(s3ReadObject.World())
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
@@ -358,7 +359,7 @@ public:
         return read;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions, TExprContext&) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TS3SourceSettingsBase>()) {
             const auto settings = maySettings.Cast();
@@ -479,9 +480,9 @@ public:
                 range.Save(&out);
 
                 paths.clear();
-                ReadPathsList(srcDesc, {}, serialized, paths);
+                ReadPathsList({}, serialized, paths);
 
-                NDq::TS3ReadActorFactoryConfig readActorConfig;
+                const NDq::TS3ReadActorFactoryConfig& readActorConfig = State_->Configuration->S3ReadActorFactoryConfig;
                 ui64 fileSizeLimit = readActorConfig.FileSizeLimit;
                 if (srcDesc.HasFormat()) {
                     if (auto it = readActorConfig.FormatSizeLimits.find(srcDesc.GetFormat()); it != readActorConfig.FormatSizeLimits.end()) {
@@ -543,10 +544,11 @@ public:
                         State_->Gateway,
                         State_->GatewayRetryPolicy,
                         connect.Url,
-                        GetAuthInfo(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
+                        TS3Credentials(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster)),
                         pathPattern,
                         pathPatternVariant,
-                        NS3Lister::ES3PatternType::Wildcard
+                        NS3Lister::ES3PatternType::Wildcard,
+                        State_->Configuration->AllowLocalFiles
                     ),
                     NActors::TMailboxType::HTSwap,
                     State_->ExecutorPoolId

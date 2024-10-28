@@ -93,6 +93,7 @@ message TMetaCommonInfo {
     repeated uint32 Nodes = 15;
     repeated uint32 Disks = 16;
     repeated TACE ACL = 17;
+    bool InterruptInheritance = 40;
 
     TBackupInfo Backup = 18;
     TResources Resources = 19;
@@ -313,23 +314,34 @@ enum EFlag {
 }
 
 message TClusterInfo {
-    string Name = 1;
-    EFlag Overall = 2;
+    uint32 Version = 1;
+    string Name = 2;
+    string Domain = 3;
+    EFlag Overall = 5;
+    repeated string Problems = 9;
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
     uint32 NumberOfCpus = 20;
-    double LoadAverage = 21;
+    uint32 CoresTotal = 24;
+    double CoresUsed = 21;
+    double LoadAverage = 22;
+    repeated NKikimrWhiteboard.TSystemStateInfo.TPoolStats PoolStats = 23;
     uint64 MemoryTotal = 30;
     uint64 MemoryUsed = 31;
     uint64 StorageTotal = 40;
     uint64 StorageUsed = 41;
-    repeated string DataCenters = 42;
-    repeated string Versions = 43;
-    repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 16;
-    uint64 Hosts = 44;
-    uint64 Tenants = 45;
-    uint64 Tablets = 46;
-    string Domain = 47;
+    map<string, uint64> MapStorageTotal = 42;
+    map<string, uint64> MapStorageUsed = 43;
+    repeated string DataCenters = 44;
+    map<string, uint32> MapDataCenters = 45;
+    repeated string Versions = 46;
+    map<string, uint32> MapVersions = 47;
+    map<string, uint32> MapNodeStates = 48;
+    map<string, uint32> MapNodeRoles = 49;
+    repeated NKikimrWhiteboard.TTabletStateInfo SystemTablets = 50;
+    repeated NKikimrSysView.TStorageStatsEntry StorageStats = 51;
+    uint64 Hosts = 60;
+    uint64 Tenants = 61;
 }
 
 enum ETenantType {
@@ -347,7 +359,7 @@ message TStorageUsage {
         SSD = 2;
     }
     EType Type = 1;
-    uint64 Size = 2;
+    optional uint64 Size = 2;
     uint64 Limit = 3;
     uint64 SoftQuota = 4;
     uint64 HardQuota = 5;
@@ -381,7 +393,9 @@ message TTenant {
     uint64 StorageGroups = 40;
     uint64 StorageAllocatedLimit = 41;
     Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
-    repeated TStorageUsage StorageUsage = 43;
+    repeated TStorageUsage TablesStorage = 44;
+    repeated TStorageUsage DatabaseStorage = 45;
+    uint32 CoresTotal = 50;
 }
 
 message TTenants {
@@ -391,6 +405,7 @@ message TTenants {
 message TTenantInfo {
     repeated TTenant TenantInfo = 1;
     repeated string Errors = 2;
+    uint32 Version = 3;
 }
 
 message TStoragePDisk {
@@ -431,16 +446,35 @@ message TStorageGroupInfo {
     string Kind = 7;
     string MediaType = 8;
     string ErasureSpecies = 9;
-    uint64 AllocationUnits = 10;
+    optional uint64 AllocationUnits = 10;
     string State = 11;
-    uint64 MissingDisks = 12; // Degraded
-    uint64 Used = 13;
-    uint64 Limit = 14;
-    uint64 Available = 15;
-    double Usage = 16;
-    uint64 Read = 17;
-    uint64 Write = 18;
-    repeated TStorageVDisk VDisks = 20;
+    optional uint64 MissingDisks = 12; // Degraded
+    optional uint64 Used = 13;
+    optional uint64 Limit = 14;
+    optional uint64 Available = 15;
+    optional float Usage = 16;
+    optional uint64 Read = 17;
+    optional uint64 Write = 18;
+    optional float DiskSpaceUsage = 19;
+    optional uint64 LatencyPutTabletLog = 20;
+    optional uint64 LatencyPutUserData = 21;
+    optional uint64 LatencyGetFast = 22;
+    repeated TStorageVDisk VDisks = 30;
+}
+
+message TStorageGroupGroup {
+    string GroupName = 1;
+    uint64 GroupCount = 2;
+    optional uint64 Used = 13;
+    optional uint64 Limit = 14;
+    optional uint64 Available = 15;
+    optional float Usage = 16;
+    optional uint64 Read = 17;
+    optional uint64 Write = 18;
+    optional float DiskSpaceUsage = 19;
+    optional uint64 LatencyPutTabletLog = 20;
+    optional uint64 LatencyPutUserData = 21;
+    optional uint64 LatencyGetFast = 22;
 }
 
 message TStoragePoolInfo {
@@ -467,15 +501,18 @@ message TStorageInfo {
 }
 
 message TStorageGroupsInfo {
-    uint64 Version = 1;
-    optional uint64 TotalGroups = 2;
-    optional uint64 FoundGroups = 3;
-    optional uint64 FieldsAvailable = 4;
-    optional uint64 FieldsRequired = 5;
+    uint32 Version = 1;
+    optional uint32 TotalGroups = 2;
+    optional uint32 FoundGroups = 3;
+    optional string FieldsAvailable = 4;
+    optional string FieldsRequired = 5;
     optional bool NeedFilter = 6;
-    optional bool NeedSort = 7;
-    optional bool NeedLimit = 8;
-    repeated TStorageGroupInfo StorageGroups = 10;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    repeated TStorageGroupInfo StorageGroups = 11;
+    repeated TStorageGroupGroup StorageGroupGroups = 12;
 }
 
 message TStorageUsageStats {
@@ -483,22 +520,41 @@ message TStorageUsageStats {
     repeated uint32 Buckets = 2;
 }
 
+message TNodeGroup {
+    string GroupName = 1;
+    uint64 NodeCount = 2;
+}
+
 message TNodeInfo {
     uint32 NodeId = 1;
-    NKikimrWhiteboard.TSystemStateInfo SystemState = 2;
-    repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 3;
-    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 4;
-    repeated TTabletStateInfo Tablets = 5;
+    string Database = 2;
+    int32 UptimeSeconds = 3; // negative for disconnect time
+    bool Disconnected = 4;
+    float CpuUsage = 5;
+    float DiskSpaceUsage = 6;
+    NKikimrWhiteboard.TSystemStateInfo SystemState = 10;
+    repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 20;
+    repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 30;
+    repeated TTabletStateInfo Tablets = 40;
 }
 
 message TNodesInfo {
-    EFlag Overall = 1;
-    repeated TNodeInfo Nodes = 2;
-    optional uint64 TotalNodes = 3;
-    optional uint64 FoundNodes = 4;
-    optional uint64 MaximumDisksPerNode = 5;
-    optional bool NoDC = 6;
-    optional bool NoRack = 7;
+    uint32 Version = 1;
+    optional uint64 TotalNodes = 2;
+    optional uint64 FoundNodes = 3;
+    optional string FieldsAvailable = 4;
+    optional string FieldsRequired = 5;
+    optional bool NeedFilter = 6;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    repeated TNodeInfo Nodes = 20;
+    repeated TNodeGroup NodeGroups = 30;
+    optional uint64 MaximumDisksPerNode = 50;
+    optional uint64 MaximumSlotsPerDisk = 51;
+    optional bool NoDC = 60;
+    optional bool NoRack = 61;
 }
 
 enum ENodeType {
@@ -605,15 +661,20 @@ message TSchemeCacheRequest {
 message TEvViewerRequest {
     TNodeLocation Location = 1;
     uint32 Timeout = 2; // ms
+    string MergeFields = 3;
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
+        NKikimrWhiteboard.TEvVDiskStateRequest VDiskRequest = 16;
+        NKikimrWhiteboard.TEvPDiskStateRequest PDiskRequest = 17;
+        NKikimrWhiteboard.TEvBSGroupStateRequest BSGroupRequest = 18;
         THttpProxyRequest QueryRequest = 13;
         THttpProxyRequest RenderRequest = 14;
         TSchemeCacheRequest AutocompleteRequest = 15;
-        bytes Reserved16 = 16;
-        bytes Reserved17 = 17;
-        bytes Reserved18 = 18;
+        bytes Reserved19 = 19;
+        bytes Reserved20 = 20;
+        bytes Reserved21 = 21;
+        bytes Reserved22 = 22;
     }
 }
 
@@ -622,12 +683,16 @@ message TEvViewerResponse {
     oneof Response {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
+        NKikimrWhiteboard.TEvVDiskStateResponse VDiskResponse = 16;
+        NKikimrWhiteboard.TEvPDiskStateResponse PDiskResponse = 17;
+        NKikimrWhiteboard.TEvBSGroupStateResponse BSGroupResponse = 18;
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
         NKikimrGraph.TEvMetricsResult RenderResponse = 14;
         TQueryAutocomplete AutocompleteResponse = 15;
-        bytes Reserved16 = 16;
-        bytes Reserved17 = 17;
-        bytes Reserved18 = 18;
+        bytes Reserved19 = 19;
+        bytes Reserved20 = 20;
+        bytes Reserved21 = 21;
+        bytes Reserved22 = 22;
     }
 }
 
@@ -638,18 +703,17 @@ message TEvDescribeSchemeInfo {
         Cache = 2;
     }
 
-    optional string Status = 1;
-    optional string Reason = 2;
-    optional string Path = 3;
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
-    optional fixed64 PathId = 6;
-
-    optional string LastExistedPrefixPath = 7;
-    optional fixed64 LastExistedPrefixPathId = 8;
-    optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
-    optional fixed64 PathOwnerId = 10;
-    optional ESource Source = 11;
+    string Status = 1;
+    string Reason = 2;
+    string Path = 3;
+    NKikimrSchemeOp.TPathDescription PathDescription = 4;
+    fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
+    fixed64 PathId = 6;
+    string LastExistedPrefixPath = 7;
+    fixed64 LastExistedPrefixPathId = 8;
+    NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
+    fixed64 PathOwnerId = 10;
+    ESource Source = 11;
 }
 
 enum EAutocompleteType {
@@ -685,13 +749,14 @@ message TQueryAutocomplete {
             EAutocompleteType Type = 2;
             string Parent = 3;
         }
-        uint32 Total = 1;
+        optional uint32 Total = 1;
         repeated TEntity Entities = 2;
     }
 
     bool Success = 1;
     TResult Result = 2;
     repeated string Error = 3;
+    uint32 Version = 4;
 }
 
 message TPDiskInfoWhiteboard {
@@ -707,4 +772,20 @@ message TPDiskInfoBSC {
 message TPDiskInfo {
     TPDiskInfoWhiteboard Whiteboard = 1;
     TPDiskInfoBSC BSC = 2;
+}
+
+message TFeatureFlagsConfig {
+    message TFeatureFlag {
+        string Name = 1;
+        optional bool Current = 2;
+        optional bool Default = 3;
+    }
+
+    message TDatabase {
+        string Name = 1;
+        repeated TFeatureFlag FeatureFlags = 2;
+    }
+
+    uint32 Version = 1;
+    repeated TDatabase Databases = 2;
 }

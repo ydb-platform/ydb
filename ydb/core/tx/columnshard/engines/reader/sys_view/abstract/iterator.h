@@ -29,12 +29,12 @@ public:
         return IndexGranules.empty();
     }
 
-    virtual TConclusion<std::optional<TPartialReadResult>> GetBatch() override {
+    virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override {
         while (!Finished()) {
             auto batchOpt = ExtractStatsBatch();
             if (!batchOpt) {
                 AFL_VERIFY(Finished());
-                return std::nullopt;
+                return std::shared_ptr<TPartialReadResult>();
             }
             auto originalBatch = *batchOpt;
             if (originalBatch->num_rows() == 0) {
@@ -50,15 +50,17 @@ public:
 
             // Leave only requested columns
             auto resultBatch = NArrow::TColumnOperator().Adapt(originalBatch, ResultSchema).DetachResult();
-            NArrow::TStatusValidator::Validate(ReadMetadata->GetProgram().ApplyProgram(resultBatch));
+            auto applyConclusion = ReadMetadata->GetProgram().ApplyProgram(resultBatch);
+            if (!applyConclusion.ok()) {
+                return TConclusionStatus::Fail(applyConclusion.ToString());
+            }
             if (resultBatch->num_rows() == 0) {
                 continue;
             }
             auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
-            TPartialReadResult out(table, lastKey, std::nullopt);
-            return std::move(out);
+            return std::make_shared<TPartialReadResult>(table, lastKey, std::nullopt);
         }
-        return std::nullopt;
+        return std::shared_ptr<TPartialReadResult>();
     }
 
     std::optional<std::shared_ptr<arrow::RecordBatch>> ExtractStatsBatch() {
@@ -134,10 +136,6 @@ public:
             } else {
                 return it->second;
             }
-        }
-
-        const NTable::TScheme::TTableSchema& GetSchema() const override {
-            return StatsSchema;
         }
 
         NSsa::TColumnInfo GetDefaultColumn() const override {

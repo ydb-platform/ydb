@@ -125,6 +125,7 @@ private:
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
+    void DoWakeup(const NActors::TActorContext& ctx);
 
     void InitLockPartition(const NActors::TActorContext& ctx);
     void InitStartReading(const NActors::TActorContext& ctx);

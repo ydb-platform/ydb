@@ -135,7 +135,7 @@ namespace {
             {
                 TParamsRef p((TMyParams*)(ptr));
 
-                //drop counter, gotten in Start()
+                // drop counter, gotten in Start()
                 p->UnRef();
 
                 SetThrName(*p);
@@ -146,7 +146,7 @@ namespace {
         }
 
         inline void Start() {
-            //do not do this, kids, at home
+            // do not do this, kids, at home
             P_->Ref();
     #if _WIN32_WINNT < 0x0502
             Handle = reinterpret_cast<HANDLE>(::_beginthreadex(nullptr, (unsigned)StackSize(*P_), Proxy, (void*)P_.Get(), 0, &ThreadId));
@@ -170,7 +170,7 @@ namespace {
 
     using TThreadBase = TWinThread;
 #else
-    //unix
+    // unix
 
     #define PCHECK(x, y)                                    \
         {                                                   \
@@ -268,7 +268,7 @@ namespace {
 
         return t.Get();
     }
-}
+} // namespace
 
 class TThread::TImpl: public TThreadBase {
 public:
@@ -382,7 +382,7 @@ namespace {
     static void* ThreadProcWrapper(void* param) {
         return reinterpret_cast<T*>(param)->ThreadProc();
     }
-}
+} // namespace
 
 ISimpleThread::ISimpleThread(size_t stackSize)
     : TThread(TParams(ThreadProcWrapper<ISimpleThread>, reinterpret_cast<void*>(this), stackSize))
@@ -463,7 +463,7 @@ namespace {
         TSetThreadDescription SetThreadDescription;
         TGetThreadDescription GetThreadDescription;
     };
-}
+} // namespace
 #endif // _win_
 
 void TThread::SetCurrentThreadName(const char* name) {

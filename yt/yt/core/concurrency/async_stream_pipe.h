@@ -39,4 +39,30 @@ DEFINE_REFCOUNTED_TYPE(TAsyncStreamPipe)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TBoundedAsyncStreamPipe
+    : public IAsyncZeroCopyInputStream
+    , public IAsyncOutputStream
+{
+public:
+    explicit TBoundedAsyncStreamPipe(i64 sizeLimit);
+
+    TFuture<TSharedRef> Read() override;
+
+    TFuture<void> Write(const TSharedRef& buffer) override;
+    TFuture<void> Close() override;
+
+    void Abort(const TError& error);
+
+private:
+    TBoundedNonblockingQueue<TSharedRef> Queue_;
+
+    std::atomic<bool> Aborting_ = false;
+    std::atomic<bool> Aborted_ = false;
+    TError Error_;
+};
+
+DEFINE_REFCOUNTED_TYPE(TBoundedAsyncStreamPipe)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NConcurrency

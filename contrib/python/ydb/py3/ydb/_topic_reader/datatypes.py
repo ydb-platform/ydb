@@ -7,7 +7,7 @@ import enum
 from collections import deque
 from dataclasses import dataclass, field
 import datetime
-from typing import Union, Any, List, Dict, Deque, Optional
+from typing import Union, Any, List, Dict, Deque, Optional, Tuple
 
 from ydb._grpc.grpcwrapper.ydb_topic import OffsetsRange, Codec
 from ydb._topic_reader import topic_reader_asyncio
@@ -171,3 +171,31 @@ class PublicBatch(ICommittable, ISessionAlive):
 
     def pop_message(self) -> PublicMessage:
         return self.messages.pop(0)
+
+    def _extend(self, batch: PublicBatch) -> None:
+        self.messages.extend(batch.messages)
+        self._bytes_size += batch._bytes_size
+
+    def _pop(self) -> Tuple[List[PublicMessage], bool]:
+        msgs_left = True if len(self.messages) > 1 else False
+        return self.messages.pop(0), msgs_left
+
+    def _pop_batch(self, message_count: int) -> PublicBatch:
+        initial_length = len(self.messages)
+
+        if message_count >= initial_length:
+            raise ValueError("Pop batch with size >= actual size is not supported.")
+
+        one_message_size = self._bytes_size // initial_length
+
+        new_batch = PublicBatch(
+            messages=self.messages[:message_count],
+            _partition_session=self._partition_session,
+            _bytes_size=one_message_size * message_count,
+            _codec=self._codec,
+        )
+
+        self.messages = self.messages[message_count:]
+        self._bytes_size = self._bytes_size - new_batch._bytes_size
+
+        return new_batch

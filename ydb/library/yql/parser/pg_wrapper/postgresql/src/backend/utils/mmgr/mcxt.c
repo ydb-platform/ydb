@@ -183,6 +183,7 @@ static const MemoryContextMethods mcxt_methods[] = {
  *		Default memory context for allocations.
  */
 __thread MemoryContext CurrentMemoryContext = NULL;
+MemoryContext* ImplPtrCurrentMemoryContext() { return &CurrentMemoryContext; }
 
 /*
  * Standard top-level contexts. For a description of the purpose of each
@@ -192,6 +193,7 @@ __thread MemoryContext TopMemoryContext = NULL;
 __thread MemoryContext ErrorContext = NULL;
 __thread MemoryContext PostmasterContext = NULL;
 __thread MemoryContext CacheMemoryContext = NULL;
+MemoryContext* ImplPtrCacheMemoryContext() { return &CacheMemoryContext; }
 __thread MemoryContext MessageContext = NULL;
 __thread MemoryContext TopTransactionContext = NULL;
 __thread MemoryContext CurTransactionContext = NULL;

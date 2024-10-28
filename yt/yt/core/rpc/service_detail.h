@@ -295,7 +295,6 @@ public:
         return *Response_;
     }
 
-
     using IServiceContext::Reply;
 
     void Reply()
@@ -314,7 +313,6 @@ public:
             this->DoReply(error);
         }
     }
-
 
     const THandlerInvocationOptions& GetOptions() const
     {
@@ -411,7 +409,7 @@ protected:
         if (!typedContext->DeserializeRequest()) { \
             return; \
         } \
-        InitContext(typedContext); \
+        InitContext(typedContext.Get());          \
         auto* request = &typedContext->Request(); \
         auto* response = &typedContext->Response(); \
         this->method(request, response, typedContext); \
@@ -426,11 +424,11 @@ protected:
             return ::NYT::NRpc::TServiceBase::TLiteHandler(); \
         } \
         return \
-            BIND_NO_PROPAGATE([=, this] ( \
+            BIND([this, typedContext = std::move(typedContext)] ( \
                 const ::NYT::NRpc::IServiceContextPtr&, \
                 const ::NYT::NRpc::THandlerInvocationOptions&) \
             { \
-                InitContext(typedContext); \
+                InitContext(typedContext.Get());          \
                 auto* request = &typedContext->Request(); \
                 auto* response = &typedContext->Response(); \
                 this->method(request, response, typedContext); \
@@ -466,7 +464,9 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueuePtr CreateRequestQueue(TString name, const NProfiling::TProfiler& profiler = {});
+TRequestQueuePtr CreateRequestQueue(
+    const std::string& name,
+    const NProfiling::TProfiler& profiler = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -505,6 +505,14 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TServiceOptions
+{
+    IMemoryUsageTrackerPtr MemoryUsageTracker;
+    TRealmId RealmId;
+    IAuthenticatorPtr Authenticator;
+    bool UseHotProfiler = true;
+};
 
 //! Provides a base for implementing IService.
 class TServiceBase
@@ -550,7 +558,7 @@ protected:
     //! By default, this method does nothing. You may hide this method by a custom implementation
     //! (possibly switching argument type to a proper typed context class) in order to customize
     //! specific service context before invoking method handler.
-    void InitContext(IServiceContextPtr context);
+    void InitContext(IServiceContext* context);
 
     //! Information needed to a register a service method.
     struct TMethodDescriptor
@@ -649,29 +657,25 @@ protected:
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
-    struct TErrorCodesCounter
+    struct TErrorCodeCounter
     {
-        TErrorCodesCounter(const NProfiling::TProfiler& profiler)
-            : Profiler_(profiler)
-        { }
+        explicit TErrorCodeCounter(NProfiling::TProfiler profiler);
 
-        void RegisterCode(TErrorCode code)
-        {
-            ErrorCodes_.FindOrInsert(code, [&] () {
-                return Profiler_.WithTag("code", ToString(code)).Counter("/code_count");
-            }).first->Increment();
-        }
+        void Increment(TErrorCode code);
 
     private:
-        NYT::NConcurrency::TSyncMap<TErrorCode, NProfiling::TCounter> ErrorCodes_;
-        NProfiling::TProfiler Profiler_;
+        const NProfiling::TProfiler Profiler_;
+
+        NConcurrency::TSyncMap<TErrorCode, NProfiling::TCounter> CodeToCounter_;
     };
 
     //! Per-user and per-method profiling counters.
     struct TMethodPerformanceCounters
         : public TRefCounted
     {
-        TMethodPerformanceCounters(const NProfiling::TProfiler& profiler, const THistogramConfigPtr& histogramConfig);
+        TMethodPerformanceCounters(
+            const NProfiling::TProfiler& profiler,
+            const TTimeHistogramConfigPtr& timeHistogramConfig);
 
         //! Counts the number of method calls.
         NProfiling::TCounter RequestCounter;
@@ -712,7 +716,8 @@ protected:
         //! Counts the number of bytes in response message attachment.
         NProfiling::TCounter ResponseMessageAttachmentSizeCounter;
 
-        TErrorCodesCounter ErrorCodes;
+        //! Counts the number of errors, per error code.
+        TErrorCodeCounter ErrorCodeCounter;
     };
 
     using TMethodPerformanceCountersPtr = TIntrusivePtr<TMethodPerformanceCounters>;
@@ -823,17 +828,8 @@ protected:
     TServiceBase(
         IInvokerPtr defaultInvoker,
         const TServiceDescriptor& descriptor,
-        const NLogging::TLogger& logger,
-        TRealmId realmId = NullRealmId,
-        IAuthenticatorPtr authenticator = nullptr);
-
-    TServiceBase(
-        IInvokerPtr defaultInvoker,
-        const TServiceDescriptor& descriptor,
-        IMemoryUsageTrackerPtr memoryUsageTracker,
-        const NLogging::TLogger& logger,
-        TRealmId realmId = NullRealmId,
-        IAuthenticatorPtr authenticator = nullptr);
+        NLogging::TLogger logger,
+        TServiceOptions options = {});
 
     //! Registers a method handler.
     //! This call is must be performed prior to service registration.
@@ -942,10 +938,16 @@ private:
     static constexpr size_t RequestBucketCount = 64;
     std::array<TRequestBucket, RequestBucketCount> RequestBuckets_;
 
+    struct TReplyBusData
+    {
+        THashSet<TServiceContext*> Contexts;
+        TCallback<void(const TError&)> BusTerminationHandler;
+    };
+
     struct TReplyBusBucket
     {
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
-        THashMap<NYT::NBus::IBusPtr, THashSet<TServiceContext*>> ReplyBusToContexts;
+        THashMap<NYT::NBus::IBusPtr, TReplyBusData> ReplyBusToData;
     };
 
     static constexpr size_t ReplyBusBucketCount = 64;
@@ -975,10 +977,9 @@ private:
 
     std::atomic<bool> EnablePerUserProfiling_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, HistogramConfigLock_);
-    THistogramConfigPtr HistogramTimerProfiling{};
+    TAtomicIntrusivePtr<TTimeHistogramConfig> TimeHistogramConfig_;
 
-    std::atomic<bool> EnableErrorCodeCounting = false;
+    std::atomic<bool> EnableErrorCodeCounter_ = false;
 
     const NConcurrency::TPeriodicExecutorPtr ServiceLivenessChecker_;
 
@@ -1080,7 +1081,7 @@ class TRequestQueue
     : public TRefCounted
 {
 public:
-    explicit TRequestQueue(TString name, NProfiling::TProfiler profiler);
+    TRequestQueue(const std::string& name, NProfiling::TProfiler profiler);
 
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
@@ -1099,10 +1100,11 @@ public:
     void ConfigureWeightThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
 
-    const TString& GetName() const;
+    const std::string& GetName() const;
 
 private:
-    const TString Name_;
+    const std::string Name_;
+
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;
     TServiceBase* Service_;
@@ -1130,8 +1132,6 @@ private:
 
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);
-
-    i64 GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context);
 
     void IncrementQueueSize(const TServiceBase::TServiceContextPtr& context);
     void DecrementQueueSize(const TServiceBase::TServiceContextPtr& context);

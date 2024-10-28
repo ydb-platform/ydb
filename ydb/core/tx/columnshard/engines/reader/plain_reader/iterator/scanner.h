@@ -80,14 +80,12 @@ private:
     std::vector<TIntervalStat> IntervalStats;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
-    ui64 MaxInFlightMemory = TGlobalLimits::ScanMemoryLimit;
     ui64 ZeroCount = 0;
-    bool AbortFlag = false;
     void DrainSources();
     [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
 public:
     void OnSentDataFromInterval(const ui32 intervalIdx) const {
-        if (AbortFlag) {
+        if (Context->IsAborted()) {
             return;
         }
         auto it = FetchingIntervals.find(intervalIdx);
@@ -112,8 +110,10 @@ public:
         return sb;
     }
 
-    void OnIntervalResult(const std::optional<NArrow::TShardedRecordBatch>& batch, const std::shared_ptr<arrow::RecordBatch>& lastPK, 
-        std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader);
+    void OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
+        const std::optional<NArrow::TShardedRecordBatch>& batch,
+        const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
+        const ui32 intervalIdx, TPlainReadData& reader);
 
     TConclusionStatus Start();
 

@@ -9,13 +9,9 @@ Functions for data types are [described in the article](../../builtins/types.md)
 ## General conventions {#rules}
 
 * [Primitive data types](../primitive.md) are represented in text format simply by referencing their name.
-
 * A complex data type is composed of other data types. If you depict this structure as a tree, it has [primitive data types](../primitive.md) as leaves and [containers](../containers.md) as other nodes. [You may treat special data types](../special.md) as exceptions, because they can function as both.
-
 * The text representation repeats the structure of this tree from the root to the leaves: each node of the tree specifies the name of the current data type, and proceeding to a deeper level is denoted by different types of brackets.
-
 * Feel free to use spaces and line breaks if they improve readability.
-
 * If the ID contains something else except the Latin letters and numbers, put it in single quotes and use C-escaping.
 
 ## Containers {#containers}

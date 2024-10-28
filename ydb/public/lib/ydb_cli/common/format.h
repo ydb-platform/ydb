@@ -8,6 +8,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
+#include <util/generic/set.h>
+
 namespace NYdb {
 
     class TResultSetParquetPrinter;
@@ -28,15 +30,52 @@ protected:
 
 class TCommandWithFormat {
 protected:
-    void AddInputFormats(TClientCommand::TConfig& config, 
-                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat = EOutputFormat::JsonUnicode);
-    void AddStdinFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedStdinFormats, 
-                         const TVector<EOutputFormat>& allowedFramingFormats);
-    void AddFormats(TClientCommand::TConfig& config, 
-                         const TVector<EOutputFormat>& allowedFormats, EOutputFormat defaultFormat = EOutputFormat::Pretty);
-    void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
-    void ParseFormats();
-    void ParseMessagingFormats();
+    // Has both input and output
+    bool IsIoCommand();
+    virtual bool HasInput();
+    virtual bool HasOutput();
+};
+
+class TCommandWithInput: virtual public TCommandWithFormat {
+protected:
+    void AddInputFormats(TClientCommand::TConfig& config, const TVector<EDataFormat>& allowedFormats,
+        EDataFormat defaultFormat = EDataFormat::Json);
+    void AddLegacyInputFormats(TClientCommand::TConfig& config, const TString& legacyName,
+        const TVector<TString>& newNames,
+        const TVector<EDataFormat>& allowedFormats);
+    void AddLegacyJsonInputFormats(TClientCommand::TConfig& config);
+    void AddInputFramingFormats(TClientCommand::TConfig &config, const TVector<EFramingFormat>& allowedFormats,
+        EFramingFormat defaultFormat = EFramingFormat::NoFraming);
+    void AddInputBinaryStringEncodingFormats(TClientCommand::TConfig &config,
+        const TVector<EBinaryStringEncodingFormat>& allowedFormats,
+        EBinaryStringEncodingFormat defaultFormat = EBinaryStringEncodingFormat::Unicode);
+    void AddInputFileOption(TClientCommand::TConfig& config, bool allowMultiple,
+        const TString& description = "File name with input data");
+    void ParseInputFormats();
+
+    virtual THashMap<EDataFormat, TString>& GetInputFormatDescriptions();
+    virtual bool HasInput() override;
+
+protected:
+    TVector<TString> InputFiles;
+    bool AllowMultipleInputFiles;
+    EDataFormat InputFormat = EDataFormat::Default;
+    EFramingFormat InputFramingFormat = EFramingFormat::Default;
+    EBinaryStringEncodingFormat InputBinaryStringEncodingFormat = EBinaryStringEncodingFormat::Default;
+    EBinaryStringEncoding InputBinaryStringEncoding;
+
+private:
+    TVector<EDataFormat> LegacyInputFormats;
+    TSet<EDataFormat> AllowedInputFormats;
+    TSet<EFramingFormat> AllowedInputFramingFormats;
+    TSet<EBinaryStringEncodingFormat> AllowedBinaryStringEncodingFormats;
+};
+
+class TCommandWithOutput: virtual public TCommandWithFormat {
+protected:
+    void AddOutputFormats(TClientCommand::TConfig& config, 
+                         const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::Pretty);
+    void ParseOutputFormats();
 
     // Deprecated
     void AddDeprecatedJsonOption(TClientCommand::TConfig& config,
@@ -44,29 +83,28 @@ protected:
         " Output in json format");
 
 protected:
-    EOutputFormat OutputFormat = EOutputFormat::Default;
-    EOutputFormat InputFormat = EOutputFormat::Default;
-    EOutputFormat FramingFormat = EOutputFormat::Default;
-    EOutputFormat StdinFormat = EOutputFormat::Default;
-    TVector<EOutputFormat> StdinFormats;
+    EDataFormat OutputFormat = EDataFormat::Default;
+
+private:
+    TVector<EDataFormat> AllowedFormats;
+    bool DeprecatedOptionUsed = false;
+};
+
+class TCommandWithMessagingFormat {
+protected:
+    void AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats);
+    void ParseMessagingFormats();
+
+protected:
     EMessagingFormat MessagingFormat = EMessagingFormat::SingleMessage;
 
 private:
-    TVector<EOutputFormat> AllowedInputFormats;
-    TVector<EOutputFormat> AllowedStdinFormats;
-    TVector<EOutputFormat> AllowedFramingFormats;
-    TVector<EOutputFormat> AllowedFormats;
     TVector<EMessagingFormat> AllowedMessagingFormats;
-    bool DeprecatedOptionUsed = false;
-    
-protected:
-    bool IsStdinFormatSet = false;
-    bool IsFramingFormatSet = false;
 };
 
 class TResultSetPrinter {
 public:
-    TResultSetPrinter(EOutputFormat format, std::function<bool()> isInterrupted = []() { return false; });
+    TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; });
     ~TResultSetPrinter();
 
     void Print(const TResultSet& resultSet);
@@ -85,14 +123,14 @@ private:
 
     bool FirstPart = true;
     bool PrintedSomething = false;
-    EOutputFormat Format;
+    EDataFormat Format;
     std::function<bool()> IsInterrupted;
     std::unique_ptr<TResultSetParquetPrinter> ParquetPrinter;
 };
 
 class TQueryPlanPrinter {
 public:
-    TQueryPlanPrinter(EOutputFormat format, bool analyzeMode = false, IOutputStream& output = Cout, size_t maxWidth = 0)
+    TQueryPlanPrinter(EDataFormat format, bool analyzeMode = false, IOutputStream& output = Cout, size_t maxWidth = 0)
         : Format(format)
         , AnalyzeMode(analyzeMode)
         , Output(output)
@@ -111,7 +149,7 @@ private:
     TString JsonToString(const NJson::TJsonValue& jsonValue);
 
 private:
-    EOutputFormat Format;
+    EDataFormat Format;
     bool AnalyzeMode;
     IOutputStream& Output;
     size_t MaxWidth;

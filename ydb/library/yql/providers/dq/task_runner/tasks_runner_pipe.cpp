@@ -10,7 +10,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/rope/rope_over_buffer.h>
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>

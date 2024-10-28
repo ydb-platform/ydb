@@ -82,6 +82,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     ui32 NodeCount = 1;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
+    bool EnableForceFollowers = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
@@ -97,6 +98,12 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
+        FeatureFlags.SetEnableFollowerStats(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -112,6 +119,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
 };
 
@@ -228,6 +236,7 @@ enum class EIndexTypeSql {
     Global,
     GlobalSync,
     GlobalAsync,
+    GlobalVectorKMeansTree,
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -238,6 +247,8 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
         return "GLOBAL SYNC";
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "GLOBAL";
     }
 }
 
@@ -248,6 +259,30 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalSync;
     case EIndexTypeSql::GlobalAsync:
         return NYdb::NTable::EIndexType::GlobalAsync;
+    case EIndexTypeSql::GlobalVectorKMeansTree:
+        return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+    }
+}
+
+inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+    case EIndexTypeSql::GlobalSync:
+    case EIndexTypeSql::GlobalAsync:
+        return "";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "USING vector_kmeans_tree";
+    }
+}
+
+inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
+    switch (type) {
+    case EIndexTypeSql::Global:
+    case EIndexTypeSql::GlobalSync:
+    case EIndexTypeSql::GlobalAsync:
+        return "";
+    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
     }
 }
 
@@ -337,8 +372,19 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 
-/* Temporary solution to canonize tests */
-NJson::TJsonValue CanonizeJoinOrder(const TString& deserializedPlan);
+struct TGetPlanParams {
+    bool IncludeFilters = false;
+    bool IncludeOptimizerEstimation = false;
+    bool IncludeTables = true;
+};
+
+/* Gets join order with details as: join algo, join type and scan type. */
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TGetPlanParams& params = {});
+
+/* Gets tables join order without details : only tables. */
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan);
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -119,13 +119,13 @@ TEST(TFederatedClientTest, Basic)
         .WillRepeatedly(Return(VoidFuture));
 
     // Creation of federated client.
-    std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
+    std::vector<IClientPtr> clients{mockClientVla, mockClientSas};
     auto config = New<TFederationConfig>();
-    config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
+    config->ClusterHealthCheckPeriod = TDuration::Seconds(3);
     config->ClusterRetryAttempts = 1;
     auto federatedClient = CreateClient(clients, config);
 
-    // 1. `vla` client should be used as closest cluster.
+    // 1. `vla` client should be used as first cluster.
     // 2. error from `vla` cluster should be received.
     // 3. `sas` client should be used as other cluster.
 
@@ -213,6 +213,9 @@ TEST(TFederatedClientTest, CheckHealth)
     EXPECT_CALL(*mockClientSas, LookupRows(data.Path, _, _, _))
         .WillOnce(Return(MakeFuture(data.LookupResult2)));
 
+    // Wait initialization and choose `local` cluster.
+    Sleep(TDuration::Seconds(2));
+
     // From `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
@@ -297,6 +300,12 @@ TEST(TFederatedClientTest, Transactions)
     Sleep(TDuration::Seconds(2));
 
     auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
+
+    // Check mock transaction doesn't work with sticky proxy address.
+    {
+        auto* derived = transaction->As<IFederatedClientTransactionMixin>();
+        ASSERT_EQ(std::nullopt, derived->TryGetStickyProxyAddress());
+    }
 
     // From `vla`.
     {
@@ -456,14 +465,15 @@ TEST(TFederatedClientTest, AttachTransaction)
     auto mockConnectionVla = New<TStrictMockConnection>();
     EXPECT_CALL(*mockConnectionVla, GetClusterTag())
         .WillRepeatedly(Return(NObjectClient::TCellTag(456)));
-    EXPECT_CALL(*mockClientVla, GetConnection())
-        .WillOnce(Return(mockConnectionVla));
 
     // Creation of federated client.
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
     config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
     auto federatedClient = CreateClient(clients, config);
+
+    // Wait initialization.
+    Sleep(TDuration::Seconds(2));
 
     auto mockTransactionSas = New<TStrictMockTransaction>();
     auto transactionId = TGuid(0, 123 << 16, 0, 0);

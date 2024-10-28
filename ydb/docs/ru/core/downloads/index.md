@@ -4,7 +4,7 @@
 
 [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — утилита командной строки для работы с базами данных {{ ydb-short-name }}.
 
-{% list tabs %}
+{% list tabs group=os %}
 
 - Linux
 
@@ -28,7 +28,7 @@
 
 {{ ydb-short-name }} Server — сборка для запуска узла [кластера YDB](../concepts/glossary.md#cluster).
 
-{% list tabs %}
+{% list tabs group=os %}
 
 - Linux
 
@@ -40,7 +40,7 @@
 
 - Исходный код
 
-  {% include notitle [docker](_includes/server/source_code.md) %}
+  {% include notitle [source_code](_includes/server/source_code.md) %}
 
 {% endlist %}
 

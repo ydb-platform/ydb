@@ -28,9 +28,9 @@ Note that `LockTxId` is just a unique number, that is used across multiple opera
 
 Locks table (see [datashard_locks.h](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tx/datashard/datashard_locks.h) and [datashard_locks.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tx/datashard/datashard_locks.cpp)) indexes locks by their primary key ranges in a range tree, allowing finding and "breaking" them by point keys. In the simplest case when read operation reads a range it is added using a [SetLock](https://github.com/ydb-platform/ydb/blob/207ac81618e05ade724a8a8193bc9125d466bd06/ydb/core/tx/datashard/datashard_locks.h#L831) method, and when write operation writes a key it breaks other locks using a [BreakLocks](https://github.com/ydb-platform/ydb/blob/207ac81618e05ade724a8a8193bc9125d466bd06/ydb/core/tx/datashard/datashard_locks.h#L834) method.
 
-When the lock is added for the first time, it is assigned a monotonically increasing `Counter` in the current tablet's `Generation` (see [TLock](https://github.com/ydb-platform/ydb/blob/207ac81618e05ade724a8a8193bc9125d466bd06/ydb/core/protos/data_events.proto#L8) message), and a row with these numbers is added to the virtual `/sys/locks` table (which is no longer used). These locks are then returned in result messages (e.g. see [TEvReadResult](https://github.com/ydb-platform/ydb/blob/b07264456a2e8b5929901f258ad60399bb64678a/ydb/core/protos/tx_datashard.proto#L1702)). 
+When the lock is added for the first time, it is assigned a monotonically increasing `Counter` in the current tablet's `Generation` (see [TLock](https://github.com/ydb-platform/ydb/blob/207ac81618e05ade724a8a8193bc9125d466bd06/ydb/core/protos/data_events.proto#L8) message), and a row with these numbers is added to the virtual `/sys/locks` table (which is no longer used). These locks are then returned in result messages (e.g. see [TEvReadResult](https://github.com/ydb-platform/ydb/blob/b07264456a2e8b5929901f258ad60399bb64678a/ydb/core/protos/tx_datashard.proto#L1702)).
 
-In the successful scenario, the lock exists and is not broken, `Generation` and `Counter` fields do not change. 
+In the successful scenario, the lock exists and is not broken, `Generation` and `Counter` fields do not change.
 
 In the unsuccessful scenarios, previously acquired locks are broken. For example, when changing the `Generation` of the lock (disabling the lock on restart) or the `Counter` (on an explicit error status, or when disabling and recreating the lock in the same generation).
 
@@ -65,12 +65,14 @@ Even more complicated is the case where change visibility writes happen over com
 4. Tx1 performs an uncommitted blind `UPSERT` with `C = 3` and `TxId` 101
 5. At this point Tx1 may still commit successfully, because it didn't read key K and change with `C = 3` may still move to some future commit timestamp
 6. Tx1 performs a read of key K, which happens at snapshot `v5000/max`:
+
     * This read will have `[101] => v{min}` in its custom transaction map
     * The iteration will be positioned at the first delta with `C = 3` (since `v{min} <= v5000/max`), which will be applied to the row state
     * All other committed deltas and rows will also be applied, i.e. the row state would include `B = 2` which is currently committed
     * However, there is a conflict: `B = 2` is committed above the MVCC read snapshot (`v6000/102 > v5000/max`)
     * This will be detected in [OnApplyCommitted](https://github.com/ydb-platform/ydb/blob/efe5b5f8d2da503eda4d172f6f2e85aac64ba6a6/ydb/core/tx/datashard/datashard__engine_host.cpp#L698) callback, which calls [CheckReadConflict](https://github.com/ydb-platform/ydb/blob/efe5b5f8d2da503eda4d172f6f2e85aac64ba6a6/ydb/core/tx/datashard/datashard__engine_host.cpp#L751)
     * Since this introduces a read inconsistency, the lock will be immediately broken, and an inconsistent read flag will be raised
+
 7. Not only the above read would fail, Tx1 would not be able to commit since serializable isolation can no longer be provided
 8. The application will get a "transaction locks invalidated" error and retry the transaction from the beginning
 

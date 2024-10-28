@@ -72,6 +72,8 @@ namespace NKikimr::NKqp {
 
         S3GatewayConfig = queryServiceConfig.GetS3();
 
+        S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
+
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);
 
@@ -127,7 +129,8 @@ namespace NKikimr::NKqp {
             GenericGatewaysConfig,
             YtGatewayConfig,
             YtGateway,
-            nullptr};
+            nullptr,
+            S3ReadActorFactoryConfig};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&

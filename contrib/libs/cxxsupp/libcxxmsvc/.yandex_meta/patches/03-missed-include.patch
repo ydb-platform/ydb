@@ -1,0 +1,84 @@
+diff --git a/include/__bit/bit_cast.h b/include/__bit/bit_cast.h
+index fbb70b3..fc29a74 100644
+--- a/include/__bit/bit_cast.h
++++ b/include/__bit/bit_cast.h
+@@ -11,6 +11,7 @@
+ #define _LIBCPP___BIT_BIT_CAST_H
+ 
+ #include <__config>
++#include <cstring>
+ #include <type_traits>
+ 
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+diff --git a/include/__locale b/include/__locale
+index ad97be0..514cb4a 100644
+--- a/include/__locale
++++ b/include/__locale
+@@ -12,6 +12,7 @@
+ 
+ #include <__availability>
+ #include <__config>
++#include <atomic>
+ #include <cctype>
+ #include <cstdint>
+ #include <locale.h>
+diff --git a/include/__memory/unique_ptr.h b/include/__memory/unique_ptr.h
+index 348c903..e9d4189 100644
+--- a/include/__memory/unique_ptr.h
++++ b/include/__memory/unique_ptr.h
+@@ -18,6 +18,7 @@
+ #include <__utility/forward.h>
+ #include <__utility/move.h>
+ #include <cstddef>
++#include <stlfwd>
+ #include <type_traits>
+ 
+ #if _LIBCPP_STD_VER <= 14 || defined(_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR)
+diff --git a/include/__random/log2.h b/include/__random/log2.h
+index b077d21..f4f8377 100644
+--- a/include/__random/log2.h
++++ b/include/__random/log2.h
+@@ -11,6 +11,7 @@
+ 
+ #include <__config>
+ #include <cstddef>
++#include <limits>
+ #include <type_traits>
+ 
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+diff --git a/include/memory b/include/memory
+index 3bc31d2..088cf21 100644
+--- a/include/memory
++++ b/include/memory
+@@ -830,6 +830,7 @@ void* align(size_t alignment, size_t size, void*& ptr, size_t& space);
+ #include <iterator>
+ #include <new>
+ #include <stdexcept>
++#include <stlfwd>
+ #include <tuple>
+ #include <type_traits>
+ #include <typeinfo>
+diff --git a/include/type_traits b/include/type_traits
+index 54df709..86bc5fa 100644
+--- a/include/type_traits
++++ b/include/type_traits
+@@ -419,6 +419,7 @@ namespace std
+ #include <__config>
+ #include <cstddef>
+ #include <version>
++#include <__utility/declval.h>
+ 
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+ #  pragma GCC system_header
+diff --git a/src/support/runtime/exception_fallback.ipp b/src/support/runtime/exception_fallback.ipp
+index 100ee6d..ebdca7e 100644
+--- a/src/support/runtime/exception_fallback.ipp
++++ b/src/support/runtime/exception_fallback.ipp
+@@ -8,6 +8,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ #include <cstdio>
++#include "../../include/atomic_support.h"
+ 
+ namespace std {
+ 

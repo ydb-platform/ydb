@@ -1,6 +1,6 @@
 /* Functions to support link list bitsets.
 
-   Copyright (C) 2002-2004, 2006, 2009-2015, 2018-2019 Free Software
+   Copyright (C) 2002-2004, 2006, 2009-2015, 2018-2020 Free Software
    Foundation, Inc.
 
    Contributed by Michael Hayes (m.hayes@elec.canterbury.ac.nz).
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 
@@ -122,7 +122,7 @@ lbitset_elt_alloc (void)
 # define OBSTACK_CHUNK_FREE free
 #endif
 
-#if ! defined __GNUC__ || __GNUC__ < 2
+#if !(defined __GNUC__ || defined __clang__)
 # define __alignof__(type) 0
 #endif
 
@@ -859,7 +859,8 @@ lbitset_unused_clear (bitset dst)
       bitset_word *srcp = elt->words;
       bitset_windex windex = n_bits / BITSET_WORD_BITS;
 
-      srcp[windex - elt->index] &= ((bitset_word) 1 << last_bit) - 1;
+      srcp[windex - elt->index]
+        &= ((bitset_word) 1 << (last_bit % BITSET_WORD_BITS)) - 1;
       windex++;
 
       for (; (windex - elt->index) < LBITSET_ELT_WORDS; windex++)
@@ -1275,7 +1276,7 @@ struct bitset_vtable lbitset_vtable = {
 
 /* Return size of initial structure.  */
 size_t
-lbitset_bytes (bitset_bindex n_bits ATTRIBUTE_UNUSED)
+lbitset_bytes (bitset_bindex n_bits MAYBE_UNUSED)
 {
   return sizeof (struct lbitset_struct);
 }
@@ -1283,7 +1284,7 @@ lbitset_bytes (bitset_bindex n_bits ATTRIBUTE_UNUSED)
 
 /* Initialize a bitset.  */
 bitset
-lbitset_init (bitset bset, bitset_bindex n_bits ATTRIBUTE_UNUSED)
+lbitset_init (bitset bset, bitset_bindex n_bits MAYBE_UNUSED)
 {
   BITSET_NBITS_ (bset) = n_bits;
   bset->b.vtable = &lbitset_vtable;

@@ -15,12 +15,12 @@ DECLARE_REFCOUNTED_STRUCT(TProducerCounters)
 
 struct TProducerCounters final
 {
-    TString Prefix;
+    std::string Prefix;
     TTagSet ProducerTags;
     TSensorOptions Options;
 
-    THashMap<TString, std::pair<TGauge, i64>> Gauges;
-    THashMap<TString, std::tuple<TCounter, i64, i64>> Counters;
+    THashMap<std::string, std::pair<TGauge, i64>> Gauges;
+    THashMap<std::string, std::tuple<TCounter, i64, i64>> Counters;
     THashMap<TTag, std::pair<TProducerCountersPtr, i64>> Tags;
 
     void ClearOutdated(i64 lastIteration);
@@ -38,8 +38,8 @@ public:
 
     void PushTag(TTag tag) override;
     void PopTag() override;
-    void AddGauge(const TString& name, double value) override;
-    void AddCounter(const TString& name, i64 value) override;
+    void AddGauge(const std::string& name, double value) override;
+    void AddCounter(const std::string& name, i64 value) override;
 
 private:
     IRegistryImplPtr Registry_;
@@ -54,7 +54,7 @@ DECLARE_REFCOUNTED_STRUCT(TProducerState)
 struct TProducerState final
 {
     TProducerState(
-        const TString& prefix,
+        const std::string& prefix,
         const TTagSet& tags,
         TSensorOptions options,
         TWeakPtr<ISensorProducer> producer)

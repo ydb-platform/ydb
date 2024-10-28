@@ -54,6 +54,7 @@
 #include "sequencer.h"
 #include "boot_queue.h"
 #include "object_distribution.h"
+#include "data_center_info.h"
 
 #define DEPRECATED_CTX (ActorContext())
 #define DEPRECATED_NOW (TActivationContext::Now())
@@ -239,6 +240,7 @@ protected:
     friend class TTxUpdateTabletGroups;
     friend class TTxMonEvent_TabletAvailability;
     friend class TLoggedMonTransaction;
+    friend class TTxUpdateDcFollowers;
 
     friend class TDeleteTabletActor;
 
@@ -301,6 +303,8 @@ protected:
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
     ITransaction* CreateUpdateDomain(TSubDomainKey subdomainKey, TEvHive::TEvUpdateDomain::TPtr event = {});
+    ITransaction* CreateUpdateDcFollowers(const TDataCenterId& dc);
+    ITransaction* CreateDeleteNode(TNodeId nodeId);
 
 public:
     TDomainsView DomainsView;
@@ -329,8 +333,6 @@ protected:
     ui32 ConfigurationGeneration = 0;
     ui64 TabletsTotal = 0;
     ui64 TabletsAlive = 0;
-    ui32 DataCenters = 1;
-    ui32 RegisteredDataCenters = 1;
     TObjectDistributions ObjectDistributions;
     double StorageScatter = 0;
     std::set<TTabletTypes::EType> SeenTabletTypes;
@@ -415,6 +417,8 @@ protected:
     TEventPriorityQueue<THive> EventQueue{*this};
     ui64 OperationsLogIndex = 0;
     std::vector<TActorId> ActorsWaitingToMoveTablets;
+    std::queue<TActorId> NodePingQueue;
+    std::unordered_set<TNodeId> NodePingsInProgress;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -443,13 +447,16 @@ protected:
 
     NKikimrConfig::THiveConfig ClusterConfig;
     NKikimrConfig::THiveConfig DatabaseConfig;
+    TDuration NodeBrokerEpoch;
     std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit> TabletLimit; // built from CurrentConfig
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
-    std::unordered_map<TDataCenterId, std::unordered_set<TNodeId>> RegisteredDataCenterNodes;
+    std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
     std::unordered_set<TNodeId> ConnectedNodes;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
+    std::vector<TTabletTypes::EType> CutHistoryDenyList; // built from CurrentConfig
+    std::vector<TTabletTypes::EType> CutHistoryAllowList; // built from CurrentConfig
 
     struct TTabletMoveInfo {
         TInstant Timestamp;
@@ -571,6 +578,8 @@ protected:
     void Handle(TEvHive::TEvUpdateDomain::TPtr& ev);
     void Handle(TEvPrivate::TEvDeleteNode::TPtr& ev);
     void Handle(TEvHive::TEvRequestTabletDistribution::TPtr& ev);
+    void Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev);
+    void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -650,6 +659,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterEventQueueSize(i64 eventQueueSizeDiff);
     void UpdateCounterNodesConnected(i64 nodesConnectedDiff);
     void UpdateCounterTabletsStarting(i64 tabletsStartingDiff);
+    void UpdateCounterPingQueueSize();
+    void UpdateCounterTabletChannelHistorySize();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -674,18 +685,19 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
-    ui32 GetRegisteredDataCenters();
-    void UpdateRegisteredDataCenters();
     void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
+    void QueuePing(const TActorId& local);
     void SendPing(const TActorId& local, TNodeId id);
+    void RemoveFromPingInProgress(TNodeId node);
+    void ProcessNodePingQueue();
     void SendReconnect(const TActorId& local);
     static THolder<TGroupFilter> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
     void KickTablet(const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
-    void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
+    void CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     TDuration GetBalancerCooldown(EBalancerType balancerType) const;
     void UpdateObjectCount(const TLeaderTabletInfo& tablet, const TNodeInfo& node, i64 diff);
     ui64 GetObjectImbalance(TFullObjectId object);
@@ -734,7 +746,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     }
 
     TDuration GetNodeDeletePeriod() const {
-        return TDuration::Seconds(CurrentConfig.GetNodeDeletePeriod());
+        if (CurrentConfig.HasNodeDeletePeriod()) {
+            return TDuration::Seconds(CurrentConfig.GetNodeDeletePeriod());
+        } else {
+            return NodeBrokerEpoch;
+        }
     }
 
     ui64 GetDrainInflight() const {
@@ -891,6 +907,21 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return (found != ignoreList.end());
     }
 
+    bool IsCutHistoryAllowed(TTabletTypes::EType type) const {
+        bool allowed = true;
+        const auto& denyList = CutHistoryDenyList;
+        if (!denyList.empty()) {
+            bool found = std::find(denyList.begin(), denyList.end(), type) != denyList.end();
+            allowed &= !found;
+        }
+        const auto& allowList = CutHistoryAllowList;
+        if (!allowList.empty()) {
+            bool found = std::find(allowList.begin(), allowList.end(), type) != allowList.end();
+            allowed &= found;
+        }
+        return allowed;
+    }
+
     double GetSpaceUsagePenaltyThreshold() {
         return CurrentConfig.GetSpaceUsagePenaltyThreshold();
     }
@@ -937,6 +968,14 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     double GetNodeUsageRangeToKick() const {
         return CurrentConfig.GetNodeUsageRangeToKick();
+    }
+
+    bool GetLessSystemTabletsMoves() const {
+        return CurrentConfig.GetLessSystemTabletsMoves();
+    }
+
+    ui64 GetMaxPingsInFlight() const {
+        return CurrentConfig.GetMaxPingsInFlight();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

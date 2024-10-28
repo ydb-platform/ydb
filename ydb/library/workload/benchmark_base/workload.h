@@ -17,8 +17,13 @@ public:
         Column  /* "column" */,
         ExternalS3      /* "external-s3"     */
     };
+    enum class EQuerySyntax {
+        YQL /* "yql" */,
+        PG /* "pg"*/
+    };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     TString GetFullTableName(const char* table) const;
+    static TString GetTablePathQuote(EQuerySyntax syntax);
     YDB_ACCESSOR_DEF(TString, Path);
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
     YDB_READONLY_DEF(TString, S3Endpoint);
@@ -38,6 +43,8 @@ public:
     static const TString TsvFormatString;
     static const TString CsvDelimiter;
     static const TString CsvFormatString;
+    static const TString PsvDelimiter;
+    static const TString PsvFormatString;
 
 protected:
     virtual TString DoGetDDLQueries() const = 0;

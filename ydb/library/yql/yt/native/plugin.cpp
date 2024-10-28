@@ -35,7 +35,9 @@
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/url_preprocessing/url_preprocessing.h>
+#include <ydb/library/yql/core/yql_library_compiler.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
+
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
@@ -146,7 +148,12 @@ class TSkiffConverter
     : public ISkiffConverter
 {
 public:
-    TString ConvertNodeToSkiff(const TDqStatePtr state, const IDataProvider::TFillSettings& fillSettings, const NYT::TNode& rowSpec, const NYT::TNode& item) override
+    TString ConvertNodeToSkiff(
+        const TDqStatePtr state,
+        const IDataProvider::TFillSettings& fillSettings,
+        const NYT::TNode& rowSpec,
+        const NYT::TNode& item,
+        const TVector<TString>& columns) override
     {
         TMemoryUsageInfo memInfo("DqResOrPull");
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), state->FunctionRegistry->SupportsSizedAllocators());
@@ -154,7 +161,7 @@ public:
         TTypeEnvironment env(alloc);
         NYql::NCommon::TCodecContext codecCtx(env, *state->FunctionRegistry, &holderFactory);
 
-        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"));
+        auto skiffBuilder = MakeHolder<TSkiffExecuteResOrPull>(fillSettings.RowsLimitPerWrite, fillSettings.AllResultsBytesLimit, codecCtx, holderFactory, rowSpec, state->TypeCtx->OptLLVM.GetOrElse("OFF"), columns);
         if (item.IsList()) {
             skiffBuilder->SetListResult();
             for (auto& node : item.AsList()) {
@@ -296,10 +303,26 @@ public:
 
             FuncRegistry_->SetSystemModulePaths(systemModules);
 
-            NYql::NUserData::TUserData::UserDataToLibraries({}, Modules_);
-            auto userDataTable = GetYqlModuleResolver(ExprContext_, ModuleResolver_, {}, Clusters_, {});
+            TUserDataTable userDataTable;
+            LoadYqlDefaultMounts(userDataTable);
 
-            if (!userDataTable) {
+            const auto libraries = NYTree::ConvertTo<THashMap<TString, TString>>(options.Libraries);
+            TVector<NYql::NUserData::TUserData> userData;
+            userData.reserve(libraries.size());
+            for (const auto& [module, path] : libraries) {
+                userData.emplace_back(NYql::NUserData::EType::LIBRARY, NYql::NUserData::EDisposition::FILESYSTEM, path, path);
+                Modules_[to_lower(module)] = path;
+
+                auto& block = userDataTable[TUserDataKey::File(path)];
+                block.Data = path;
+                block.Type = EUserDataType::PATH;
+                block.Usage.Set(EUserDataBlockUsage::Library, true);
+            }
+
+            NYql::NUserData::TUserData::UserDataToLibraries(userData, Modules_);
+
+            TModulesTable modulesTable;
+            if (!CompileLibraries(userDataTable, ExprContext_, modulesTable, true)) {
                 TStringStream err;
                 ExprContext_.IssueManager
                     .GetIssues()
@@ -309,6 +332,7 @@ public:
                 exit(1);
             }
 
+            ModuleResolver_ = std::make_shared<NYql::TModuleResolver>(std::move(modulesTable), ExprContext_.NextUniqueId, Clusters_, THashSet<TString>{});
             OperationAttributes_ = options.OperationAttributes;
 
             TVector<NYql::TDataProviderInitializer> dataProvidersInit;
@@ -351,7 +375,9 @@ public:
             ProgramFactory_->SetFileStorage(FileStorage_);
             ProgramFactory_->SetUrlPreprocessing(MakeIntrusive<NYql::TUrlPreprocessing>(GatewaysConfig_));
         } catch (const std::exception& ex) {
-            YQL_LOG(FATAL) << "Unexpected exception while initializing YQL plugin: " << ex.what();
+            // NB: YQL_LOG may be not initialized yet (for example, during singletons config parse),
+            // so we use std::cerr instead of it.
+            std::cerr << "Unexpected exception while initializing YQL plugin: " << ex.what() << std::endl;
             exit(1);
         }
         YQL_LOG(INFO) << "YQL plugin initialized";

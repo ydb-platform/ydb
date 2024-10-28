@@ -17,6 +17,8 @@ using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NTransactionClient;
 
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NDetail {
 
 void FormatProgressWithProjection(
@@ -702,7 +704,7 @@ std::vector<TReplicationProgress> ScatterReplicationProgress(
 bool IsReplicaLocationValid(
     const TReplicaInfo* replica,
     const NYPath::TYPath& tablePath,
-    const TString& clusterName)
+    const std::string& clusterName)
 {
     return replica->ReplicaPath == tablePath && replica->ClusterName == clusterName;
 }
@@ -862,6 +864,7 @@ TDuration ComputeReplicationProgressLag(
 THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
 {
     TReplicationProgress syncProgress;
+
     for (const auto& [replicaId, replicaInfo] : replicas) {
         if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
             if (syncProgress.Segments.empty()) {
@@ -869,14 +872,24 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
             } else {
                 syncProgress = BuildMaxProgress(syncProgress, replicaInfo.ReplicationProgress);
             }
+
+            // Advance progress to current era start timestamp if replica not in current era
+            auto lastHistoryItemTimestamp = replicaInfo.History.back().Timestamp;
+            if (GetReplicationProgressMinTimestamp(replicaInfo.ReplicationProgress) < lastHistoryItemTimestamp) {
+                syncProgress = AdvanceReplicationProgress(syncProgress, lastHistoryItemTimestamp);
+            }
         }
     }
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {
-        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History)) {
+        if (IsReplicaReallySync(replicaInfo.Mode, replicaInfo.State, replicaInfo.History) &&
+            GetReplicationProgressMinTimestamp(replicaInfo.ReplicationProgress) >=
+                replicaInfo.History.back().Timestamp)
+        {
             result.emplace(replicaId, TDuration::Zero());
         } else {
+            // Replica is async or sync, but still in previous era
             result.emplace(
                 replicaId,
                 ComputeReplicationProgressLag(syncProgress, replicaInfo.ReplicationProgress));

@@ -39,6 +39,7 @@ namespace NActors {
         , OutputCounter(0ULL)
     {
         Proxy->Metrics->SetConnected(0);
+        PartUpdateTimestamp = GetCycleCountFast();
         ReceiveContext.Reset(new TReceiveContext);
     }
 
@@ -143,6 +144,9 @@ namespace NActors {
 
         SetOutputStuckFlag(true);
         ++NumEventsInQueue;
+        if (State == EState::Idle) {
+            UpdateState(EState::Utilized);
+        }
         RearmCloseOnIdle();
 
         LWTRACK(EnqueueEvent, event->Orbit, Proxy->PeerNodeId, NumEventsInQueue, GetWriteBlockedTotal(), evChannel, oChannel.GetQueueSize(), oChannel.GetBufferedAmountOfData());
@@ -408,8 +412,14 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
         }
 
+        if (NumEventsInQueue || OutgoingStream || OutOfBandStream || XdcStream) {
+            UpdateState(EState::Utilized);
+        }
+
         // generate ping request, if needed
         IssuePingRequest();
+
+        bool notEnoughCpu = false;
 
         while (Socket) {
             ProducePackets();
@@ -438,6 +448,7 @@ namespace NActors {
             } else if (TimeLimit->CheckExceeded()) {
                 SetEnoughCpu(++StarvingInRow < StarvingInRowForNotEnoughCpu);
                 IssueRam(false);
+                notEnoughCpu = true;
                 break;
             }
         }
@@ -449,6 +460,10 @@ namespace NActors {
 
         // equalize channel weights
         EqualizeCounter += ChannelScheduler->Equalize();
+
+        // update state
+        const bool finished = !NumEventsInQueue && !OutgoingStream && !OutOfBandStream && !XdcStream;
+        UpdateState(finished ? EState::Idle : notEnoughCpu ? EState::WaitingCpu : EState::Utilized);
     }
 
     void TInterconnectSessionTCP::ProducePackets() {
@@ -533,6 +548,7 @@ namespace NActors {
             XdcSocket->Shutdown(SHUT_RDWR);
             XdcSocket.Reset();
         }
+        UpdateState(EState::Idle);
     }
 
     void TInterconnectSessionTCP::ReestablishConnectionExecute() {
@@ -1120,6 +1136,10 @@ namespace NActors {
         }
     }
 
+    void TInterconnectSessionTCP::UpdateUtilization() {
+        Proxy->Metrics->SetUtilization(1'000'000 * Utilized, 1'000'000 * Starving);
+    }
+
     void TInterconnectSessionTCP::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {
         TStringStream str;
         ev->Get()->Output(str);
@@ -1181,6 +1201,14 @@ namespace NActors {
                                     }
                                     TABLED() {
                                         str << x->GetPeerCommonName();
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {
+                                        str << "Signature algorithm";
+                                    }
+                                    TABLED() {
+                                        str << x->GetSignatureAlgorithm();
                                     }
                                 }
                             }
@@ -1323,6 +1351,15 @@ namespace NActors {
 
                             MON_VAR(CpuStarvationEvents)
                             MON_VAR(CpuStarvationEventsOnWriteData)
+
+                            UpdateState();
+
+                            TABLER() {
+                                TABLED() { str << "Utilization"; }
+                                TABLED() {
+                                    str << Sprintf("%.1f%%", 100 * Utilized) << " / " << Sprintf("%.1f%%", Starving);
+                                }
+                            }
 
                             TString clockSkew;
                             i64 x = GetClockSkew();

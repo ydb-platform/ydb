@@ -8,4 +8,5 @@ The key articles to get started with this section:
 * [{#T}](preparing-vms-with-terraform.md)
 * [{#T}](restart.md)
 * Observability:
+
   * [{#T}](observability/logging.md)

@@ -34,7 +34,7 @@ ci:
             platforms:
               title: Build only for particular platforms (comma separated)
               type: string
-              default: ""
+              default: "linux-x86_64, linux-aarch64"
       filters:
         - discovery: dir
           abs-paths:

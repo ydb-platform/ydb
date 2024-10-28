@@ -86,7 +86,7 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                                "Node Type": "Aggregate-Filter-TableFullScan",
                                                                                 "Operators": [
                                                                                     {
                                                                                         "Aggregation": "state",
@@ -97,6 +97,15 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Aggregate"
+                                                                                    },
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "MobilePhoneModel != "
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],
@@ -196,7 +205,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

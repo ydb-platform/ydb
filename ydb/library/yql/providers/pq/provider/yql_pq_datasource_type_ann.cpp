@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/pushdown/type_ann.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 
@@ -47,7 +48,7 @@ public:
         return TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprContext& ctx, TVector<TString>& columnOrder) {
+    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprContext& ctx, TColumnOrder& columnOrder) {
         TVector<const TItemExprType*> items;
         items.reserve((columns ? columns.Cast().Ref().ChildrenSize() : 0) + topic.Metadata().Size());
 
@@ -56,7 +57,7 @@ public:
 
         std::unordered_set<TString> addedFields;
         if (columns) {
-            columnOrder.reserve(items.capacity());
+            columnOrder.Reserve(items.capacity());
 
             for (auto c : columns.Cast().Ref().ChildrenList()) {
                 if (!EnsureAtom(*c, ctx)) {
@@ -67,7 +68,7 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(topic.Pos()), TStringBuilder() << "Unable to find column: " << c->Content()));
                     return nullptr;
                 }
-                columnOrder.push_back(TString(c->Content()));
+                columnOrder.AddColumn(TString(c->Content()));
                 items.push_back(itemSchema->GetItems()[*index]);
                 addedFields.emplace(c->Content());
             }
@@ -104,7 +105,7 @@ public:
             return TStatus::Error;
         }
 
-        TVector<TString> columnOrder;
+        TColumnOrder columnOrder;
         auto schema = GetReadTopicSchema(topic, read.Columns().Maybe<TCoAtomList>(), ctx, columnOrder);
         if (!schema) {
             return TStatus::Error;
@@ -131,11 +132,16 @@ public:
     }
 
     TStatus HandleDqTopicSource(TExprBase input, TExprContext& ctx) {
-        if (!EnsureArgsCount(input.Ref(), 4, ctx)) {
+        if (!EnsureArgsCount(input.Ref(), 6, ctx)) {
             return TStatus::Error;
         }
 
         TDqPqTopicSource topicSource = input.Cast<TDqPqTopicSource>();
+
+        if (!EnsureWorldType(topicSource.World().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
         TPqTopic topic = topicSource.Topic();
 
         if (!EnsureCallable(topic.Ref(), ctx)) {
@@ -148,6 +154,13 @@ public:
         if (!meta) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicPath << "`"));
             return TStatus::Error;
+        }
+
+        auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+
+        const TStatus filterAnnotationStatus = NYql::NPushdown::AnnotateFilterPredicate(input.Ptr(), TDqPqTopicSource::idx_FilterPredicate, rowSchema, ctx);
+        if (filterAnnotationStatus != TStatus::Ok) {
+            return filterAnnotationStatus;
         }
 
         if (topic.Metadata().Empty()) {

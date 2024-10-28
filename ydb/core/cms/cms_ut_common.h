@@ -92,6 +92,9 @@ struct TTestEnvOpts {
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
 
+    using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
+    TNodeLocationCallback NodeLocationCallback;
+
     TTestEnvOpts() = default;
 
     TTestEnvOpts(ui32 nodeCount, 
@@ -107,7 +110,7 @@ struct TTestEnvOpts {
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
         , EnableSentinel(false)
-        , EnableCMSRequestPriorities(false)
+        , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
     {
     }
@@ -122,10 +125,16 @@ struct TTestEnvOpts {
         return *this;
     }
 
-    TTestEnvOpts& WithEnableCMSRequestPriorities() {
-        EnableCMSRequestPriorities = true;
+    TTestEnvOpts& WithoutEnableCMSRequestPriorities() {
+        EnableCMSRequestPriorities = false;
         return *this;
     }
+
+    TTestEnvOpts& WithNodeLocationCallback(TNodeLocationCallback nodeLocationCallback) {
+        NodeLocationCallback = nodeLocationCallback;
+        return *this;
+    }
+
 };
 
 class TCmsTestEnv : public TTestBasicRuntime {
@@ -322,6 +331,8 @@ public:
     {
         return CheckRequest(user, id, dry, NKikimrCms::MODE_MAX_AVAILABILITY, res, count);
     }
+
+    void CheckBSCUpdateRequests(std::set<ui32> expectedNodes, NKikimrBlobStorage::EDriveStatus expectedStatus);
 
     void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask *req);
 

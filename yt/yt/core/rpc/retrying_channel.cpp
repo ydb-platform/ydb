@@ -232,12 +232,12 @@ private:
             Retry();
         }
 
-        void HandleResponse(TSharedRefArray message, TString address) override
+        void HandleResponse(TSharedRefArray message, const std::string& address) override
         {
             YT_LOG_DEBUG("Request attempt succeeded (RequestId: %v)",
                 Request_->GetRequestId());
 
-            ResponseHandler_->HandleResponse(std::move(message), std::move(address));
+            ResponseHandler_->HandleResponse(std::move(message), address);
         }
 
         void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override
@@ -310,12 +310,12 @@ private:
                 Request_->GetService(),
                 Request_->GetMethod(),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUser()) {
+                    if (!Request_->GetUser().empty()) {
                         builder->AppendFormat("User: %v, ", Request_->GetUser());
                     }
                 }),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUserTag() && Request_->GetUserTag() != Request_->GetUser()) {
+                    if (!Request_->GetUserTag().empty() && Request_->GetUserTag() != Request_->GetUser()) {
                         builder->AppendFormat("UserTag: %v, ", Request_->GetUserTag());
                     }
                 }),

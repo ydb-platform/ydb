@@ -24,6 +24,10 @@ static TString ConvertYtDataType(const TString& ytType, ui64& nativeYtTypeFlags)
     if (ytType == "string") {
         yqlType = "String";
     }
+    else if (ytType == "uuid") {
+        nativeYtTypeFlags |= NTCF_UUID;
+        yqlType = "Uuid";
+    }
     else if (ytType == "utf8") {
         yqlType = "Utf8";
     }
@@ -675,8 +679,10 @@ std::pair<NYT::EValueType, bool> RowSpecYqlTypeToYtType(const NYT::TNode& rowSpe
 
     const auto& yqlType = (*type)[1].AsString();
     NYT::EValueType ytType;
-    if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("Uuid") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
+    if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
         ytType = NYT::VT_STRING;
+    } else if (yqlType == TStringBuf("Uuid")) {
+        ytType = (nativeYtTypeFlags & NTCF_UUID) ? NYT::VT_UUID : NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Json")) {
         ytType = (nativeYtTypeFlags & NTCF_JSON) ? NYT::VT_JSON : NYT::VT_STRING;
     } else if (yqlType == TStringBuf("Decimal")) {
@@ -740,8 +746,10 @@ NYT::TNode RowSpecYqlTypeToYtNativeType(const NYT::TNode& rowSpecType, ui64 nati
     if ((*type)[0] == TStringBuf("DataType")) {
         const auto& yqlType = (*type)[1].AsString();
         TString ytType;
-        if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("Uuid") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
+        if (yqlType == TStringBuf("String") || yqlType == TStringBuf("Longint") || yqlType == TStringBuf("JsonDocument") || yqlType == TStringBuf("DyNumber")) {
             ytType = "string";
+        } else if (yqlType == TStringBuf("Uuid")) {
+            ytType = "uuid";
         } else if (yqlType == TStringBuf("Json")) {
             ytType = (nativeYtTypeFlags & NTCF_JSON) ? "json" : "string";
         } else if (yqlType == TStringBuf("Utf8")) {

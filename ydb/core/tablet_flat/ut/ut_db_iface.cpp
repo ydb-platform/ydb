@@ -276,7 +276,8 @@ Y_UNIT_TEST_SUITE(DBase) {
         UNIT_ASSERT(me->Counters().Parts.RowsErase == 0);
         UNIT_ASSERT(me->Counters().Parts.PartsCount == 0);
         UNIT_ASSERT(me->Counters().Parts.PlainBytes == 0);
-        UNIT_ASSERT(me->Counters().Parts.IndexBytes == 0);
+        UNIT_ASSERT(me->Counters().Parts.FlatIndexBytes == 0);
+        UNIT_ASSERT(me->Counters().Parts.BTreeIndexBytes == 0);
         UNIT_ASSERT(me->Counters().Parts.OtherBytes == 0);
     }
 

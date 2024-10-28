@@ -40,6 +40,8 @@ public:
     TWorkerFilter(const Yql::DqsProto::TWorkerFilter& filter);
 
     EMatchStatus Match(const NDqs::TWorkerInfo::TPtr& workerInfo, int taskId, TStats* stats) const;
+    // match mandatory host-specific fields like Address, NodeId, ClusterName
+    bool MatchHost(const NDqs::TWorkerInfo::TPtr& workerInfo) const;
 
     void Visit(const std::function<void(const Yql::DqsProto::TFile&)>& visitor) const;
 

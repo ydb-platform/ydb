@@ -171,13 +171,13 @@ NYql::TIssues ValidateEntityName(const TString& name) {
             MakeErrorIssue(TIssuesIds::BAD_REQUEST, "name field is not specified"));
     }
 
-    if (name.Size() > 255) {
+    if (name.size() > 255) {
         issues.AddIssue(
             MakeErrorIssue(TIssuesIds::BAD_REQUEST,
                            TStringBuilder{}
                                << "Incorrect connection name: " << name
                                << ". Name length must not exceed 255 symbols. Current length is "
-                               << name.Size() << " symbol(s)"));
+                               << name.size() << " symbol(s)"));
     }
 
     if (name != to_lower(name)) {

@@ -33,7 +33,9 @@ private:
     private:
         bool nextImpl() final {
             while (!Coro->InputFinished || !Coro->Requests.empty()) {
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
                 Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
                 if (Coro->InputBuffer) {
                     RawDataBuffer.swap(Coro->InputBuffer);
                     Coro->InputBuffer.clear();
@@ -65,6 +67,8 @@ private:
     }
 
     void Run() final {
+        StartCycleCount = GetCycleCountFast();
+
         try {
             std::unique_ptr<NDB::ReadBuffer> coroBuffer = std::make_unique<TCoroReadBuffer>(this);
             NDB::ReadBuffer* buffer = coroBuffer.get();
@@ -74,15 +78,15 @@ private:
                 decompressorBuffer->nextIfAtEnd();
                 TString data{decompressorBuffer->available(), ' '};
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
-                Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data)));
+                Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));
             }
         } catch (const TDtorException&) {
             // Stop any activity instantly
             return;
         } catch (...) {
-            Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::current_exception()));
+            Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::current_exception(), TakeCpuTimeDelta()));
         }
-        Send(Parent, new TEvS3Provider::TEvDecompressDataFinish());
+        Send(Parent, new TEvS3Provider::TEvDecompressDataFinish(TakeCpuTimeDelta()));
     }
 
     void ProcessOneEvent() {
@@ -99,7 +103,19 @@ private:
         InputBuffer = std::move(event.Data);
     }
 
+    TDuration GetCpuTimeDelta() {
+        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - StartCycleCount));
+    }
+
+    TDuration TakeCpuTimeDelta() {
+        auto currentCpuTime = CpuTime;
+        CpuTime = TDuration::Zero();
+        return currentCpuTime;
+    }
+
 private:
+    TDuration CpuTime;
+    ui64 StartCycleCount = 0;
     TString InputBuffer;
     TString Compression;
     TActorId Parent;

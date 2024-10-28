@@ -10,9 +10,6 @@ void TFieldSchema::Register(TRegistrar registrar)
 {
     registrar.Parameter("name", &TThis::Name);
     registrar.Parameter("tag", &TThis::Tag);
-    registrar.Parameter("deprecated", &TThis::Deprecated)
-        .Default(false)
-        .DontSerializeDefault();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

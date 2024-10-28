@@ -4,7 +4,7 @@
 
 ## Syntax
 
-```sql
+```yql
 DROP VIEW <name>
 ```
 
@@ -16,7 +16,7 @@ DROP VIEW <name>
 
 The following command will drop the view named `recent_series`:
 
-```sql
+```yql
 DROP VIEW recent_series;
 ```
 

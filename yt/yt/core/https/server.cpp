@@ -160,7 +160,11 @@ IServerPtr CreateServer(
 
     auto configCopy = CloneYsonStruct(config);
     configCopy->IsHttps = true;
-    auto httpServer = NHttp::CreateServer(configCopy, tlsListener, poller, acceptor);
+    auto httpServer = NHttp::CreateServer(
+        configCopy,
+        tlsListener,
+        poller,
+        acceptor);
 
     return New<TServer>(std::move(httpServer), std::move(certificateUpdater));
 }

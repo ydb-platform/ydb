@@ -140,12 +140,12 @@ class Factory:
                 # Don't be surprised - binary types look like UTF8 strings in Go
                 Column(
                     name='col_22_binary',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(my=mysql.Binary()),
                 ),
                 Column(
                     name='col_23_varbinary',
-                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.UTF8),
+                    ydb_type=makeOptionalYdbTypeFromTypeID(Type.STRING),
                     data_source_type=DataSourceType(my=mysql.VarBinary()),
                 ),
                 Column(

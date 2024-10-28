@@ -282,18 +282,25 @@ void Deserialize(T& value, TSource source, bool postprocess, bool setDefaults)
 }
 
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj)
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj, bool postprocess, bool setDefaults)
 {
     if (!obj) {
         return nullptr;
     }
-    return ConvertTo<TIntrusivePtr<T>>(NYson::ConvertToYsonString(*obj));
+    if constexpr(std::derived_from<T, TYsonStructBase>) {
+        auto node = ConvertToNode(NYson::ConvertToYsonString(*obj));
+        auto cloneObj = New<T>();
+        cloneObj->Load(node, postprocess, setDefaults);
+        return cloneObj;
+    } else {
+        return ConvertTo<TIntrusivePtr<T>>(NYson::ConvertToYsonString(*obj));
+    }
 }
 
 template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj)
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess, bool setDefaults)
 {
-    return CloneYsonStruct(ConstPointerCast<const T>(obj));
+    return CloneYsonStruct(ConstPointerCast<const T>(obj), postprocess, setDefaults);
 }
 
 template <class T>
@@ -394,6 +401,13 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
     if (src) {
         dst = src;
     }
+}
+
+template <CYsonStructDerived T, CYsonStructDerived U>
+    requires std::same_as<T, U>
+bool operator==(const T& lhs, const U& rhs)
+{
+    return static_cast<const TYsonStructBase&>(lhs).IsEqual(static_cast<const TYsonStructBase&>(rhs));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

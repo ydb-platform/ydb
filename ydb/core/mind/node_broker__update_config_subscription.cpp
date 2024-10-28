@@ -1,6 +1,8 @@
 #include "node_broker_impl.h"
 #include "node_broker__scheme.h"
 
+#include <ydb/core/protos/counters_node_broker.pb.h>
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -13,6 +15,8 @@ public:
         , SubscriptionId(0)
     {
     }
+
+    TTxType GetTxType() const override { return TXTYPE_UPDATE_CONFIG_SUBSCRIPTION; }
 
     bool Execute(TTransactionContext &txc,
                  const TActorContext &ctx) override

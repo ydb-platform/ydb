@@ -31,9 +31,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
         typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
-        auto ytState = MakeIntrusive<TYtState>();
+        auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
         ytState->Gateway = ytGateway;
-        ytState->Types = typeAnnotationContext.Get();
 
         InitializeYtGateway(ytGateway, ytState);
         typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
@@ -440,6 +439,28 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
+    }
+
+    Y_UNIT_TEST(ExtractSortedTuple) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('a (String '4)) '('b (String 'c)) '('c (String 'x)))
+                (AsStruct '('a (String '1)) '('b (String 'd)) '('c (String 'y)))
+                (AsStruct '('a (String '3)) '('b (String 'b)) '('c (String 'z)))
+            ))
+            (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b)))))
+            (let map (OrderedFlatMap sorted (lambda '(item) (OptionalIf (== (Member item 'a) (String '1)) (AddMember item 'x '((Member item 'a) (Member item 'b)))))))
+            (let extract (ExtractMembers map '('x)))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) extract '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(a,x/0[asc];b,x/1[asc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "Sorted(x[asc])");
     }
 
     Y_UNIT_TEST(TopSort) {
@@ -3269,6 +3290,35 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "");
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
+    }
+
+    Y_UNIT_TEST(GroupByHop) {
+        const TStringBuf s = R"((
+(let list (AsList
+    (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:02Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:03Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+))
+(let input (FlatMap list (lambda '(row) (Just (AsStruct '('"data" (Member row '"data")) '('group0 (AsList (Member row '"user"))) '('"time" (Member row '"time")) '('"user" (Member row '"user")))))))
+(let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
+(let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
+(let res (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
+  (let interval (Interval '1000000))
+  (let map (lambda '(item) (AsStruct)))
+  (let reduce (lambda '(lhs rhs) (AsStruct)))
+  (let hopping (MultiHoppingCore (Iterator row) keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0"))
+  (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
+)))))
+
+(let res_sink (DataSink 'yt (quote plato)))
+(let world (Write! world res_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
+(return (Commit! world res_sink))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PartitionsByKeys", "Distinct((data,group0))");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PartitionsByKeys", "Unique((data,group0))");
     }
 }
 

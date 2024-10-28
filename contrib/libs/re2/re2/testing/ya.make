@@ -6,6 +6,8 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(2024-07-02)
+
 PEERDIR(
     contrib/libs/re2
     contrib/restricted/abseil-cpp/absl/base

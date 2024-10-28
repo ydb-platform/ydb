@@ -1,9 +1,8 @@
 #include "meta.h"
 
-#include <ydb/core/formats/arrow/scalar/serialization.h>
+#include <ydb/library/formats/arrow/scalar/serialization.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/program/program.h>
-#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
@@ -16,8 +15,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     {
         TChunkedColumnReader cReader = *reader.begin();
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
-            auto minMax = NArrow::FindMinMaxPosition(cReader.GetCurrentChunk());
-            auto currentScalar = NArrow::GetScalar(cReader.GetCurrentChunk(), minMax.second);
+            auto currentScalar = cReader.GetCurrentAccessor()->GetMaxScalar();
+            AFL_VERIFY(currentScalar);
             if (!result || NArrow::ScalarCompare(*result, *currentScalar) == -1) {
                 result = currentScalar;
             }

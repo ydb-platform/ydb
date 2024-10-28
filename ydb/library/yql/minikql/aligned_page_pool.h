@@ -183,6 +183,8 @@ public:
     void OffloadAlloc(ui64 size);
     void OffloadFree(ui64 size) noexcept;
 
+    static void DoCleanupGlobalFreeList(ui64 targetSize = 4 * 64 * 1024 * 1024);
+
     static ui64 GetGlobalPagePoolSize();
 
     ui64 GetLimit() const noexcept {
@@ -216,6 +218,10 @@ public:
 
     void SetMaximumLimitValueReached(bool isReached) noexcept {
         IsMaximumLimitValueReached = isReached;
+    }
+
+    bool GetMaximumLimitValueReached() const noexcept {
+        return IsMaximumLimitValueReached;
     }
 
     bool IsMemoryYellowZoneEnabled() const noexcept {
@@ -295,5 +301,11 @@ void* GetAlignedPage(ui64 size);
 
 template<typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem, ui64 size);
+
+template<typename TMmap = TSystemMmap>
+i64 GetTotalMmapedBytes();
+template<typename TMmap = TSystemMmap>
+i64 GetTotalFreeListBytes();
+
 
 } // NKikimr

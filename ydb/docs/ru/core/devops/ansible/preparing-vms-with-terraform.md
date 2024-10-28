@@ -1,6 +1,6 @@
 # Развёртывание инфраструктуры для кластера {{ ydb-short-name }} с помощью Terraform
 
-Развернуть кластер {{ ydb-short-name }} для использования в production можно тремя рекомендованными способами: с помощью [Ansible](./initial-deployment.md), [Kubernetes](../kubernetes/index.md) или [вручную](../../deploy/index.md). Если вариант с Kubernetes практически самодостаточен, то для вариантов с Ansible и вручную нужен SSH-доступ к правильно сконфигурированным серверам или виртуальным машинам.
+Развернуть кластер {{ ydb-short-name }} для использования в production можно тремя рекомендованными способами: с помощью [Ansible](./initial-deployment.md), [Kubernetes](../kubernetes/index.md) или [вручную](../../devops/manual/index.md). Если вариант с Kubernetes практически самодостаточен, то для вариантов с Ansible и вручную нужен SSH-доступ к правильно сконфигурированным серверам или виртуальным машинам.
 
 В статье описывается, как создать и настроить необходимый для работы кластера {{ ydb-short-name }} набор виртуальных машин у различных облачных провайдеров с помощью Terraform.
 
@@ -10,7 +10,9 @@
 
 Конфигурация настройки окружения ВМ описывается в YAML-формате, а инфраструктурный код пишется на [HCL](https://github.com/hashicorp/hcl) (язык конфигурации Terraform). Основной логической единицей записи в HCL является «блок». Блок состоит из ключевого слова, идентифицирующего его тип, названия и фигурных скобок, обозначающих тело блока. Например, так может выглядеть блок управления виртуальным сервером в AWS:
 
-```hcl
+<!-- markdownlint-disable blanks-around-fences -->
+
+```tf
 resource "aws_instance" "ydb-vm" {
   count                  = var.instance_count
   ami                    = "ami-008fe2fc65df48dac"
@@ -18,13 +20,14 @@ resource "aws_instance" "ydb-vm" {
   key_name               = var.req_key_pair
   vpc_security_group_ids = [var.input_security_group_id]
   subnet_id              = element(var.input_subnet_ids, count.index % length(var.input_subnet_ids))
-  
   tags = {
     Name                 = "ydb-node-${count.index +1}"
     Username             = "ubuntu"
   }
 }
 ```
+
+<!-- markdownlint-enable blanks-around-fences -->
 
 Блоки могут располагаться друг за другом в одном файле и быть независимыми, могут ссылаться друг на друга и быть зависимыми, а также могут вкладываться друг в друга.
 
@@ -45,18 +48,20 @@ resource "aws_instance" "ydb-vm" {
 * `outputs.tf` – переменные, которые содержат результаты работы ресурса (IP-адреса ВМ, ID сетей/подсетей и т.д.).
 
 Модули подключаются к проекту в корневом файле `main.tf` следующим образом:
-```
+
+```tf
 module "vpc" {
   source                     = "./modules/vpc"
   subnets_count              = var.subnets_count
   subnets_availability_zones = var.availability_zones
 }
 ```
+
 В примере подключается модуль `vpc` (имя модуля назначается при подключении). Обязательный параметр – это `source`, путь к директории, где располагается модуль. `subnets_count` и `subnets_availability_zones` – это переменные внутри модуля `vpc`, которые принимают значения из переменных глобального уровня `var.subnets_count` и `var.availability_zones`.
 
 Модули, как и блоки, располагаются друг за другом в корневом `main.tf` проекта. Основное преимущество модульного подхода организации проекта – возможность легко управлять логически связанными наборами ресурсов. Поэтому [репозиторий](https://github.com/ydb-platform/ydb-terraform) с готовыми Terraform-сценариями организован следующим образом:
 
-```txt
+```text
 .
 ├── README.md
 ├── README_RU.md
@@ -96,7 +101,8 @@ module "vpc" {
 Чтобы воспользоваться готовыми Terraform-сценариями из репозитория, нужно скачать репозиторий командой `git clone https://github.com/ydb-platform/ydb-terraform.git`, внести изменения в конфигурационный файл Terraform `~/.terraformrc`, задать актуальные значения глобальных переменных сценария и скачать CLI того облачного провайдера, где будет создана инфраструктура.
 
 Если вы планируете использовать несколько провайдеров, можно добавить следующий код в `~/.terraformrc`, который установит пути скачивания для всех провайдеров, описанных ниже:
-```
+
+```tf
 provider_installation {
   network_mirror {
     url     = "https://terraform-mirror.yandexcloud.net/"

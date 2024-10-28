@@ -13,7 +13,7 @@ namespace NKikimr::NPrivate {
 
 class TPQCounters : public ILabeledCounters {
 protected:
-    TConcurrentRWHashMap<TString, TAutoPtr<TAggregatedLabeledCounters>, 256> LabeledCountersByGroup;
+    TConcurrentRWHashMap<TString, TIntrusivePtr<TAggregatedLabeledCounters>, 256> LabeledCountersByGroup;
     NMonitoring::TDynamicCounterPtr Group;
 
 public:

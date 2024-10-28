@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package NYql.NProto;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+message TTranslationSettings {
+    optional string PathPrefix = 1;
+    optional uint32 SyntaxVersion = 2;
+    optional bool AnsiLexer = 3;
+    optional bool PgParser = 4;
+
+    repeated string Pragmas = 10;
+}

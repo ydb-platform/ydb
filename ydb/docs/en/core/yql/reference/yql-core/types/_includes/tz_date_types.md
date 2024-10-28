@@ -8,10 +8,10 @@ Time zone label for the `TzDate`, `TzDatetime`, `TzTimestamp` types is an attrib
 The point in time for these types is stored in UTC, and the timezone label doesn't participate in any other calculations in any way. For example:
 
 ```yql
-select --these expressions are always true for any timezones:  the timezone doesn't affect the point in time.
+SELECT -- these expressions are always true for any timezones: the timezone doesn't affect the point in time.
     AddTimezone(CurrentUtcDate(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDate(), "America/New_York"),
-    AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") == 
+    AddTimezone(CurrentUtcDatetime(), "Europe/Moscow") ==
         AddTimezone(CurrentUtcDatetime(), "America/New_York");
 ```
 

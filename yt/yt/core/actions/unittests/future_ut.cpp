@@ -4,6 +4,8 @@
 #include <yt/yt/core/actions/future.h>
 #include <yt/yt/core/actions/invoker_util.h>
 
+#include <yt/yt/core/concurrency/action_queue.h>
+
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
@@ -1410,16 +1412,6 @@ TEST_F(TFutureTest, AnyNCombinerDontPropagateCancelation)
     EXPECT_FALSE(p2.IsCanceled());
 }
 
-TEST_F(TFutureTest, AsyncViaCanceledInvoker)
-{
-    auto context = New<TCancelableContext>();
-    auto invoker = context->CreateInvoker(GetSyncInvoker());
-    auto generator = BIND([] {}).AsyncVia(invoker);
-    context->Cancel(TError("oops"));
-    auto future = generator();
-    auto error = future.Get();
-    ASSERT_EQ(NYT::EErrorCode::Canceled, error.GetCode());
-}
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST_F(TFutureTest, LastPromiseDied)
@@ -1717,7 +1709,100 @@ TEST_F(TFutureTest, CancelAppliedToUncancellable)
     EXPECT_TRUE(future1.Get().IsOK());
 }
 
-///////////////////////////////////////////////////////////////////////////////
+TEST_F(TFutureTest, AsyncViaCanceledInvoker1)
+{
+    auto queue = New<NConcurrency::TActionQueue>();
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(queue->GetInvoker());
+
+    context->Cancel(TError(EErrorCode::Canceled, "From cancelable context!"));
+
+    auto error = WaitFor(BIND([] {}).AsyncVia(invoker).Run());
+
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("From cancelable context!"))
+        << NYT::ToString(error);
+}
+
+TEST_F(TFutureTest, AsyncViaCanceledInvoker2)
+{
+    auto queue = New<NConcurrency::TActionQueue>();
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(queue->GetInvoker());
+
+    auto taskReady = NewPromise<void>();
+    auto promise = NewPromise<void>();
+
+    auto future = BIND([promise, taskReady, invoker] {
+        taskReady.Set();
+        WaitFor(promise.ToFuture(), invoker).ThrowOnError();
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(taskReady.ToFuture()).ThrowOnError();
+
+    context->Cancel(TError(EErrorCode::Canceled, "From cancelable context!"));
+    promise.Set();
+
+    auto error = WaitFor(future);
+
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("From cancelable context!"))
+        << NYT::ToString(error);
+}
+
+TEST_F(TFutureTest, YT_12720)
+{
+    auto aqueue = New<NConcurrency::TActionQueue>();
+    auto invoker = aqueue->GetInvoker();
+    auto leash = NewPromise<void>();
+    auto taskStarted = NewPromise<void>();
+    auto future = BIND([leash, taskStarted] {
+        taskStarted.Set();
+        WaitFor(leash.ToFuture()).ThrowOnError();
+    }).AsyncVia(invoker).Run();
+
+    WaitFor(taskStarted.ToFuture()).ThrowOnError();
+
+    future.Cancel(NYT::TError(EErrorCode::Canceled, "Fiber canceled in .Reset() of TFiberGuard"));
+    auto error = WaitFor(future);
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("Fiber canceled in .Reset() of TFiberGuard"))
+        << NYT::ToString(error);
+}
+
+TEST_F(TFutureTest, DiscardInApply)
+{
+    auto aqueue = New<NConcurrency::TActionQueue>();
+    auto invoker = aqueue->GetInvoker();
+
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    // NB(arkady-e1ppa): mutable is required to destructively move promise out of the
+    // closure thus forcing it to be destroyed inside the scope.
+    auto canceled = BIND([p = std::move(promise)] () mutable {
+        auto localPromise = std::move(p);
+        while (true) {
+            Yield();
+        }
+    }).AsyncVia(invoker).Run();
+
+    Sleep(std::chrono::seconds(1));
+
+    canceled.Cancel(TError(EErrorCode::Canceled, "Canceled!"));
+
+    auto error = WaitFor(future);
+    EXPECT_EQ(error.GetCode(), EErrorCode::Canceled);
+    EXPECT_TRUE(NYT::ToString(error).Contains("Canceled!"))
+        << NYT::ToString(error);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT

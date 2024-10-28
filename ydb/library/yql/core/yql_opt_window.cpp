@@ -155,7 +155,265 @@ struct TCalcOverWindowTraits {
     const TTypeAnnotationNode* LagQueueItemType = nullptr;
 };
 
-TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames, TExprContext& ctx) {
+TExprNode::TPtr ApplyDistinctForInitLambda(TExprNode::TPtr initLambda, const TStringBuf& distinctKey, const TTypeAnnotationNode& distinctKeyType, const TTypeAnnotationNode& distinctKeyOrigType, TExprContext& ctx) {
+    bool hasParent = initLambda->Child(0)->ChildrenSize() == 2;
+    bool distinctKeyIsStruct = distinctKeyOrigType.GetKind() == ETypeAnnotationKind::Struct;
+
+    auto expandedDistinctKeyType = ExpandType(initLambda->Pos(), distinctKeyType, ctx);
+    auto expandedDistinctKeyOrigType = ExpandType(initLambda->Pos(), distinctKeyOrigType, ctx);
+
+    auto setCreateUdf = ctx.Builder(initLambda->Pos())
+        .Callable("Udf")
+            .Atom(0, "Set.Create")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "TupleType")
+                .Callable(0, "VoidType").Seal()
+                .Callable(1, "VoidType").Seal()
+                .Add(2, expandedDistinctKeyOrigType)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto setCreateLambda = ctx.Builder(initLambda->Pos())
+        .Lambda()
+            .Param("value")
+            .Param("parent")
+            .Callable("NamedApply")
+                .Add(0, setCreateUdf)
+                .List(1)
+                    .Arg(0, "value")
+                    .Callable(1, "Uint32")
+                        .Atom(0, 0)
+                    .Seal()
+                .Seal()
+                .Callable(2, "AsStruct").Seal()
+                .Callable(3, "DependsOn")
+                    .Arg(0, "parent")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    initLambda = ctx.Builder(initLambda->Pos())
+        .Lambda()
+            .Param("value")
+            .Param("parent")
+            .List()
+                // aggregation state
+                .Apply(0, initLambda)
+                    .Do([&](TExprNodeReplaceBuilder& builder) -> TExprNodeReplaceBuilder& {
+                        if (distinctKeyIsStruct) {
+                            return builder
+                                .With(0)
+                                    .Callable("CastStruct")
+                                        .Arg(0, "value")
+                                        .Add(1, expandedDistinctKeyType)
+                                    .Seal()
+                                .Done();
+                        } else {
+                            return builder.With(0, "value");
+                        }
+                    })
+                    .Do([&](TExprNodeReplaceBuilder& builder) -> TExprNodeReplaceBuilder& {
+                        return hasParent ? builder.With(1, "parent") : builder;
+                    })
+                .Seal()
+                // distinct set state
+                .Apply(1, setCreateLambda)
+                    .With(0, "value")
+                    .With(1, "parent")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(initLambda->Pos())
+        .Lambda()
+            .Param("row")
+            .Param("parent")
+            .Apply(initLambda)
+                .With(0)
+                    .Callable("Member")
+                        .Arg(0, "row")
+                        .Atom(1, distinctKey)
+                    .Seal()
+                .Done()
+                .With(1, "parent")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ApplyDistinctForUpdateLambda(TExprNode::TPtr updateLambda, const TStringBuf& distinctKey, const TTypeAnnotationNode& distinctKeyType, const TTypeAnnotationNode& distinctKeyOrigType, TExprContext& ctx) {
+    bool hasParent = updateLambda->Child(0)->ChildrenSize() == 3;
+    bool distinctKeyIsStruct = distinctKeyOrigType.GetKind() == ETypeAnnotationKind::Struct;
+
+    auto expandedDistinctKeyType = ExpandType(updateLambda->Pos(), distinctKeyType, ctx);
+    auto expandedDistinctKeyOrigType = ExpandType(updateLambda->Pos(), distinctKeyOrigType, ctx);
+    
+    auto setAddValueUdf = ctx.Builder(updateLambda->Pos())
+        .Callable("Udf")
+            .Atom(0, "Set.AddValue")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "TupleType")
+                .Callable(0, "VoidType").Seal()
+                .Callable(1, "VoidType").Seal()
+                .Add(2, expandedDistinctKeyOrigType)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto setWasChangedUdf = ctx.Builder(updateLambda->Pos())
+        .Callable("Udf")
+            .Atom(0, "Set.WasChanged")
+            .Callable(1, "Void").Seal()
+            .Callable(2, "TupleType")
+                .Callable(0, "VoidType").Seal()
+                .Callable(1, "VoidType").Seal()
+                .Add(2, expandedDistinctKeyOrigType)
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto setInsertLambda = ctx.Builder(updateLambda->Pos())
+        .Lambda()
+            .Param("set")
+            .Param("value")
+            .Param("parent")
+            .Callable("NamedApply")
+                .Add(0, setAddValueUdf)
+                .List(1)
+                    .Arg(0, "set")
+                    .Arg(1, "value")
+                .Seal()
+                .Callable(2, "AsStruct").Seal()
+                .Callable(3, "DependsOn")
+                    .Arg(0, "parent")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto setWasChangedLambda = ctx.Builder(updateLambda->Pos())
+        .Lambda()
+            .Param("set")
+            .Param("parent")
+            .Callable("NamedApply")
+                .Add(0, setWasChangedUdf)
+                .List(1)
+                    .Arg(0, "set")
+                .Seal()
+                .Callable(2, "AsStruct").Seal()
+                .Callable(3, "DependsOn")
+                    .Arg(0, "parent")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    updateLambda = ctx.Builder(updateLambda->Pos())
+        .Lambda()
+            .Param("value")
+            .Param("state")
+            .Param("parent")
+            .Callable("If")
+                // condition
+                .Apply(0, setWasChangedLambda)
+                    .With(0)
+                        .Apply(setInsertLambda)
+                            .With(0)
+                                .Callable("Nth")
+                                    .Arg(0, "state")
+                                    .Atom(1, 1)
+                                .Seal()
+                            .Done()
+                            .With(1, "value")
+                            .With(2, "parent")
+                        .Seal()
+                    .Done()
+                    .With(1, "parent")
+                .Seal()
+                // new state
+                .List(1)
+                    // aggregation state
+                    .Apply(0, updateLambda)
+                        .Do([&](TExprNodeReplaceBuilder& builder) -> TExprNodeReplaceBuilder& {
+                            if (distinctKeyIsStruct) {
+                                return builder
+                                    .With(0)
+                                        .Callable("CastStruct")
+                                            .Arg(0, "value")
+                                            .Add(1, expandedDistinctKeyType)
+                                        .Seal()
+                                    .Done();
+                            } else {
+                                return builder.With(0, "value");
+                            }
+                        })
+                        .With(1)
+                            .Callable("Nth")
+                                .Arg(0, "state")
+                                .Atom(1, 0)
+                            .Seal()
+                        .Done()
+                        .Do([&](TExprNodeReplaceBuilder& builder) -> TExprNodeReplaceBuilder& {
+                            return hasParent ? builder.With(2, "parent") : builder;
+                        })
+                    .Seal()
+                    // distinct set state
+                    .Apply(1, setInsertLambda)
+                        .With(0)
+                            .Callable("Nth")
+                                .Arg(0, "state")
+                                .Atom(1, 1)
+                            .Seal()
+                        .Done()
+                        .With(1, "value")
+                        .With(2, "parent")
+                    .Seal()
+                .Seal()
+                // old state
+                .Arg(2, "state")
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(updateLambda->Pos())
+        .Lambda()
+            .Param("row")
+            .Param("state")
+            .Param("parent")
+            .Apply(updateLambda)
+                .With(0)
+                    .Callable("Member")
+                        .Arg(0, "row")
+                        .Atom(1, distinctKey)
+                    .Seal()
+                .Done()
+                .With(1, "state")
+                .With(2, "parent")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ApplyDistinctForCalculateLambda(TExprNode::TPtr calculateLambda, TExprContext& ctx) {
+    return ctx.Builder(calculateLambda->Pos())
+        .Lambda()
+            .Param("state")
+            .Apply(calculateLambda)
+                .With(0)
+                    .Callable("Nth")
+                        .Arg(0, "state")
+                        .Atom(1, 0)
+                    .Seal()
+                .Done()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames, const TStructExprType& rowType, TExprContext& ctx) {
     TCalcOverWindowTraits result;
 
     auto& maxDataOutpace = result.MaxDataOutpace;
@@ -221,6 +479,22 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                 rawTraits.OutputType = calculateLambda->GetTypeAnn();
                 YQL_ENSURE(rawTraits.OutputType);
 
+                auto lambdaInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                
+                if (item->ChildrenSize() == 3) {
+                    auto distinctKey = item->Child(2)->Content();
+
+                    auto distinctKeyOrigType = rowType.FindItemType(distinctKey);
+                    YQL_ENSURE(distinctKeyOrigType);
+
+                    initLambda = ApplyDistinctForInitLambda(initLambda, distinctKey, *lambdaInputType, *distinctKeyOrigType, ctx);
+                    updateLambda = ApplyDistinctForUpdateLambda(updateLambda, distinctKey, *lambdaInputType, *distinctKeyOrigType, ctx);
+                    calculateLambda = ApplyDistinctForCalculateLambda(calculateLambda, ctx);
+                } else {
+                    initLambda = ReplaceFirstLambdaArgWithCastStruct(*initLambda, *lambdaInputType, ctx);
+                    updateLambda = ReplaceFirstLambdaArgWithCastStruct(*updateLambda, *lambdaInputType, ctx);
+                }
+
                 if (initLambda->Child(0)->ChildrenSize() == 2) {
                     initLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*initLambda, i, ctx);
                 }
@@ -228,10 +502,6 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                 if (updateLambda->Child(0)->ChildrenSize() == 3) {
                     updateLambda = ReplaceLastLambdaArgWithUnsignedLiteral(*updateLambda, i, ctx);
                 }
-
-                auto lambdaInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                initLambda = ReplaceFirstLambdaArgWithCastStruct(*initLambda, *lambdaInputType, ctx);
-                updateLambda = ReplaceFirstLambdaArgWithCastStruct(*updateLambda, *lambdaInputType, ctx);
 
                 rawTraits.InitLambda = initLambda;
                 rawTraits.UpdateLambda = updateLambda;
@@ -1452,12 +1722,12 @@ struct TQueueParams {
 };
 
 TVector<TChain1MapTraits::TPtr> BuildFoldMapTraits(TQueueParams& queueParams, const TExprNode::TPtr& frames,
-    const TMaybe<TString>& partitionRowsColumn, TExprContext& ctx) {
+    const TMaybe<TString>& partitionRowsColumn, const TStructExprType& rowType, TExprContext& ctx) {
     queueParams = {};
 
     TVector<TChain1MapTraits::TPtr> result;
 
-    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, ctx);
+    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, rowType, ctx);
 
     if (traits.LagQueueItemType->Cast<TStructExprType>()->GetSize()) {
         YQL_ENSURE(traits.MaxUnboundedPrecedingLag > 0);
@@ -1934,7 +2204,7 @@ enum EFold1LambdaKind {
 };
 
 TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& frames, EFold1LambdaKind kind,
-    const TExprNodeList& keyColumns, TExprContext& ctx)
+    const TExprNodeList& keyColumns, const TStructExprType& rowType, TExprContext& ctx)
 {
     TExprNode::TPtr arg1 = ctx.NewArgument(pos, "arg1");
     TExprNodeList args = { arg1 };
@@ -1952,21 +2222,38 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
             YQL_ENSURE(winOn->Child(i)->IsList());
             YQL_ENSURE(winOn->Child(i)->Child(0)->IsAtom());
             YQL_ENSURE(winOn->Child(i)->Child(1)->IsCallable("WindowTraits"));
+            YQL_ENSURE(2 <= winOn->Child(i)->ChildrenSize() && winOn->Child(i)->ChildrenSize() <= 3);
 
             auto column = winOn->Child(i)->ChildPtr(0);
             auto traits = winOn->Child(i)->ChildPtr(1);
-            auto rowInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            auto traitsInputType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+            TStringBuf distinctKey;
+            const TTypeAnnotationNode* distinctKeyOrigType = nullptr;
+            if (winOn->Child(i)->ChildrenSize() == 3) {
+                auto distinctKeyNode = winOn->Child(i)->Child(2);
+                YQL_ENSURE(distinctKeyNode->IsAtom());
+                distinctKey = distinctKeyNode->Content();
+
+                distinctKeyOrigType = rowType.FindItemType(distinctKey);
+                YQL_ENSURE(distinctKeyOrigType);
+            }
 
             TExprNode::TPtr applied;
-
             switch (kind) {
                 case EFold1LambdaKind::INIT: {
                     auto lambda = traits->ChildPtr(1);
+                    if (distinctKeyOrigType) {
+                        lambda = ApplyDistinctForInitLambda(lambda, distinctKey, *traitsInputType, *distinctKeyOrigType, ctx);
+                    } else {
+                        lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *traitsInputType, ctx);
+                    }
+
                     if (lambda->Child(0)->ChildrenSize() == 2) {
                         lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
-                    lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 1);
+
                     applied = ctx.Builder(pos)
                         .Apply(lambda)
                             .With(0, arg1)
@@ -1977,6 +2264,11 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 case EFold1LambdaKind::CALCULATE: {
                     auto lambda = traits->ChildPtr(4);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 1);
+
+                    if (distinctKeyOrigType) {
+                        lambda = ApplyDistinctForCalculateLambda(lambda, ctx);
+                    }
+
                     applied = ctx.Builder(pos)
                         .Apply(lambda)
                             .With(0)
@@ -1991,11 +2283,17 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
                 }
                 case EFold1LambdaKind::UPDATE: {
                     auto lambda = traits->ChildPtr(2);
+                    if (distinctKeyOrigType) {
+                        lambda = ApplyDistinctForUpdateLambda(lambda, distinctKey, *traitsInputType, *distinctKeyOrigType, ctx);
+                    } else {
+                        lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *traitsInputType, ctx);
+                    }
+
                     if (lambda->Child(0)->ChildrenSize() == 3) {
                         lambda = ReplaceLastLambdaArgWithUnsignedLiteral(*lambda, i, ctx);
                     }
-                    lambda = ReplaceFirstLambdaArgWithCastStruct(*lambda, *rowInputType, ctx);
                     YQL_ENSURE(lambda->Child(0)->ChildrenSize() == 2);
+                    
                     applied = ctx.Builder(pos)
                         .Apply(lambda)
                             .With(0, arg1)
@@ -2235,11 +2533,11 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
                     .Apply(0, preprocessLambda)
                         .With(0, "stream")
                     .Seal()
-                    .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::INIT, keyColumns, ctx))
+                    .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::INIT, keyColumns, *rowType, ctx))
                     .Add(2, condenseSwitch)
-                    .Add(3, BuildFold1Lambda(pos, frames, EFold1LambdaKind::UPDATE, keyColumns, ctx))
+                    .Add(3, BuildFold1Lambda(pos, frames, EFold1LambdaKind::UPDATE, keyColumns, *rowType, ctx))
                 .Seal()
-                .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::CALCULATE, keyColumns, ctx))
+                .Add(1, BuildFold1Lambda(pos, frames, EFold1LambdaKind::CALCULATE, keyColumns, *rowType, ctx))
             .Seal()
         .Seal()
         .Build();
@@ -2512,12 +2810,12 @@ const TStructExprType* ApplyFramesToType(const TStructExprType& inputType, const
     return ctx.MakeType<TStructExprType>(resultItems);
 }
 
-bool NeedPartitionRows(const TExprNode::TPtr& frames, TExprContext& ctx) {
+bool NeedPartitionRows(const TExprNode::TPtr& frames, const TStructExprType& rowType, TExprContext& ctx) {
     if (frames->ChildrenSize() == 0) {
         return false;
     }
 
-    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, ctx);
+    TCalcOverWindowTraits traits = ExtractCalcOverWindowTraits(frames, rowType, ctx);
     for (const auto& item : traits.RawTraits) {
         const TRawTrait& trait = item.second;
         if (trait.CalculateLambda->IsCallable({"CumeDist","NTile","PercentRank"})) {
@@ -2621,7 +2919,7 @@ TExprNode::TPtr ProcessRowsFrames(TPositionHandle pos, const TExprNode::TPtr& in
     TExprNode::TPtr processed = input;
     TExprNode::TPtr dataQueue;
     TQueueParams queueParams;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, partitionRowsColumn, ctx);
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, partitionRowsColumn, rowType, ctx);
     if (queueParams.DataQueueNeeded) {
         ui64 queueSize = (queueParams.DataOutpace == Max<ui64>()) ? Max<ui64>() : (queueParams.DataOutpace + queueParams.DataLag + 2);
         dataQueue = BuildQueue(pos, rowType, queueSize, queueParams.DataLag, dependsOn, ctx);
@@ -2654,7 +2952,7 @@ TExprNode::TPtr ProcessRowsFrames(TPositionHandle pos, const TExprNode::TPtr& in
     return WrapWithWinContext(processed, ctx);
 }
 
-TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& sortKey, const TExprNode::TPtr& frames,
+TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TStructExprType& rowType, const TExprNode::TPtr& sortKey, const TExprNode::TPtr& frames,
     const TMaybe<TString>& partitionRowsColumn, TExprContext& ctx) {
     if (frames->ChildrenSize() == 0) {
         return input;
@@ -2662,7 +2960,7 @@ TExprNode::TPtr ProcessRangeFrames(TPositionHandle pos, const TExprNode::TPtr& i
 
     TExprNode::TPtr processed = input;
     TQueueParams queueParams;
-    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, partitionRowsColumn, ctx);
+    TVector<TChain1MapTraits::TPtr> traits = BuildFoldMapTraits(queueParams, frames, partitionRowsColumn, rowType, ctx);
     YQL_ENSURE(!queueParams.DataQueueNeeded);
     YQL_ENSURE(queueParams.LagQueueSize == 0);
     YQL_ENSURE(queueParams.LagQueueItemType == nullptr);
@@ -2959,7 +3257,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
     TExprNode::TPtr processed = topLevelStreamArg;
 
     TMaybe<TString> partitionRowsColumn;
-    if (NeedPartitionRows(frames, ctx)) {
+    if (NeedPartitionRows(frames, *rowType, ctx)) {
         partitionRowsColumn = AllocatePartitionRowsColumn(outputRowType);
         input = AddPartitionRowsColumn(pos, input, fullKeyColumns, *partitionRowsColumn, ctx, types);
     }
@@ -2967,7 +3265,7 @@ TExprNode::TPtr ExpandSingleCalcOverWindow(TPositionHandle pos, const TExprNode:
     // All RANGE frames (even simplest RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
     // will require additional memory to store TableRow()'s - so we want to start with minimum size of row
     // (i.e. process range frames first)
-    processed = ProcessRangeFrames(pos, processed, originalSortKey, rangeFrames, partitionRowsColumn, ctx);
+    processed = ProcessRangeFrames(pos, processed, *rowType, originalSortKey, rangeFrames, partitionRowsColumn, ctx);
     rowType = ApplyFramesToType(*rowType, outputRowType, *rangeFrames, ctx);
     processed = ProcessRowsFrames(pos, processed, *rowType, topLevelStreamArg, rowsFrames, partitionRowsColumn, ctx);
 
@@ -3096,41 +3394,35 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
             for (ui32 i = 1; i < frameNode->ChildrenSize(); ++i) {
                 auto kvTuple = frameNode->ChildPtr(i);
                 YQL_ENSURE(kvTuple->IsList());
-                YQL_ENSURE(kvTuple->ChildrenSize() == 2);
+                YQL_ENSURE(2 <= kvTuple->ChildrenSize() && kvTuple->ChildrenSize() <= 3);
 
                 auto columnName = kvTuple->ChildPtr(0);
 
                 auto traits = kvTuple->ChildPtr(1);
-                YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits"}));
+                YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits", "PercentRank", "CumeDist", "NTile"}));
                 if (traits->IsCallable("WindowTraits")) {
-                    YQL_ENSURE(traits->Head().GetTypeAnn());
-                    const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                    traits = ctx.Builder(traits->Pos())
-                        .Callable(traits->Content())
-                            .Add(0, inputItemType)
-                            .Add(1, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)))
-                            .Add(2, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(2), oldItemType, ctx)))
-                            .Add(3, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(3), oldItemType, ctx)))
-                            .Add(4, ctx.DeepCopyLambda(*traits->Child(4)))
-                            .Add(5, traits->Child(5)->IsLambda() ? ctx.DeepCopyLambda(*traits->Child(5)) : traits->ChildPtr(5))
-                        .Seal()
-                        .Build();
-                } else {
-                    TExprNodeList args;
-                    args.push_back(inputType);
-                    if (traits->ChildrenSize() > 1) {
+                    bool isDistinct = kvTuple->ChildrenSize() == 3;
+                    if (!isDistinct) {
                         YQL_ENSURE(traits->Head().GetTypeAnn());
-                        const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
-                            ->Cast<TListExprType>()->GetItemType();
-                        args.push_back(ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)));
+                        const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                        traits = ctx.Builder(traits->Pos())
+                            .Callable(traits->Content())
+                                .Add(0, inputItemType)
+                                .Add(1, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)))
+                                .Add(2, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(2), oldItemType, ctx)))
+                                .Add(3, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(3), oldItemType, ctx)))
+                                .Add(4, ctx.DeepCopyLambda(*traits->Child(4)))
+                                .Add(5, traits->Child(5)->IsLambda() ? ctx.DeepCopyLambda(*traits->Child(5)) : traits->ChildPtr(5))
+                            .Seal()
+                            .Build();
                     }
-                    if (traits->ChildrenSize() > 2) {
-                        args.push_back(traits->ChildPtr(2));
-                    }
-                    traits = ctx.NewCallable(traits->Pos(), traits->Content(), std::move(args));
+                } else if (traits->IsCallable({"Lag", "Lead", "Rank", "DenseRank", "PercentRank"})) {
+                    YQL_ENSURE(traits->Head().GetTypeAnn());
+                    const TTypeAnnotationNode& oldItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                        ->Cast<TListExprType>()->GetItemType();
+                    traits = ctx.ChangeChild(*traits, 1, ctx.DeepCopyLambda(*ReplaceFirstLambdaArgWithCastStruct(*traits->Child(1), oldItemType, ctx)));
                 }
-
-                winOnArgs.push_back(ctx.NewList(kvTuple->Pos(), {columnName, traits}));
+                winOnArgs.push_back(ctx.ChangeChild(*kvTuple, 1, std::move(traits)));
             }
             newFrames.push_back(ctx.ChangeChildren(*frameNode, std::move(winOnArgs)));
         }

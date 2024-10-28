@@ -54,11 +54,8 @@ namespace NActors {
     }
 
     void TSyncHttpMon::Stop() {
-        if (IndexMonPage) {
-            IndexMonPage->ClearPages(); // it's required to avoid loop-reference
-            TBase::Stop();
-            IndexMonPage.Drop();
-        }
+        IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+        TBase::Stop();
     }
 
     void TSyncHttpMon::Register(NMonitoring::IMonPage* page) {
@@ -81,7 +78,8 @@ namespace NActors {
             fields.ActorSystem,
             fields.ActorId,
             fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
-            fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
+            fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
+            fields.MonServiceName);
         if (fields.Index) {
             fields.Index->Register(page);
             if (fields.SortPages) {

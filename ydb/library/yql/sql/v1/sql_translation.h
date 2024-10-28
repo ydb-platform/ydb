@@ -101,8 +101,6 @@ TDeferredAtom PureColumnOrNamed(const TRule_pure_column_or_named& node, TTransla
 
 bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node, TTranslation& ctx, TVector<TDeferredAtom>& outList);
 
-bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<TIndexDescription>& indexes);
-
 std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TViewDescription view, TTranslation& ctx);
 
 std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
@@ -177,7 +175,15 @@ protected:
     bool StoreDataSourceSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool StoreResourcePoolSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
     bool StoreResourcePoolSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
+    bool StoreResourcePoolClassifierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
+    bool StoreResourcePoolClassifierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
     bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType);
+
+    bool CreateTableIndex(const TRule_table_index& node, TVector<TIndexDescription>& indexes);
+    bool CreateIndexSettings(const TRule_with_index_settings& settingsNode, TIndexDescription::EType indexType, TIndexDescription::TIndexSettings& indexSettings);
+    bool CreateIndexSettingEntry(const TIdentifier& id, const TRule_index_setting_value& value, TIndexDescription::EType indexType, TIndexDescription::TIndexSettings& indexSettings);
+    template<typename T>
+    std::tuple<bool, T, TString> GetIndexSettingValue(const TRule_index_setting_value& node);
 
     TIdentifier GetTopicConsumerId(const TRule_topic_consumer_ref& node);
     bool CreateConsumerSettings(const TRule_topic_consumer_settings& settingsNode, TTopicConsumerSettings& settings);
@@ -233,11 +239,30 @@ protected:
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction);
+    bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
+    bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_classifier_action& alterAction);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result);
     bool PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption);
     bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
     bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
+    bool StoreStringSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
+    bool StoreStringSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
+    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, const TRule_backup_collection_settings& settings);
+    bool ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions);
+    bool ParseBackupCollectionTables(TVector<TDeferredAtom>& result, const TRule_table_list& tables);
+    bool ParseBackupCollectionEntry(
+        bool& addDatabase,
+        bool& removeDatabase,
+        TVector<TDeferredAtom>& addTables,
+        TVector<TDeferredAtom>& removeTables,
+        const TRule_alter_backup_collection_entry& entry);
+    bool ParseBackupCollectionEntries(
+        bool& addDatabase,
+        bool& removeDatabase,
+        TVector<TDeferredAtom>& addTables,
+        TVector<TDeferredAtom>& removeTables,
+        const TRule_alter_backup_collection_entries& entries);
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
@@ -254,11 +279,16 @@ private:
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
     bool StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);
+    bool ValidateTableSettings(const TTableSettings& settings);
+
 protected:
     NSQLTranslation::ESqlMode Mode;
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
+
+bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
+bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 
 template<typename TChar>
 struct TPatternComponent {

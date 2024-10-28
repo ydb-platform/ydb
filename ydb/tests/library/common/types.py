@@ -8,23 +8,6 @@ from ydb.tests.library.common.generators import int_between, one_of, float_in, s
 
 
 @unique
-class DeltaTypes(IntEnum):
-    AddTable = 1,
-    DropTable = 2,
-    AddColumn = 3,
-    DropColumn = 4,
-    AddColumnToKey = 5,
-    AddColumnToFamily = 6,
-    AddFamily = 7,
-    UpdateExecutorInfo = 8,
-    SetCompactionPolicy = 9,
-    SetRoom = 10,
-    SetFamily = 11,
-    SetRedo = 12,
-    SetTable = 13
-
-
-@unique
 class PDiskCategory(IntEnum):
     ROT = 0
     SSD = 1

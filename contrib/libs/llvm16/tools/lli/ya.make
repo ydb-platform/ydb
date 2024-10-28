@@ -2,6 +2,8 @@
 
 PROGRAM()
 
+VERSION(16.0.0)
+
 LICENSE(Apache-2.0 WITH LLVM-exception)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
@@ -71,6 +73,15 @@ PEERDIR(
 IF (OS_LINUX)
     PEERDIR(
         contrib/libs/llvm16/lib/ExecutionEngine/PerfJITEvents
+    )
+ENDIF()
+
+IF (ARCH_AARCH64)
+    PEERDIR(
+        contrib/libs/llvm16/lib/Target/AArch64
+        contrib/libs/llvm16/lib/Target/AArch64/AsmParser
+        contrib/libs/llvm16/lib/Target/AArch64/MCTargetDesc
+        contrib/libs/llvm16/lib/Target/AArch64/TargetInfo
     )
 ENDIF()
 

@@ -25,7 +25,7 @@ public:
 
     const TTag& Decode(TTagId tagId) const;
     int GetSize() const;
-    THashMap<TString, int> GetTopByKey() const;
+    THashMap<std::string, int> GetTopByKey() const;
 
     void DumpTags(NProto::TSensorDump* dump);
 

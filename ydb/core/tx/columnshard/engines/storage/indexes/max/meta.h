@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+
 namespace NKikimr::NOlap::NIndexes::NMax {
 
 class TIndexMeta: public TIndexByColumns {
@@ -12,6 +13,7 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
+        Y_UNUSED(newMeta);
         return TConclusionStatus::Fail("max index not modifiable");
     }
     virtual void DoFillIndexCheckers(

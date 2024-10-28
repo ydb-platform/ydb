@@ -39,7 +39,7 @@ struct TOauth2TokenExchangeParams {
 
     FLUENT_SETTING_DEFAULT(TString, GrantType, "urn:ietf:params:oauth:grant-type:token-exchange");
 
-    FLUENT_SETTING(TString, Resource);
+    FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Resource);
     FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Audience);
     FLUENT_SETTING_VECTOR_OR_SINGLE(TString, Scope);
 

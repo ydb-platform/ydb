@@ -15,6 +15,7 @@
 #include <yt/yt/core/logging/zstd_compression.h>
 #include <yt/yt/core/logging/config.h>
 #include <yt/yt/core/logging/formatter.h>
+#include <yt/yt/core/logging/system_log_event_provider.h>
 
 #include <yt/yt/core/json/json_parser.h>
 
@@ -191,6 +192,7 @@ protected:
 
         auto writer = CreateFileLogWriter(
             std::make_unique<TPlainTextLogFormatter>(),
+            CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
             this);
@@ -222,14 +224,14 @@ TEST_F(TLoggingTest, ReloadOnSighup)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -270,14 +272,14 @@ TEST_F(TLoggingTest, ReloadOnRename)
         watch_period = 1000;
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -316,6 +318,7 @@ TEST_F(TLoggingTest, FileWriter)
 
     auto writer = CreateFileLogWriter(
         std::make_unique<TPlainTextLogFormatter>(),
+        CreateDefaultSystemLogEventProvider(writerConfig),
         "test_writer",
         writerConfig,
         this);
@@ -369,9 +372,13 @@ TEST_F(TLoggingTest, ZstdCompression)
 TEST_F(TLoggingTest, StreamWriter)
 {
     TStringStream stringOutput;
+    auto config = New<TLogWriterConfig>();
+    auto eventProvider = CreateDefaultSystemLogEventProvider(config);
     auto writer = CreateStreamLogWriter(
         std::make_unique<TPlainTextLogFormatter>(),
+        std::move(eventProvider),
         "test_writer",
+        std::move(config),
         &stringOutput);
 
     WritePlainTextEvent(writer);
@@ -435,22 +442,22 @@ TEST_F(TLoggingTest, LogManager)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
             {
-                "min_level" = "error";
-                "writers" = [ "error" ];
+                min_level = "error";
+                writers = [ "error" ];
             };
         ];
-        "writers" = {
+        writers = {
             "error" = {
-                "file_name" = "%v";
-                "type" = "file";
+                file_name = "%v";
+                type = "file";
             };
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", errorFile.Name(), infoFile.Name()));
@@ -479,14 +486,14 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "debug";
-                "writers" = [ "debug" ];
+                min_level = "debug";
+                writers = [ "debug" ];
             };
         ];
-        "writers" = {
+        writers = {
             "debug" = {
-                "file_name" = "%v";
-                "type" = "file";
+                file_name = "%v";
+                type = "file";
             };
         };
     })", debugFile.Name()));
@@ -526,7 +533,8 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
             writerConfig->FileName = logFile.Name();
 
             auto writer = CreateFileLogWriter(
-                std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}, /*enableControllMessages*/ true, enableSourceLocation),
+                std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}, enableSourceLocation),
+                CreateDefaultSystemLogEventProvider(writerConfig),
                 "test_writer",
                 writerConfig,
                 this);
@@ -576,6 +584,7 @@ TEST_F(TLoggingTest, StructuredLogging)
 
         auto writer = CreateFileLogWriter(
             std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}),
+            CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
             this);
@@ -613,6 +622,7 @@ TEST_F(TLoggingTest, UnstructuredLogging)
 
         auto writer = CreateFileLogWriter(
             std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}),
+            CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
             this);
@@ -659,13 +669,14 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
     auto formatter = std::make_unique<TStructuredLogFormatter>(
         ELogFormat::Json,
         /*commonFields*/ THashMap<TString, INodePtr>{},
-        /*enableControlMessages*/ true,
         /*enableSourceLocation*/ false,
         /*enableSystemFields*/ true,
+        /*enableHostField*/ false,
         jsonFormat);
 
     auto writer = CreateFileLogWriter(
         std::move(formatter),
+        CreateDefaultSystemLogEventProvider(writerConfig),
         "test_writer",
         writerConfig,
         this);
@@ -691,15 +702,15 @@ TEST_F(TLoggingTest, StructuredLoggingWithValidator)
         rules = [
             {
                 "family" = "structured";
-                "min_level" = "info";
-                "writers" = [ "test" ];
+                min_level = info;
+                writers = [ "test" ];
             };
         ];
-        "writers" = {
+        writers = {
             "test" = {
                 "format" = "structured";
-                "file_name" = "%v";
-                "type" = "file";
+                file_name = "%v";
+                type = "file";
             };
         };
         "structured_validation_sampling_rate" = 1.0;
@@ -741,15 +752,15 @@ TEST_F(TLoggingTest, StructuredValidationWithSamplingRate)
         rules = [
             {
                 "family" = "structured";
-                "min_level" = "info";
-                "writers" = [ "test" ];
+                min_level = info;
+                writers = [ "test" ];
             };
         ];
-        "writers" = {
+        writers = {
             "test" = {
-                "file_name" = "%v";
+                file_name = "%v";
                 "format" = "structured";
-                "type" = "file";
+                type = "file";
             }
         };
         "structured_validation_sampling_rate" = 0.5;
@@ -831,15 +842,15 @@ TEST_P(TBuiltinRotationTest, All)
         flush_period = 100;
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
+        writers = {
+            info = {
+                file_name = "%v";
                 "use_timestamp_suffix" = %v;
-                "type" = "file";
+                type = "file";
                 "rotation_policy" = {
                     "max_segment_count_to_keep" = %v;
                     "max_segment_size" = 10;
@@ -1051,14 +1062,14 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
     })", logFile.Name()));
@@ -1073,21 +1084,21 @@ TEST_F(TLoggingTest, DISABLED_LogFatal)
 
 // Windows does not support request tracing for now.
 #ifndef _win_
-TEST_F(TLoggingTest, RequestSuppression)
+TEST_F(TLoggingTest, SupressedRequests)
 {
     TTempFile logFile(GenerateLogFileName());
 
     Configure(Format(R"({
         rules = [
             {
-                "min_level" = "info";
-                "writers" = [ "info" ];
+                min_level = info;
+                writers = [ info ];
             };
         ];
-        "writers" = {
-            "info" = {
-                "file_name" = "%v";
-                "type" = "file";
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
             };
         };
         "request_suppression_timeout" = 100;
@@ -1113,6 +1124,73 @@ TEST_F(TLoggingTest, RequestSuppression)
     EXPECT_TRUE(lines[0].find("Info message") != TString::npos);
 }
 #endif
+
+TEST_F(TLoggingTest, SuppressedMessages)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
+            };
+        };
+        suppressed_messages = ["Suppressed message"];
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Suppressed message 1");
+    YT_LOG_INFO("Suppressed message 2");
+    YT_LOG_INFO("Good message");
+
+    TLogManager::Get()->Synchronize();
+
+    auto lines = ReadPlainTextEvents(logFile.Name());
+    EXPECT_EQ(1, std::ssize(lines));
+    EXPECT_TRUE(lines[0].find("Good message") != TString::npos);
+}
+
+TEST_F(TLoggingTest, MessageLevelOverride)
+{
+    TTempFile logFile(GenerateLogFileName());
+
+    Configure(Format(R"({
+        rules = [
+            {
+                min_level = info;
+                writers = [ info ];
+            };
+        ];
+        writers = {
+            info = {
+                file_name = "%v";
+                type = "file";
+            };
+        };
+        message_level_overrides = {
+            "Overridden message" = "info";
+        };
+    })", logFile.Name()));
+
+    YT_LOG_INFO("Overridden message 1");
+    YT_LOG_TRACE("Overridden message 2");
+    YT_LOG_INFO("Good message");
+
+    TLogManager::Get()->Synchronize();
+
+    auto lines = ReadPlainTextEvents(logFile.Name());
+    for (auto l : lines) Cerr << l << Endl;
+    EXPECT_EQ(3, std::ssize(lines));
+    EXPECT_TRUE(lines[0].find("Overridden message 1") != TString::npos);
+    EXPECT_TRUE(lines[1].find("Overridden message 2") != TString::npos);
+    EXPECT_TRUE(lines[2].find("Good message") != TString::npos);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1187,15 +1265,15 @@ protected:
         Configure(Format(R"({
             rules = [
                 {
-                    "min_level" = "info";
-                    "max_level" = "info";
-                    "writers" = [ "info" ];
+                    min_level = info;
+                    "max_level" = info;
+                    writers = [ info ];
                 };
             ];
-            "writers" = {
-                "info" = {
-                    "file_name" = "%v";
-                    "type" = "file";
+            writers = {
+                info = {
+                    file_name = "%v";
+                    type = "file";
                 };
             };
         })", fileName));
@@ -1204,7 +1282,7 @@ protected:
     void LogLongMessages()
     {
         for (int i = 0; i < N; ++i) {
-            YT_LOG_INFO("%v", MakeRange(Chunks_.data(), Chunks_.data() + i));
+            YT_LOG_INFO("%v", TRange(Chunks_.data(), Chunks_.data() + i));
         }
     }
 
@@ -1215,7 +1293,7 @@ protected:
         auto lines = ReadPlainTextEvents(fileName);
         EXPECT_EQ(N, std::ssize(lines));
         for (int i = 0; i < N; ++i) {
-            auto expected = Format("%v", MakeRange(Chunks_.data(), Chunks_.data() + i));
+            auto expected = Format("%v", TRange(Chunks_.data(), Chunks_.data() + i));
             auto actual = lines[i];
             EXPECT_NE(TString::npos, actual.find(expected));
         }
@@ -1377,9 +1455,9 @@ TEST_F(TCustomWriterTest, UnknownWriterType)
         {
             Configure(R"({
                 "rules" = [];
-                "writers" = {
+                writers = {
                     "custom" = {
-                        "type" = "unknown";
+                        type = "unknown";
                     };
                 };
             })");
@@ -1393,9 +1471,9 @@ TEST_F(TCustomWriterTest, WriterConfigValidation)
         {
             Configure(Format(R"({
                 "rules" = [];
-                "writers" = {
+                writers = {
                     "custom" = {
-                        "type" = "%v";
+                        type = "%v";
                         "padding" = -10;
                     };
                 };
@@ -1409,13 +1487,13 @@ TEST_F(TCustomWriterTest, Write)
     Configure(Format(R"({
         "rules" = [
             {
-                "min_level" = "info";
-                "writers" = [ "custom" ];
+                min_level = info;
+                writers = [ "custom" ];
             }
         ];
-        "writers" = {
+        writers = {
             "custom" = {
-                "type" = "%v";
+                type = "%v";
                 "padding" = 2;
             };
         };

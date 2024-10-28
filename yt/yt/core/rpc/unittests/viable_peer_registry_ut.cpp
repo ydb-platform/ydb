@@ -85,8 +85,9 @@ class TFakeChannel
     : public IChannel
 {
 public:
-    TFakeChannel(TString address, THashSet<TString>* channelRegistry)
-        : Address_(std::move(address))
+    TFakeChannel(const std::string& address, THashSet<std::string>* channelRegistry)
+        : Address_(address)
+        , EndpointDescription_(address)
         , ChannelRegistry_(channelRegistry)
     {
         if (ChannelRegistry_) {
@@ -94,9 +95,9 @@ public:
         }
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
-        return Address_;
+        return EndpointDescription_;
     }
 
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override
@@ -129,28 +130,37 @@ public:
         return 0;
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
     DEFINE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
+
 private:
-    TString Address_;
-    THashSet<TString>* ChannelRegistry_;
+    const std::string Address_;
+    const std::string EndpointDescription_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
+
+    THashSet<std::string>* ChannelRegistry_;
 };
 
 class TFakeChannelFactory
     : public IChannelFactory
 {
 public:
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         return New<TFakeChannel>(address, &ChannelRegistry_);
     }
 
-    const THashSet<TString>& GetChannelRegistry() const
+    const THashSet<std::string>& GetChannelRegistry() const
     {
         return ChannelRegistry_;
     }
 
 private:
-    THashSet<TString> ChannelRegistry_;
+    THashSet<std::string> ChannelRegistry_;
 };
 
 IViablePeerRegistryPtr CreateTestRegistry(
@@ -173,13 +183,13 @@ IViablePeerRegistryPtr CreateTestRegistry(
 
     return CreateViablePeerRegistry(
         config,
-        BIND([=] (const TString& address) { return channelFactory->CreateChannel(address); }),
+        BIND([=] (const std::string& address) { return channelFactory->CreateChannel(address); }),
         Logger);
 }
 
-std::vector<TString> AddressesFromChannels(const std::vector<IChannelPtr>& channels)
+std::vector<std::string> AddressesFromChannels(const std::vector<IChannelPtr>& channels)
 {
-    std::vector<TString> result;
+    std::vector<std::string> result;
     for (const auto& channel: channels) {
         result.push_back(channel->GetEndpointDescription());
     }
@@ -356,7 +366,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetRandomChannel)
         EXPECT_TRUE(viablePeerRegistry->RegisterPeer(Format("address-%v", i)));
     }
 
-    THashSet<TString> retrievedAddresses;
+    THashSet<std::string> retrievedAddresses;
 
     auto req = CreateRequest();
     for (int iter = 0; iter < 100; ++iter) {
@@ -378,7 +388,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetStickyChannel)
         EXPECT_TRUE(viablePeerRegistry->RegisterPeer(Format("address-%v", i)));
     }
 
-    THashSet<TString> retrievedAddresses;
+    THashSet<std::string> retrievedAddresses;
 
     auto req = CreateRequest(/*enableStickiness*/ true);
     for (int iter = 0; iter < 100; ++iter) {
@@ -534,7 +544,7 @@ TEST(TPreferLocalViablePeerRegistryTest, MinPeerCountForPriorityAwareness)
         EXPECT_TRUE(viablePeerRegistry->RegisterPeer(Format("non-local-%v.sas.yp-c.yandex.net", i)));
     }
 
-    THashSet<TString> retrievedAddresses;
+    THashSet<std::string> retrievedAddresses;
 
     auto req = CreateRequest();
     for (int iter = 0; iter < 100; ++iter) {

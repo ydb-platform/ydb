@@ -107,8 +107,10 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TString from;
-            TString to;
+            const auto now = TInstant::Now();
+            const auto now1h = now - TDuration::Hours(1);
+            TString from = now1h.ToStringUpToSeconds();
+            TString to = now.ToStringUpToSeconds();
             TString program;
             bool downsamplingDisabled = false;
             TString downsamplingAggregation = "AVG";
@@ -198,6 +200,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
+                    .World(soReadObject.World())
                     .Project(soReadObject.Object().Project())
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
@@ -225,7 +228,7 @@ public:
         return TSoWrite::Match(&write);
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
         const TDqSource dqSource(&node);
         const auto maybeSettings = dqSource.Settings().Maybe<TSoSourceSettings>();
         if (!maybeSettings) {

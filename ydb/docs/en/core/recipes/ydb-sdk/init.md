@@ -1,8 +1,3 @@
----
-title: "Instructions for initializing the driver in {{ ydb-short-name }}"
-description: "The article describes the examples of the code for connecting to {{ ydb-short-name }} (driver creation) in different {{ ydb-short-name }} SDKs."
----
-
 # Initialize the driver
 
 {% include [work in progress message](_includes/addition.md) %}
@@ -82,26 +77,27 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
 
   {% cut "Using a connection string" %}
 
-    The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
-    ```golang
-    package main
+  The `database/sql` driver is registered when importing the package of a specific driver separated by an underscore:
 
-    import (
-      "database/sql"
+  ```golang
+  package main
 
-      _ "github.com/ydb-platform/ydb-go-sdk/v3"
-    )
+  import (
+    "database/sql"
 
-    func main() {
-      db, err := sql.Open("ydb", "grpc://localhost:2136/local")
-      if err != nil {
-        panic(err)
-      }
-      defer db.Close()
+    _ "github.com/ydb-platform/ydb-go-sdk/v3"
+  )
 
-      // ...
+  func main() {
+    db, err := sql.Open("ydb", "grpc://localhost:2136/local")
+    if err != nil {
+      panic(err)
     }
-    ```
+    defer db.Close()
+
+    // ...
+  }
+  ```
 
   {% endcut %}
 
@@ -144,7 +140,7 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
       'iam_config'  => [
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new \YdbPlatform\Ydb\Auth\Implement\AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
   ];
 

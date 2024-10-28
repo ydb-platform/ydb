@@ -25,6 +25,4 @@ SRCS(
     incrhuge_log_merger_ut.cpp
 )
 
-REQUIREMENTS(ram:9)
-
 END()

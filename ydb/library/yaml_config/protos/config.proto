@@ -70,9 +70,9 @@ message TExtendedHostConfigDrive {
     optional bool SharedWithOs = 3 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional bool ReadCentric = 4 [(NMarkers.CopyTo) = "THostConfigDrive"];
     optional uint64 Kind = 5 [(NMarkers.CopyTo) = "THostConfigDrive"];
-    optional uint64 ExpectedSlotCount = 6;
 
-    optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 7 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6 [(NMarkers.CopyTo) = "THostConfigDrive"];
+    optional uint64 ExpectedSlotCount = 7;
 }
 
 message THosts {

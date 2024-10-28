@@ -121,7 +121,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
         case FederatedQuery::BindingSetting::kObjectStorage:
             const FederatedQuery::ObjectStorageBinding objectStorage = setting.object_storage();
             for (const auto& subset: objectStorage.subset()) {
-                issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit));
+                issues.AddIssues(NKikimr::NExternalSource::Validate(subset.schema(), subset, pathsLimit, subset.path_pattern()));
             }
             break;
         }

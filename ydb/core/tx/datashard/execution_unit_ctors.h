@@ -75,6 +75,7 @@ THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard &dataShard, TPipelin
 THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckReadUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateReadUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateIncrementalRestoreSrcUnit(TDataShard &dataShard, TPipeline &pipeline);
 
 } // namespace NDataShard
 } // namespace NKikimr

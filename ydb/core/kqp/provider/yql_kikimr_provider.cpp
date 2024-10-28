@@ -73,6 +73,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateSequence::CallableName());
         DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
+        DataSinkNames.insert(TKiAnalyzeTable::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -220,27 +221,27 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     TVector<const TItemExprType*> items;
     for (auto pair : Metadata->Columns) {
         auto& column = pair.second;
-
-        // Currently Kikimr doesn't have parametrized types and Decimal type
-        // is passed with no params. It's known to always be Decimal(22,9),
-        // so we transform Decimal type here.
         const TTypeAnnotationNode *type;
-        if (to_lower(column.Type) == "decimal") {
-            type = ctx.MakeType<TDataExprParamsType>(
-                NKikimr::NUdf::GetDataSlot(column.Type),
-                ToString(NKikimr::NScheme::DECIMAL_PRECISION),
-                ToString(NKikimr::NScheme::DECIMAL_SCALE));
-        } else {
-            if (column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
-                type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
-            } else {
-                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetTypeDesc()));
-            }
+        switch (column.TypeInfo.GetTypeId()) {
+        case NKikimr::NScheme::NTypeIds::Pg: {
+            type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
+            break;
+        }
+        case NKikimr::NScheme::NTypeIds::Decimal: {
+            const NKikimr::NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
+            type = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(decimal.GetPrecision()), ToString(decimal.GetScale()));
+            if (!column.NotNull)
+                type = ctx.MakeType<TOptionalExprType>(type);
+            break;
+        }
+        default: {
+            type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
+            if (!column.NotNull)
+                type = ctx.MakeType<TOptionalExprType>(type);
+            break;
+        }
         }
 
-        if (!column.NotNull && column.TypeInfo.GetTypeId() != NKikimr::NScheme::NTypeIds::Pg) {
-            type = ctx.MakeType<TOptionalExprType>(type);
-        }
 
         items.push_back(ctx.MakeType<TItemExprType>(column.Name, type));
 
@@ -561,8 +562,8 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
     auto slot = type->Cast<TDataExprType>()->GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
-    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
-        NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId));
+    YQL_ENSURE(typeId == NKikimr::NScheme::NTypeIds::Decimal || NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
 
     auto& protoType = *proto.MutableType();
     auto& protoValue = *proto.MutableValue();
@@ -600,7 +601,7 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             break;
         case EDataSlot::String:
         case EDataSlot::DyNumber:
-            protoValue.SetBytes(value.Data(), value.Size());
+            protoValue.SetBytes(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
@@ -629,7 +630,7 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
             break;
         }
         case EDataSlot::Uuid: {
-            const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+            const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
             protoValue.SetLow128(uuidData[0]);
             protoValue.SetHi128(uuidData[1]);
             break;
@@ -667,7 +668,7 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
         auto actualPgType = valueType->Cast<TPgExprType>();
         YQL_ENSURE(actualPgType);
 
-        auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+        auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
         if (!typeDesc) {
             return TStringBuilder() << "Failed to parse default expr typename " << actualPgType->GetName();
         }
@@ -743,7 +744,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             break;
         case EDataSlot::String:
         case EDataSlot::DyNumber:
-            protoValue.set_bytes_value(value.Data(), value.Size());
+            protoValue.set_bytes_value(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
@@ -772,7 +773,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             break;
         }
         case EDataSlot::Uuid: {
-            const ui64* uuidData = reinterpret_cast<const ui64*>(value.Data());
+            const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
             protoValue.set_low_128(uuidData[0]);
             protoValue.set_high_128(uuidData[1]);
             break;
@@ -829,6 +830,39 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos) {
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
+
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance) {
+    if (distance == "cosine")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+    else if (distance == "manhattan")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+    else if (distance == "euclidean")
+        return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+    else
+        YQL_ENSURE(false, "Wrong index setting distance: " << distance);
+};
+
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity) {
+    if (similarity == "cosine")
+        return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+    else if (similarity == "inner_product")
+        return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+    else
+        YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
+};
+
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType) {
+    if (vectorType == "float")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+    else if (vectorType == "uint8")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+    else if (vectorType == "int8")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+    else if (vectorType == "bit")
+        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+    else
+        YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
+};
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
     return Singleton<TKikimrData>()->DataSourceNames;
@@ -964,3 +998,36 @@ TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPo
 }
 
 } // namespace NYql
+
+namespace NSQLTranslation {
+
+void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationSettings& serializedSettings) {
+    serializedSettings.SetPathPrefix(settings.PathPrefix);
+    serializedSettings.SetSyntaxVersion(settings.SyntaxVersion);
+    serializedSettings.SetAnsiLexer(settings.AnsiLexer);
+    serializedSettings.SetPgParser(settings.PgParser);
+
+    auto* pragmas = serializedSettings.MutablePragmas();
+    pragmas->Clear();
+    pragmas->Add(settings.Flags.begin(), settings.Flags.end());
+}
+
+void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, TTranslationSettings& settings) {
+    #define DeserializeSetting(settingName) \
+        if (serializedSettings.Has##settingName()) { \
+            settings.settingName = serializedSettings.Get##settingName(); \
+        }
+
+        DeserializeSetting(PathPrefix);
+        DeserializeSetting(SyntaxVersion);
+        DeserializeSetting(AnsiLexer);
+        DeserializeSetting(PgParser);
+
+    #undef DeserializeSetting
+
+    // overwrite existing pragmas
+    settings.Flags.clear();
+    settings.Flags.insert(serializedSettings.GetPragmas().begin(), serializedSettings.GetPragmas().end());
+}
+
+}

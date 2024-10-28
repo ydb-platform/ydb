@@ -155,7 +155,8 @@ void YTreeNodeToUnversionedValue(
             builder->AddValue(MakeUnversionedSentinelValue(EValueType::Null, id, flags));
             break;
         default:
-            builder->AddValue(MakeUnversionedAnyValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
+            value->MutableAttributes()->Clear();
+            builder->AddValue(MakeUnversionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
             break;
     }
 }
@@ -332,7 +333,8 @@ TVersionedRow YsonToVersionedRow(
                 builder.AddValue(MakeVersionedSentinelValue(EValueType::Null, timestamp, id, flags));
                 break;
             default:
-                builder.AddValue(MakeVersionedAnyValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
+                value->MutableAttributes()->Clear();
+                builder.AddValue(MakeVersionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
                 break;
         }
     }
@@ -463,6 +465,25 @@ void FromUnversionedValue(TString* value, TUnversionedValue unversionedValue)
 
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
+    const std::string& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    ToUnversionedValue(unversionedValue, static_cast<TStringBuf>(value), rowBuffer, id, flags);
+}
+
+void FromUnversionedValue(std::string* value, TUnversionedValue unversionedValue)
+{
+    TStringBuf uncapturedValue;
+    FromUnversionedValue(&uncapturedValue, unversionedValue);
+    *value = std::string(uncapturedValue);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
     TStringBuf value,
     const TRowBufferPtr& rowBuffer,
     int id,
@@ -474,7 +495,7 @@ void ToUnversionedValue(
 void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
-        *value = TStringBuf{};
+        *value = {};
         return;
     }
     if (unversionedValue.Type != EValueType::String) {
@@ -482,6 +503,18 @@ void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue)
             unversionedValue.Type);
     }
     *value = unversionedValue.AsStringBuf();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    std::string_view value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedStringValue(TStringBuf(value), id, flags));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

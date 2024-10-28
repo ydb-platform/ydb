@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.4.0)
+VERSION(3.5.0)
 
 LICENSE(Apache-2.0)
 
@@ -21,12 +21,17 @@ PY_SRCS(
     argcomplete/packages/__init__.py
     argcomplete/packages/_argparse.py
     argcomplete/packages/_shlex.py
+    argcomplete/scripts/__init__.py
+    argcomplete/scripts/activate_global_python_argcomplete.py
+    argcomplete/scripts/python_argcomplete_check_easy_install_script.py
+    argcomplete/scripts/register_python_argcomplete.py
     argcomplete/shell_integration.py
 )
 
 RESOURCE_FILES(
     PREFIX contrib/python/argcomplete/py3/
     .dist-info/METADATA
+    .dist-info/entry_points.txt
     .dist-info/top_level.txt
     argcomplete/bash_completion.d/_python-argcomplete
     argcomplete/py.typed

@@ -1,6 +1,6 @@
 /* Muscle table manager for Bison.
 
-   Copyright (C) 2001-2015, 2018-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001-2015, 2018-2021 Free Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
 
@@ -15,19 +15,19 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 #include "system.h"
 
 #include <hash.h>
+#include <quote.h>
 
 #include "complain.h"
 #include "files.h"
 #include "fixits.h"
 #include "getargs.h"
 #include "muscle-tab.h"
-#include "quote.h"
 
 muscle_kind
 muscle_kind_new (char const *k)
@@ -107,8 +107,7 @@ muscle_entry_new (char const *key)
   res->key = key;
   res->value = NULL;
   res->storage = NULL;
-  if (!hash_insert (muscle_table, res))
-    xalloc_die ();
+  hash_xinsert (muscle_table, res);
   return res;
 }
 
@@ -126,11 +125,8 @@ muscle_init (void)
   /* Initialize the muscle obstack.  */
   obstack_init (&muscle_obstack);
 
-  muscle_table = hash_initialize (HT_INITIAL_CAPACITY, NULL, hash_muscle,
-                                  hash_compare_muscles, muscle_entry_free);
-
-  /* Version and input file.  */
-  MUSCLE_INSERT_STRING ("version", VERSION);
+  muscle_table = hash_xinitialize (HT_INITIAL_CAPACITY, NULL, hash_muscle,
+                                   hash_compare_muscles, muscle_entry_free);
 }
 
 
@@ -142,8 +138,7 @@ muscle_free (void)
 }
 
 /* Look for the muscle named KEY.  Return NULL if does not exist.  */
-static
-muscle_entry *
+static muscle_entry *
 muscle_lookup (char const *key)
 {
   muscle_entry probe;
@@ -211,7 +206,7 @@ muscle_syncline_grow (char const *key, location loc)
   obstack_printf (&muscle_obstack, "]b4_syncline(%d, ", loc.start.line);
   obstack_quote (&muscle_obstack,
                  quotearg_style (c_quoting_style, loc.start.file));
-  obstack_sgrow (&muscle_obstack, ")[");
+  obstack_sgrow (&muscle_obstack, ")dnl\n[");
   char const *extension = obstack_finish0 (&muscle_obstack);
   muscle_grow (key, extension, "", "");
   obstack_free (&muscle_obstack, extension);
@@ -227,7 +222,7 @@ void
 muscle_code_grow (const char *key, const char *val, location loc)
 {
   muscle_syncline_grow (key, loc);
-  muscle_grow (key, val, "\n", "\n");
+  muscle_grow (key, val, "", "\n");
 }
 
 
@@ -275,18 +270,14 @@ muscle_boundary_grow (char const *key, boundary bound)
 {
   obstack_sgrow  (&muscle_obstack, "[[");
   obstack_escape (&muscle_obstack, bound.file);
-  obstack_printf (&muscle_obstack, ":%d.%d]]", bound.line, bound.column);
+  obstack_printf (&muscle_obstack, ":%d.%d@@%d]]", bound.line, bound.column, bound.byte);
   char const *extension = obstack_finish0 (&muscle_obstack);
   muscle_grow (key, extension, "", "");
   obstack_free (&muscle_obstack, extension);
 }
 
 
-/* In the format '[[file_name:line.column]], [[file_name:line.column]]',
-   append LOC to MUSCLE.  Use digraphs for special characters in each
-   file name.  */
-
-static void
+void
 muscle_location_grow (char const *key, location loc)
 {
   muscle_boundary_grow (key, loc.start);
@@ -296,7 +287,6 @@ muscle_location_grow (char const *key, location loc)
 
 #define COMMON_DECODE(Value)                                    \
   case '$':                                                     \
-    ++(Value); aver (*(Value) == '[');                          \
     ++(Value); aver (*(Value) == ']');                          \
     ++(Value); aver (*(Value) == '[');                          \
     obstack_sgrow (&muscle_obstack, "$");                       \
@@ -454,6 +444,7 @@ muscle_percent_variable_update (char const *variable,
     { "api.push_pull",              "api.push-pull",             muscle_keyword },
     { "api.tokens.prefix",          "api.token.prefix",          muscle_code },
     { "extends",                    "api.parser.extends",        muscle_keyword },
+    { "filename_type",              "api.filename.type",         muscle_code },
     { "final",                      "api.parser.final",          muscle_keyword },
     { "implements",                 "api.parser.implements",     muscle_keyword },
     { "lex_symbol",                 "api.token.constructor",     -1 },
@@ -462,6 +453,7 @@ muscle_percent_variable_update (char const *variable,
     { "lr.keep-unreachable-states", "lr.keep-unreachable-state", muscle_keyword },
     { "lr.keep_unreachable_states", "lr.keep-unreachable-state", muscle_keyword },
     { "namespace",                  "api.namespace",             muscle_code },
+    { "package",                    "api.package",               muscle_code },
     { "parser_class_name",          "api.parser.class",          muscle_code },
     { "public",                     "api.parser.public",         muscle_keyword },
     { "strictfp",                   "api.parser.strictfp",       muscle_keyword },
@@ -529,15 +521,13 @@ muscle_percent_define_insert (char const *var, location variable_loc,
             = atoi (muscle_find_const (how_name));
           if (how_old == MUSCLE_PERCENT_DEFINE_F)
             goto end;
-          unsigned i = 0;
           /* If assigning the same value, make it a warning.  */
           warnings warn = STREQ (value, current_value) ? Wother : complaint;
-          complain_indent (&variable_loc, warn, &i,
-                           _("%%define variable %s redefined"),
-                           quote (variable));
-          i += SUB_INDENT;
+          complain (&variable_loc, warn,
+                    _("%%define variable %s redefined"),
+                    quote (variable));
           location loc = muscle_percent_define_get_loc (variable);
-          complain_indent (&loc, warn, &i, _("previous definition"));
+          subcomplain (&loc, warn, _("previous definition"));
           fixits_register (&variable_loc, "");
           warned = true;
         }
@@ -630,17 +620,17 @@ muscle_percent_define_check_kind (char const *variable, muscle_kind kind)
         {
         case muscle_code:
           complain (&loc, Wdeprecated,
-                    "%%define variable '%s' requires '{...}' values",
+                    _("%%define variable '%s' requires '{...}' values"),
                     variable);
           break;
         case muscle_keyword:
           complain (&loc, Wdeprecated,
-                    "%%define variable '%s' requires keyword values",
+                    _("%%define variable '%s' requires keyword values"),
                     variable);
           break;
         case muscle_string:
           complain (&loc, Wdeprecated,
-                    "%%define variable '%s' requires '\"...\"' values",
+                    _("%%define variable '%s' requires '\"...\"' values"),
                     variable);
           break;
         }
@@ -714,9 +704,11 @@ muscle_percent_define_default (char const *variable, char const *value)
       {
         uniqstr loc_name = muscle_name (variable, "loc");
         location loc;
-        loc.start.file = loc.end.file = "<default value>";
-        loc.start.line = loc.end.line = -1;
-        loc.start.column = loc.end.column = -1;
+        loc.start.file = "<default value>";
+        loc.start.line = -1;
+        loc.start.column = -1;
+        loc.start.byte = -1;
+        loc.end = loc.start;
         muscle_insert (loc_name, "");
         muscle_location_grow (loc_name, loc);
       }
@@ -741,14 +733,12 @@ muscle_percent_define_check_values (char const * const *values)
           if (!*values)
             {
               location loc = muscle_percent_define_get_loc (*variablep);
-              unsigned i = 0;
-              complain_indent (&loc, complaint, &i,
-                               _("invalid value for %%define variable %s: %s"),
-                               quote (*variablep), quote_n (1, value));
-              i += SUB_INDENT;
+              complain (&loc, complaint,
+                        _("invalid value for %%define variable %s: %s"),
+                        quote (*variablep), quote_n (1, value));
               for (values = variablep + 1; *values; ++values)
-                complain_indent (&loc, complaint | no_caret | silent, &i,
-                                 _("accepted value: %s"), quote (*values));
+                subcomplain (&loc, complaint | no_caret | silent,
+                             _("accepted value: %s"), quote (*values));
             }
           else
             while (*values)

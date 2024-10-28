@@ -25,6 +25,7 @@ DECLARE_REFCOUNTED_STRUCT(TReplicationCard)
 
 DECLARE_REFCOUNTED_STRUCT(IReplicationCardCache)
 DECLARE_REFCOUNTED_CLASS(TReplicationCardCacheConfig)
+DECLARE_REFCOUNTED_CLASS(TReplicationCardCacheDynamicConfig)
 
 struct TReplicationProgress;
 struct TReplicaHistoryItem;
@@ -35,6 +36,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ReplicationCardNotKnown)         (3200))
     ((ReplicationCardMigrated)         (3201))
     ((ChaosCellSuspended)              (3202))
+    ((ReplicationCollocationNotKnown)  (3203))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

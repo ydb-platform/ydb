@@ -65,7 +65,7 @@ inline NKikimr::NUdf::TUnboxedValuePod AnyDatumToPod(Datum datum, bool passByVal
 }
 
 inline Datum PointerDatumFromPod(const NKikimr::NUdf::TUnboxedValuePod& value) {
-    return (Datum)(((const NKikimr::NMiniKQL::TMkqlPAllocHeader*)value.AsBoxed().Get()) + 1);
+    return (Datum)(((const NKikimr::NMiniKQL::TMkqlPAllocHeader*)value.AsRawBoxed()) + 1);
 }
 
 inline Datum PointerDatumFromItem(const NKikimr::NUdf::TBlockItem& value) {
@@ -103,8 +103,8 @@ inline char* MakeCStringNotFilled(size_t size) {
 }
 
 inline char* MakeCString(TStringBuf s) {
-    char* ret = MakeCStringNotFilled(s.Size());
-    memcpy(ret, s.Data(), s.Size());
+    char* ret = MakeCStringNotFilled(s.size());
+    memcpy(ret, s.data(), s.size());
     return ret;
 }
 
@@ -116,8 +116,8 @@ inline char* MakeFixedStringNotFilled(size_t size) {
 
 inline char* MakeFixedString(TStringBuf s, size_t size) {
     auto ret = MakeFixedStringNotFilled(size);
-    Y_ENSURE(s.Size() <= size);
-    memcpy(ret, s.Data(), s.Size());
+    Y_ENSURE(s.size() <= size);
+    memcpy(ret, s.data(), s.size());
     return ret;
 }
 
@@ -128,8 +128,8 @@ inline text* MakeVarNotFilled(size_t size) {
 }
 
 inline text* MakeVar(TStringBuf s) {
-    text* ret = MakeVarNotFilled(s.Size());
-    memcpy(GetMutableVarData(ret), s.Data(), s.Size());
+    text* ret = MakeVarNotFilled(s.size());
+    memcpy(GetMutableVarData(ret), s.data(), s.size());
     return ret;
 }
 
@@ -148,5 +148,24 @@ inline bool PrepareVariadicArray(FunctionCallInfoBaseData& callInfo, const NPg::
     PrepareVariadicArraySlow(callInfo, desc);
     return true;
 }
+
+bool GetPgFuncAddr(ui32 procOid, FmgrInfo& finfo);
+
+class TExtensionsRegistry {
+class TImpl;
+public:
+    static TExtensionsRegistry& Instance();
+    void InitThread();
+    void CleanupThread();
+    void Load(ui32 extensionIndex, const TString& name, const TString& path);
+    PGFunction GetFuncAddr(ui32 extensionIndex, const TString& funcName);
+
+    TExtensionsRegistry();
+
+private:
+    std::unique_ptr<TImpl> Impl_;
+};
+
+void RebuildSysCache();
 
 }

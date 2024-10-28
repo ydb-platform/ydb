@@ -131,11 +131,10 @@ private:
         Consumer->OnBeginMap();
         auto children = node->GetChildren();
         if (Stable_) {
-            using TPair = std::pair<TString, INodePtr>;
             std::sort(
                 children.begin(),
                 children.end(),
-                [] (const TPair& lhs, const TPair& rhs) {
+                [] (const auto& lhs, const auto& rhs) {
                     return lhs.first < rhs.first;
                 });
         }

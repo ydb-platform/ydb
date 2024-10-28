@@ -15,6 +15,7 @@ class TGranuleShardingInfo;
 
 class TPortionInfoConstructor {
 private:
+    bool Constructed = false;
     YDB_ACCESSOR(ui64, PathId, 0);
     std::optional<ui64> PortionId;
 
@@ -25,11 +26,47 @@ private:
     std::optional<ui64> SchemaVersion;
     std::optional<ui64> ShardingVersion;
 
+    std::optional<TSnapshot> CommitSnapshot;
+    std::optional<TInsertWriteId> InsertWriteId;
+
     std::vector<TIndexChunk> Indexes;
     YDB_ACCESSOR_DEF(std::vector<TColumnRecord>, Records);
     std::vector<TUnifiedBlobId> BlobIds;
 
+    class TAddressBlobId {
+    private:
+        TChunkAddress Address;
+        YDB_READONLY(TBlobRangeLink16::TLinkId, BlobIdx, 0);
+
+    public:
+        const TChunkAddress& GetAddress() const {
+            return Address;
+        }
+
+        TAddressBlobId(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx)
+            : Address(address)
+            , BlobIdx(blobIdx)
+        {
+
+        }
+    };
+    std::vector<TAddressBlobId> BlobIdxs;
+    bool NeedBlobIdxsSort = false;
+
+    TPortionInfoConstructor(const TPortionInfoConstructor&) = default;
+    TPortionInfoConstructor& operator=(const TPortionInfoConstructor&) = default;
+
 public:
+    TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
+    TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
+
+    class TTestCopier {
+    public:
+        static TPortionInfoConstructor Copy(const TPortionInfoConstructor& source) {
+            return source;
+        }
+    };
+
     void SetPortionId(const ui64 value) {
         AFL_VERIFY(value);
         PortionId = value;
@@ -37,7 +74,7 @@ public:
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords, const NArrow::TMinMaxSpecialKeys& minMaxSpecial) {
+    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords, const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial) {
         MetaConstructor.FillMetaInfo(firstLastRecords, deletionsCount, minMaxSpecial, snapshotSchema.GetIndexInfo());
     }
 
@@ -55,13 +92,21 @@ public:
         return MetaConstructor;
     }
 
+    TInsertWriteId GetInsertWriteIdVerified() const {
+        AFL_VERIFY(InsertWriteId);
+        return *InsertWriteId;
+    }
+
     TPortionInfoConstructor(const TPortionInfo& portion, const bool withBlobs, const bool withMetadata)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionOptional())
-        , ShardingVersion(portion.GetShardingVersionOptional()) {
+        , ShardingVersion(portion.GetShardingVersionOptional())
+        , CommitSnapshot(portion.GetCommitSnapshotOptional())
+        , InsertWriteId(portion.GetInsertWriteIdOptional())
+    {
         if (withMetadata) {
             MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
@@ -158,6 +203,19 @@ public:
 
     std::shared_ptr<ISnapshotSchema> GetSchema(const TVersionedIndex& index) const;
 
+    void SetCommitSnapshot(const TSnapshot& snap) {
+        AFL_VERIFY(!!InsertWriteId);
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(snap.Valid());
+        CommitSnapshot = snap;
+    }
+
+    void SetInsertWriteId(const TInsertWriteId value) {
+        AFL_VERIFY(!InsertWriteId);
+        AFL_VERIFY((ui64)value);
+        InsertWriteId = value;
+    }
+
     void SetMinSnapshotDeprecated(const TSnapshot& snap) {
         Y_ABORT_UNLESS(snap.Valid());
         MinSnapshotDeprecated = snap;
@@ -216,6 +274,16 @@ public:
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
     }
 
+    const TBlobRange RestoreBlobRangeSlow(const TBlobRangeLink16& linkRange, const TChunkAddress& address) const {
+        for (auto&& i : BlobIdxs) {
+            if (i.GetAddress() == address) {
+                return linkRange.RestoreRange(GetBlobId(i.GetBlobIdx()));
+            }
+        }
+        AFL_VERIFY(false);
+        return TBlobRange();
+    }
+
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
         AFL_VERIFY(linkId < BlobIds.size());
         return BlobIds[linkId];
@@ -226,19 +294,10 @@ public:
     }
 
     void RegisterBlobIdx(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx) {
-        for (auto&& i : Records) {
-            if (i.GetColumnId() == address.GetEntityId() && i.GetChunkIdx() == address.GetChunkIdx()) {
-                i.RegisterBlobIdx(blobIdx);
-                return;
-            }
+        if (BlobIdxs.size() && address < BlobIdxs.back().GetAddress()) {
+            NeedBlobIdxsSort = true;
         }
-        for (auto&& i : Indexes) {
-            if (i.GetIndexId() == address.GetEntityId() && i.GetChunkIdx() == address.GetChunkIdx()) {
-                i.RegisterBlobIdx(blobIdx);
-                return;
-            }
-        }
-        AFL_VERIFY(false)("problem", "portion haven't address for blob registration")("address", address.DebugString());
+        BlobIdxs.emplace_back(address, blobIdx);
     }
 
     TString DebugString() const {
@@ -265,26 +324,37 @@ public:
             std::sort(Indexes.begin(), Indexes.end(), pred);
             CheckChunksOrder(Indexes);
         }
+        if (NeedBlobIdxsSort) {
+            auto pred = [](const TAddressBlobId& l, const TAddressBlobId& r) {
+                return l.GetAddress() < r.GetAddress();
+            };
+            std::sort(BlobIdxs.begin(), BlobIdxs.end(), pred);
+        }
     }
 
     void FullValidation() const {
         AFL_VERIFY(Records.size());
         CheckChunksOrder(Records);
         CheckChunksOrder(Indexes);
-        std::set<ui32> blobIdxs;
-        for (auto&& i : Records) {
-            blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
-        }
-        for (auto&& i : Indexes) {
-            if (i.HasBlobRange()) {
-                blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
-            }
-        }
-        if (BlobIds.size()) {
-            AFL_VERIFY(BlobIds.size() == blobIdxs.size());
-            AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
+        if (BlobIdxs.size()) {
+            AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
+                                                               "indexes", Indexes.size());
         } else {
-            AFL_VERIFY(blobIdxs.empty());
+            std::set<ui32> blobIdxs;
+            for (auto&& i : Records) {
+                blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+            }
+            for (auto&& i : Indexes) {
+                if (i.HasBlobRange()) {
+                    blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
+                }
+            }
+            if (BlobIds.size()) {
+                AFL_VERIFY(BlobIds.size() == blobIdxs.size());
+                AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
+            } else {
+                AFL_VERIFY(blobIdxs.empty());
+            }
         }
     }
 
@@ -305,6 +375,9 @@ public:
     }
 
     TPortionInfo Build(const bool needChunksNormalization);
+    std::shared_ptr<TPortionInfo> BuildPtr(const bool needChunksNormalization) {
+        return std::make_shared<TPortionInfo>(Build(needChunksNormalization));
+    }
 };
 
 class TPortionConstructors {

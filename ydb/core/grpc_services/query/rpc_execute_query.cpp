@@ -1,10 +1,11 @@
 #include "service_query.h"
-
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/audit_dml_operations.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/base/flow_control.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
+#include <ydb/core/grpc_services/grpc_integrity_trails.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
@@ -23,49 +24,8 @@ using TEvExecuteQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::ExecuteQu
 
 struct TProducerState {
     TMaybe<ui64> LastSeqNo;
-    ui64 AckedFreeSpaceBytes = 0;
+    i64 AckedFreeSpaceBytes = 0;
     TActorId ActorId;
-};
-
-class TRpcFlowControlState {
-public:
-    TRpcFlowControlState(ui64 inflightLimitBytes)
-        : InflightLimitBytes_(inflightLimitBytes) {}
-
-    void PushResponse(ui64 responseSizeBytes) {
-        ResponseSizeQueue_.push(responseSizeBytes);
-        TotalResponsesSize_ += responseSizeBytes;
-    }
-
-    void PopResponse() {
-        Y_ENSURE(!ResponseSizeQueue_.empty());
-        TotalResponsesSize_ -= ResponseSizeQueue_.front();
-        ResponseSizeQueue_.pop();
-    }
-
-    size_t QueueSize() const {
-        return ResponseSizeQueue_.size();
-    }
-
-    ui64 FreeSpaceBytes() const {
-        return TotalResponsesSize_ < InflightLimitBytes_
-            ? InflightLimitBytes_ - TotalResponsesSize_
-            : 0;
-    }
-
-    ui64 InflightBytes() const {
-        return TotalResponsesSize_;
-    }
-
-    ui64 InflightLimitBytes() const {
-        return InflightLimitBytes_;
-    }
-
-private:
-    const ui64 InflightLimitBytes_;
-
-    TQueue<ui64> ResponseSizeQueue_;
-    ui64 TotalResponsesSize_ = 0;
 };
 
 bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::TransactionSettings& to,
@@ -264,6 +224,7 @@ private:
         }
 
         AuditContextAppend(Request_.get(), *req);
+        NDataIntegrity::LogIntegrityTrails(traceId, *req, ctx);
 
         auto queryType = req->concurrent_result_sets()
             ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
@@ -326,13 +287,13 @@ private:
             FlowControl_.PopResponse();
         }
 
-        ui64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+        const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
 
         for (auto& pair : StreamChannels_) {
             const auto& channelId = pair.first;
             auto& channel = pair.second;
 
-            if (freeSpaceBytes > 0 && channel.LastSeqNo && channel.AckedFreeSpaceBytes == 0) {
+            if (freeSpaceBytes > 0 && channel.LastSeqNo && channel.AckedFreeSpaceBytes <= 0) {
                 LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
                     << ", channel: " << channelId
                     << ", seqNo: " << channel.LastSeqNo
@@ -361,7 +322,7 @@ private:
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
         FlowControl_.PushResponse(out.size());
-        auto freeSpaceBytes = FlowControl_.FreeSpaceBytes();
+        const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
 
         Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
 
@@ -384,15 +345,17 @@ private:
         ctx.Send(channel.ActorId, resp.Release());
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        auto& record = ev->Get()->Record.GetRef();
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        NDataIntegrity::LogIntegrityTrails(Request_->GetTraceId(), *Request_->GetProtoRequest(), ev, ctx);
+
+        auto& record = ev->Get()->Record;
 
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
 
         bool hasTrailingMessage = false;
 
         auto& kqpResponse = record.GetResponse();
-        if (kqpResponse.GetYdbResults().size() > 1) {
+        if (kqpResponse.GetYdbResults().size() > 1 && QueryAction != NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 "Unexpected trailing message with multiple result sets.");
             ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);

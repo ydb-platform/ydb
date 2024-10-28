@@ -242,7 +242,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
         case Ydb::StatusIds::SUCCESS:
             break;
@@ -381,7 +381,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        auto& record = ev->Get()->Record.GetRef();
+        auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
         case Ydb::StatusIds::SUCCESS:
             break;

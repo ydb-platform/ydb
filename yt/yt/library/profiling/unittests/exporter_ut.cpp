@@ -1,9 +1,9 @@
-#include "yt/yt/library/profiling/solomon/registry.h"
 #include <gtest/gtest.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
 
 #include <yt/yt/library/profiling/solomon/exporter.h>
+#include <yt/yt/library/profiling/solomon/registry.h>
 
 namespace NYT::NProfiling {
 namespace {
@@ -102,8 +102,8 @@ TEST(TSolomonExporter, ReadSensorsFilter)
 {
     auto registry = New<TSolomonRegistry>();
 
-    THashMap<TString, NYT::NProfiling::TShardConfigPtr> shards;
-    auto AddShardConfig = [&shards] (TString shardName) -> void {
+    THashMap<std::string, NYT::NProfiling::TShardConfigPtr> shards;
+    auto AddShardConfig = [&shards] (const std::string& shardName) {
         auto shardConfig = New<TShardConfig>();
         shardConfig->GridStep = TDuration::Seconds(1);
         shardConfig->Filter = {shardName};
@@ -169,8 +169,8 @@ TEST(TSolomonExporter, ReadSensorsStripSensorsOption)
 {
     auto registry = New<TSolomonRegistry>();
 
-    THashMap<TString, NYT::NProfiling::TShardConfigPtr> shards;
-    auto AddShardConfig = [&shards] (TString shardName) -> void {
+    THashMap<std::string, NYT::NProfiling::TShardConfigPtr> shards;
+    auto AddShardConfig = [&shards] (const std::string& shardName) {
         auto shardConfig = New<TShardConfig>();
         shardConfig->GridStep = TDuration::Seconds(1);
         shardConfig->Filter = {shardName};

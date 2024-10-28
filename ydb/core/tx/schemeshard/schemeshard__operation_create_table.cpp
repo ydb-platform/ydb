@@ -446,10 +446,18 @@ public:
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
+                if (parentPathStr.StartsWith(JoinPath({parentPath.GetDomainPathString(), ".backups/collections"}))) {
+                    schema.SetSystemColumnNamesAllowed(true);
+                }
                 if (parentPath.Base()->IsTableIndex()) {
-                    checks.IsInsideTableIndexPath()
-                          .IsUnderCreating(NKikimrScheme::StatusNameConflict)
-                          .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                    checks.IsInsideTableIndexPath();
+                    // Not build index impl tables can be created only as part of create index
+                    // build index impl tables created multiple times during index construction
+                    if (!NTableIndex::IsBuildImplTable(name)) {
+                        checks
+                            .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                            .IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
                 } else if (!Transaction.GetAllowAccessToPrivatePaths()) {
                     checks.IsCommonSensePath()
                           .IsLikeDirectory();
@@ -559,7 +567,21 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
-        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, LocalSequences);
+        const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+            .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+            .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+            .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+        };
+        TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
+            nullptr,
+            schema,
+            *typeRegistry,
+            limits,
+            *domainInfo,
+            featureFlags,
+            errStr,
+            LocalSequences);
+
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -641,7 +663,11 @@ public:
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
         if (tableInfo->IsAsyncReplica()) {
-            newTable->SetAsyncReplica();
+            newTable->SetAsyncReplica(true);
+        }
+
+        if (tableInfo->IsRestoreTable()) {
+            newTable->SetRestoreTable();
         }
 
         context.SS->Tables[newTable->PathId] = tableInfo;

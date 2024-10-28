@@ -1,7 +1,3 @@
----
-title: "Overview of client load balancing in {{ ydb-short-name }}"
-description: "The section contains code recipes with client load balancing settings in different {{ ydb-short-name }} SDKs."
----
 # Balancing
 
 {% include [work in progress message](_includes/addition.md) %}
@@ -14,6 +10,7 @@ Note that custom balancing is limited when it comes to {{ ydb-short-name }} sess
 This section contains code recipes with client load balancing settings in different {{ ydb-short-name }} SDKs.
 
 Table of contents:
+
 - [Random choice](balancing-random-choice.md)
 - [Prefer the nearest data center](balancing-prefer-local.md)
 - [Prefer the specific availability zone](balancing-prefer-location.md)

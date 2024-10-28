@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(100)
+SPLIT_FACTOR(200)
 
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
@@ -13,6 +13,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    delete_ut.cpp
     kqp_olap_stats_ut.cpp
     GLOBAL kqp_olap_ut.cpp
     sys_view_ut.cpp
@@ -23,6 +24,10 @@ SRCS(
     clickbench_ut.cpp
     aggregations_ut.cpp
     write_ut.cpp
+    sparsed_ut.cpp
+    tiering_ut.cpp
+    decimal_ut.cpp
+    compression_ut.cpp
 )
 
 PEERDIR(

@@ -21,26 +21,33 @@ If you drop a table that a view references, the view will become invalid. Querie
 ## Performance
 
 Queries are executed in two steps:
+
 1. compilation
 2. execution of the compiled code
 
 The resulting compiled code contains no evidence that the query was made using views because all the references to views should have been replaced during compilation by the queries that they represent. In practice, there must be no difference in the execution time of the compiled code (step 2) for queries made using views versus queries directly reading from the underlying tables.
 
 However, users might notice a little increase in the compilation time of the queries made using views compared to the compilation time of the same queries written directly. It happens because a statement reading from a view:
-```sql
+
+```yql
 SELECT * FROM a_view;
 ```
+
 is compiled similarly to a statement reading from a subquery:
-```sql
+
+```yql
 SELECT * FROM (SELECT * FROM underlying_table);
 ```
+
 but with an additional overhead of loading data from the schema object `a_view`.
 
 Please note that if you execute the same query over and over again, like:
-```sql
+
+```yql
 -- execute multiple times
 SELECT * FROM hot_view;
 ```
+
 compilation results will be cached on the {{ ydb-short-name }} server side, and you will not notice any difference in the performance of queries using views and direct queries.
 
 ## View redefinition lag
@@ -62,12 +69,15 @@ The cache is automatically updated by {{ ydb-short-name }} to stay on track with
 ### Example of the problem
 
 Let's consider the following situation. Alice repeatedly executes the following query:
-```sql
+
+```yql
 -- Alice's session
 SELECT * FROM some_view_which_is_going_to_be_redefined;
 ```
+
 while Bob redefines the view's query like this:
-```sql
+
+```yql
 -- Bob's session
 DROP VIEW some_view_which_is_going_to_be_redefined;
 CREATE VIEW some_view_which_is_going_to_be_redefined ...;

@@ -1,5 +1,5 @@
 """
-Payload implemenation for coroutines as data provider.
+Payload implementation for coroutines as data provider.
 
 As a simple case, you can upload data from file::
 
@@ -44,7 +44,7 @@ class _stream_wrapper:
         self.kwargs = kwargs
 
     async def __call__(self, writer: AbstractStreamWriter) -> None:
-        await self.coro(writer, *self.args, **self.kwargs)  # type: ignore[operator]
+        await self.coro(writer, *self.args, **self.kwargs)
 
 
 class streamer:

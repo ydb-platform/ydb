@@ -1,8 +1,6 @@
 LIBRARY(clicommands)
 
 SRCS(
-    interactive/interactive_cli.cpp
-    interactive/line_reader.cpp
     benchmark_utils.cpp
     topic_operations_scenario.cpp
     topic_read_scenario.cpp
@@ -33,7 +31,6 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
-    contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre
@@ -45,6 +42,7 @@ PEERDIR(
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/command_base
+    ydb/public/lib/ydb_cli/commands/interactive
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
@@ -69,6 +67,11 @@ PEERDIR(
 
 END()
 
-RECURSE_FOR_TESTS(
-    topic_workload/ut
+RECURSE(
+    command_base
+    interactive
+    sdk_core_access
+    topic_workload
+    transfer_workload
+    ydb_discovery
 )

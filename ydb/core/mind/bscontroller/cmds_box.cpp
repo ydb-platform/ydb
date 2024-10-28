@@ -213,7 +213,7 @@ namespace NKikimr::NBsController {
         for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
             if (slot->Group) {
                 auto *m = VSlots.FindForUpdate(slot->VSlotId);
-                m->Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+                m->VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
                 m->IsReady = false;
                 TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
                 GroupFailureModelChanged.insert(slot->Group->ID);

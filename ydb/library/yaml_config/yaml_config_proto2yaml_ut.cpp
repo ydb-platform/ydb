@@ -5,7 +5,7 @@
 
 Y_UNIT_TEST_SUITE(YamlConfigProto2Yaml) {
     Y_UNIT_TEST(StorageConfig) {
-        Ydb::BSConfig::StorageConfig storageConfig;
+        NKikimrConfig::StorageConfig storageConfig;
         auto *hostConfig = storageConfig.add_host_config();
         hostConfig->set_host_config_id(1);
         auto *drive = hostConfig->add_drive();

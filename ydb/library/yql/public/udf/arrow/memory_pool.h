@@ -6,6 +6,9 @@
 namespace NYql {
 namespace NUdf {
 
+constexpr size_t ArrowMemoryAlignment = 64;
+static_assert((ArrowMemoryAlignment & (ArrowMemoryAlignment - 1)) == 0, "ArrowMemoryAlignment should be power of 2");
+
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
 arrow::MemoryPool* GetYqlMemoryPool();
 #else

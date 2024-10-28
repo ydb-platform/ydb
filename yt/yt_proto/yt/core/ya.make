@@ -8,6 +8,7 @@ SRCS(
     misc/proto/bloom_filter.proto
     misc/proto/error.proto
     misc/proto/guid.proto
+    misc/proto/hyperloglog.proto
     misc/proto/protobuf_helpers.proto
 
     tracing/proto/span.proto

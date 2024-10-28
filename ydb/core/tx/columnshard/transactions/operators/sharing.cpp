@@ -28,9 +28,9 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_exists")("session_id", SharingTask->GetSessionId())("info", SharingTask->DebugString());
     } else {
         SharingTask->Confirm();
+        TxPropose = SharingSessionsManager->ProposeDestSession(&owner, SharingTask);
     }
 
-    TxPropose = SharingSessionsManager->ProposeDestSession(&owner, SharingTask);
 
     return true;
 }
@@ -47,8 +47,8 @@ void TSharingTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner
     if (!SessionExistsFlag) {
         AFL_VERIFY(!!TxPropose);
         TxPropose->Complete(ctx);
+        TxPropose.reset();
     }
-    TxPropose.release();
 }
 
 bool TSharingTransactionOperator::ProgressOnExecute(

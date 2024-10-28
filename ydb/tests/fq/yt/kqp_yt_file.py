@@ -8,7 +8,6 @@ from utils import DATA_PATH, get_config, get_parameters_files, replace_vars
 from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path, yql_source_path
 
 EXCLUDED_SUITES = [
-    'match_recognize',  # MATCH_RECOGNIZE is disabled in KQP
 ]
 
 EXCLUDED_TESTS = [
@@ -56,6 +55,9 @@ EXCLUDED_TESTS = [
     'simple_columns/simple_columns_join_coalesce_qualified_all_enable',
     # PRECONDITION_FAILED, Unexpected flow status, YQ-3174
     'produce/reduce_typeinfo',
+    # GENERIC ERROR. Cannot infer schema for table "InputView"
+    # (unsupported standalone view)
+    'view/standalone_view_lambda',
 ]
 
 

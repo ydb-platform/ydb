@@ -12,16 +12,35 @@ import copy
 import re
 import warnings
 from functools import lru_cache, partial
+from typing import Optional
 
 from hypothesis.errors import HypothesisWarning, InvalidArgument
 from hypothesis.internal import charmap
+from hypothesis.internal.conjecture.data import COLLECTION_DEFAULT_MAX_SIZE
 from hypothesis.internal.filtering import max_len, min_len
 from hypothesis.internal.intervalsets import IntervalSet
+from hypothesis.internal.reflection import get_pretty_function_description
 from hypothesis.strategies._internal.collections import ListStrategy
 from hypothesis.strategies._internal.lazy import unwrap_strategies
-from hypothesis.strategies._internal.numbers import IntegersStrategy
-from hypothesis.strategies._internal.strategies import SearchStrategy
+from hypothesis.strategies._internal.strategies import (
+    OneOfStrategy,
+    SampledFromStrategy,
+    SearchStrategy,
+)
 from hypothesis.vendor.pretty import pretty
+
+
+# Cache size is limited by sys.maxunicode, but passing None makes it slightly faster.
+@lru_cache(maxsize=None)
+def _check_is_single_character(c):
+    # In order to mitigate the performance cost of this check, we use a shared cache,
+    # even at the cost of showing the culprit strategy in the error message.
+    if not isinstance(c, str):
+        type_ = get_pretty_function_description(type(c))
+        raise InvalidArgument(f"Got non-string {c!r} (type {type_})")
+    if len(c) != 1:
+        raise InvalidArgument(f"Got {c!r} (length {len(c)} != 1)")
+    return c
 
 
 class OneCharStringStrategy(SearchStrategy):
@@ -72,6 +91,31 @@ class OneCharStringStrategy(SearchStrategy):
             )
         return cls(intervals, force_repr=f"characters({_arg_repr})")
 
+    @classmethod
+    def from_alphabet(cls, alphabet):
+        if isinstance(alphabet, str):
+            return cls.from_characters_args(categories=(), include_characters=alphabet)
+
+        assert isinstance(alphabet, SearchStrategy)
+        char_strategy = unwrap_strategies(alphabet)
+        if isinstance(char_strategy, cls):
+            return char_strategy
+        elif isinstance(char_strategy, SampledFromStrategy):
+            for c in char_strategy.elements:
+                _check_is_single_character(c)
+            return cls.from_characters_args(
+                categories=(),
+                include_characters=char_strategy.elements,
+            )
+        elif isinstance(char_strategy, OneOfStrategy):
+            intervals = IntervalSet()
+            for s in char_strategy.element_strategies:
+                intervals = intervals.union(cls.from_alphabet(s).intervals)
+            return cls(intervals, force_repr=repr(alphabet))
+        raise InvalidArgument(
+            f"{alphabet=} must be a sampled_from() or characters() strategy"
+        )
+
     def __repr__(self):
         return self._force_repr or f"OneCharStringStrategy({self.intervals!r})"
 
@@ -115,7 +159,13 @@ class TextStrategy(ListStrategy):
         elems = unwrap_strategies(self.element_strategy)
         if isinstance(elems, OneCharStringStrategy):
             return data.draw_string(
-                elems.intervals, min_size=self.min_size, max_size=self.max_size
+                elems.intervals,
+                min_size=self.min_size,
+                max_size=(
+                    COLLECTION_DEFAULT_MAX_SIZE
+                    if self.max_size == float("inf")
+                    else self.max_size
+                ),
             )
         return "".join(super().do_draw(data))
 
@@ -181,21 +231,22 @@ def _string_filter_rewrite(self, kind, condition):
             stacklevel=2,
         )
 
-    elems = unwrap_strategies(self.element_strategy)
     if (
-        (kind is bytes or isinstance(elems, OneCharStringStrategy))
+        (
+            kind is bytes
+            or isinstance(
+                unwrap_strategies(self.element_strategy), OneCharStringStrategy
+            )
+        )
         and isinstance(pattern := getattr(condition, "__self__", None), re.Pattern)
         and isinstance(pattern.pattern, kind)
     ):
         from hypothesis.strategies._internal.regex import regex_strategy
 
-        print(f"{condition=}")
-        print(f"{condition.__name__=}")
-
         if condition.__name__ == "match":
             # Replace with an easier-to-handle equivalent condition
-            caret = "^" if kind is str else b"^"
-            pattern = re.compile(caret + pattern.pattern, flags=pattern.flags)
+            caret, close = ("^(?:", ")") if kind is str else (b"^(?:", b")")
+            pattern = re.compile(caret + pattern.pattern + close, flags=pattern.flags)
             condition = pattern.search
 
         if condition.__name__ in ("search", "findall", "fullmatch"):
@@ -291,15 +342,15 @@ def _identifier_characters():
     return id_start, id_continue
 
 
-class BytesStrategy(ListStrategy):
-    def __init__(self, min_size, max_size):
-        super().__init__(IntegersStrategy(0, 255), min_size=min_size, max_size=max_size)
+class BytesStrategy(SearchStrategy):
+    def __init__(self, min_size: int, max_size: Optional[int]):
+        self.min_size = min_size
+        self.max_size = (
+            max_size if max_size is not None else COLLECTION_DEFAULT_MAX_SIZE
+        )
 
     def do_draw(self, data):
-        # TODO: refactor the underlying provider to support variable-length bytes
-        if self.min_size == self.max_size:
-            return bytes(data.draw_bytes(self.min_size))
-        return bytes(super().do_draw(data))
+        return data.draw_bytes(self.min_size, self.max_size)
 
     _nonempty_filters = (
         *ListStrategy._nonempty_filters,
@@ -313,4 +364,4 @@ class BytesStrategy(ListStrategy):
     def filter(self, condition):
         if (new := _string_filter_rewrite(self, bytes, condition)) is not None:
             return new
-        return super().filter(condition)
+        return ListStrategy.filter(self, condition)

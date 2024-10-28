@@ -24,11 +24,11 @@ public:
     ETokenType GetType() const;
     ETokenType GetPreviousType() const;
     TStringBuf GetToken() const;
-    TStringBuf GetPrefix() const;
-    TStringBuf GetPrefixPlusToken() const;
+    TYPathBuf GetPrefix() const;
+    TYPathBuf GetPrefixPlusToken() const;
     TStringBuf GetSuffix() const;
     TStringBuf GetInput() const;
-    TStringBuf GetPath() const;
+    TYPathBuf GetPath() const;
     const TString& GetLiteralValue() const;
 
     void Expect(ETokenType expectedType) const;
@@ -71,7 +71,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool HasPrefix(const TYPath& fullPath, const TYPath& prefixPath);
+bool HasPrefix(TYPathBuf fullPath, TYPathBuf prefixPath);
 
 ////////////////////////////////////////////////////////////////////////////////
 

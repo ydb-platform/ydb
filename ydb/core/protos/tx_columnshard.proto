@@ -1,9 +1,9 @@
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/long_tx_service.proto";
-import "ydb/core/protos/statistics.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/tx.proto";
+import "ydb/library/formats/arrow/protos/fields.proto";
 
 package NKikimrTxColumnShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -88,6 +88,8 @@ message TLogicalMetadata {
     optional uint64 DirtyWriteTimeSeconds = 5;
     optional string SpecialKeysRawData = 6;
     optional TEvWrite.EModificationType ModificationType = 7;
+    optional NKikimrArrowSchema.TSchemaSubset SchemaSubset = 8;
+    optional string SpecialKeysPayloadData = 9;
 }
 
 message TEvWriteResult {
@@ -142,6 +144,8 @@ enum ETransactionKind {
     TX_KIND_COMMIT_WRITE = 5;
     TX_KIND_BACKUP = 6;
     TX_KIND_SHARING = 7;
+    TX_KIND_COMMIT_WRITE_PRIMARY = 8;
+    TX_KIND_COMMIT_WRITE_SECONDARY = 9;
 }
 
 enum ETransactionFlag {
@@ -202,6 +206,29 @@ message TBackupTxBody {
 
 message TCommitWriteTxBody {
     optional uint64 LockId = 1;
+
+    message TPrimary {
+        repeated uint64 SendingShards = 1;
+        repeated uint64 ReceivingShards = 2;
+        repeated uint64 WaitShardsBrokenFlags = 3;
+        repeated uint64 WaitShardsResultAck = 4;
+        optional bool TxBroken = 5;
+    }
+
+    message TSecondary {
+        optional uint64 ArbiterTabletId = 1;
+        optional bool NeedReceiveBroken = 2;
+        optional bool ReceiveAck = 3;
+        optional bool SelfBroken = 4;
+        optional bool TxBroken = 5;
+    }
+
+    oneof Implementation {
+        TPrimary PrimaryTabletData = 5;
+        TSecondary SecondaryTabletData = 6;
+    }
+
+    optional bool Broken = 4 [default = false];
 }
 
 message TSchemaPresetVersionInfo {
@@ -209,6 +236,7 @@ message TSchemaPresetVersionInfo {
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
+    optional NKikimrSchemeOp.TColumnTableSchemaDiff Diff = 5;
 }
 
 message TTtlSettingsPresetVersionInfo {
@@ -222,7 +250,6 @@ message TTableVersionInfo {
     optional uint64 PathId = 1;
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
-    optional NKikimrSchemeOp.TColumnTableSchema Schema = 4;
     optional uint32 SchemaPresetId = 5;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 6;
     optional uint32 TtlSettingsPresetId = 7;
@@ -325,4 +352,6 @@ message TEvReadBlobRangesResult {
 message TInternalOperationData {
     repeated uint64 InternalWriteIds = 1;
     optional uint32 ModificationType = 2;
+    optional uint64 PathId = 3;
+    optional bool WritePortions = 4;
 }

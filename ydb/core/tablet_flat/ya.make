@@ -74,7 +74,6 @@ SRCS(
     shared_handle.cpp
     shared_sausagecache.cpp
     shared_sausagecache.h
-    shared_cache_memtable.h
     tablet_flat_executor.h
     tablet_flat_executor.cpp
     tablet_flat_executed.h
@@ -111,6 +110,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat/protos
+    ydb/core/util
     ydb/library/binary_json
     ydb/library/dynumber
     ydb/library/mkql_proto/protos

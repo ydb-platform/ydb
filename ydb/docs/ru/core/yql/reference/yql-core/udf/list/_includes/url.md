@@ -2,25 +2,26 @@
 
 ## Normalize {#normalize}
 
-* ```Url::Normalize(String) -> String?```
+* `Url::Normalize(String) -> String?`
 
 Нормализует URL удобным для Web-роботов образом: приводит hostname в нижний регистр, выкидывает фрагмент и т.п.
 Результат нормализации зависит только от самого URL. В процессе нормализации **НЕ** выполняются операции, зависящие от внешних данных: приведение по дублям, зеркалам и т.п.
 
 Возвращаемое значение:
+
 * нормализованный URL;
 * `NULL`, если переданный строковый аргумент не удалось распарсить как URL.
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 SELECT Url::Normalize("hTTp://wWw.yDb.TECH/"); -- "http://www.ydb.tech/"
 SELECT Url::Normalize("http://ydb.tech#foo");      -- "http://ydb.tech/"
 ```
 
 ## NormalizeWithDefaultHttpScheme {#normalizewithdefaulthttpscheme}
 
-* ```Url::NormalizeWithDefaultHttpScheme(String?) -> String?```
+* `Url::NormalizeWithDefaultHttpScheme(String?) -> String?`
 
 Выполняет нормализацию аналогично `Url::Normalize`, но подставляет схему `http://` в случае, если схемы нет.
 
@@ -29,9 +30,9 @@ SELECT Url::Normalize("http://ydb.tech#foo");      -- "http://ydb.tech/"
 * нормализованный URL;
 * исходный URL, если нормализация не удалась.
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 SELECT Url::NormalizeWithDefaultHttpScheme("wWw.yDb.TECH");    -- "http://www.ydb.tech/"
 SELECT Url::NormalizeWithDefaultHttpScheme("http://ydb.tech#foo"); -- "http://ydb.tech/"
 ```
@@ -40,17 +41,17 @@ SELECT Url::NormalizeWithDefaultHttpScheme("http://ydb.tech#foo"); -- "http://yd
 
 Кодируют UTF-8 строку в urlencoded формат (`Url::Encode`) и обратно (`Url::Decode`).
 
-**Список функций**
+### Список функций
 
-* ```Url::Encode(String?) -> String?```
-* ```Url::Decode(String?) -> String?```
+* `Url::Encode(String?) -> String?`
+* `Url::Decode(String?) -> String?`
 
-**Примеры**
+### Примеры
 
-```sql
-SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0"); 
+```yql
+SELECT Url::Decode("http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0");
   -- "http://ydb.tech/страница"
-SELECT Url::Encode("http://ydb.tech/страница");                                         
+SELECT Url::Encode("http://ydb.tech/страница");
   -- "http://ydb.tech/%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0"
 ```
 
@@ -58,11 +59,13 @@ SELECT Url::Encode("http://ydb.tech/страница");
 
 Разбирает URL на составные части.
 
-* ```Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >```
+```yql
+Url::Parse(Parse{Flags:AutoMap}) -> Struct< Frag: String?, Host: String?, ParseError: String?, Pass: String?, Path: String?, Port: String?, Query: String?, Scheme: String?, User: String? >
+```
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 SELECT Url::Parse(
   "https://en.wikipedia.org/wiki/Isambard_Kingdom_Brunel?s=24&g=h-24#Great_Western_Railway");
 /*
@@ -84,53 +87,52 @@ SELECT Url::Parse(
 
 Получение компонента URL.
 
-**Список функций**
+### Список функций
 
-* ```Url::GetScheme(String{Flags:AutoMap}) -> String```
-* ```Url::GetHost(String?) -> String?```
-* ```Url::GetHostPort(String?) -> String?```
-* ```Url::GetSchemeHost(String?) -> String?```
-* ```Url::GetSchemeHostPort(String?) -> String?```
-* ```Url::GetPort(String?) -> String?```
-* ```Url::GetTail(String?) -> String?``` -- всё после хоста: path + query + fragment
-* ```Url::GetPath(String?) -> String?```
-* ```Url::GetFragment(String?) -> String?```
-* ```Url::GetCGIParam(String?, String) -> String?``` -- второй параметр — имя нужного CGI параметра
-* ```Url::GetDomain(String?, Uint8) -> String?``` -- второй параметр — необходимый уровень домена
-* ```Url::GetTLD(String{Flags:AutoMap}) -> String```
-* ```Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool``` -- зарегистрирован на http://www.iana.org/
-* ```Url::IsWellKnownTLD(String{Flags:AutoMap}) -> Bool``` -- находится в небольшом whitelist из com, net, org, ru и пр.
-* ```Url::GetDomainLevel(String{Flags:AutoMap}) -> Uint64```
-* ```Url::GetSignificantDomain(String{Flags:AutoMap}, [List<String>?]) -> String```
+* `Url::GetScheme(String{Flags:AutoMap}) -> String`
+* `Url::GetHost(String?) -> String?`
+* `Url::GetHostPort(String?) -> String?`
+* `Url::GetSchemeHost(String?) -> String?`
+* `Url::GetSchemeHostPort(String?) -> String?`
+* `Url::GetPort(String?) -> String?`
+* `Url::GetTail(String?) -> String?` -- всё после хоста: path + query + fragment
+* `Url::GetPath(String?) -> String?`
+* `Url::GetFragment(String?) -> String?`
+* `Url::GetCGIParam(String?, String) -> String?` -- второй параметр — имя нужного CGI параметра
+* `Url::GetDomain(String?, Uint8) -> String?` -- второй параметр — необходимый уровень домена
+* `Url::GetTLD(String{Flags:AutoMap}) -> String`
+* `Url::IsKnownTLD(String{Flags:AutoMap}) -> Bool` -- зарегистрирован на [iana.org](http://www.iana.org/).
+* `Url::IsWellKnownTLD(String{Flags:AutoMap}) -> Bool` -- находится в небольшом whitelist из com, net, org, ru и пр.
+* `Url::GetDomainLevel(String{Flags:AutoMap}) -> Uint64`
+* `Url::GetSignificantDomain(String{Flags:AutoMap}, [List<String>?]) -> String`
   Возвращает домен второго уровня в большинстве случаев и домен третьего уровня для хостеймов вида: ***.XXX.YY, где XXX — одно из com, net, org, co, gov, edu. Этот список можно переопределить через опциональный второй аргумент
-
-* ```Url::GetOwner(String{Flags:AutoMap}) -> String```
+* `Url::GetOwner(String{Flags:AutoMap}) -> String`
   Возвращает домен, которым с наибольшей вероятностью владеет отдельный человек или организация. В отличие от Url::GetSignificantDomain работает по специальному разрешительному списку, и помимо доменов из серии ***.co.uk возвращает домен третьего уровня для, например, бесплатных хостингов и блогов, например something.livejournal.com
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 SELECT Url::GetScheme("https://ydb.tech");           -- "https://"
 SELECT Url::GetDomain("http://www.ydb.tech", 2); -- "ydb.tech"
 ```
 
 ## Cut... {#cut}
 
-* ```Url::CutScheme(String?) -> String?```
+* `Url::CutScheme(String?) -> String?`
   Возвращает переданный URL уже без схемы (http://, https:// и т.п.).
 
-* ```Url::CutWWW(String?) -> String?```
+* `Url::CutWWW(String?) -> String?`
   Возвращает переданный домен без префикса "www.", если он присутствовал.
 
-* ```Url::CutWWW2(String?) -> String?```
+* `Url::CutWWW2(String?) -> String?`
   Возвращает переданный домен без префикса "www.", "www2.", "wwww777." и тому подобных, если он присутствовал.
 
-* ```Url::CutQueryStringA­ndFragment(String{Flags:AutoMap}) -> String```
+* `Url::CutQueryStringA­ndFragment(String{Flags:AutoMap}) -> String`
   Возращает копию переданного URL с удаленными всеми CGI параметрами и фрагментами ("?foo=bar" и/или "#baz").
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 SELECT Url::CutScheme("http://www.ydb.tech"); -- "www.ydb.tech"
 SELECT Url::CutWWW("www.ydb.tech");           -- "ydb.tech"
 ```
@@ -139,17 +141,17 @@ SELECT Url::CutWWW("www.ydb.tech");           -- "ydb.tech"
 
 Преобразования [Punycode](https://en.wikipedia.org/wiki/Punycode).
 
-**Список функций**
+### Список функций
 
-* ```Url::HostNameToPunycode(String{Flag:AutoMap}) -> String?```
-* ```Url::ForceHostNameToPunycode(String{Flag:AutoMap}) -> String```
-* ```Url::PunycodeToHostName(String{Flag:AutoMap}) -> String?```
-* ```Url::ForcePunycodeToHostName(String{Flag:AutoMap}) -> String```
-* ```Url::CanBePunycodeHostName(String{Flag:AutoMap}) -> Bool```
+* `Url::HostNameToPunycode(String{Flag:AutoMap}) -> String?`
+* `Url::ForceHostNameToPunycode(String{Flag:AutoMap}) -> String`
+* `Url::PunycodeToHostName(String{Flag:AutoMap}) -> String?`
+* `Url::ForcePunycodeToHostName(String{Flag:AutoMap}) -> String`
+* `Url::CanBePunycodeHostName(String{Flag:AutoMap}) -> Bool`
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 SELECT Url::PunycodeToHostName("xn--80aniges7g.xn--j1aef"); -- "экзампл.ком"
 ```
 
@@ -157,9 +159,9 @@ SELECT Url::PunycodeToHostName("xn--80aniges7g.xn--j1aef"); -- "экзампл.�
 
 Преобразования [Query](https://docs.python.org/3/library/urllib.parse.html).
 
-**Список функций**
+### Список функций
 
-```sql
+```yql
 Url::QueryStringToList(String{Flag:AutoMap}, [
   KeepBlankValues:Bool?,  -- пустые значения в percent-encoded запросах интерпретируются как пустыe строки; по умолчанию false
   Strict:Bool?,           -- если false - ошибки парсинга игнорируются, ошибочные поля пропускаются; по умолчанию true
@@ -183,8 +185,9 @@ Url::BuildQueryString(List<Tuple<String, String?>>{Flag:AutoMap}, [
 ]) -> String
 ```
 
-**Примеры**
-```sql
+### Примеры
+
+```yql
 SELECT Url::QueryStringToList("a=1&b=2&a=3");                       -- [("a", "1"), ("b", "2"), ("a", "3")]
 SELECT Url::QueryStringToDict("a=1&b=2&a=3");                       -- {"b" : ["2"], "a" : ["1", "3"]}
 SELECT Url::BuildQueryString([("a", "1"), ("a", "3"), ("b", "2")]); -- "a=1&a=3&b=2"

@@ -1,20 +1,21 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/blob_cache.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/test_helper/helper.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
+#include <ydb/core/tx/long_tx_service/public/types.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/tx/long_tx_service/public/types.h>
-#include <ydb/core/tx/data_events/common/modification_type.h>
 
 namespace NKikimr::NOlap {
 struct TIndexInfo;
@@ -167,7 +168,7 @@ struct TTestSchema {
             // PK
             firstKeyItem,
             TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
             TTestColumn("level", TTypeInfo(NTypeIds::Int32) ),
             TTestColumn("message", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
@@ -183,7 +184,7 @@ struct TTestSchema {
         std::vector<TTestColumn> schema = {
             // PK
             TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
-            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
             //
@@ -192,7 +193,7 @@ struct TTestSchema {
             TTestColumn("json_payload", TTypeInfo(NTypeIds::JsonDocument) ),
             TTestColumn("ingested_at", TTypeInfo(NTypeIds::Timestamp) ),
             TTestColumn("saved_at", TTypeInfo(NTypeIds::Timestamp) ),
-            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson) )
+            TTestColumn("request_id", TTypeInfo(NTypeIds::Yson)).SetAccessorClassName("SPARSED")
         };
         return schema;
     };
@@ -201,7 +202,7 @@ struct TTestSchema {
         std::vector<TTestColumn> schema = {
             TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
             TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY"),
-            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
+            TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)).SetAccessorClassName("SPARSED"),
             TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ).SetStorageId("__MEMORY")
         };
         return schema;
@@ -401,15 +402,17 @@ struct TTestSchema {
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
 void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
-void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
+void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
 
-void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
+void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds,
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
-                              const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr, const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
+    const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr,
+    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
 
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
                               ui64 tableId, const ui64 writePartId, const TString& data,
@@ -432,7 +435,7 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planSt
     PlanCommit(runtime, sender, planStep, ids);
 }
 
-void Wakeup(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId);
+void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId);
 
 struct TTestBlobOptions {
     THashSet<TString> NullColumns;
@@ -474,10 +477,12 @@ namespace NKikimr::NColumnShard {
                 auto& builder = Owner.Builders[Index];
                 auto type = builder->type();
 
-                NArrow::SwitchType(type->id(), [&](const auto& t) {
+                Y_ABORT_UNLESS(NArrow::SwitchType(type->id(), [&](const auto& t) {
                     using TWrap = std::decay_t<decltype(t)>;
                     using T = typename TWrap::T;
                     using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+
+                    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("T", typeid(T).name());
 
                     auto& typedBuilder = static_cast<TBuilder&>(*builder);
                     if constexpr (std::is_arithmetic<TData>::value) {
@@ -493,9 +498,16 @@ namespace NKikimr::NColumnShard {
                             return true;
                         }
                     }
+
+                    if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
+                        if constexpr (arrow::is_decimal128_type<T>::value) {
+                            Y_ABORT_UNLESS(typedBuilder.Append(arrow::Decimal128(data.Hi_, data.Low_)).ok());
+                            return true;
+                        }
+                    }
                     Y_ABORT("Unknown type combination");
                     return false;
-                });
+                }));
                 return TRowBuilder(Index + 1, Owner);
             }
 

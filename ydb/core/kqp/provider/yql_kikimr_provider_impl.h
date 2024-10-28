@@ -73,6 +73,8 @@ private:
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -196,6 +198,17 @@ struct TKiExecDataQuerySettings {
     static TKiExecDataQuerySettings Parse(NNodes::TKiExecDataQuery exec);
 };
 
+struct TWriteBackupCollectionSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TKiBackupCollectionEntryList> Entries;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> BackupCollectionSettings;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteBackupCollectionSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
+};
+
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
@@ -241,6 +254,10 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op,
     TVector<NKqpProto::TKqpTableInfo>& infos);
 
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance);
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity);
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);  
+
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
@@ -268,5 +285,7 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
+
+TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 
 } // namespace NYql

@@ -1,4 +1,4 @@
-Зарегистрируйтесь в Google Cloud Console и [создайте](https://console.cloud.google.com/projectselector2/home) проект. Активируйте [платежный аккаунт](https://console.cloud.google.com/billing/manage) и пополните его средствами для запуска девяти ВМ. Рассчитать стоимость можно в [калькуляторе](https://cloud.google.com/products/calculator). 
+Зарегистрируйтесь в Google Cloud Console и [создайте](https://console.cloud.google.com/projectselector2/home) проект. Активируйте [платежный аккаунт](https://console.cloud.google.com/billing/manage) и пополните его средствами для запуска девяти ВМ. Рассчитать стоимость можно в [калькуляторе](https://cloud.google.com/products/calculator).
 
 Настройте GCP CLI:
 
@@ -17,6 +17,6 @@
 
 1. `terraform init` – установка провайдера и инициализация модулей.
 2. `terraform plan` – создание плана будущей инфраструктуры.
-3. `terraform apply` (повторное выполнение) – создание ресурсов в облаке. 
+3. `terraform apply` (повторное выполнение) – создание ресурсов в облаке.
 
 Далее используются команды `terraform plan`, `terraform apply` и `terraform destroy` (уничтожение созданной инфраструктуры).

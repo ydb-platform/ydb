@@ -6,10 +6,14 @@ SRCS(
     cast.h
     debug_info.cpp
     debug_info.h
+    exceptions.cpp
+    exceptions.h
     future_action.cpp
     future_action.h
     hash.cpp
     hash.h
+    limiting_allocator.cpp
+    line_split.cpp
     md5_stream.cpp
     md5_stream.h
     method_index.cpp
@@ -25,8 +29,6 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
-    rope_over_buffer.cpp
-    rope_over_buffer.h
     sort.cpp
     sort.h
     swap_bytes.cpp
@@ -40,7 +42,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/util
+    ydb/library/yql/core/issue/protos
     library/cpp/digest/md5
     library/cpp/messagebus
     library/cpp/string_utils/quote
@@ -61,6 +63,7 @@ RECURSE(
     fetch
     log
     plan
+    rope
     signals
     simd
     sys

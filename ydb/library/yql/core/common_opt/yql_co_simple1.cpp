@@ -5,6 +5,7 @@
 #include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_join.h>
+#include <ydb/library/yql/core/yql_opt_hopping.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
@@ -12,6 +13,8 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/generic/map.h>
 #include <util/string/cast.h>
@@ -2074,12 +2077,6 @@ TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TO
         }
     }
 
-    if (lambdaBody.IsCallable("ForwardList")) {
-        const bool keepList = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && lambdaBody.Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
-        YQL_CLOG(DEBUG, Core) << (keepList ? "Pull" : "Drop") << " out " << lambdaBody.Content() << " from " << node->Content() << " lambda root.";
-        return ctx.WrapByCallableIf(keepList, lambdaBody.Content(), ctx.ChangeChild(*node, 1U, ctx.DeepCopyLambda(node->Tail(), lambdaBody.HeadPtr())));
-    }
-
     if (CanRewriteToEmptyContainer(*node)) {
         const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables);
         if (IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
@@ -2271,6 +2268,24 @@ TExprNode::TPtr HasNullOverVariant(const TExprNode::TPtr& node, TExprContext& ct
 
 }
 
+constexpr std::initializer_list<std::string_view> FlowPriority = {
+    "AssumeSorted", "AssumeUnique", "AssumeDistinct", "AssumeConstraints",
+    "Map", "OrderedMap", "MapNext",
+    "Filter", "OrderedFilter",
+    "FlatMap", "OrderedFlatMap",
+    "MultiMap", "OrderedMultiMap",
+    "FoldMap", "Fold1Map", "Chain1Map",
+    "Take", "Skip",
+    "TakeWhile", "SkipWhile",
+    "TakeWhileInclusive", "SkipWhileInclusive",
+    "SkipNullMembers", "FilterNullMembers",
+    "SkipNullElements", "FilterNullElements",
+    "Condense", "Condense1",
+    "MapJoinCore", "CommonJoinCore",
+    "CombineCore", "ExtractMembers",
+    "PartitionByKey", "SqueezeToDict"
+};
+
 TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("Nothing")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
@@ -2295,6 +2310,65 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable("ToList") && node->Head().Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
         YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
         return ctx.ChangeChildren(*node, node->Head().ChildrenList());
+    }
+
+    if (node->Head().IsCallable(FlowPriority)) {
+        YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+        return ctx.SwapWithHead(*node);
+    }
+
+    if (node->Head().IsCallable("FromFlow")) {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " with " << node->Head().Content();
+        return node->Head().HeadPtr();
+    }
+
+    if (node->Head().IsCallable("ForwardList")) {
+        YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
+        return ctx.ChangeChild(*node, 0U,  node->Head().HeadPtr());
+    }
+
+    if (node->Head().IsCallable("Chopper")) {
+        YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
+        auto children = node->Head().ChildrenList();
+        children.front() = ctx.ChangeChildren(*node, {std::move(children.front())});
+        children.back() = ctx.Builder(children.back()->Pos())
+            .Lambda()
+                .Param("key")
+                .Param("flow")
+                .Callable("ToFlow")
+                    .Apply(0, *children.back())
+                        .With(0, "key")
+                        .With(1)
+                            .Callable("FromFlow")
+                                .Arg(0, "flow")
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+        return ctx.ChangeChildren(node->Head(), std::move(children));
+    }
+
+    if (node->Head().IsCallable("Switch")) {
+        YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
+        auto children = node->Head().ChildrenList();
+        children.front() = ctx.ChangeChildren(*node, {std::move(children.front())});
+        for (auto i = 3U; i < children.size(); ++++i) {
+            children[i] = ctx.Builder(children[i]->Pos())
+                .Lambda()
+                    .Param("flow")
+                    .Callable("ToFlow")
+                        .Apply(0, *children[i])
+                            .With(0)
+                                .Callable("FromFlow")
+                                    .Arg(0, "flow")
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+        }
+        return ctx.ChangeChildren(node->Head(), std::move(children));
     }
 
     return node;
@@ -3228,6 +3302,99 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TCoAggregate& aggr, TExprContext&
     return aggr.Ptr();
 }
 
+TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, TExprContext& ctx) {
+    const auto pos = aggregate.Pos();
+
+    NHopping::EnsureNotDistinct(aggregate);
+
+    const auto maybeHopTraits = NHopping::ExtractHopTraits(aggregate, ctx, false);
+    if (!maybeHopTraits) {
+        return nullptr;
+    }
+    const auto hopTraits = *maybeHopTraits;
+
+    const auto aggregateInputType = GetSeqItemType(*aggregate.Ptr()->Head().GetTypeAnn()).Cast<TStructExprType>();
+    NHopping::TKeysDescription keysDescription(*aggregateInputType, aggregate.Keys(), hopTraits.Column);
+
+    const auto keyLambda = keysDescription.GetKeySelector(ctx, pos, aggregateInputType);
+    const auto timeExtractorLambda = NHopping::BuildTimeExtractor(hopTraits.Traits, ctx);
+    const auto initLambda = NHopping::BuildInitHopLambda(aggregate, ctx);
+    const auto updateLambda = NHopping::BuildUpdateHopLambda(aggregate, ctx);
+    const auto saveLambda = NHopping::BuildSaveHopLambda(aggregate, ctx);
+    const auto loadLambda = NHopping::BuildLoadHopLambda(aggregate, ctx);
+    const auto mergeLambda = NHopping::BuildMergeHopLambda(aggregate, ctx);
+    const auto finishLambda = NHopping::BuildFinishHopLambda(aggregate, keysDescription.GetActualGroupKeys(), hopTraits.Column, ctx);
+
+    const auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
+    auto multiHoppingCoreBuilder = Build<TCoMultiHoppingCore>(ctx, pos)
+        .KeyExtractor(keyLambda)
+        .TimeExtractor(timeExtractorLambda)
+        .Hop(hopTraits.Traits.Hop())
+        .Interval(hopTraits.Traits.Interval())
+        .Delay(hopTraits.Traits.Delay())
+        .DataWatermarks(hopTraits.Traits.DataWatermarks())
+        .InitHandler(initLambda)
+        .UpdateHandler(updateLambda)
+        .MergeHandler(mergeLambda)
+        .FinishHandler(finishLambda)
+        .SaveHandler(saveLambda)
+        .LoadHandler(loadLambda)
+        .template WatermarkMode<TCoAtom>().Build(ToString(false));
+
+    return Build<TCoPartitionsByKeys>(ctx, pos)
+        .Input(aggregate.Input())
+        .KeySelectorLambda(keyLambda)
+        .SortDirections<TCoBool>()
+                .Literal()
+                .Value("true")
+                .Build()
+            .Build()
+        .SortKeySelectorLambda(timeExtractorLambda)
+        .ListHandlerLambda()
+            .Args(streamArg)
+            .template Body<TCoForwardList>()
+                .Stream(Build<TCoMap>(ctx, pos)
+                    .Input(multiHoppingCoreBuilder
+                        .template Input<TCoIterator>()
+                            .List(streamArg)
+                            .Build()
+                        .Done())
+                    .Lambda(keysDescription.BuildUnpickleLambda(ctx, pos, *aggregateInputType))
+                    .Done())
+                .Build()
+            .Build()
+        .Done()
+        .Ptr();
+}
+
+TExprNode::TPtr RewriteAsHoppingWindow(TExprNode::TPtr node, TExprContext& ctx) {
+    const auto aggregate = TCoAggregate(node);
+
+    if (!IsPureIsolatedLambda(*aggregate.Ptr())) {
+        return nullptr;
+    }
+
+    if (!GetSetting(aggregate.Settings().Ref(), "hopping")) {
+        return nullptr;
+    }
+
+    auto result = RewriteAsHoppingWindowFullOutput(aggregate, ctx);
+    if (!result) {
+        return result;
+    }
+
+    auto outputColumnSetting = GetSetting(aggregate.Settings().Ref(), "output_columns");
+    if (!outputColumnSetting) {
+        return result;
+    }
+
+    return Build<TCoExtractMembers>(ctx, aggregate.Pos())
+        .Input(result)
+        .Members(outputColumnSetting->ChildPtr(1))
+        .Done()
+        .Ptr();
+}
+
 TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     TVector<ui32> withAssume;
     for (ui32 i = 0; i < node->ChildrenSize() - 2; i++) {
@@ -3246,50 +3413,6 @@ TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, T
         return KeepColumnOrder(result, *node, ctx, *optCtx.Types);
     }
     return node;
-}
-
-std::unordered_set<ui32> GetUselessSortedJoinInputs(const TCoEquiJoin& equiJoin) {
-    std::unordered_map<std::string_view, std::tuple<ui32, const TSortedConstraintNode*, const TChoppedConstraintNode*>> sorteds(equiJoin.ArgCount() - 2U);
-    for (ui32 i = 0U; i + 2U < equiJoin.ArgCount(); ++i) {
-        if (const auto joinInput = equiJoin.Arg(i).Cast<TCoEquiJoinInput>(); joinInput.Scope().Ref().IsAtom()) {
-            const auto sorted = joinInput.List().Ref().GetConstraint<TSortedConstraintNode>();
-            const auto chopped = joinInput.List().Ref().GetConstraint<TChoppedConstraintNode>();
-            if (sorted || chopped)
-                sorteds.emplace(joinInput.Scope().Ref().Content(), std::make_tuple(i, sorted, chopped));
-        }
-    }
-
-    for (std::vector<const TExprNode*> joinTreeNodes(1U, equiJoin.Arg(equiJoin.ArgCount() - 2).Raw()); !joinTreeNodes.empty();) {
-        const auto joinTree = joinTreeNodes.back();
-        joinTreeNodes.pop_back();
-
-        if (!joinTree->Child(1)->IsAtom())
-            joinTreeNodes.emplace_back(joinTree->Child(1));
-
-        if (!joinTree->Child(2)->IsAtom())
-            joinTreeNodes.emplace_back(joinTree->Child(2));
-
-        if (!joinTree->Head().IsAtom("Cross")) {
-            std::unordered_map<std::string_view, TPartOfConstraintBase::TSetType> tableJoinKeys;
-            for (const auto keys : {joinTree->Child(3), joinTree->Child(4)})
-                for (ui32 i = 0U; i < keys->ChildrenSize(); i += 2)
-                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TPartOfConstraintBase::TPathType(1U, keys->Child(i + 1)->Content()));
-
-            for (const auto& [label, joinKeys]: tableJoinKeys) {
-                if (const auto it = sorteds.find(label); sorteds.cend() != it) {
-                    const auto sorted = std::get<const TSortedConstraintNode*>(it->second);
-                    const auto chopped = std::get<const TChoppedConstraintNode*>(it->second);
-                    if (sorted && sorted->StartsWith(joinKeys) || chopped && chopped->Equals(joinKeys))
-                        sorteds.erase(it);
-                }
-            }
-        }
-    }
-
-    std::unordered_set<ui32> result(sorteds.size());
-    for (const auto& sort : sorteds)
-        result.emplace(std::get<ui32>(sort.second));
-    return result;
 }
 
 TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStringBuf parseUdfName, const THashSet<TStringBuf>& serializeUdfNames) {
@@ -5007,6 +5130,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return clean;
         }
 
+        if (auto hopping = RewriteAsHoppingWindow(node, ctx)) {
+            YQL_CLOG(DEBUG, Core) << "RewriteAsHoppingWindow";
+            return hopping;
+        }
+
         return DropReorder<false>(node, ctx);
     };
 
@@ -5066,20 +5194,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "HandleEmptyListInJoin";
             return ret;
-        }
-
-        if (const auto indexes = GetUselessSortedJoinInputs(TCoEquiJoin(node)); !indexes.empty()) {
-            YQL_CLOG(DEBUG, Core) << "Suppress order on " << indexes.size() << ' ' << node->Content() << " inputs.";
-            auto children = node->ChildrenList();
-            for (const auto idx : indexes)
-                children[idx] = ctx.Builder(children[idx]->Pos())
-                    .List()
-                        .Callable(0, "Unordered")
-                            .Add(0, children[idx]->HeadPtr())
-                        .Seal()
-                        .Add(1, children[idx]->TailPtr())
-                    .Seal().Build();
-            return ctx.ChangeChildren(*node, std::move(children));
         }
 
         for (ui32 i = 0U; i < node->ChildrenSize() - 2U; ++i) {
@@ -5863,7 +5977,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
-        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply"})) {
+        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply","PartitionByKey","PartitionsByKeys"})) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over " << node->Head().Content();
             return node->HeadPtr();
         }
@@ -5871,6 +5985,22 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("AssumeSorted")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+        }
+
+        if (node->Head().IsCallable("AssumeConstraints") && node->Head().GetConstraint<TSortedConstraintNode>()) {
+            TConstraintSet constrSet = node->Head().GetConstraintSet();
+            constrSet.RemoveConstraint<TSortedConstraintNode>();
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            auto res = ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
+            if (constrSet) {
+                res = ctx.Builder(node->Head().Pos())
+                    .Callable("AssumeConstraints")
+                        .Add(0, std::move(res))
+                        .Atom(1, NYT::NodeToYsonString(constrSet.ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
+                    .Seal()
+                    .Build();
+            }
+            return res;
         }
 
         return node;
@@ -6563,6 +6693,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
             return lambdaResult;
         }
+        return node;
+    };
+
+    map["Likely"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable("Likely")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return node->HeadPtr();
+        }
+
         return node;
     };
 

@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include "replication.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/core/base/defs.h>
@@ -31,6 +32,10 @@ struct TEvPrivate {
         EvAlterDstResult,
         EvRemoveWorker,
         EvDescribeTargetsResult,
+        EvRequestCreateStream,
+        EvAllowCreateStream,
+        EvRequestDropStream,
+        EvAllowDropStream,
 
         EvEnd,
     };
@@ -38,8 +43,20 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
-        using TAddEntry = std::pair<NYdb::NScheme::TSchemeEntry, TString>; // src, dst
-        using TFailedEntry = std::pair<TString, NYdb::TStatus>; // src, error
+        struct TAddEntry {
+            TString SrcPath;
+            TString DstPath;
+            TReplication::ETargetKind Kind;
+
+            explicit TAddEntry(const TString& srcPath, const TString& dstPath, TReplication::ETargetKind kind);
+        };
+
+        struct TFailedEntry {
+            TString SrcPath;
+            NYdb::TStatus Error;
+
+            explicit TFailedEntry(const TString& srcPath, const NYdb::TStatus& error);
+        };
 
         const ui64 ReplicationId;
         TVector<TAddEntry> ToAdd;
@@ -206,6 +223,18 @@ struct TEvPrivate {
 
         explicit TEvDescribeTargetsResult(const TActorId& sender, ui64 rid, TResult&& result);
         TString ToString() const override;
+    };
+
+    struct TEvRequestCreateStream: public TEventLocal<TEvRequestCreateStream, EvRequestCreateStream> {
+    };
+
+    struct TEvAllowCreateStream: public TEventLocal<TEvAllowCreateStream, EvAllowCreateStream> {
+    };
+
+    struct TEvRequestDropStream: public TEventLocal<TEvRequestDropStream, EvRequestDropStream> {
+    };
+
+    struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
     };
 
 }; // TEvPrivate

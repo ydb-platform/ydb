@@ -16,6 +16,15 @@ const TString TWorkloadGeneratorBase::TsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
+const TString TWorkloadGeneratorBase::PsvDelimiter = "|";
+const TString TWorkloadGeneratorBase::PsvFormatString = [] () {
+    Ydb::Formats::CsvSettings settings;
+    settings.set_delimiter(PsvDelimiter);
+    settings.set_header(true);
+    settings.mutable_quoting()->set_disabled(true);
+    return settings.SerializeAsString();
+} ();
+
 const TString TWorkloadGeneratorBase::CsvDelimiter = ",";
 const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     Ydb::Formats::CsvSettings settings;
@@ -135,11 +144,20 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
 }
 
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
-    return TFsPath(DbPath) / Path/ table;
+    return TFsPath(DbPath) / Path / table;
 }
 
 TWorkloadGeneratorBase::TWorkloadGeneratorBase(const TWorkloadBaseParams& params)
     : Params(params)
 {}
+
+TString TWorkloadBaseParams::GetTablePathQuote(EQuerySyntax syntax) {
+    switch(syntax) {
+    case EQuerySyntax::YQL:
+        return "`";
+    case EQuerySyntax::PG:
+        return "\"";
+    }
+}
 
 }

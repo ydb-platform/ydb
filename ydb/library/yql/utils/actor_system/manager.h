@@ -71,4 +71,4 @@ namespace NYql {
         THolder<TLogBackend> LoggerBackend_ = nullptr;
         IMetricsRegistryPtr MetricsRegistry_;
     };
-}
+} // namespace NYql

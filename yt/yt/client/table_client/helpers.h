@@ -76,6 +76,9 @@ void FromUnversionedValue(TString* value, TUnversionedValue unversionedValue);
 void ToUnversionedValue(TUnversionedValue* unversionedValue, TStringBuf value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
 void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue);
 
+void ToUnversionedValue(TUnversionedValue* unversionedValue, const std::string& value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
+void FromUnversionedValue(std::string* value, TUnversionedValue unversionedValue);
+
 void ToUnversionedValue(TUnversionedValue* unversionedValue, const char* value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
 void FromUnversionedValue(const char** value, TUnversionedValue unversionedValue);
 
@@ -140,6 +143,20 @@ void ToUnversionedValue(
     EValueFlags flags = EValueFlags::None);
 template <class T>
     requires TEnumTraits<T>::IsEnum
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue);
+
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+template <class T>
+    requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void FromUnversionedValue(
     T* value,
     TUnversionedValue unversionedValue);

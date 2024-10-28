@@ -405,6 +405,30 @@ UNIT_ASSERT_VALUES_EQUAL(file.CountCache(0, 12345), -1);
 #endif
 }
 
+Y_UNIT_TEST_SUITE(TTestFileHandle) {
+    Y_UNIT_TEST(MoveAssignment) {
+        TTempFile tmp("tmp");
+        {
+            TFileHandle file1(tmp.Name(), OpenAlways | WrOnly);
+            file1.Write("1", 1);
+
+            TFileHandle file2;
+            file2 = std::move(file1);
+            Y_ENSURE(!file1.IsOpen());
+            Y_ENSURE(file2.IsOpen());
+
+            file2.Write("2", 1);
+        }
+
+        {
+            TFileHandle file(tmp.Name(), OpenExisting | RdOnly);
+            char buf[2];
+            Y_ENSURE(file.Read(buf, 2) == 2);
+            Y_ENSURE(TStringBuf(buf, 2) == "12");
+        }
+    }
+} // Y_UNIT_TEST_SUITE(TTestFileHandle)
+
 Y_UNIT_TEST_SUITE(TTestDecodeOpenMode) {
     Y_UNIT_TEST(It) {
         UNIT_ASSERT_VALUES_EQUAL("0", DecodeOpenMode(0));
@@ -413,4 +437,4 @@ Y_UNIT_TEST_SUITE(TTestDecodeOpenMode) {
         UNIT_ASSERT_VALUES_EQUAL("WrOnly|ForAppend", DecodeOpenMode(WrOnly | ForAppend));
         UNIT_ASSERT_VALUES_EQUAL("RdWr|CreateAlways|CreateNew|ForAppend|Transient|CloseOnExec|Temp|Sync|Direct|DirectAligned|Seq|NoReuse|NoReadAhead|AX|AR|AW|AWOther|0xF8888000", DecodeOpenMode(0xFFFFFFFF));
     }
-}
+} // Y_UNIT_TEST_SUITE(TTestDecodeOpenMode)

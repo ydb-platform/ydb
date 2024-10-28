@@ -24,6 +24,8 @@
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 
@@ -317,6 +319,12 @@ namespace NYql {
 
                 if (useStaticLinking) {
                     NKikimr::NMiniKQL::FillStaticModules(*FuncRegistry_);
+                }
+
+                if (!Options_.PgExtensions_.empty()) {
+                    NPg::RegisterExtensions(Options_.PgExtensions_, false,
+                        *NSQLTranslationPG::CreateExtensionSqlParser(),
+                        NKikimr::NMiniKQL::CreateExtensionLoader().get());
                 }
 
                 TUserDataTable userDataTable = GetYqlModuleResolver(ExprContext_, ModuleResolver_, Options_.UserData_, Clusters_, {});

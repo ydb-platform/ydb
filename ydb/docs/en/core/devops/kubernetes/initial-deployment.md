@@ -26,19 +26,19 @@ Skip this section if you have already configured a suitable {{ k8s }} cluster.
 
   3. Run the following command:
 
-      ```bash
-        eksctl create cluster \
-          --name ydb \
-          --nodegroup-name standard-workers \
-          --node-type c5a.2xlarge \
-          --nodes 3 \
-          --nodes-min 1 \
-          --nodes-max 4
-      ```
+    ```bash
+      eksctl create cluster \
+        --name ydb \
+        --nodegroup-name standard-workers \
+        --node-type c5a.2xlarge \
+        --nodes 3 \
+        --nodes-min 1 \
+        --nodes-max 4
+    ```
 
-      This command will create a {{ k8s }} cluster named `ydb`. The `--node-type` flag indicates that the cluster is deployed using `c5a.2xlarge` (8vCPUs, 16 GiB RAM) instances. This meets minimal guidelines for running {{ ydb-short-name }}.
+    This command will create a {{ k8s }} cluster named `ydb`. The `--node-type` flag indicates that the cluster is deployed using `c5a.2xlarge` (8vCPUs, 16 GiB RAM) instances. This meets minimal guidelines for running {{ ydb-short-name }}.
 
-      It takes 10 to 15 minutes on average to create a {{ k8s }} cluster. Wait for the process to complete before proceeding to the next step of {{ ydb-short-name }} deployment. The `kubectl` configuration will be automatically updated to work with the cluster after it is created.
+    It takes 10 to 15 minutes on average to create a {{ k8s }} cluster. Wait for the process to complete before proceeding to the next step of {{ ydb-short-name }} deployment. The `kubectl` configuration will be automatically updated to work with the cluster after it is created.
 
 
 - {{ managed-k8s-full-name }}
@@ -49,7 +49,7 @@ Skip this section if you have already configured a suitable {{ k8s }} cluster.
 
 ## Overview of {{ ydb-short-name }} Helm chart
 
-The Helm chart installs [YDB Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) to the {{ k8s }} cluster. It is a controller that follows the [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) design pattern. It implements the logic required for deploying and managing {{ ydb-short-name }} components. 
+The Helm chart installs [YDB Kubernetes Operator](https://github.com/ydb-platform/ydb-kubernetes-operator) to the {{ k8s }} cluster. It is a controller that follows the [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) design pattern. It implements the logic required for deploying and managing {{ ydb-short-name }} components.
 
 A {{ ydb-short-name }} cluster consists of two kinds of nodes:
 
@@ -69,43 +69,38 @@ See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-k
 
 ## Environment preparation
 
-1. Clone the [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator) repository:
+1. Add the {{ ydb-short-name }} repository to Helm:
 
-    ```bash
-    git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
-    ```
+  Run the command:
 
-2. Add the {{ ydb-short-name }} repository to Helm:
+  ```bash
+  helm repo add ydb https://charts.ydb.tech/
+  ```
 
-    Run the command:
+  `ydb`: The repository alias.
+  `https://charts.ydb.tech/`: The {{ ydb-short-name }} repository URL.
 
-    ```bash
-    helm repo add ydb https://charts.ydb.tech/
-    ```
-    * `ydb`: The repository alias.
-    * `https://charts.ydb.tech/`: The {{ ydb-short-name }} repository URL.
+  Output:
 
-    Output:
+  ```text
+  "ydb" has been added to your repositories
+  ```
 
-    ```text
-    "ydb" has been added to your repositories
-    ```
+2. Update the Helm chart index:
 
-3. Update the Helm chart index:
+  Run the command:
 
-    Run the command:
+  ```bash
+  helm repo update
+  ```
 
-    ```bash
-    helm repo update
-    ```
+  Output:
 
-    Output:
-
-    ```text
-    Hang tight while we grab the latest from your chart repositories...
-    ...Successfully got an update from the "ydb" chart repository
-    Update Complete. ⎈Happy Helming!⎈
-    ```
+  ```text
+  Hang tight while we grab the latest from your chart repositories...
+  ...Successfully got an update from the "ydb" chart repository
+  Update Complete. ⎈Happy Helming!⎈
+  ```
 
 ## Deploying a {{ ydb-short-name }} cluster
 
@@ -113,25 +108,23 @@ See the operator's source code [on GitHub](https://github.com/ydb-platform/ydb-k
 
 Use `helm` to deploy the {{ ydb-short-name }} {{ k8s }} operator to the cluster:
 
-  Run the command:
+```bash
+helm install ydb-operator ydb/ydb-operator
+```
 
-  ```bash
-  helm install ydb-operator ydb/ydb-operator
-  ```
+* `ydb-operator`: The installation name.
+* `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
 
-  * `ydb-operator`: The installation name.
-  * `ydb/ydb-operator`: The name of the chart in the repository you have added earlier.
+Result:
 
-  Result:
-
-  ```text
-  NAME: ydb-operator
-  LAST DEPLOYED: Thu Aug 12 19:32:28 2021
-  NAMESPACE: default
-  STATUS: deployed
-  REVISION: 1
-  TEST SUITE: None
-  ```
+```text
+NAME: ydb-operator
+LAST DEPLOYED: Thu Aug 12 19:32:28 2021
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+```
 
 ### Deploy storage nodes
 
@@ -144,7 +137,7 @@ Apply the manifest for creating storage nodes:
 - block-4-2
 
   ```bash
-  kubectl apply -f samples/storage-block-4-2.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-block-4-2.yaml
   ```
 
   This will create 8 {{ ydb-short-name }} storage nodes that persist data using erasure coding. This takes only 50% of additional storage space to provide fault-tolerance.
@@ -152,7 +145,7 @@ Apply the manifest for creating storage nodes:
 - mirror-3-dc
 
   ```bash
-  kubectl apply -f samples/storage-mirror-3-dc.yaml
+  kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/storage-mirror-3dc.yaml
   ```
 
   This will create 9 {{ ydb-short-name }} storage nodes that store data with replication factor 3.
@@ -176,7 +169,7 @@ The cluster configuration is static. The controller won't process any changes wh
 Apply the manifest for creating a database and dynamic nodes:
 
 ```bash
-kubectl apply -f samples/database.yaml
+kubectl apply -f https://raw.githubusercontent.com/ydb-platform/ydb-kubernetes-operator/master/samples/database.yaml
 ```
 
 {% note info %}
@@ -195,7 +188,7 @@ kubectl describe database.ydb.tech
 
 Result:
 
-```
+```text
 Name:         database-sample
 Namespace:    default
 Labels:       <none>
@@ -215,11 +208,9 @@ Events:
 
 `State: Ready` means that the database is ready to be used.
 
-
 ### Test cluster operation
 
 Check how {{ ydb-short-name }} works:
-
 
  1. Check that all nodes are in the `Running` status:
 
@@ -229,7 +220,7 @@ Check how {{ ydb-short-name }} works:
 
     Result:
 
-    ```
+    ```text
     NAME                READY   STATUS    RESTARTS   AGE
     database-sample-0   1/1     Running   0          1m
     database-sample-1   1/1     Running   0          1m
@@ -282,7 +273,7 @@ Check how {{ ydb-short-name }} works:
 
 After you have tested that the created {{ ydb-short-name }} cluster operates fine you can continue using it as you see fit. For example, if you just want to continue experimenting, you can use it to follow the [YQL tutorial](../../dev/yql-tutorial/index.md).
 
-Below are a few more things to consider. 
+Below are a few more things to consider.
 
 ### Monitoring
 

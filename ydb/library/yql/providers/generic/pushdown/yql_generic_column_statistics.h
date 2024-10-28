@@ -83,4 +83,4 @@ namespace NYql::NGenericPushDown {
         TMaybe<TTimestampColumnStatsData> Timestamp;
     };
 
-}
+} // namespace NYql::NGenericPushDown

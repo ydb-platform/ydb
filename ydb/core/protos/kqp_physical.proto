@@ -60,10 +60,23 @@ message TKqpPhyColumnId {
     string Name = 2;
 }
 
+message TKqpPhyColumnTypeParam {
+    oneof TypeParam {
+        string PgTypeName = 1;    
+        Ydb.DecimalType Decimal = 2;
+    }
+}
+
+message TKqpPhySequenceId {
+    uint64 OwnerId = 2;
+    uint64 LocalPathId = 3;
+}
+
 message TKqpPhyColumn {
+
     TKqpPhyColumnId Id = 1;
     uint32 TypeId = 2;
-    string PgTypeName = 3;
+    optional TKqpPhyColumnTypeParam TypeParam = 3;
     oneof DefaultKind {
         string DefaultFromSequence = 4;
         Ydb.TypedValue DefaultFromLiteral = 5;
@@ -72,6 +85,7 @@ message TKqpPhyColumn {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 7;
+    optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
 }
 
 enum EKqpPhyTableKind {
@@ -376,6 +390,8 @@ message TKqpPhyStage {
     repeated TKqpSink Sinks = 11;
     map<string, string> SecureParams = 12;
     bool AllowWithSpilling = 13;
+    uint32 TaskCount = 14;
+    double StageCost = 15;
 }
 
 message TKqpPhyResult {
@@ -384,6 +400,11 @@ message TKqpPhyResult {
     bool IsStream = 3;
     repeated string ColumnHints = 4;
     optional uint32 QueryResultIndex = 5;
+}
+
+message TKqpAnalyzeOperation {
+    string TablePath = 1;
+    repeated string Columns = 2;
 }
 
 message TKqpPhyMetadataOperation {
@@ -450,6 +471,10 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateResourcePool = 38;
         NKikimrSchemeOp.TModifyScheme AlterResourcePool = 39;
         NKikimrSchemeOp.TModifyScheme DropResourcePool = 40;
+        TKqpAnalyzeOperation AnalyzeTable = 41;
+        NKikimrSchemeOp.TModifyScheme CreateTopic = 42;
+        NKikimrSchemeOp.TModifyScheme AlterTopic = 43;
+        NKikimrSchemeOp.TModifyScheme DropTopic = 44;
     }
 }
 

@@ -10,7 +10,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_session.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h>
-#include <ydb/public/sdk/cpp/client/ydb_federated_topic/ut/fds_mock.h>
+#include <ydb/public/sdk/cpp/client/ydb_federated_topic/ut/fds_mock/fds_mock.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -1095,6 +1095,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .EventHandlers_.SessionClosedHandler([&](const NTopic::TSessionClosedEvent &ev) {
                 ++(ev.IsSuccess() ? successfulSessionClosedEvents : otherSessionClosedEvents);
             });
+
+        writeSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
 
         auto WriteSession = topicClient.CreateWriteSession(writeSettings);
 

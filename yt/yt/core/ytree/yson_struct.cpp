@@ -74,7 +74,12 @@ void TYsonStructBase::Load(IInputStream* input)
 void TYsonStructBase::Save(IYsonConsumer* consumer) const
 {
     consumer->OnBeginMap();
+    SaveAsMapFragment(consumer);
+    consumer->OnEndMap();
+}
 
+void TYsonStructBase::SaveAsMapFragment(NYson::IYsonConsumer* consumer) const
+{
     for (const auto& [name, parameter] : Meta_->GetParameterSortedList()) {
         if (!parameter->CanOmitValue(this)) {
             consumer->OnKeyedItem(name);
@@ -90,8 +95,6 @@ void TYsonStructBase::Save(IYsonConsumer* consumer) const
             Serialize(child, consumer);
         }
     }
-
-    consumer->OnEndMap();
 }
 
 void TYsonStructBase::Save(IOutputStream* output) const
@@ -143,6 +146,11 @@ std::vector<TString> TYsonStructBase::GetAllParameterAliases(const TString& key)
 void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
 {
     return Meta_->WriteSchema(this, consumer);
+}
+
+bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
+{
+    return Meta_->CompareStructs(this, &rhs);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

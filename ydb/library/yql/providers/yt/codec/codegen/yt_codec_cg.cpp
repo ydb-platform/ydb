@@ -50,9 +50,9 @@ extern "C" void YtCodecWriteJsonDocument(void* vbuf, const char* buffer, ui32 le
     NCommon::TOutputBuf& buf = *(NCommon::TOutputBuf*)vbuf;
     TStringBuf binaryJson(buffer, len);
     const TString json = NBinaryJson::SerializeToJson(binaryJson);
-    const ui32 size = json.Size();
+    const ui32 size = json.size();
     buf.WriteMany((const char*)&size, sizeof(size));
-    buf.WriteMany(json.Data(), size);
+    buf.WriteMany(json.data(), size);
 }
 
 extern "C" void YtCodecReadJsonDocument(void* vbuf, void* vpod) {
@@ -67,7 +67,7 @@ extern "C" void YtCodecReadJsonDocument(void* vbuf, void* vpod) {
     buf.ReadMany(json.AsStringRef().Data(), size);
 
     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(json.AsStringRef());
-    if (!binaryJson.Defined()) {
+    if (binaryJson.IsFail()) {
         YQL_ENSURE(false, "Invalid JSON stored for JsonDocument type");
     }
 
@@ -127,7 +127,7 @@ public:
             {
                 Block_ = just;
                 CallInst::Create(module.getFunction("WriteJust"), { buf }, "", Block_);
-                if (unwrappedType->IsOptional()) {
+                if (unwrappedType->IsOptional() || unwrappedType->IsPg()) {
                     const auto unwrappedElem = GetOptionalValue(context, elem, Block_);
                     const auto unwrappedElemPtr = new AllocaInst(valueType, 0U, "unwrapped", Block_);
                     new StoreInst(unwrappedElem, unwrappedElemPtr, Block_);

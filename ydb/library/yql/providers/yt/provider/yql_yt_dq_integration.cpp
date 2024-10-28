@@ -45,100 +45,16 @@ namespace {
         ctx.IssueManager.RaiseIssue(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_INFO, "Can't use block reader: " + msg));
     }
 
-    bool CheckBlockReaderSupportedTypes(const TSet<TString>& list, const TSet<NUdf::EDataSlot>& dataTypesSupported, const TStructExprType* types, TExprContext& ctx, const TPosition& pos) {
-        TSet<ETypeAnnotationKind> supported;
-        for (const auto &e: list) {
-            if (e == "pg") {
-                supported.insert(ETypeAnnotationKind::Pg);
-            } else if (e == "tuple") {
-                supported.emplace(ETypeAnnotationKind::Tuple);
-            } else if (e == "struct") {
-                supported.emplace(ETypeAnnotationKind::Struct);
-            } else if (e == "dict") {
-                supported.emplace(ETypeAnnotationKind::Dict);
-            } else if (e == "list") {
-                supported.emplace(ETypeAnnotationKind::List);
-            } else if (e == "variant") {
-                supported.emplace(ETypeAnnotationKind::Variant);
-            } else {
-                // Unknown type
-                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unknown type: " << e);
-                return false;
-            }
-        }
-        if (dataTypesSupported.size()) {
-            supported.emplace(ETypeAnnotationKind::Data);
-        }
-        auto checkType = [&] (const TTypeAnnotationNode* type) {
-             if (type->GetKind() == ETypeAnnotationKind::Data) {
-                if (!supported.contains(ETypeAnnotationKind::Data)) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported data types");
-                    return false;
-                }
-                if (!dataTypesSupported.contains(type->Cast<TDataExprType>()->GetSlot())) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
-                    return false;
-                }
-            } else if (type->GetKind() == ETypeAnnotationKind::Pg) {
-                if (!supported.contains(ETypeAnnotationKind::Pg)) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported pg");
-                    return false;
-                }
-                auto name = type->Cast<TPgExprType>()->GetName();
-                if (name == "float4" && !dataTypesSupported.contains(NUdf::EDataSlot::Float)) {
-                    BlockReaderAddInfo(ctx, pos, TStringBuilder() << "PgFloat4 unsupported yet since float is no supported");
-                    return false;
-                }
-            } else {
-                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported annotation kind: " << type->GetKind());
-                return false;
-            }
-            return true;
-        };
-
-        TVector<const TTypeAnnotationNode*> stack;
-
+    bool CheckBlockReaderSupportedTypes(const TSet<TString>& supportedTypes, const TSet<NUdf::EDataSlot>& supportedDataTypes, const TStructExprType* types, TExprContext& ctx, const TPosition& pos) {
+        TTypeAnnotationNode::TListType typesToCheck;
         for (auto sub: types->GetItems()) {
             auto subT = sub->GetItemType();
-            stack.push_back(subT);
+            typesToCheck.push_back(subT);
         }
-        while (!stack.empty()) {
-            auto el = stack.back();
-            stack.pop_back();
-            if (el->GetKind() == ETypeAnnotationKind::Optional) {
-                stack.push_back(el->Cast<TOptionalExprType>()->GetItemType());
-                continue;
-            }
-            if (!supported.contains(el->GetKind())) {
-                BlockReaderAddInfo(ctx, pos, TStringBuilder() << "unsupported " << el->GetKind());
-                return false;
-            }
-            if (el->GetKind() == ETypeAnnotationKind::Tuple) {
-                for (auto e: el->Cast<TTupleExprType>()->GetItems()) {
-                    stack.push_back(e);
-                }
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::Struct) {
-                for (auto e: el->Cast<TStructExprType>()->GetItems()) {
-                    stack.push_back(e->GetItemType());
-                }
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::List) {
-                stack.push_back(el->Cast<TListExprType>()->GetItemType());
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::Dict) {
-                stack.push_back(el->Cast<TDictExprType>()->GetKeyType());
-                stack.push_back(el->Cast<TDictExprType>()->GetPayloadType());
-                continue;
-            } else if (el->GetKind() == ETypeAnnotationKind::Variant) {
-                stack.push_back(el->Cast<TVariantExprType>()->GetUnderlyingType());
-                continue;
-            }
-            if (!checkType(el)) {
-                return false;
-            }
-        }
-        return true;
+
+        return CheckSupportedTypes(typesToCheck, supportedTypes, supportedDataTypes, [&ctx, &pos](const TString& msg) {
+            BlockReaderAddInfo(ctx, pos, msg);
+        });
     }
 };
 
@@ -426,11 +342,6 @@ public:
                     AddMessage(ctx, info, skipIssues, State_->PassiveExecution);
                     return false;
                 }
-                auto sampleSetting = GetSetting(section.Settings().Ref(), EYtSettingType::Sample);
-                if (sampleSetting && sampleSetting->Child(1)->Child(0)->Content() == "system") {
-                    AddMessage(ctx, "system sampling", skipIssues, State_->PassiveExecution);
-                    return false;
-                }
                 for (auto path: section.Paths()) {
                     if (!path.Table().Maybe<TYtTable>()) {
                         AddMessage(ctx, "non-table path", skipIssues, State_->PassiveExecution);
@@ -515,6 +426,14 @@ public:
         const TYtSectionList& sectionList = wrap.Input().Cast<TYtReadTable>().Input();
         for (size_t i = 0; i < sectionList.Size(); ++i) {
             auto section = sectionList.Item(i);
+            auto paths = section.Paths();
+            for (const auto& path : section.Paths()) {
+                if (!IsYtTableSuitableForArrowInput(path.Table(), [&ctx, &node](const TString& msg) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), msg);
+                })) {
+                    return false;
+                }
+            }
             if (!NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns).empty()) {
                 BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "system column");
                 return false;
@@ -647,6 +566,64 @@ public:
         return read;
     }
 
+    TExprNode::TPtr RecaptureWrite(const TExprNode::TPtr& write, TExprContext& ctx) override {
+        if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
+            if (State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto& content = maybeWrite.Cast().Content();
+                if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
+                    return write;
+                }
+                TExprNode::TPtr newContent;
+                const auto materializeWorld = ctx.NewWorld(write->Pos()); // TODO: maybeWrite.Cast().World()
+                if (content.Maybe<TCoAssumeSorted>()) {
+                    // Duplicate AssumeSorted before YtMaterialize, because DQ cannot keep sort and so optimizes AssumeSorted as complete Sort
+                    // Before: YtWrite -> AssumeSorted -> ...
+                    // After: YtWrite -> AssumeConstraints -> YtMaterialize -> AssumeSorted -> ...
+                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
+                        .World(materializeWorld)
+                        .DataSink(maybeWrite.Cast().DataSink())
+                        .Input(content)
+                        .Settings().Build()
+                        .Done().Ptr();
+                } else if (content.Raw()->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName()}) && !content.Raw()->GetConstraint<TSortedConstraintNode>()) {
+                    // For Sorts by non members lambdas do it on YT side because of aux columns
+                    // Before: YtWrite -> Sort/TopSort -> ...
+                    // After: YtWrite -> Sort/TopSort -> YtMaterialize -> ...
+                    auto materialize = Build<TYtMaterialize>(ctx, content.Pos())
+                        .World(materializeWorld)
+                        .DataSink(maybeWrite.Cast().DataSink())
+                        .Input(content.Cast<TCoInputBase>().Input())
+                        .Settings().Build()
+                        .Done();
+                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, materialize.Ptr());
+                } else {
+                    // Materialize dq graph to yt table before YtWrite:
+                    // Before: YtWrite -> Some callables ...
+                    // After: YtWrite -> YtMaterialize -> Some callables ...
+                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
+                        .World(materializeWorld)
+                        .DataSink(maybeWrite.Cast().DataSink())
+                        .Input(content)
+                        .Settings().Build()
+                        .Done().Ptr();
+                }
+                if (content.Raw()->GetConstraint<TSortedConstraintNode>() || content.Raw()->GetConstraint<TDistinctConstraintNode>() || content.Raw()->GetConstraint<TUniqueConstraintNode>()) {
+                    newContent = Build<TCoAssumeConstraints>(ctx, content.Pos())
+                        .Input(newContent)
+                        .Value()
+                            .Value(NYT::NodeToYsonString(content.Raw()->GetConstraintSet().ToYson(), NYson::EYsonFormat::Text), TNodeFlags::MultilineContent)
+                        .Build()
+                        .Done().Ptr();
+                }
+                return Build<TYtWriteTable>(ctx, write->Pos())
+                    .InitFrom(maybeWrite.Cast())
+                    .Content(newContent)
+                    .Done().Ptr();
+            }
+        }
+        return write;
+    }
+
     void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override {
         const TDqLookupSourceWrap wrap(&node);
         auto table = wrap.Input().Cast<TYtTable>();
@@ -667,7 +644,6 @@ public:
         settings.PackFrom(source);
         sourceType = "yt";
     }
-
 
     TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& ctx) override {
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {
@@ -691,17 +667,19 @@ public:
                 return false;
             }
 
-            const auto content = maybeWrite.Cast().Content().Raw();
-            if (const auto sorted = content->GetConstraint<TSortedConstraintNode>()) {
-                if (const auto distinct = content->GetConstraint<TDistinctConstraintNode>()) {
-                    if (distinct->IsOrderBy(*sorted)) {
-                        AddInfo(ctx, "unsupported write of unique data", false);
+            if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto content = maybeWrite.Cast().Content().Raw();
+                if (const auto sorted = content->GetConstraint<TSortedConstraintNode>()) {
+                    if (const auto distinct = content->GetConstraint<TDistinctConstraintNode>()) {
+                        if (distinct->IsOrderBy(*sorted)) {
+                            AddInfo(ctx, "unsupported write of unique data", false);
+                            return false;
+                        }
+                    }
+                    if (!content->IsCallable({"Sort", "TopSort", "AssumeSorted"})) {
+                        AddInfo(ctx, "unsupported write of sorted data", false);
                         return false;
                     }
-                }
-                if (!content->IsCallable({"Sort", "TopSort", "AssumeSorted"})) {
-                    AddInfo(ctx, "unsupported write of sorted data", false);
-                    return false;
                 }
             }
             return true;

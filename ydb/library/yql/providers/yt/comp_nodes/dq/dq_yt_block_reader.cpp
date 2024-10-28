@@ -1,10 +1,10 @@
 #include "dq_yt_block_reader.h"
 #include "stream_decoder.h"
 #include "dq_yt_rpc_helpers.h"
-#include "arrow_converter.h"
 
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 
+#include <ydb/library/yql/providers/yt/codec/yt_arrow_converter.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -310,6 +310,7 @@ public:
         YQL_ENSURE(batch);
         MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
+        YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
         result.resize(ColumnConverters_.size());
         size_t matchedColumns = 0;
         for (size_t i = 0; i < ColumnConverters_.size(); ++i) {

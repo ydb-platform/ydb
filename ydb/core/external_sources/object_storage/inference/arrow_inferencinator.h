@@ -9,6 +9,7 @@ enum class EFileFormat {
     CsvWithNames,
     TsvWithNames,
     JsonEachRow,
+    JsonList,
     Parquet,
 };
 
@@ -21,6 +22,9 @@ constexpr EFileFormat ConvertFileFormat(TStringBuf format) {
     }
     if (format == "json_each_row") {
         return EFileFormat::JsonEachRow;
+    }
+    if (format == "json_list") {
+        return EFileFormat::JsonList;
     }
     if (format == "parquet") {
         return EFileFormat::Parquet;
@@ -37,6 +41,8 @@ constexpr TStringBuf ConvertFileFormat(EFileFormat format) {
         return "tsv_with_names";
     case EFileFormat::JsonEachRow:
         return "json_each_row";
+    case EFileFormat::JsonList:
+        return "json_list";
     case EFileFormat::Parquet:
       return "parquet";
     case EFileFormat::Undefined:
@@ -53,5 +59,5 @@ constexpr bool IsArrowInferredFormat(TStringBuf format) {
     return IsArrowInferredFormat(ConvertFileFormat(format));
 }
 
-NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher, EFileFormat format, const THashMap<TString, TString>& params);
+NActors::IActor* CreateArrowInferencinator(NActors::TActorId arrowFetcher);
 } // namespace NKikimr::NExternalSource::NObjectStorage::NInference

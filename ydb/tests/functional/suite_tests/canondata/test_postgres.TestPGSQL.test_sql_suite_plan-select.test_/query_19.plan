@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,22 +14,22 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-TableFullScan",
+                                        "Node Type": "Limit-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -43,30 +43,39 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "item.unique2 == 11 And item.stringu1 == \"ATAAAA\""
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "stringu1",
-                                                    "unique2"
-                                                ],
-                                                "ReadRanges": [
-                                                    "unique1 (-\u221e, +\u221e)",
-                                                    "unique2 (-\u221e, +\u221e)"
-                                                ],
-                                                "Scan": "Parallel",
-                                                "Table": "postgres_select.test_plan/onek2"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "postgres_select.test_plan/onek2"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "stringu1",
+                                                            "unique2"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "unique1 (-\u221e, +\u221e)",
+                                                            "unique2 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_select.test_plan/onek2"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "postgres_select.test_plan/onek2"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]
@@ -75,7 +84,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

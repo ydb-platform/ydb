@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/formats/arrow
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/core/tx/columnshard/blobs_action/bs
@@ -13,6 +14,8 @@ SRCS(
     helper.cpp
     controllers.cpp
     columnshard_ut_common.cpp
+    shard_reader.cpp
+    shard_writer.cpp
 )
 
 IF (OS_WINDOWS)

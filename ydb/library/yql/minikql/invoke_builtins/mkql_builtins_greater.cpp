@@ -299,6 +299,7 @@ void RegisterGreater(TKernelFamilyMap& kernelFamilyMap) {
 
     AddNumericComparisonKernels<TGreaterOp>(*family);
     AddDateComparisonKernels<TDiffDateGreaterOp>(*family);
+    AddDecimalComparisonKernels<TDecimalGreater>(*family);
     RegisterStringKernelGreater(*family);
 
     kernelFamilyMap["Greater"] = std::move(family);

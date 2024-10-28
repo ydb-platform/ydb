@@ -1,0 +1,7 @@
+diff --git a/ares_setup.h b/ares_setup.h
+index 4df7961..b9a1fd5 100644
+--- a/src/lib/ares_setup.h
++++ b/src/lib/ares_setup.h
+@@ -28,1 +28,1 @@
+-#ifdef HAVE_CONFIG_H
++#if defined(HAVE_CONFIG_H) && !defined(_MSC_VER)

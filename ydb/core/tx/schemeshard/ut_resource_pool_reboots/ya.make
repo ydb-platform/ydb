@@ -5,10 +5,11 @@ IF (NOT WITH_VALGRIND)
 
     SPLIT_FACTOR(60)
 
-    IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+    IF (SANITIZER_TYPE OR WITH_VALGRIND)
         TIMEOUT(3600)
         SIZE(LARGE)
         TAG(ya:fat)
+        REQUIREMENTS(ram:12)
     ELSE()
         TIMEOUT(600)
         SIZE(MEDIUM)
@@ -24,8 +25,6 @@ IF (NOT WITH_VALGRIND)
     SRCS(
         ut_resource_pool_reboots.cpp
     )
-
-    REQUIREMENTS(ram:12)
 
 END()
 ENDIF()

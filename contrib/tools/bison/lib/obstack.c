@@ -1,5 +1,5 @@
 /* obstack.c - subroutines used implicitly by object stack macros
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988-2020 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -322,7 +322,7 @@ int obstack_exit_failure = EXIT_FAILURE;
 #   include <libio/iolibio.h>
 #  endif
 
-static _Noreturn void
+static __attribute_noreturn__ void
 print_and_abort (void)
 {
   /* Don't change any of these strings.  Yes, it would be possible to add

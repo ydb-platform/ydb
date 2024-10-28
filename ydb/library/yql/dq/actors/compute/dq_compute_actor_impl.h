@@ -109,6 +109,7 @@ protected:
 public:
     void Bootstrap() {
         try {
+            StartTime = TInstant::Now();
             {
                 TStringBuilder prefixBuilder;
                 prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
@@ -188,6 +189,12 @@ protected:
                     true,
                     false
         );
+
+        if (ComputeActorSpan) {
+            ComputeActorSpan.Attribute("stageLevel", static_cast<int>(Task.GetProgram().GetSettings().GetStageLevel()));
+            ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
+        }
+
         Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
         if (ownMemoryQuota) {
@@ -200,6 +207,7 @@ protected:
             MkqlMemoryQuota = taskCounters->GetCounter("MkqlMemoryQuota");
             OutputChannelSize = taskCounters->GetCounter("OutputChannelSize");
             SourceCpuTimeMs = taskCounters->GetCounter("SourceCpuTimeMs", true);
+            InputTransformCpuTimeMs = taskCounters->GetCounter("InputTransformCpuTimeMs", true);
         }
     }
 
@@ -313,12 +321,12 @@ protected:
     void OnMemoryLimitExceptionHandler() {
         TString memoryConsumptionDetails = MemoryLimits.MemoryQuotaManager->MemoryConsumptionDetails();
         TStringBuilder failureReason = TStringBuilder()
-            << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
+            << "Mkql memory limit exceeded, allocated by task " << Task.GetId() << ": " << GetMkqlMemoryLimit()
             << ", host: " << HostName()
             << ", canAllocateExtraMemory: " << CanAllocateExtraMemory;
 
         if (!memoryConsumptionDetails.empty()) {
-            failureReason << ", memory manager details: " << memoryConsumptionDetails;
+            failureReason << ", memory manager details for current node: " << memoryConsumptionDetails;
         }
 
         InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, failureReason);
@@ -523,6 +531,10 @@ protected:
         Terminate(success, TIssues({TIssue(message)}));
     }
 
+    virtual TMaybe<google::protobuf::Any> ExtraData() {
+        return Nothing();
+    }
+
     void FillExtraData(NDqProto::TEvComputeActorState& state) {
         auto* extraData = state.MutableExtraData();
         for (auto& [index, input] : SourcesMap) {
@@ -552,9 +564,14 @@ protected:
                 }
             }
         }
+
+        if (auto data = static_cast<TDerived*>(this)->ExtraData()) {
+            auto* entry = extraData->MutableComputeExtraData();
+            entry->MutableData()->CopyFrom(*data);
+        }
     }
 
-    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
+    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool forceTerminate = false)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
@@ -575,7 +592,7 @@ protected:
 
         this->Send(ExecuterId, execEv.Release());
 
-        if (Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
+        if (!forceTerminate && Checkpoints && State == NDqProto::COMPUTE_STATE_FINISHED) {
             // checkpointed CAs must not self-destroy
             return;
         }
@@ -627,6 +644,10 @@ protected:
             ResumeEventScheduled = true;
             this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
         }
+    }
+
+    void SendError(const TString& error) {
+        this->Send(this->SelfId(), TEvDq::TEvAbortExecution::InternalError(error));
     }
 
 protected: //TDqComputeActorChannels::ICallbacks
@@ -1028,10 +1049,6 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
-                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, TStringBuilder()
-                    << "Timeout event from compute actor " << this->SelfId()
-                    << ", TxId: " << TxId << ", task: " << Task.GetId());
-
                 if (ComputeActorSpan) {
                     ComputeActorSpan.EndError(
                         TStringBuilder()
@@ -1040,10 +1057,14 @@ protected:
                     );
                 }
 
-                this->Send(ExecuterId, abortEv.Release());
+                TStringBuilder reason = TStringBuilder() << "Task execution timeout ";
+                if (RuntimeSettings.Timeout) {
+                    reason << RuntimeSettings.Timeout->MilliSeconds() << "ms ";
+                }
+                reason << "exceeded, terminating after " << (TInstant::Now() - StartTime).MilliSeconds() << "ms";
 
-                TerminateSources("timeout exceeded", false);
-                Terminate(false, "timeout exceeded");
+                State = NDqProto::COMPUTE_STATE_FAILURE;
+                ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue(reason)}, true);
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1067,8 +1088,9 @@ protected:
         switch (lostEventType) {
             case TEvDqCompute::TEvState::EventType: {
                 CA_LOG_E("Handle undelivered TEvState event, abort execution");
-                this->TerminateSources("executer lost", false);
-                Terminate(false, "executer lost");
+
+                TerminateSources("executer lost", false);
+                Terminate(false, "executer lost"); // Executer lost - no need to report state
                 break;
             }
             default: {
@@ -1114,14 +1136,17 @@ protected:
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ev->Get()->GetIssues().begin());
             return;
         }
+
         TIssues issues = ev->Get()->GetIssues();
         CA_LOG_E("Handle abort execution event from: " << ev->Sender
             << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
             << ", reason: " << issues.ToOneLineString());
 
-        bool success = ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS;
-
-        this->TerminateSources(issues, success);
+        if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS) {
+            State = NDqProto::COMPUTE_STATE_FINISHED;
+        } else {
+            State = NDqProto::COMPUTE_STATE_FAILURE;
+        }
 
         if (ev->Sender != ExecuterId) {
             if (ComputeActorSpan) {
@@ -1131,7 +1156,7 @@ protected:
             NActors::TActivationContext::Send(ev->Forward(ExecuterId));
         }
 
-        Terminate(success, issues);
+        ReportStateAndMaybeDie(ev->Get()->Record.GetStatusCode(), issues, true);
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -1316,6 +1341,7 @@ protected:
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
                         .ComputeActorId = this->SelfId(),
+                        .TaskCounters = TaskCounters,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .Alloc = Alloc,
@@ -1337,6 +1363,7 @@ protected:
                         .OutputIndex = outputIndex,
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
+                        .TaskId = Task.GetId(),
                         .TransformOutput = transform.OutputBuffer,
                         .Callback = static_cast<TOutputTransformCallbacks*>(this),
                         .SecureParams = secureParams,
@@ -1362,13 +1389,15 @@ protected:
                         .OutputIndex = outputIndex,
                         .StatsLevel = collectStatsLevel,
                         .TxId = TxId,
+                        .TaskId = Task.GetId(),
                         .Callback = static_cast<TSinkCallbacks*>(this),
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .Alloc = Alloc,
-                        .RandomProvider = randomProvider
+                        .RandomProvider = randomProvider,
+                        .TraceId = ComputeActorSpan.GetTraceId(),
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();
@@ -1378,8 +1407,20 @@ protected:
     }
 
     void PollAsyncInput() {
+        if (!Running) {
+            CA_LOG_T("Skip polling inputs and sources because not running");
+            return;
+        }
+
+        CA_LOG_T("Poll inputs");
+        for (auto& [inputIndex, transform] : InputTransformsMap) {
+            if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
+                ContinueExecute(*resume);
+            }
+        }
+
         // Don't produce any input from sources if we're about to save checkpoint.
-        if (!Running || (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
+        if ((Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
             CA_LOG_T("Skip polling sources because of pending checkpoint");
             return;
         }
@@ -1390,22 +1431,24 @@ protected:
                 ContinueExecute(*resume);
             }
         }
-
-        CA_LOG_T("Poll inputs");
-        for (auto& [inputIndex, transform] : InputTransformsMap) {
-            if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                ContinueExecute(*resume);
-            }
-        }
     }
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {
         Y_ABORT_UNLESS(SourcesMap.FindPtr(ev->Get()->InputIndex) || InputTransformsMap.FindPtr(ev->Get()->InputIndex));
-        auto cpuTimeDelta = TakeSourceCpuTimeDelta();
-        if (SourceCpuTimeMs) {
-            SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
+        {
+            auto cpuTimeDelta = TakeSourceCpuTimeDelta();
+            if (SourceCpuTimeMs) {
+                SourceCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
+            }
+            CpuTimeSpent += cpuTimeDelta;
         }
-        CpuTimeSpent += cpuTimeDelta;
+        {
+            auto cpuTimeDelta = TakeInputTransformCpuTimeDelta();
+            if (InputTransformCpuTimeMs) {
+                InputTransformCpuTimeMs->Add(cpuTimeDelta.MilliSeconds());
+            }
+            CpuTimeSpent += cpuTimeDelta;
+        }
         ContinueExecute(EResumeSource::CANewAsyncInput);
     }
 
@@ -1600,6 +1643,21 @@ public:
         return result;
     }
 
+    TDuration GetInputTransformCpuTime() const {
+        auto result = TDuration::Zero();
+        for (auto& [inputIndex, sourceInfo] : InputTransformsMap) {
+            result += sourceInfo.AsyncInput->GetCpuTime();
+        }
+        return result;
+    }
+
+    TDuration TakeInputTransformCpuTimeDelta() {
+        auto newInputTransformCpuTime = GetInputTransformCpuTime();
+        auto result = newInputTransformCpuTime - InputTransformCpuTime;
+        InputTransformCpuTime = newInputTransformCpuTime;
+        return result;
+    }
+
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (RuntimeSettings.CollectNone()) {
             return;
@@ -1609,7 +1667,7 @@ public:
             ReportEventElapsedTime();
         }
 
-        dst->SetCpuTimeUs(CpuTime.MicroSeconds());
+        dst->SetCpuTimeUs(CpuTime.MicroSeconds() + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
         dst->SetMaxMemoryUsage(MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
 
         if (auto memProfileStats = GetMemoryProfileStats(); memProfileStats) {
@@ -1642,10 +1700,13 @@ public:
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
 
-            // More accurate cpu time counter:
+            auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
-                protoTask->SetCpuTimeUs(CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
+                // Async TR is another actor, summarize CPU usage
+                cpuTimeUs += CpuTime.MicroSeconds();
             }
+            // CpuTimeUs does include SourceCpuTime
+            protoTask->SetCpuTimeUs(cpuTimeUs + SourceCpuTime.MicroSeconds() + InputTransformCpuTime.MicroSeconds());
             protoTask->SetSourceCpuTimeUs(SourceCpuTime.MicroSeconds());
 
             ui64 ingressBytes = 0;
@@ -1811,6 +1872,8 @@ public:
                     }
                 }
             }
+        } else {
+            // TODO: what should happen in this case?
         }
 
         static_cast<TDerived*>(this)->FillExtraStats(dst, last);
@@ -1911,7 +1974,9 @@ protected:
     TDqComputeActorMetrics MetricsReporter;
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
+    TDuration InputTransformCpuTime;
 private:
+    TInstant StartTime;
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;
@@ -1920,6 +1985,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;
     ::NMonitoring::TDynamicCounters::TCounterPtr SourceCpuTimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
 };

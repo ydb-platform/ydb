@@ -1,5 +1,6 @@
 #include "helpers.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
@@ -56,6 +57,17 @@ void ToProto(
     proto->set_ping_ancestors(options.PingAncestors);
     proto->set_suppress_transaction_coordinator_sync(options.SuppressTransactionCoordinatorSync);
     proto->set_suppress_upstream_sync(options.SuppressUpstreamSync);
+}
+
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto)
+{
+    FromProto(&options->TransactionId, proto.transaction_id());
+    options->Ping = proto.ping();
+    options->PingAncestors = proto.ping_ancestors();
+    options->SuppressTransactionCoordinatorSync = proto.suppress_transaction_coordinator_sync();
+    options->SuppressUpstreamSync = proto.suppress_upstream_sync();
 }
 
 void ToProto(
@@ -426,6 +438,30 @@ void FromProto(
     FromProto(&result->Errors, proto.errors());
 }
 
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result)
+{
+    ToProto(proto->mutable_operation_id(), result.OperationId);
+    ToProto(proto->mutable_job_id(), result.JobId);
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_event_index(result.EventIndex);
+    proto->set_event(result.Event);
+    proto->set_event_time(ToProto<i64>(result.EventTime));
+}
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto)
+{
+    FromProto(&result->OperationId, proto.operation_id());
+    FromProto(&result->JobId, proto.job_id());
+    FromProto(&result->TraceId, proto.trace_id());
+    result->EventIndex = proto.event_index();
+    result->Event = proto.event();
+    result->EventTime = TInstant::FromValue(proto.event_time());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // MISC
 ////////////////////////////////////////////////////////////////////////////////
@@ -446,6 +482,11 @@ void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSche
         protoSchema->set_expression(*schema.Expression());
     } else {
         protoSchema->clear_expression();
+    }
+    if (schema.Materialized()) {
+        protoSchema->set_materialized(*schema.Materialized());
+    } else {
+        protoSchema->clear_materialized();
     }
     if (schema.Aggregate()) {
         protoSchema->set_aggregate(*schema.Aggregate());
@@ -520,12 +561,13 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     }
 
     schema->SetLogicalType(std::move(columnType));
-    schema->SetLock(protoSchema.has_lock() ? std::make_optional(protoSchema.lock()) : std::nullopt);
-    schema->SetExpression(protoSchema.has_expression() ? std::make_optional(protoSchema.expression()) : std::nullopt);
-    schema->SetAggregate(protoSchema.has_aggregate() ? std::make_optional(protoSchema.aggregate()) : std::nullopt);
-    schema->SetSortOrder(protoSchema.has_sort_order() ? std::make_optional(ESortOrder(protoSchema.sort_order())) : std::nullopt);
-    schema->SetGroup(protoSchema.has_group() ? std::make_optional(protoSchema.group()) : std::nullopt);
-    schema->SetMaxInlineHunkSize(protoSchema.has_max_inline_hunk_size() ? std::make_optional(protoSchema.max_inline_hunk_size()) : std::nullopt);
+    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
+    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
+    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
+    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
 
 void ToProto(NProto::TTableSchema* protoSchema, const NTableClient::TTableSchema& schema)
@@ -619,22 +661,6 @@ void FromProto(
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
 
-void ToProto(
-    NProto::TVersionedReadOptions* protoOptions,
-    const NTableClient::TVersionedReadOptions& options)
-{
-    protoOptions->set_read_mode(static_cast<i32>(options.ReadMode));
-}
-
-void FromProto(
-    NTableClient::TVersionedReadOptions* options,
-    const NProto::TVersionedReadOptions& protoOptions)
-{
-    if (protoOptions.has_read_mode()) {
-        options->ReadMode = CheckedEnumCast<EVersionedIOMode>(protoOptions.read_mode());
-    }
-}
-
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
     protoOperation->Clear();
@@ -706,6 +732,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
 
     if (operation.SlotIndexPerPoolTree) {
         protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
+    }
+
+    if (operation.SchedulingAttributesPerPoolTree) {
+        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
     }
 
     if (operation.TaskNames) {
@@ -840,6 +870,12 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->SlotIndexPerPoolTree = TYsonString();
     }
 
+    if (protoOperation.has_scheduling_attributes_per_pool_tree()) {
+        operation->SchedulingAttributesPerPoolTree = TYsonString(protoOperation.scheduling_attributes_per_pool_tree());
+    } else {
+        operation->SchedulingAttributesPerPoolTree = TYsonString();
+    }
+
     if (protoOperation.has_task_names()) {
         operation->TaskNames = TYsonString(protoOperation.task_names());
     } else {
@@ -965,6 +1001,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
     if (job.ArchiveFeatures) {
         protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+    }
+    if (job.MonitoringDescriptor) {
+        protoJob->set_monitoring_descriptor(*job.MonitoringDescriptor);
     }
 }
 
@@ -1110,6 +1149,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->ArchiveFeatures = TYsonString();
     }
+    if (protoJob.has_monitoring_descriptor()) {
+        job->MonitoringDescriptor = protoJob.monitoring_descriptor();
+    } else {
+        job->MonitoringDescriptor.reset();
+    }
 }
 
 void ToProto(
@@ -1215,6 +1259,8 @@ void ToProto(
     if (statistics.LegacyChunkRowCount) {
         protoStatistics->set_legacy_chunk_row_count(*statistics.LegacyChunkRowCount);
     }
+
+    ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 }
 
 void FromProto(
@@ -1243,6 +1289,8 @@ void FromProto(
     } else {
         statistics->LegacyChunkRowCount.reset();
     }
+
+    FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 }
 
 void ToProto(
@@ -1901,6 +1949,78 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
             THROW_ERROR_EXCEPTION("Protobuf contains unknown value for query state");
     }
     YT_ABORT();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    ToProto(req->mutable_path(), path);
+
+    if (options.TransactionId) {
+        ToProto(req->mutable_transactional_options(), options);
+    }
+}
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req)
+{
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    if (req.has_transactional_options()) {
+        FromProto(mutableOptions, req.transactional_options());
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    req->set_session(ConvertToYsonString(session).ToString());
+    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
+}
+
+void ParseRequest(
+    TDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req)
+{
+    *mutableSession = ConvertTo<TDistributedWriteSessionPtr>(TYsonString(req.session()));
+    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteTableFragment* req,
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options)
+{
+    req->set_cookie(ConvertToYsonString(cookie).ToString());
+
+    if (options.Config) {
+        req->set_config(ConvertToYsonString(*options.Config).ToString());
+    }
+}
+
+void ParseRequest(
+    TFragmentWriteCookiePtr* mutableCookie,
+    TFragmentTableWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req)
+{
+    *mutableCookie = ConvertTo<TFragmentWriteCookiePtr>(TYsonString(req.cookie()));
+    if (req.has_config()) {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
+    } else {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(TStringBuf("{}")));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -16,6 +16,7 @@
 
 #include <ydb/core/util/pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -919,6 +920,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropResourcePool, NKikimrSchemeOp::EOperationType::ESchemeOpDropResourcePool)
 
+    // backup collection
+    GENERIC_HELPERS(CreateBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableCreateBackupCollection)
+    GENERIC_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableDropBackupCollection)
+    DROP_BY_PATH_ID_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -1026,7 +1032,7 @@ namespace NSchemeShardUT_Private {
         return result;
     }
 
-    void AsyncExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
+    void AsyncExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
         NKikimrExport::TCreateExportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
@@ -1044,26 +1050,29 @@ namespace NSchemeShardUT_Private {
         if (userSID) {
             ev->Record.SetUserSID(userSID);
         }
+        if (peerName) {
+            ev->Record.SetPeerName(peerName);
+        }
 
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
-        AsyncExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID);
+    void AsyncExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
+        AsyncExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName);
     }
 
-    void TestExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        AsyncExport(runtime, schemeshardId, id, dbName, requestStr, userSID);
+        AsyncExport(runtime, schemeshardId, id, dbName, requestStr, userSID, peerName);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
         UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetEntry().GetStatus(), expectedStatus);
     }
 
-    void TestExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestExport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        TestExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, expectedStatus);
+        TestExport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName, expectedStatus);
     }
 
     NKikimrExport::TEvGetExportResponse TestGetExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
@@ -1152,7 +1161,7 @@ namespace NSchemeShardUT_Private {
         return TestForgetExport(runtime, TTestTxConfig::SchemeShard, txId, dbName, exportId, expectedStatus);
     }
 
-    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
+    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
         NKikimrImport::TCreateImportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
@@ -1160,26 +1169,29 @@ namespace NSchemeShardUT_Private {
         if (userSID) {
             ev->Record.SetUserSID(userSID);
         }
+        if (peerName) {
+            ev->Record.SetPeerName(peerName);
+        }
 
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
-        AsyncImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID);
+    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName) {
+        AsyncImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName);
     }
 
-    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        AsyncImport(runtime, schemeshardId, id, dbName, requestStr, userSID);
+        AsyncImport(runtime, schemeshardId, id, dbName, requestStr, userSID, peerName);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvImport::TEvCreateImportResponse>(handle);
         UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetEntry().GetStatus(), expectedStatus);
     }
 
-    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
+    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID, const TString& peerName,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        TestImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, expectedStatus);
+        TestImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, peerName, expectedStatus);
     }
 
     NKikimrImport::TEvGetImportResponse TestGetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
@@ -1500,6 +1512,7 @@ namespace NSchemeShardUT_Private {
                                         (let child '('ChildrenLimit (Uint64 '%lu)))
                                         (let acl '('AclByteSizeLimit (Uint64 '%lu)))
                                         (let columns '('TableColumnsLimit (Uint64 '%lu)))
+                                        (let columnColumns '('ColumnTableColumnsLimit (Uint64 '%lu)))
                                         (let colName '('TableColumnNameLengthLimit (Uint64 '%lu)))
                                         (let keyCols '('TableKeyColumnsLimit (Uint64 '%lu)))
                                         (let indices '('TableIndicesLimit (Uint64 '%lu)))
@@ -1512,11 +1525,11 @@ namespace NSchemeShardUT_Private {
                                         (let pqPartitions '('PQPartitionsLimit (Uint64 '%lu)))
                                         (let exports '('ExportsLimit (Uint64 '%lu)))
                                         (let imports '('ImportsLimit (Uint64 '%lu)))
-                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns colName keyCols indices streams shards pathShards consCopy maxPathLength extraSymbols pqPartitions exports imports))))
+                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns columnColumns colName keyCols indices streams shards pathShards consCopy maxPathLength extraSymbols pqPartitions exports imports))))
                                         (return ret)
                                     )
                                  )", domainId, limits.MaxDepth, limits.MaxPaths, limits.MaxChildrenInDir, limits.MaxAclBytesSize,
-                               limits.MaxTableColumns, limits.MaxTableColumnNameLength, limits.MaxTableKeyColumns,
+                               limits.MaxTableColumns, limits.MaxColumnTableColumns, limits.MaxTableColumnNameLength, limits.MaxTableKeyColumns,
                                limits.MaxTableIndices, limits.MaxTableCdcStreams,
                                limits.MaxShards, limits.MaxShardsInPath, limits.MaxConsistentCopyTargets,
                                limits.MaxPathElementLength, escapedStr.c_str(), limits.MaxPQPartitions,
@@ -1672,12 +1685,38 @@ namespace NSchemeShardUT_Private {
         *index.mutable_data_columns() = {cfg.DataColumns.begin(), cfg.DataColumns.end()};
 
         switch (cfg.IndexType) {
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-            *index.mutable_global_index() = Ydb::Table::GlobalIndex();
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-            *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-            break;
+        case NKikimrSchemeOp::EIndexTypeGlobal: {
+            auto& settings = *index.mutable_global_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
+            auto& settings = *index.mutable_global_async_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            auto& settings = *index.mutable_global_vector_kmeans_tree_index();
+
+            auto& vectorIndexSettings = *settings.mutable_vector_settings()->mutable_settings();
+            if (cfg.VectorIndexSettings) {
+                cfg.VectorIndexSettings->SerializeTo(vectorIndexSettings);
+            } else {
+                // some random valid settings
+                vectorIndexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+                vectorIndexSettings.set_vector_dimension(42);
+                vectorIndexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            }
+
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(*settings.mutable_level_table_settings());
+                if (cfg.GlobalIndexSettings.size() > 1) {
+                    cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
+                }
+            }
+        } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }
@@ -1760,6 +1799,15 @@ namespace NSchemeShardUT_Private {
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+        }, expectedStatus);
+    }
+
+    void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                              const TString &src, const TString &name, TString column,
+                              Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, {}
         }, expectedStatus);
     }
 
@@ -1987,7 +2035,7 @@ namespace NSchemeShardUT_Private {
                 Runtime.SendToPipe(shardData.ShardId, sender, proposal);
                 TAutoPtr<IEventHandle> handle;
                 auto event = Runtime.GrabEdgeEventIf<TEvDataShard::TEvProposeTransactionResult>(handle,
-                                                                                                [=](const TEvDataShard::TEvProposeTransactionResult& event) {
+                                                                                                [this, shardData](const TEvDataShard::TEvProposeTransactionResult& event) {
                     return event.GetTxId() == TxId && event.GetOrigin() == shardData.ShardId;
                 });
                 activeZone = true;

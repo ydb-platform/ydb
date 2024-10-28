@@ -89,25 +89,20 @@ TString TEvChangeExchange::TEvRemoveRecords::ToString() const {
 }
 
 // TEvRecords
-TEvChangeExchange::TEvRecords::TEvRecords(const TChangeRecordVector& records)
+TEvChangeExchange::TEvRecords::TEvRecords(const TVector<IChangeRecord::TPtr>& records)
     : Records(records)
 {
 }
 
-TEvChangeExchange::TEvRecords::TEvRecords(TChangeRecordVector&& records)
+TEvChangeExchange::TEvRecords::TEvRecords(TVector<IChangeRecord::TPtr>&& records)
     : Records(std::move(records))
 {
 }
 
-
 TString TEvChangeExchange::TEvRecords::ToString() const {
-    return std::visit(
-        [&](auto& records){
-            return TStringBuilder() << ToStringHeader() << " {"
-                << " Records " << ((TBaseChangeRecordContainer*)records.get())->Out()
-            << " }";
-        },
-        Records);
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Records [" << JoinSeq(",", Records) << "]"
+    << " }";
 }
 
 /// TEvForgetRecords

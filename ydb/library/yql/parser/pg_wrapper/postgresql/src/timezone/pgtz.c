@@ -275,7 +275,7 @@ pg_tzset(const char *tzname)
 	/*
 	 * "GMT" is always sent to tzparse(), as per discussion above.
 	 */
-	if (strcmp(uppername, "GMT") == 0)
+	if (strcmp(uppername, "GMT") == 0 || strcmp(uppername, "Z") == 0)
 	{
 		if (!tzparse(uppername, &tzstate, true))
 		{

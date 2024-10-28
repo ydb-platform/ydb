@@ -1,0 +1,141 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     CC0-1.0 AND BSD-2-Clause 0d3a9d8603290e9ff13aea7ed6b4fb86
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        LICENSE.txt [2:14]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [2:14]
+
+KEEP     CC0-1.0              27442f52d8b635b92af00d2a85e22393
+BELONGS ya.make
+    License text:
+         * Written by Michael Barker and released to the public domain,
+         * as explained at http://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/hdr_histogram.c [3:4]
+        src/hdr_histogram.h [3:4]
+        src/hdr_interval_recorder.c [3:4]
+        src/hdr_interval_recorder.h [3:4]
+        src/hdr_time.h [3:4]
+        src/hdr_writer_reader_phaser.c [3:4]
+        src/hdr_writer_reader_phaser.h [3:4]
+
+KEEP     CC0-1.0              3853e2a78a247145b4aa16667736f6de
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        COPYING.txt [1:121]
+
+KEEP     CC0-1.0              4bcc1b8e65be1d8f3d8b2ddb2ef94f6a
+BELONGS ya.make
+    License text:
+         * Written by Philip Orwig and released to the public domain,
+         * as explained at http://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/hdr_atomic.h [3:4]
+        src/hdr_thread.h [3:4]
+
+KEEP     BSD-2-Clause         652477f3584c57bfd67ad3534ca70d66
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE.txt [21:41]
+
+KEEP     CC0-1.0              8996e50f093524d1bb4458d443c51d3d
+BELONGS ya.make
+    License text:
+        * Released to the public domain, as explained at http://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/hdr_endian.h [3:3]
+
+KEEP     CC0-1.0              af8bc0f246a23fc16cb03d508c868432
+BELONGS ya.make
+    License text:
+        * Written by Michael Barker and Philip Orwig and released to the public domain,
+        * as explained at http://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/hdr_time.c [3:4]
+
+KEEP     CC0-1.0              e8fbb0dbcb7d5f1ad1664b4f404ba721
+BELONGS ya.make
+    License text:
+        * Written by Philip Orwig and released to the public domain,
+        * as explained at http://creativecommons.org/publicdomain/zero/1.0/
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        src/hdr_thread.c [3:4]

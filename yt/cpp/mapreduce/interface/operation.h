@@ -86,7 +86,7 @@ TStructuredTablePath Structured(TRichYPath richYPath);
 template <typename TRow>
 TTableStructure StructuredTableDescription();
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /// Tag class marking that row stream is empty.
 struct TVoidStructuredRowStream
@@ -117,7 +117,7 @@ using TStructuredRowStreamDescription = std::variant<
     TProtobufStructuredRowStream
 >;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /// Tag class marking that current binary should be used in operation.
 struct TJobBinaryDefault
@@ -710,7 +710,7 @@ struct TJobProfilerSpec
     FLUENT_FIELD_OPTION(int, SamplingFrequency);
 };
 
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 /// @brief Specification of a disk that will be available in job.
 ///
@@ -1557,10 +1557,17 @@ struct TOperationOptions
 
     ///
     /// @brief Path to directory to store temporary files.
+    /// Useful if you want to control how lifetime of uploaded files.
     FLUENT_FIELD_OPTION(TString, FileStorage);
 
     ///
     /// @brief Expiration timeout for uploaded files.
+    ///
+    /// Set attribute ExpirationTimeout for files being uploaded during operation preparation.
+    /// Useful when using custom FileStorage and don't want to create separate cleanup process.
+    ///
+    /// When using default FileStorage inside //tmp this parameter is almost useless.
+    /// //tmp directory is cleaned up by separate process and files can be deleted before FileExpiratoinTimeout is reached.
     FLUENT_FIELD_OPTION(TDuration, FileExpirationTimeout);
 
     ///
@@ -2981,7 +2988,7 @@ struct TListJobsResult
     TMaybe<i64> ArchiveJobCount;
 };
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 ///
 /// @brief Options for @ref NYT::IClient::GetJob.
@@ -3019,7 +3026,7 @@ struct TGetJobStderrOptions
     /// @endcond
 };
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 ///
 /// @brief Options for @ref NYT::IOperation::GetFailedJobInfo.
@@ -3036,6 +3043,70 @@ struct TGetFailedJobInfoOptions
     ///
     /// @brief How much of stderr tail should be downloaded.
     FLUENT_FIELD_DEFAULT(ui64, StderrTailSize, 64 * 1024);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+///
+/// @brief Options for @ref NYT::IClient::GetJobTrace.
+struct TGetJobTraceOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TGetJobTraceOptions;
+    /// @endcond
+
+    ///
+    /// @brief Id of the job.
+    FLUENT_FIELD_OPTION(TJobId, JobId);
+
+    ///
+    /// @brief Id of the trace.
+    FLUENT_FIELD_OPTION(TJobTraceId, TraceId);
+
+    ///
+    /// @brief Search for traces with time >= `FromTime`.
+    FLUENT_FIELD_OPTION(i64, FromTime);
+
+    ///
+    /// @brief Search for traces with time <= `ToTime`.
+    FLUENT_FIELD_OPTION(i64, ToTime);
+
+    ///
+    /// @brief Search for traces with event index >= `FromEventIndex`.
+    FLUENT_FIELD_OPTION(i64, FromEventIndex);
+
+    ///
+    /// @brief Search for traces with event index >= `ToEventIndex`.
+    FLUENT_FIELD_OPTION(i64, ToEventIndex);
+};
+
+///
+/// @brief Response for @ref NYT::IOperation::GetJobTrace.
+struct TJobTraceEvent
+{
+    ///
+    /// @brief Id of the operation.
+    TOperationId OperationId;
+
+    ///
+    /// @brief Id of the job.
+    TJobId JobId;
+
+    ///
+    /// @brief Id of the trace.
+    TJobTraceId TraceId;
+
+    ///
+    /// @brief Index of the trace event.
+    i64 EventIndex;
+
+    ///
+    /// @brief Raw evenr in json format.
+    TString Event;
+
+    ///
+    /// @brief Time of the event.
+    TInstant EventTime;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

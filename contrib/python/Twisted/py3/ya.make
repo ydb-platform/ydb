@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(24.3.0)
+VERSION(24.7.0)
 
 LICENSE(MIT)
 
@@ -416,7 +416,6 @@ PY_SRCS(
     twisted/web/rewrite.py
     twisted/web/script.py
     twisted/web/server.py
-    twisted/web/soap.py
     twisted/web/static.py
     twisted/web/sux.py
     twisted/web/tap.py

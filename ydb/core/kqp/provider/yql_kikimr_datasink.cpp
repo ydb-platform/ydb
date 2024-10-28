@@ -79,6 +79,16 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleAnalyze(TKiAnalyzeTable node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+
+        auto cluster = node.DataSink().Cluster();
+        auto table = node.Table();
+
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
@@ -176,9 +186,9 @@ private:
     }
 
     TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
@@ -273,6 +283,9 @@ private:
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                    return TStatus::Ok;
+                } else if (mode == "analyze") {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else {
@@ -546,6 +559,10 @@ public:
         }
 
         if(node.IsCallable(TPgDropObject::CallableName())) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiAnalyzeTable::CallableName())) {
             return true;
         }
 
@@ -869,8 +886,13 @@ public:
             return false;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on") {
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Olap && mode != "replace" && mode != "drop" && mode != "drop_if_exists" && mode != "insert_abort" && mode != "update" && mode != "upsert" && mode != "delete" && mode != "update_on" && mode != "delete_on" && mode != "analyze") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for olap tables."));
+            return true;
+        }
+
+        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
             return true;
         }
 
@@ -1002,6 +1024,20 @@ public:
                             .Done()
                             .Ptr();
                     }
+                } else if (mode == "analyze") {
+                    auto columns = Build<TCoAtomList>(ctx, node->Pos());
+
+                    for (const auto& column: settings.Columns.Cast().Ptr()->Children()) {
+                        columns.Add(column);
+                    }
+
+                    return Build<TKiAnalyzeTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
+                        .Columns(columns.Done())
+                        .Done()
+                        .Ptr();
                 } else {
                     return Build<TKiWriteTable>(ctx, node->Pos())
                         .World(node->Child(0))
@@ -1137,7 +1173,8 @@ public:
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
 
-                if (mode == "create") {
+                if (mode == "create" || mode == "create_if_not_exists") {
+                    bool existingOk = mode == "create_if_not_exists";
                     return Build<TKiCreateTopic>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1145,9 +1182,11 @@ public:
                             .TopicSettings(settings.TopicSettings.Cast())
                             .Consumers(settings.Consumers.Cast())
                             .Settings(settings.Other)
+                            .ExistingOk<TCoAtom>().Value(existingOk).Build()
                             .Done()
                             .Ptr();
-                } else if (mode == "alter") {
+                } else if (mode == "alter" || mode == "alter_if_exists") {
+                    bool missingOk = mode == "alter_if_exists";
                     return Build<TKiAlterTopic>(ctx, node->Pos())
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
@@ -1157,14 +1196,17 @@ public:
                             .AlterConsumers(settings.AlterConsumers.Cast())
                             .DropConsumers(settings.DropConsumers.Cast())
                             .Settings(settings.Other)
+                            .MissingOk<TCoAtom>().Value(missingOk).Build()
                             .Done()
                             .Ptr();
-                } else if (mode == "drop") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
+                    bool missingOk = (mode == "drop_if_exists");
                         return Build<TKiDropTopic>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Topic().Build(key.GetTopicPath())
                         .Settings(settings.Other)
+                        .MissingOk<TCoAtom>().Value(missingOk).Build()
                         .Done()
                         .Ptr();
                 } else {
@@ -1428,6 +1470,70 @@ private:
 
 } // namespace
 
+TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TVector<TKiBackupCollectionEntry> entries;
+    TVector<TCoNameValueTuple> settings;
+    TVector<TCoNameValueTuple> other;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "entries") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                for (const auto& entry : tuple.Value().Cast<TExprList>()) {
+                    auto builtEntry = Build<TKiBackupCollectionEntry>(ctx, node.Pos());
+
+                    YQL_ENSURE(entry.Maybe<TCoNameValueTupleList>());
+                    for (const auto& item : entry.Cast<TCoNameValueTupleList>()) {
+                        auto itemName = item.Name().Value();
+                        if (itemName == "type") {
+                            builtEntry.Type(item.Value().Cast<TCoAtom>());
+                        } else if (itemName == "path") {
+                            builtEntry.Path(item.Value().Cast<TCoAtom>());
+                        } else {
+                            YQL_ENSURE(false, "unknown entry item");
+                        }
+                    }
+
+                    entries.push_back(builtEntry.Done());
+                }
+            } else if (name == "settings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    settings.push_back(item);
+                }
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& builtEntries = Build<TKiBackupCollectionEntryList>(ctx, node.Pos())
+        .Add(entries)
+        .Done();
+
+    const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(settings)
+        .Done();
+
+    const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteBackupCollectionSettings ret(builtOther);
+    ret.Mode = mode;
+    ret.Entries = builtEntries;
+    ret.BackupCollectionSettings = builtSettings;
+
+    return ret;
+}
+
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,
     TExprContext& ctx)
 {
@@ -1574,6 +1680,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiAlterSequence>()) {
         return HandleAlterSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiAnalyzeTable>()) {
+        return HandleAnalyze(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

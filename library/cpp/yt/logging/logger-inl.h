@@ -14,11 +14,11 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& position) const
+inline bool TLogger::IsAnchorUpToDate(const TLoggingAnchor& anchor) const
 {
     return
         !Category_ ||
-        position.CurrentVersion == Category_->ActualVersion->load(std::memory_order::relaxed);
+        anchor.CurrentVersion == Category_->ActualVersion->load(std::memory_order::relaxed);
 }
 
 template <class... TArgs>
@@ -47,6 +47,17 @@ TLogger TLogger::WithStructuredTag(TStringBuf key, TType value) const
     auto result = *this;
     result.AddStructuredTag(key, value);
     return result;
+}
+
+Y_FORCE_INLINE ELogLevel TLogger::GetEffectiveLoggingLevel(ELogLevel level, const TLoggingAnchor& anchor)
+{
+    // Check if anchor is suppressed.
+    if (anchor.Suppressed.load(std::memory_order::relaxed)) {
+        return ELogLevel::Minimum;
+    }
+
+    // Compute the actual level taking anchor override into account.
+    return anchor.LevelOverride.load(std::memory_order::relaxed).value_or(level);
 }
 
 Y_FORCE_INLINE bool TLogger::IsLevelEnabled(ELogLevel level) const
@@ -181,12 +192,6 @@ struct TLogMessage
     TStringBuf Anchor;
 };
 
-template <class T>
-concept CLiteralLogFormat =
-    requires (T& t) {
-        [] (const char*) { } (t);
-    };
-
 template <class... TArgs>
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
@@ -200,7 +205,7 @@ TLogMessage BuildLogMessage(
 }
 
 template <CFormattable T>
-    requires (!CLiteralLogFormat<std::remove_cvref_t<T>>)
+    requires (!CStringLiteral<std::remove_cvref_t<T>>)
 TLogMessage BuildLogMessage(
     const TLoggingContext& loggingContext,
     const TLogger& logger,

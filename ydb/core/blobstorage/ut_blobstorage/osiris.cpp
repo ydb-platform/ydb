@@ -4,7 +4,7 @@
 #include <util/system/condvar.h>
 #include <util/system/info.h>
 
-#define SINGLE_THREAD 0
+#define SINGLE_THREAD 1
 
 namespace {
 

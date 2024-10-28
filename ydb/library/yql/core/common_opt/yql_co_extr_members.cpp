@@ -601,9 +601,17 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
                 auto payload = winOnRows->Child(i)->Child(1);
                 const TStructExprType* structType;
                 if (payload->IsCallable("WindowTraits")) {
-                    structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                    bool isDistinct = winOnRows->Child(i)->ChildrenSize() == 3;
+                    if (isDistinct) {
+                        auto distinctColumn = winOnRows->Child(i)->Child(2);
+                        YQL_ENSURE(distinctColumn->IsAtom());
+                        usedFields.insert(distinctColumn->Content());
+                        continue;
+                    } else {
+                        structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                    }
                 }
-                else if (payload->IsCallable({"Lead", "Lag", "Rank", "DenseRank"})) {
+                else if (payload->IsCallable({"Lead", "Lag", "Rank", "DenseRank", "PercentRank"})) {
                     structType = payload->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()
                         ->GetItemType()->Cast<TStructExprType>();
                 } else {

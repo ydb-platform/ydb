@@ -171,7 +171,7 @@ private:
                 node.Ptr()->SetTypeAnn(tupleAnn);
 
                 YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
-                return Types.SetColumnOrder(node.Ref(), tableDesc->Metadata->ColumnOrder, ctx);
+                return Types.SetColumnOrder(node.Ref(), TColumnOrder(tableDesc->Metadata->ColumnOrder), ctx);
             }
 
             case TKikimrKey::Type::TableList:
@@ -263,14 +263,29 @@ namespace {
         return columnTypeError;
     }
 
-    TString GetColumnTypeName(const TTypeAnnotationNode* type) {
-        if (type->GetKind() == ETypeAnnotationKind::Data) {
+    TString GetColumnTypeName(const TTypeAnnotationNode* type, const NKikimr::NScheme::TTypeInfo& typeInfo) {
+        if (type->GetKind() == ETypeAnnotationKind::Data &&
+            type->Cast<TDataExprType>()->GetSlot() != EDataSlot::Decimal) {
             return ToString(type->Cast<TDataExprType>()->GetName());
         } else {
-            auto pgTypeId = type->Cast<TPgExprType>()->GetId();
-            auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId);
-            return NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc);
+            return NKikimr::NScheme::TypeName(typeInfo);;
         }
+    }
+    
+    NKikimr::NScheme::TTypeInfo GetColumnTypeInfo(const TTypeAnnotationNode* type) {
+        if (type->GetKind() == ETypeAnnotationKind::Pg) {
+            auto pgTypeId = type->Cast<TPgExprType>()->GetId();
+            return NKikimr::NScheme::TTypeInfo(NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId));
+        } else if (type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Decimal) {
+            if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
+                ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                return NKikimr::NScheme::TDecimalType(precision, scale);
+            }
+        }
+
+        auto typeId = NKikimr::NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).TypeId;
+        return NKikimr::NScheme::TTypeInfo(typeId);
     }
 
     bool ValidateColumnDataType(const TDataExprType* type, const TExprBase& typeNode, const TString& columnName,
@@ -279,16 +294,16 @@ namespace {
         switch (type->GetSlot()) {
         case EDataSlot::Decimal:
             if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(type)) {
-                if (dataExprParamsType->GetParamOne() != "22") {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal precision \""
-                        << dataExprParamsType->GetParamOne() << "\". Only Decimal(22,9) is supported for table columns");
+                ui32 precision = FromString<ui32>(dataExprParamsType->GetParamOne());
+                ui32 scale = FromString<ui32>(dataExprParamsType->GetParamTwo());
+                TString error;
+                if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
+                    columnTypeError(typeNode.Pos(), columnName, error);
                     return false;
                 }
-                if (dataExprParamsType->GetParamTwo() != "9") {
-                    columnTypeError(typeNode.Pos(), columnName, TStringBuilder() << "Bad decimal scale \""
-                        << dataExprParamsType->GetParamTwo() << "\". Only Decimal(22,9) is supported for table columns");
-                    return false;
-                }
+            } else {
+                Y_ABORT("Error dynamic_cast decimal type");
+                return false;
             }
             break;
 
@@ -490,7 +505,7 @@ private:
         auto op = GetTableOp(node);
         if (NPgTypeAnn::IsPgInsert(node, op)) {
             TExprNode::TPtr newInput;
-            auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, table->Metadata->ColumnOrder, ctx, Types);
+            auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, TColumnOrder(table->Metadata->ColumnOrder), ctx, Types);
             if (!ok) {
                 return TStatus::Error;
             }
@@ -816,6 +831,37 @@ private:
         return TStatus::Ok;
     }
 
+Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoNameValueTupleList& indexSettings) {
+    Ydb::Table::KMeansTreeSettings proto;
+
+    for (const auto& indexSetting : indexSettings) {
+        const auto& name = indexSetting.Name().Value();
+        const auto& value = indexSetting.Value().Cast<TCoAtom>().StringValue();
+
+        if (name == "distance") {
+            proto.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
+        } else if (name == "similarity") {
+            proto.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
+        } else if (name =="vector_type") {
+            proto.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
+        } else if (name =="vector_dimension") {
+            proto.mutable_settings()->set_vector_dimension(FromString<ui32>(value));
+        } else if (name =="clusters") {
+            proto.set_clusters(FromString<ui32>(value));
+        } else if (name =="levels") {
+            proto.set_levels(FromString<ui32>(value));
+        } else {
+            YQL_ENSURE(false, "Wrong index setting name: " << name);
+        }
+    }
+
+    YQL_ENSURE(proto.settings().metric() != Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED, "Missed index setting metric");
+    YQL_ENSURE(proto.settings().vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED, "Missed index setting vector_type");
+    YQL_ENSURE(proto.settings().vector_dimension(), "Missed index setting vector_dimension");
+
+    return proto;
+}    
+
 virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
@@ -876,15 +922,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = GetColumnTypeName(actualType);
 
-            if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
-                auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
-                columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(
-                    NKikimr::NScheme::NTypeIds::Pg,
-                    NKikimr::NPg::TypeDescFromPgTypeId(pgTypeId)
-                );
-            }
+            columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
+            columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
             if (columnTuple.Size() > 2) {
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
@@ -927,6 +967,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 indexType = TIndexDescription::EType::GlobalAsync;
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
+            } else if (type == "globalVectorKmeansTree") {
+                indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -952,6 +994,12 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
+            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
+            if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>()
+                     .MutableSettings() = SerializeVectorIndexSettingsToProto(index.IndexSettings());
+            }
+
             // IndexState and version, pathId are ignored for create table with index request
             TIndexDescription indexDesc(
                 TString(index.Name().Value()),
@@ -961,7 +1009,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 TIndexDescription::EIndexState::Ready,
                 0,
                 0,
-                0
+                0,
+                specializedIndexDescription
             );
 
             meta->Indexes.push_back(indexDesc);
@@ -989,6 +1038,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         family.Compression = TString(
                             familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                         );
+                    } else if (name == "compression_level") {
+                        family.CompressionLevel = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                             TStringBuilder() << "Unknown column family setting name: " << name));
@@ -1306,7 +1357,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
                     TKikimrColumnMetadata columnMeta;
                     // columnMeta.Name = columnName;
-                    columnMeta.Type = GetColumnTypeName(actualType);
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
@@ -1321,6 +1371,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                             }
                         }
                     }
+
+                    columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
+                    columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
                     if (columnTuple.Size() > 3) {
                         auto families = columnTuple.Item(3);
@@ -1403,6 +1456,26 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 << "\". Several column families for a single column are not yet supported"));
                             return TStatus::Error;
                         }
+                    } else if (alterColumnAction == "changeColumnConstraints") {
+                        auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
+
+                        if (constraintsList.Size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Several column constrains for a single column are not yet supported"));
+                            return TStatus::Error;
+                        }
+
+                        auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
+
+                        if (constraint.Size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
+                            return TStatus::Error;
+                        }
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
                                 TStringBuilder() << "Unsupported action to alter column"));
@@ -1464,7 +1537,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     static bool CheckTopicSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
-        ui32 minParts = 0, partsLimit = 0;
+        ui32 minParts = 0, maxPartitions = 0;
         TPosition errorPos;
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
@@ -1486,11 +1559,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 );
                 minParts = value;
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setPartitionsLimit") {
+            } else if (name == "setMaxPartitions") {
                 ui32 value = FromString<ui32>(
                         setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
                 );
-                partsLimit = value;
+                maxPartitions = value;
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
@@ -1499,10 +1572,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 );
                 return false;
             }
-            if (minParts && partsLimit && partsLimit < minParts) {
+            if (minParts && maxPartitions && maxPartitions < minParts) {
                 ctx.AddError(TIssue(
                         errorPos,
-                        TStringBuilder() << "partitions_limit cannot be less than min_partitions")
+                        TStringBuilder() << "max_partitions cannot be less than min_partitions")
                 );
                 return false;
             }
@@ -2034,6 +2107,16 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
             << "Document API table cannot be modified from YQL query: " << meta.Name));
         return false;
+    }
+
+    virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
+        auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
+        if (!table) {
+            return TStatus::Error;
+        }
+    
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
     }
 
 private:

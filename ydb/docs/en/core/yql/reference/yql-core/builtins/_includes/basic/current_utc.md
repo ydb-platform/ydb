@@ -2,9 +2,9 @@
 
 `CurrentUtcDate()`, `CurrentUtcDatetime()` and `CurrentUtcTimestamp()`: Getting the current date and/or time in UTC. The result data type is specified at the end of the function name.
 
-The arguments are optional and work same as [RANDOM](#random).
+The arguments are optional and work same as [RANDOM](../../basic.md#random).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT CurrentUtcDate();

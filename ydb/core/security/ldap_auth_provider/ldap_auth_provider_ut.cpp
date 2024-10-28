@@ -47,6 +47,8 @@ void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldap
     ldapSettings->SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
     ldapSettings->SetBindPassword("robouserPassword");
     ldapSettings->SetSearchFilter("uid=$username");
+    auto extendedSettings = ldapSettings->MutableExtendedSettings();
+    extendedSettings->SetEnableNestedGroupsSearch(true);
 
     const auto setCertificate = [&ldapSettings] (bool useStartTls, TTempFileHandle& certificateFile) {
         auto useTls = ldapSettings->MutableUseTls();
@@ -62,6 +64,12 @@ void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldap
         ldapSettings->SetScheme("ldaps");
         setCertificate(false, certificateFile);
     }
+}
+
+void InitLdapSettingsDisableSearchNestedGroups(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile, const ESecurityConnectionType& securityConnectionType) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile, securityConnectionType);
+    auto extendedSettings = ldapSettings->MutableExtendedSettings();
+    extendedSettings->SetEnableNestedGroupsSearch(false);
 }
 
 void InitLdapSettingsWithInvalidRobotUserLogin(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile, const ESecurityConnectionType& securityConnectionType) {
@@ -125,6 +133,7 @@ public:
         Server.EnableGRpc(GrpcPort);
         Server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         Server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        Server.GetRuntime()->SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NLog::PRI_TRACE);
     }
 
     TTestActorRuntime* GetRuntime() const {
@@ -206,9 +215,9 @@ public:
     static std::vector<TString> ManagerGroups;
     static std::vector<TString> DevelopersGroups;
     static std::vector<TString> PeopleGroups;
-    static LdapMock::TLdapMockResponses GetResponses(const TString& login, const TString& groupAttribute = "memberOf");
-    static LdapMock::TLdapMockResponses GetAdResponses(const TString& login, const TString& groupAttribute = "memberOf");
-    static LdapMock::TLdapMockResponses GetUpdatedResponses(const TString& login, const TString& groupAttribute = "memberOf");
+    static LdapMock::TLdapMockResponses GetResponses(const TString& login, bool doReturnDirectedGroups = false, const TString& groupAttribute = "memberOf");
+    static LdapMock::TLdapMockResponses GetAdResponses(const TString& login, bool doReturnDirectedGroups = false, const TString& groupAttribute = "memberOf");
+    static LdapMock::TLdapMockResponses GetUpdatedResponses(const TString& login, bool doReturnDirectedGroups = false, const TString& groupAttribute = "memberOf");
     static THashSet<TString> GetAllGroups(const TString& domain) {
         THashSet<TString> result;
         auto AddGroups = [&result, &domain] (const std::vector<TString>& groups) {
@@ -223,6 +232,17 @@ public:
         return result;
     }
 
+    static THashSet<TString> GetDirectedGroups(const TString& domain) {
+        THashSet<TString> result;
+        auto AddGroups = [&result, &domain] (const std::vector<TString>& groups) {
+            std::transform(groups.begin(), groups.end(), std::inserter(result, result.end()), [&domain](const TString& group) {
+                return TString(group).append(domain);
+            });
+        };
+        AddGroups(DirectGroups);
+        return result;
+    }
+
     static THashSet<TString> GetAllUpdatedGroups(const TString& domain) {
         THashSet<TString> result;
         auto AddGroups = [&result, &domain] (const std::vector<TString>& groups) {
@@ -233,6 +253,17 @@ public:
         AddGroups(UpdatedDirectGroups);
         AddGroups(DevelopersGroups);
         AddGroups(PeopleGroups);
+        return result;
+    }
+
+    static THashSet<TString> GetUpdatedDirectedGroups(const TString& domain) {
+        THashSet<TString> result;
+        auto AddGroups = [&result, &domain] (const std::vector<TString>& groups) {
+            std::transform(groups.begin(), groups.end(), std::inserter(result, result.end()), [&domain](const TString& group) {
+                return TString(group).append(domain);
+            });
+        };
+        AddGroups(UpdatedDirectGroups);
         return result;
     }
 };
@@ -258,7 +289,7 @@ std::vector<TString> TCorrectLdapResponse::PeopleGroups {
     "cn=people,ou=groups,dc=search,dc=yandex,dc=net",
 };
 
-LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& login, const TString& groupAttribute) {
+LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& login, bool doReturnDirectedGroups, const TString& groupAttribute) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
@@ -286,6 +317,10 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
         .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
     };
     responses.SearchResponses.push_back({requestDirectedUserGroups, responseDirectedUserGroups});
+
+    if (doReturnDirectedGroups) {
+        return responses;
+    }
 
     std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter> filterToGetGroupOfManagers = std::make_shared<LdapMock::TSearchRequestInfo::TSearchFilter>();
     filterToGetGroupOfManagers->Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY;
@@ -424,7 +459,7 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
     return responses;
 }
 
-LdapMock::TLdapMockResponses TCorrectLdapResponse::GetUpdatedResponses(const TString& login, const TString& groupAttribute) {
+LdapMock::TLdapMockResponses TCorrectLdapResponse::GetUpdatedResponses(const TString& login, bool doReturnDirectedGroups, const TString& groupAttribute) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
@@ -452,6 +487,10 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetUpdatedResponses(const TSt
         .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
     };
     responses.SearchResponses.push_back({requestDirectedUserGroups, responseDirectedUserGroups});
+
+    if (doReturnDirectedGroups) {
+        return responses;
+    }
 
     std::shared_ptr<LdapMock::TSearchRequestInfo::TSearchFilter> filterToGetGroupOfDevelopers = std::make_shared<LdapMock::TSearchRequestInfo::TSearchFilter>();
     filterToGetGroupOfDevelopers->Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY;
@@ -567,7 +606,7 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetUpdatedResponses(const TSt
     return responses;
 }
 
-LdapMock::TLdapMockResponses TCorrectLdapResponse::GetAdResponses(const TString& login, const TString& groupAttribute) {
+LdapMock::TLdapMockResponses TCorrectLdapResponse::GetAdResponses(const TString& login, bool doReturnDirectedGroups, const TString& groupAttribute) {
     LdapMock::TLdapMockResponses responses;
     responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
 
@@ -595,6 +634,10 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetAdResponses(const TString&
         .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
     };
     responses.SearchResponses.push_back({requestDirectedUserGroups, responseDirectedUserGroups});
+
+    if (doReturnDirectedGroups) {
+        return responses;
+    }
 
     LdapMock::TSearchRequestInfo requestToGetAllNestedGroupsFromAd {
         {
@@ -664,9 +707,6 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
 } // namespace
 
-
-Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
-
     void LdapFetchGroupsWithDefaultGroupAttributeGood(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -694,16 +734,31 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood_nonSecure) {
-        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
-    }
+    void LdapFetchGroupsWithDefaultGroupAttributeDisableNestedGroupsGood(const ESecurityConnectionType& secureType) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
 
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood_StartTls) {
-        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::START_TLS);
-    }
+        TLdapKikimrServer server(InitLdapSettingsDisableSearchNestedGroups, secureType);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetResponses(login, true), secureType == ESecurityConnectionType::LDAPS_SCHEME);
 
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood_LdapsScheme) {
-        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+        THashSet<TString> expectedGroups = TCorrectLdapResponse::GetDirectedGroups(ldapDomain);
+        expectedGroups.insert("all-users@well-known");
+
+        UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.Stop();
     }
 
     void LdapFetchGroupsFromAdLdapServer(const ESecurityConnectionType& secureType) {
@@ -733,16 +788,31 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer_nonSecure) {
-        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::NON_SECURE);
-    }
+    void LdapFetchGroupsDisableRequestToAD(const ESecurityConnectionType& secureType) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
 
-    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer_StartTls) {
-        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::START_TLS);
-    }
+        TLdapKikimrServer server(InitLdapSettingsDisableSearchNestedGroups, secureType);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetAdResponses(login, true), secureType == ESecurityConnectionType::LDAPS_SCHEME);
 
-    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer_LdapsScheme) {
-        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::LDAPS_SCHEME);
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+        THashSet<TString> expectedGroups = TCorrectLdapResponse::GetDirectedGroups(ldapDomain);
+        expectedGroups.insert("all-users@well-known");
+
+        UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.Stop();
     }
 
     void LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(const ESecurityConnectionType& secureType) {
@@ -772,24 +842,12 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts_nonSecure) {
-        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts_StartTls) {
-        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts_LdapsScheme) {
-        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapFetchGroupsWithCustomGroupAttributeGood(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
 
         TLdapKikimrServer server(InitLdapSettingsWithCustomGroupAttribute, secureType);
-        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetResponses(login, "groupDN"), secureType == ESecurityConnectionType::LDAPS_SCHEME);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), TCorrectLdapResponse::GetResponses(login, false, "groupDN"), secureType == ESecurityConnectionType::LDAPS_SCHEME);
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
@@ -809,18 +867,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         }
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood_nonSecure) {
-        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood_StartTls) {
-        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood_LdapsScheme) {
-        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
     }
 
     void LdapFetchGroupsWithDontExistGroupAttribute(const ESecurityConnectionType& secureType) {
@@ -870,18 +916,6 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute_nonSecure) {
-        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute_StartTls) {
-        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute_LdapsScheme) {
-        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
     void LdapFetchGroupsWithInvalidRobotUserLoginBad(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
@@ -895,26 +929,10 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        TStringBuilder expectedErrorMessage;
-        expectedErrorMessage << "Could not perform initial LDAP bind for dn cn=invalidRobouser,dc=search,dc=yandex,dc=net on server "
-                             << (secureType == ESecurityConnectionType::LDAPS_SCHEME ? "ldaps://" : "ldap://") << "localhost:"
-                             << server.GetLdapPort() << "\nInvalid credentials";
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad_nonSecure) {
-        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad_StartTls) {
-        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad_LdapsScheme) {
-        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::LDAPS_SCHEME);
     }
 
     void LdapFetchGroupsWithInvalidRobotUserPasswordBad(const ESecurityConnectionType& secureType) {
@@ -930,26 +948,10 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        TStringBuilder expectedErrorMessage;
-        expectedErrorMessage << "Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server "
-                             << (secureType == ESecurityConnectionType::LDAPS_SCHEME ? "ldaps://" : "ldap://") << "localhost:"
-                             << server.GetLdapPort() << "\nInvalid credentials";
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad_nonSecure) {
-        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad_StartTls) {
-        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad_LdapsScheme) {
-        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::LDAPS_SCHEME);
     }
 
     void LdapFetchGroupsWithRemovedUserCredentialsBad(const ESecurityConnectionType& secureType) {
@@ -981,25 +983,9 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, removedUserLogin, removedUserPassword);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        const TString expectedErrorMessage = "LDAP user " + removedUserLogin + " does not exist. "
-                                             "LDAP search for filter uid=" + removedUserLogin + " on server " +
-                                             (secureType == ESecurityConnectionType::LDAPS_SCHEME ? "ldaps://" : "ldap://") + "localhost:" +
-                                             ToString(server.GetLdapPort()) + " return no entries";
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad_nonSecure) {
-        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad_StartTls) {
-        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad_LdapsScheme) {
-        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::LDAPS_SCHEME);
     }
 
     void LdapFetchGroupsUseInvalidSearchFilterBad(const ESecurityConnectionType& secureType) {
@@ -1015,50 +1001,14 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        const TString expectedErrorMessage = "Could not search for filter &(uid=" + login + ")() on server " +
-                                              (secureType == ESecurityConnectionType::LDAPS_SCHEME ? "ldaps://" : "ldap://") + "localhost:" +
-                                              ToString(server.GetLdapPort()) + "\nBad search filter";
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
 
         ldapServer.Stop();
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad_nonSecure) {
-        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::NON_SECURE);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad_StartTls) {
-        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad_LdapsScheme) {
-        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::LDAPS_SCHEME);
-    }
-
-    Y_UNIT_TEST(LdapServerIsUnavailable) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "Could not start TLS\nCan't contact LDAP server", ESecurityConnectionType::START_TLS);
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyHost) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "List of ldap server hosts is empty");
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyBaseDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Parameter BaseDn is empty");
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyBindDn) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Parameter BindDn is empty");
-    }
-
-    Y_UNIT_TEST(LdapRequestWithEmptyBindPassword) {
-        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Parameter BindPassword is empty");
     }
 
     void LdapRefreshGroupsInfoGood(const ESecurityConnectionType& secureType) {
         TString login = "ldapuser";
         TString password = "ldapUserPassword";
-
 
         auto responses = TCorrectLdapResponse::GetResponses(login);
         LdapMock::TLdapMockResponses updatedResponses = TCorrectLdapResponse::GetUpdatedResponses(login);
@@ -1111,16 +1061,59 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapRefreshGroupsInfoGood_nonSecure) {
-        LdapRefreshGroupsInfoGood(ESecurityConnectionType::NON_SECURE);
-    }
+    void LdapRefreshGroupsInfoDisableNestedGroupsGood(const ESecurityConnectionType& secureType) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
 
-    Y_UNIT_TEST(LdapRefreshGroupsInfoGood_StartTls) {
-        LdapRefreshGroupsInfoGood(ESecurityConnectionType::START_TLS);
-    }
+        auto responses = TCorrectLdapResponse::GetResponses(login, true);
+        LdapMock::TLdapMockResponses updatedResponses = TCorrectLdapResponse::GetUpdatedResponses(login, true);
+        const TString ldapDomain = "@ldap";
 
-    Y_UNIT_TEST(LdapRefreshGroupsInfoGood_LdapsScheme) {
-        LdapRefreshGroupsInfoGood(ESecurityConnectionType::LDAPS_SCHEME);
+        TLdapKikimrServer server(InitLdapSettingsDisableSearchNestedGroups, secureType);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), {responses, updatedResponses}, secureType == ESecurityConnectionType::LDAPS_SCHEME);
+
+        auto loginResponse = GetLoginResponse(server, login, password);
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        TAutoPtr<IEventHandle> handle;
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+
+        THashSet<TString> expectedGroups = TCorrectLdapResponse::GetDirectedGroups(ldapDomain);
+        expectedGroups.insert("all-users@well-known");
+
+        UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.UpdateResponses();
+        Sleep(TDuration::Seconds(10));
+
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
+        const auto& newFetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> newGroups(newFetchedGroups.begin(), newFetchedGroups.end());
+
+        THashSet<TString> newExpectedGroups = TCorrectLdapResponse::GetUpdatedDirectedGroups(ldapDomain);
+        newExpectedGroups.insert("all-users@well-known");
+
+        UNIT_ASSERT_VALUES_EQUAL(newFetchedGroups.size(), newExpectedGroups.size());
+        for (const auto& expectedGroup : newExpectedGroups) {
+            UNIT_ASSERT_C(newGroups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.Stop();
     }
 
     void LdapRefreshRemoveUserBad(const ESecurityConnectionType& secureType) {
@@ -1169,28 +1162,206 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
 
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
-        const TString expectedErrorMessage = "LDAP user " + login + " does not exist. "
-                                             "LDAP search for filter uid=" + login + " on server " +
-                                             (secureType == ESecurityConnectionType::LDAPS_SCHEME ? "ldaps://" : "ldap://") + "localhost:" +
-                                             ToString(server.GetLdapPort()) + " return no entries";
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "User is unauthorized in LDAP server");
         UNIT_ASSERT_EQUAL(ticketParserResult->Error.Retryable, false);
 
         ldapServer.Stop();
     }
 
-    Y_UNIT_TEST(LdapRefreshRemoveUserBad_nonSecure) {
-        LdapRefreshRemoveUserBad(ESecurityConnectionType::NON_SECURE);
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
+    Y_UNIT_TEST(LdapServerIsUnavailable) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithUnavailableHost, "User is unauthorized in LDAP server", ESecurityConnectionType::START_TLS);
     }
 
-    Y_UNIT_TEST(LdapRefreshRemoveUserBad_StartTls) {
-        LdapRefreshRemoveUserBad(ESecurityConnectionType::START_TLS);
+    Y_UNIT_TEST(LdapRequestWithEmptyHost) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyHost, "List of ldap server hosts is empty");
     }
 
-    Y_UNIT_TEST(LdapRefreshRemoveUserBad_LdapsScheme) {
+    Y_UNIT_TEST(LdapRequestWithEmptyBaseDn) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBaseDn, "Parameter BaseDn is empty");
+    }
+
+    Y_UNIT_TEST(LdapRequestWithEmptyBindDn) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindDn, "Parameter BindDn is empty");
+    }
+
+    Y_UNIT_TEST(LdapRequestWithEmptyBindPassword) {
+        CheckRequiredLdapSettings(InitLdapSettingsWithEmptyBindPassword, "Parameter BindPassword is empty");
+    }
+}
+
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest_LdapsScheme) {
+    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer) {
+        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsDisableRequestToAD) {
+        LdapFetchGroupsDisableRequestToAD(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeDisableNestedGroupsGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeDisableNestedGroupsGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts) {
+        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood) {
+        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute) {
+        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad) {
+        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad) {
+        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad) {
+        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad) {
+        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoGood) {
+        LdapRefreshGroupsInfoGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoDisableNestedGroupsGood) {
+        LdapRefreshGroupsInfoDisableNestedGroupsGood(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
         LdapRefreshRemoveUserBad(ESecurityConnectionType::LDAPS_SCHEME);
     }
+}
 
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest_StartTls) {
+    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer) {
+        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsDisableRequestToAD) {
+        LdapFetchGroupsDisableRequestToAD(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeDisableNestedGroupsGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeDisableNestedGroupsGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts) {
+        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood) {
+        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute) {
+        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad) {
+        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad) {
+        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad) {
+        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad) {
+        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoGood) {
+        LdapRefreshGroupsInfoGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoDisableNestedGroupsGood) {
+        LdapRefreshGroupsInfoDisableNestedGroupsGood(ESecurityConnectionType::START_TLS);
+    }
+
+    Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
+        LdapRefreshRemoveUserBad(ESecurityConnectionType::START_TLS);
+    }
+}
+
+Y_UNIT_TEST_SUITE(LdapAuthProviderTest_nonSecure) {
+    Y_UNIT_TEST(LdapFetchGroupsFromAdLdapServer) {
+        LdapFetchGroupsFromAdLdapServer(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsDisableRequestToAD) {
+        LdapFetchGroupsDisableRequestToAD(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeDisableNestedGroupsGood) {
+        LdapFetchGroupsWithDefaultGroupAttributeDisableNestedGroupsGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts) {
+        LdapFetchGroupsWithDefaultGroupAttributeGoodUseListOfHosts(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithCustomGroupAttributeGood) {
+        LdapFetchGroupsWithCustomGroupAttributeGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithDontExistGroupAttribute) {
+        LdapFetchGroupsWithDontExistGroupAttribute(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad) {
+        LdapFetchGroupsWithInvalidRobotUserLoginBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad) {
+        LdapFetchGroupsWithInvalidRobotUserPasswordBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad) {
+        LdapFetchGroupsWithRemovedUserCredentialsBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad) {
+        LdapFetchGroupsUseInvalidSearchFilterBad(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoGood) {
+        LdapRefreshGroupsInfoGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapRefreshGroupsInfoDisableNestedGroupsGood) {
+        LdapRefreshGroupsInfoDisableNestedGroupsGood(ESecurityConnectionType::NON_SECURE);
+    }
+
+    Y_UNIT_TEST(LdapRefreshRemoveUserBad) {
+        LdapRefreshRemoveUserBad(ESecurityConnectionType::NON_SECURE);
+    }
 }
 
 } // NKikimr

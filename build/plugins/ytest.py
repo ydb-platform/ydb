@@ -24,7 +24,6 @@ from _dart_fields import (
     serialize_list,
     get_unit_list_variable,
     deserialize_list,
-    prepare_env,
     create_dart_record,
 )
 
@@ -40,17 +39,17 @@ KTLINT_OLD_EDITOR_CONFIG = "arcadia/build/platform/java/ktlint_old/.editorconfig
 
 YTEST_FIELDS_BASE = (
     df.AndroidApkTestActivity.value,
-    df.BinaryPath.value,
-    df.BuildFolderPath.value,
-    df.CustomDependencies.value,
+    df.BinaryPath.normalized,
+    df.BuildFolderPath.normalized,
+    df.CustomDependencies.all_standard,
     df.GlobalLibraryPath.value,
-    df.ScriptRelPath.value,
+    df.ScriptRelPath.second_flat,
     df.SkipTest.value,
-    df.SourceFolderPath.value,
-    df.SplitFactor.value,
-    df.TestCwd.value,
+    df.SourceFolderPath.normalized,
+    df.SplitFactor.from_macro_args_and_unit,
+    df.TestCwd.from_unit,
     df.TestedProjectFilename.value,
-    df.TestedProjectName.value,
+    df.TestedProjectName.unit_name,
     df.TestEnv.value,
     df.TestIosDeviceType.value,
     df.TestIosRuntimeType.value,
@@ -59,44 +58,57 @@ YTEST_FIELDS_BASE = (
 
 YTEST_FIELDS_EXTRA = (
     df.Blob.value,
-    df.ForkMode.value,
-    df.Size.value,
-    df.Tag.value,
-    df.TestTimeout.value,
-    df.YtSpec.value,
+    df.ForkMode.from_macro_and_unit,
+    df.Size.from_macro_args_and_unit,
+    df.Tag.from_macro_args_and_unit,
+    df.TestTimeout.from_macro_args_and_unit,
+    df.YtSpec.from_macro_args_and_unit,
 )
 
 PY_EXEC_FIELDS_BASE = (
     df.Blob.value,
-    df.BuildFolderPath.value2,
+    df.BuildFolderPath.stripped,
     df.CanonizeSubPath.value,
-    df.CustomDependencies.value3,
-    df.ForkMode.value2,
+    df.CustomDependencies.test_depends_only,
+    df.ForkMode.test_fork_mode,
     df.ForkTestFiles.value,
     df.PythonPaths.value,
-    df.Requirements.value4,
-    df.Size.value2,
+    df.Requirements.from_unit,
+    df.Size.from_unit,
     df.SkipTest.value,
-    df.SourceFolderPath.value,
-    df.SplitFactor.value2,
-    df.Tag.value,
-    df.TestCwd.value2,
-    df.TestData.value5,
+    df.SourceFolderPath.normalized,
+    df.SplitFactor.from_unit,
+    df.Tag.from_macro_args_and_unit,
+    df.TestCwd.keywords_replaced,
+    df.TestData.from_unit_with_canonical,
     df.TestEnv.value,
-    df.TestFiles.value5,
+    df.TestFiles.test_srcs,
     df.TestPartition.value,
     df.TestRecipes.value,
-    df.TestTimeout.value2,
+    df.TestTimeout.from_unit_with_default,
     df.UseArcadiaPython.value,
 )
 
 CHECK_FIELDS_BASE = (
-    df.CustomDependencies.value2,
-    df.Requirements.value3,
-    df.ScriptRelPath.value2,
+    df.CustomDependencies.depends_only,
+    df.Requirements.from_macro_args,
+    df.ScriptRelPath.first_flat,
     df.TestEnv.value,
-    df.TestName.value3,
+    df.TestName.first_flat,
     df.UseArcadiaPython.value,
+)
+
+LINTER_FIELDS_BASE = (
+    df.LintName.value,
+    df.LintExtraParams.from_macro_args,
+    df.TestName.name_from_macro_args,
+    df.TestedProjectName.unit_name,
+    df.SourceFolderPath.normalized,
+    df.TestEnv.value,
+    df.UseArcadiaPython.value,
+    df.LintFileProcessingTime.from_macro_args,
+    df.Linter.value,
+    df.CustomDependencies.depends_with_linter,
 )
 
 tidy_config_map = None
@@ -397,13 +409,6 @@ def dump_test(unit, kw):
     return data
 
 
-def reference_group_var(varname: str, extensions: list[str] | None = None) -> str:
-    if extensions is None:
-        return f'"${{join=\\;:{varname}}}"'
-
-    return serialize_list(f'${{ext={ext};join=\\;:{varname}}}' for ext in extensions)
-
-
 def count_entries(x):
     # see (de)serialize_list
     assert x is None or isinstance(x, str), type(x)
@@ -478,8 +483,8 @@ def get_project_tidy_config(unit):
 @df.with_fields(
     CHECK_FIELDS_BASE
     + (
-        df.TestedProjectName.value2,
-        df.SourceFolderPath.value,
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
         df.SbrUidExt.value,
         df.TestFiles.value,
     )
@@ -513,10 +518,10 @@ def check_data(fields, unit, *args):
 @df.with_fields(
     CHECK_FIELDS_BASE
     + (
-        df.TestedProjectName.value2,
-        df.SourceFolderPath.value,
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
         df.SbrUidExt.value,
-        df.TestFiles.value2,
+        df.TestFiles.flat_args_wo_first,
     )
 )
 def check_resource(fields, unit, *args):
@@ -546,10 +551,10 @@ def check_resource(fields, unit, *args):
 @df.with_fields(
     CHECK_FIELDS_BASE
     + (
-        df.TestedProjectName.value2,
-        df.SourceFolderPath.value,
-        df.TestData.value3,
-        df.TestFiles.value2,
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
+        df.TestData.ktlint,
+        df.TestFiles.flat_args_wo_first,
         df.ModuleLang.value,
         df.KtlintBinary.value,
         df.UseKtlintOld.value,
@@ -584,11 +589,11 @@ def ktlint(fields, unit, *args):
 @df.with_fields(
     CHECK_FIELDS_BASE
     + (
-        df.TestedProjectName.value2,
-        df.SourceFolderPath.value,
-        df.TestData.value4,
-        df.ForkMode.value2,
-        df.TestFiles.value3,
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
+        df.TestData.java_style,
+        df.ForkMode.test_fork_mode,
+        df.TestFiles.java_style,
         df.JdkLatestVersion.value,
         df.JdkResource.value,
         df.ModuleLang.value,
@@ -628,10 +633,10 @@ def java_style(fields, unit, *args):
 @df.with_fields(
     CHECK_FIELDS_BASE
     + (
-        df.TestedProjectName.value3,
-        df.SourceFolderPath.value2,
-        df.ForkMode.value2,
-        df.TestFiles.value2,
+        df.TestedProjectName.test_dir,
+        df.SourceFolderPath.test_dir,
+        df.ForkMode.test_fork_mode,
+        df.TestFiles.flat_args_wo_first,
         df.ModuleLang.value,
     )
 )
@@ -662,14 +667,47 @@ def gofmt(fields, unit, *args):
 @df.with_fields(
     CHECK_FIELDS_BASE
     + (
-        df.TestedProjectName.value2,
-        df.SourceFolderPath.value,
-        df.ForkMode.value2,
-        df.TestFiles.value2,
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
+        df.ForkMode.test_fork_mode,
+        df.TestFiles.flat_args_wo_first,
         df.ModuleLang.value,
     )
 )
 def govet(fields, unit, *args):
+    flat_args, spec_args = _common.sort_by_keywords(
+        {
+            "DEPENDS": -1,
+            "TIMEOUT": 1,
+            "DATA": -1,
+            "TAG": -1,
+            "REQUIREMENTS": -1,
+            "FORK_MODE": 1,
+            "SPLIT_FACTOR": 1,
+            "FORK_SUBTESTS": 0,
+            "FORK_TESTS": 0,
+            "SIZE": 1,
+        },
+        args,
+    )
+
+    dart_record = create_dart_record(fields, unit, flat_args, spec_args)
+
+    data = dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+@df.with_fields(
+    CHECK_FIELDS_BASE
+    + (
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
+        df.TestFiles.flat_args_wo_first,
+        df.ModuleLang.value,
+    )
+)
+def detekt_report(fields, unit, *args):
     flat_args, spec_args = _common.sort_by_keywords(
         {
             "DEPENDS": -1,
@@ -727,6 +765,8 @@ def onadd_check(unit, *args):
         gofmt(unit, *args)
     elif check_type == "govet":
         govet(unit, *args)
+    elif check_type == "detekt.report":
+        detekt_report(unit, *args)
 
 
 def on_register_no_check_imports(unit):
@@ -737,11 +777,11 @@ def on_register_no_check_imports(unit):
 
 @df.with_fields(
     (
-        df.TestedProjectName.value2,
-        df.SourceFolderPath.value,
+        df.TestedProjectName.normalized_basename,
+        df.SourceFolderPath.normalized,
         df.TestEnv.value,
         df.UseArcadiaPython.value,
-        df.TestFiles.value4,
+        df.TestFiles.normalized,
         df.ModuleLang.value,
         df.NoCheck.value,
     )
@@ -766,12 +806,13 @@ def onadd_check_py_imports(fields, unit, *args):
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
-        df.TestName.value4,
-        df.ScriptRelPath.value3,
-        df.TestedProjectName.value4,
+        df.TestName.filename_without_ext,
+        df.ScriptRelPath.pytest,
+        df.TestedProjectName.path_filename_basename,
         df.ModuleLang.value,
-        df.BinaryPath.value2,
+        df.BinaryPath.stripped,
         df.TestRunnerBin.value,
+        df.DockerImage.value,
     )
 )
 def onadd_pytest_bin(fields, unit, *args):
@@ -787,7 +828,7 @@ def onadd_pytest_bin(fields, unit, *args):
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
-    yt_spec = df.YtSpec.value2(unit, flat_args, spec_args)
+    yt_spec = df.YtSpec.from_unit(unit, flat_args, spec_args)
     if yt_spec and yt_spec[df.YtSpec.KEY]:
         unit.ondata_files(deserialize_list(yt_spec[df.YtSpec.KEY]))
 
@@ -802,35 +843,35 @@ def onadd_pytest_bin(fields, unit, *args):
 
 @df.with_fields(
     (
-        df.SourceFolderPath.value,
-        df.TestName.value5,
-        df.ScriptRelPath.value4,
-        df.TestTimeout.value3,
-        df.TestedProjectName.value5,
+        df.SourceFolderPath.normalized,
+        df.TestName.normalized_joined_dir_basename,
+        df.ScriptRelPath.junit,
+        df.TestTimeout.from_unit,
+        df.TestedProjectName.normalized,
         df.TestEnv.value,
-        df.TestData.value6,
-        df.ForkMode.value2,
-        df.SplitFactor.value2,
-        df.CustomDependencies.value3,
-        df.Tag.value,
-        df.Size.value2,
-        df.Requirements.value2,
+        df.TestData.java_test,
+        df.ForkMode.test_fork_mode,
+        df.SplitFactor.from_unit,
+        df.CustomDependencies.test_depends_only,
+        df.Tag.from_macro_args_and_unit,
+        df.Size.from_unit,
+        df.Requirements.with_maybe_fuzzing,
         df.TestRecipes.value,
         df.ModuleType.value,
         df.UnittestDir.value,
         df.JvmArgs.value,
         # TODO optimize, SystemProperties is used in TestData
         df.SystemProperties.value,
-        df.TestCwd.value,
+        df.TestCwd.from_unit,
         df.SkipTest.value,
         df.JavaClasspathCmdType.value,
         df.JdkResource.value,
         df.JdkForTests.value,
         df.ModuleLang.value,
         df.TestClasspath.value,
-        df.TestClasspathOrigins.value,
         df.TestClasspathDeps.value,
         df.TestJar.value,
+        df.DockerImage.value,
     )
 )
 def onjava_test(fields, unit, *args):
@@ -848,7 +889,7 @@ def onjava_test(fields, unit, *args):
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
-    yt_spec = df.YtSpec.value3(unit, (), {})
+    yt_spec = df.YtSpec.from_unit_list_var(unit, (), {})
     unit.ondata_files(deserialize_list(yt_spec[df.YtSpec.KEY]))
 
     try:
@@ -864,10 +905,10 @@ def onjava_test(fields, unit, *args):
 
 @df.with_fields(
     (
-        df.SourceFolderPath.value,
-        df.TestName.value6,
-        df.TestedProjectName.value5,
-        df.CustomDependencies.value3,
+        df.SourceFolderPath.normalized,
+        df.TestName.normalized_joined_dir_basename_deps,
+        df.TestedProjectName.normalized,
+        df.CustomDependencies.test_depends_only,
         df.IgnoreClasspathClash.value,
         df.ModuleType.value,
         df.ModuleLang.value,
@@ -908,9 +949,10 @@ def onrun(unit, *args):
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
-        df.TestName.value7,
-        df.TestedProjectName.value6,
-        df.BinaryPath.value3,
+        df.TestName.filename_without_pkg_ext,
+        df.TestedProjectName.path_filename_basename_without_pkg_ext,
+        df.BinaryPath.stripped_without_pkg_ext,
+        df.DockerImage.value,
     )
 )
 def onsetup_exectest(fields, unit, *args):
@@ -928,7 +970,7 @@ def onsetup_exectest(fields, unit, *args):
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
-    yt_spec = df.YtSpec.value2(unit, (), {})
+    yt_spec = df.YtSpec.from_unit(unit, (), {})
     if yt_spec and yt_spec[df.YtSpec.KEY]:
         unit.ondata_files(deserialize_list(yt_spec[df.YtSpec.KEY]))
 
@@ -947,91 +989,92 @@ def onsetup_run_python(unit):
         unit.ondepends('contrib/tools/python')
 
 
-def on_add_linter_check(unit, *args):
+@df.with_fields(
+    (
+        df.TestFiles.cpp_linter_files,
+        df.LintConfigs.cpp_configs,
+    )
+    + LINTER_FIELDS_BASE
+)
+def on_add_cpp_linter_check(fields, unit, *args):
     if unit.get("TIDY") == "yes":
         return
-    source_root_from_prefix = '${ARCADIA_ROOT}/'
-    source_root_to_prefix = '$S/'
-    unlimited = -1
 
     no_lint_value = _common.get_no_lint_value(unit)
     if no_lint_value in ("none", "none_internal"):
         return
 
+    unlimited = -1
     keywords = {
+        "NAME": 1,
+        "LINTER": 1,
         "DEPENDS": unlimited,
-        "FILES": unlimited,
-        "CONFIGS": unlimited,
+        "CONFIGS": 1,
+        "CUSTOM_CONFIG": 1,
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
     }
-    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
-    if len(flat_args) != 2:
-        unit.message(['ERROR', '_ADD_LINTER_CHECK params: expected 2 free parameters'])
+    _, spec_args = _common.sort_by_keywords(keywords, args)
+
+    global_resources = spec_args.get('GLOBAL_RESOURCES', [])
+    for resource in global_resources:
+        unit.onpeerdir(resource)
+    try:
+        dart_record = create_dart_record(fields, unit, (), spec_args)
+    except df.DartValueError as e:
+        if msg := str(e):
+            unit.message(['WARN', msg])
+        return
+    dart_record[df.ScriptRelPath.KEY] = 'custom_lint'
+
+    data = dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+@df.with_fields(
+    (
+        df.TestFiles.py_linter_files,
+        df.LintConfigs.python_configs,
+    )
+    + LINTER_FIELDS_BASE
+)
+def on_add_py_linter_check(fields, unit, *args):
+    if unit.get("TIDY") == "yes":
         return
 
-    configs = []
-    for cfg in spec_args.get('CONFIGS', []):
-        filename = unit.resolve(source_root_to_prefix + cfg)
-        if not os.path.exists(filename):
-            unit.message(['ERROR', 'Configuration file {} is not found'.format(filename)])
-            return
-        configs.append(cfg)
-    deps = []
+    no_lint_value = _common.get_no_lint_value(unit)
+    if no_lint_value in ("none", "none_internal"):
+        return
 
-    lint_name, linter = flat_args
-    deps.append(os.path.dirname(linter))
-
-    test_files = []
-    for path in spec_args.get('FILES', []):
-        if path.startswith(source_root_from_prefix):
-            test_files.append(path.replace(source_root_from_prefix, source_root_to_prefix, 1))
-        elif path.startswith(source_root_to_prefix):
-            test_files.append(path)
-
-    if lint_name == 'cpp_style':
-        files_dart = reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
-    else:
-        if not test_files:
-            unit.message(['WARN', 'No files to lint for {}'.format(lint_name)])
-            return
-        files_dart = serialize_list(test_files)
-
-    for arg in spec_args.get('EXTRA_PARAMS', []):
-        if '=' not in arg:
-            unit.message(['WARN', 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)])
-            return
-
-    deps += spec_args.get('DEPENDS', [])
-
-    for dep in deps:
-        unit.ondepends(dep)
-
-    for resource in spec_args.get('GLOBAL_RESOURCES', []):
-        unit.onpeerdir(resource)
-
-    test_record = {
-        'TEST-NAME': lint_name,
-        'SCRIPT-REL-PATH': 'custom_lint',
-        'TESTED-PROJECT-NAME': unit.name(),
-        'SOURCE-FOLDER-PATH': _common.get_norm_unit_path(unit),
-        'CUSTOM-DEPENDENCIES': " ".join(deps),
-        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        'USE_ARCADIA_PYTHON': unit.get('USE_ARCADIA_PYTHON') or '',
-        # TODO remove FILES, see DEVTOOLS-7052
-        'FILES': files_dart,
-        'TEST-FILES': files_dart,
-        # Linter specific parameters
-        # TODO Add configs to DATA. See YMAKE-427
-        'LINT-CONFIGS': serialize_list(configs),
-        'LINT-NAME': lint_name,
-        'LINT-FILE-PROCESSING-TIME': spec_args.get('FILE_PROCESSING_TIME', [''])[0],
-        'LINT-EXTRA-PARAMS': serialize_list(spec_args.get('EXTRA_PARAMS', [])),
-        'LINTER': linter,
+    unlimited = -1
+    keywords = {
+        "NAME": 1,
+        "LINTER": 1,
+        "DEPENDS": unlimited,
+        "CONFIGS": 1,
+        "GLOBAL_RESOURCES": unlimited,
+        "FILE_PROCESSING_TIME": 1,
+        "EXTRA_PARAMS": unlimited,
+        "PROJECT_TO_CONFIG_MAP": 1,
+        "FLAKE_MIGRATIONS_CONFIG": 1,
+        "CUSTOM_CONFIG": 1,
     }
+    _, spec_args = _common.sort_by_keywords(keywords, args)
 
-    data = dump_test(unit, test_record)
+    global_resources = spec_args.get('GLOBAL_RESOURCES', [])
+    for resource in global_resources:
+        unit.onpeerdir(resource)
+    try:
+        dart_record = create_dart_record(fields, unit, (), spec_args)
+    except df.DartValueError as e:
+        if msg := str(e):
+            unit.message(['WARN', msg])
+        return
+    dart_record[df.ScriptRelPath.KEY] = 'custom_lint'
+
+    data = dump_test(unit, dart_record)
     if data:
         unit.set_property(["DART_DATA", data])
 
@@ -1078,10 +1121,11 @@ def clang_tidy(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value,
-        df.Requirements.value,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def unittest_py(fields, unit, *args):
@@ -1111,10 +1155,11 @@ def unittest_py(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value,
-        df.Requirements.value,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def gunittest(fields, unit, *args):
@@ -1144,11 +1189,12 @@ def gunittest(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value,
-        df.Requirements.value,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
         df.BenchmarkOpts.value,
+        df.DockerImage.value,
     )
 )
 def g_benchmark(fields, unit, *args):
@@ -1178,10 +1224,11 @@ def g_benchmark(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value2,
-        df.Requirements.value,
+        df.TestData.from_macro_args_and_unit_with_canonical,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def go_test(fields, unit, *args):
@@ -1212,9 +1259,10 @@ def go_test(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value,
-        df.Requirements.value,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
+        df.DockerImage.value,
     )
 )
 def boost_test(fields, unit, *args):
@@ -1245,11 +1293,12 @@ def boost_test(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value,
-        df.Requirements.value2,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.with_maybe_fuzzing,
         df.FuzzDicts.value,
         df.FuzzOpts.value,
         df.Fuzzing.value,
+        df.DockerImage.value,
     )
 )
 def fuzz_test(fields, unit, *args):
@@ -1281,11 +1330,12 @@ def fuzz_test(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value,
-        df.Requirements.value,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.ModuleLang.value,
         df.BenchmarkOpts.value,
+        df.DockerImage.value,
     )
 )
 def y_benchmark(fields, unit, *args):
@@ -1314,8 +1364,8 @@ def y_benchmark(fields, unit, *args):
     + YTEST_FIELDS_EXTRA
     + (
         df.TestName.value,
-        df.TestData.value,
-        df.Requirements.value,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
     )
 )
@@ -1344,12 +1394,13 @@ def coverage_extractor(fields, unit, *args):
     YTEST_FIELDS_BASE
     + YTEST_FIELDS_EXTRA
     + (
-        df.TestName.value2,
-        df.TestData.value,
-        df.Requirements.value,
+        df.TestName.first_flat_with_bench,
+        df.TestData.from_macro_args_and_unit,
+        df.Requirements.from_macro_args_and_unit,
         df.TestPartition.value,
         df.GoBenchTimeout.value,
         df.ModuleLang.value,
+        df.DockerImage.value,
     )
 )
 def go_bench(fields, unit, *args):
@@ -1363,7 +1414,7 @@ def go_bench(fields, unit, *args):
         "FORK_TESTS": 0,
     }
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
-    tags = df.Tag.value(unit, flat_args, spec_args)[df.Tag.KEY]
+    tags = df.Tag.from_macro_args_and_unit(unit, flat_args, spec_args)[df.Tag.KEY]
 
     if "ya:run_go_benchmark" not in tags:
         return

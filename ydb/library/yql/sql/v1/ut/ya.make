@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/regex/pcre
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/core/sql_types
     ydb/library/yql/sql

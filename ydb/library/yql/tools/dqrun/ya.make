@@ -5,7 +5,7 @@ IF (PROFILE_MEMORY_ALLOCATIONS)
     ALLOCATOR(LF_DBG)
     CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
 ELSE()
-    IF (OS_LINUX)
+    IF (OS_LINUX AND NOT DISABLE_TCMALLOC)
         ALLOCATOR(TCMALLOC_256K)
     ELSE()
         ALLOCATOR(J)
@@ -53,6 +53,7 @@ ENDIF()
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/dq/provider/exec
         ydb/library/yql/providers/pq/async_io
+        ydb/library/yql/providers/pq/gateway/dummy
         ydb/library/yql/providers/pq/gateway/native
         ydb/library/yql/providers/pq/provider
         ydb/library/yql/providers/s3/actors
@@ -72,6 +73,7 @@ ENDIF()
         ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
+        ydb/library/yql/core/pg_ext
         ydb/library/yql/providers/yt/actors
         ydb/library/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
@@ -88,10 +90,12 @@ ENDIF()
         ydb/library/yql/parser/pg_wrapper
         ydb/library/yql/utils/log/proto
         ydb/library/yql/core/qplayer/storage/file
+        ydb/library/yql/public/result_format
 
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors
         ydb/core/fq/libs/db_id_async_resolver_impl
+        ydb/core/fq/libs/init
 
         ydb/library/yql/udfs/common/clickhouse/client
     )

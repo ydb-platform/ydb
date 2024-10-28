@@ -39,14 +39,14 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
 
         ui64 shardId = shards.at(0);
         auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
-        auto* reqTableId = request->Record.MutableTableId();
+        auto* reqTableId = request->Record.MutableTable()->MutablePathId();
         reqTableId->SetOwnerId(tableId.PathId.OwnerId);
-        reqTableId->SetTableId(tableId.PathId.LocalPathId);
+        reqTableId->SetLocalId(tableId.PathId.LocalPathId);
         runtime.SendToPipe(shardId, sender, request.release());
 
         auto response = runtime.GrabEdgeEventRethrow<NStat::TEvStatistics::TEvStatisticsResponse>(sender);
         auto& record = response->Get()->Record;
-        UNIT_ASSERT(record.GetStatus() == NKikimrStat::TEvStatisticsResponse::SUCCESS);
+        UNIT_ASSERT(record.GetStatus() == NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
         UNIT_ASSERT(record.ColumnsSize() == 2);
 
         for (ui32 i = 0; i < 2; ++i) {
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
             auto& stat = column.GetStatistics(0);
             UNIT_ASSERT(stat.GetType() == 2);
 
-            auto* data = stat.GetData().Data();
+            auto* data = stat.GetData().data();
             auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
 
             for (ui32 j = 0; j <= 10; ++j) {

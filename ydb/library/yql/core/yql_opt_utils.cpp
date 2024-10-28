@@ -369,9 +369,9 @@ TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     size_t index = 0;
-                    for (auto& col : order) {
+                    for (auto& [col, gen_col] : order) {
                         parent
-                            .Atom(index++, col);
+                            .Atom(index++, gen_col);
                     }
                     return parent;
                 })
@@ -2216,5 +2216,95 @@ TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf pre
     return result;
 }
 
+bool CheckSupportedTypes(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& supportedTypes, const TSet<NUdf::EDataSlot>& supportedDataTypes, std::function<void(const TString&)> unsupportedTypeHandler) {
+    TSet<ETypeAnnotationKind> supported;
+    for (const auto &e: supportedTypes) {
+        if (e == "pg") {
+            supported.insert(ETypeAnnotationKind::Pg);
+        } else if (e == "tuple") {
+            supported.emplace(ETypeAnnotationKind::Tuple);
+        } else if (e == "struct") {
+            supported.emplace(ETypeAnnotationKind::Struct);
+        } else if (e == "dict") {
+            supported.emplace(ETypeAnnotationKind::Dict);
+        } else if (e == "list") {
+            supported.emplace(ETypeAnnotationKind::List);
+        } else if (e == "variant") {
+            supported.emplace(ETypeAnnotationKind::Variant);
+        } else {
+            // Unknown type
+            unsupportedTypeHandler(TStringBuilder() << "unknown type: " << e);
+            return false;
+        }
+    }
+    if (supportedDataTypes.size()) {
+        supported.emplace(ETypeAnnotationKind::Data);
+    }
+    auto checkType = [&] (const TTypeAnnotationNode* type) {
+            if (type->GetKind() == ETypeAnnotationKind::Data) {
+            if (!supported.contains(ETypeAnnotationKind::Data)) {
+                unsupportedTypeHandler(TStringBuilder() << "unsupported data types");
+                return false;
+            }
+            if (!supportedDataTypes.contains(type->Cast<TDataExprType>()->GetSlot())) {
+                unsupportedTypeHandler(TStringBuilder() << "unsupported data type: " << type->Cast<TDataExprType>()->GetSlot());
+                return false;
+            }
+        } else if (type->GetKind() == ETypeAnnotationKind::Pg) {
+            if (!supported.contains(ETypeAnnotationKind::Pg)) {
+                unsupportedTypeHandler(TStringBuilder() << "unsupported pg");
+                return false;
+            }
+            auto name = type->Cast<TPgExprType>()->GetName();
+            if (name == "float4" && !supportedDataTypes.contains(NUdf::EDataSlot::Float)) {
+                unsupportedTypeHandler(TStringBuilder() << "PgFloat4 unsupported yet since float is no supported");
+                return false;
+            }
+        } else {
+            unsupportedTypeHandler(TStringBuilder() << "unsupported annotation kind: " << type->GetKind());
+            return false;
+        }
+        return true;
+    };
+
+    TVector<const TTypeAnnotationNode*> stack(typesToCheck.begin(), typesToCheck.end());
+    while (!stack.empty()) {
+        auto el = stack.back();
+        stack.pop_back();
+        if (el->GetKind() == ETypeAnnotationKind::Optional) {
+            stack.push_back(el->Cast<TOptionalExprType>()->GetItemType());
+            continue;
+        }
+        if (!supported.contains(el->GetKind())) {
+            unsupportedTypeHandler(TStringBuilder() << "unsupported " << el->GetKind());
+            return false;
+        }
+        if (el->GetKind() == ETypeAnnotationKind::Tuple) {
+            for (auto e: el->Cast<TTupleExprType>()->GetItems()) {
+                stack.push_back(e);
+            }
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::Struct) {
+            for (auto e: el->Cast<TStructExprType>()->GetItems()) {
+                stack.push_back(e->GetItemType());
+            }
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::List) {
+            stack.push_back(el->Cast<TListExprType>()->GetItemType());
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::Dict) {
+            stack.push_back(el->Cast<TDictExprType>()->GetKeyType());
+            stack.push_back(el->Cast<TDictExprType>()->GetPayloadType());
+            continue;
+        } else if (el->GetKind() == ETypeAnnotationKind::Variant) {
+            stack.push_back(el->Cast<TVariantExprType>()->GetUnderlyingType());
+            continue;
+        }
+        if (!checkType(el)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 }

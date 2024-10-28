@@ -25,20 +25,20 @@ namespace NBitmapDetail {
     // Alignment/padding in serialization should be used explicitly.
 
     using TByte = ui8;
-    constexpr static size_t Bits = 8 * sizeof(TByte);
+    static constexpr size_t Bits = 8 * sizeof(TByte);
     constexpr size_t SerializationAlignment = 8;
 
-    constexpr static TByte GetBitMask(size_t index)
+    static constexpr TByte GetBitMask(size_t index)
     {
         return TByte(1) << (index % Bits);
     }
 
-    constexpr static size_t GetWordIndex(size_t index)
+    static constexpr size_t GetWordIndex(size_t index)
     {
         return index / Bits;
     }
 
-    constexpr static size_t GetByteSize(size_t size)
+    static constexpr size_t GetByteSize(size_t size)
     {
         return (size + Bits - 1) / Bits;
     }

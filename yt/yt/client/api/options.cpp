@@ -12,7 +12,7 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NApi::TClientOptions GetClientOpsFromEnv()
+NApi::TClientOptions GetClientOptionsFromEnv()
 {
     NApi::TClientOptions options;
 
@@ -37,9 +37,9 @@ NApi::TClientOptions GetClientOpsFromEnv()
     return options;
 }
 
-const NApi::TClientOptions& GetClientOpsFromEnvStatic()
+const NApi::TClientOptions& GetClientOptionsFromEnvStatic()
 {
-    static const NApi::TClientOptions options = GetClientOpsFromEnv();
+    static const NApi::TClientOptions options = GetClientOptionsFromEnv();
     return options;
 }
 

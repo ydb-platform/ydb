@@ -253,7 +253,7 @@ void TSupportsMultisetAttributes::SetAttributes(
 void TSupportsPermissions::ValidatePermission(
     EPermissionCheckScope /*scope*/,
     EPermission /*permission*/,
-    const TString& /*user*/)
+    const std::string& /*user*/)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -265,7 +265,7 @@ TSupportsPermissions::TCachingPermissionValidator::TCachingPermissionValidator(
     , Scope_(scope)
 { }
 
-void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const TString& user)
+void TSupportsPermissions::TCachingPermissionValidator::Validate(EPermission permission, const std::string& user)
 {
     auto& validatedPermissions = ValidatedPermissions_[user];
     if (None(validatedPermissions & permission)) {
@@ -933,10 +933,10 @@ void TSupportsAttributes::SetAttribute(
     // Check if this pooled string has a small overhead (<= 25%).
     // Otherwise make a deep copy.
     const auto& requestValue = request->value();
-    const auto& safeValue = requestValue.capacity() <= requestValue.length() * 5 / 4
-        ? requestValue
-        : TString(TStringBuf(requestValue));
-    DoSetAttribute(path, TYsonString(safeValue), request->force());
+    TYsonString safeValue = requestValue.capacity() <= requestValue.length() * 5 / 4
+        ? TYsonString{requestValue}
+        : TYsonString{TStringBuf(requestValue)};
+    DoSetAttribute(path, std::move(safeValue), request->force());
     context->Reply();
 }
 

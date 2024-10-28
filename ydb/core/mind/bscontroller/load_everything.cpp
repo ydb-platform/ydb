@@ -193,8 +193,8 @@ public:
                                                    groups.GetValueOrDefault<T::DesiredVDiskCategory>(NKikimrBlobStorage::TVDiskKind::Default),
                                                    groups.GetValueOrDefault<T::EncryptionMode>(),
                                                    groups.GetValueOrDefault<T::LifeCyclePhase>(),
-                                                   groups.GetValueOrDefault<T::MainKeyId>(nullptr),
-                                                   groups.GetValueOrDefault<T::EncryptedGroupKey>(nullptr),
+                                                   groups.GetValueOrDefault<T::MainKeyId>(),
+                                                   groups.GetValueOrDefault<T::EncryptedGroupKey>(),
                                                    groups.GetValueOrDefault<T::GroupKeyNonce>(),
                                                    groups.GetValueOrDefault<T::MainKeyVersion>(),
                                                    groups.GetValueOrDefault<T::Down>(),
@@ -352,6 +352,7 @@ public:
         }
 
         // VSlots
+        const TMonotonic mono = TActivationContext::Monotonic();
         Self->VSlots.clear();
         {
             using T = Schema::VSlot;
@@ -374,6 +375,7 @@ public:
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
+                x.VDiskStatusTimestamp = mono;
 
                 if (!slot.Next()) {
                     return false;

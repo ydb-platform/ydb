@@ -134,12 +134,15 @@ struct TOptionalTypesMatch
         << ex;
 }
 
-template <typename... Args>
-[[noreturn]] void ThrowYsonToSkiffConversionError(const TComplexTypeFieldDescriptor& descriptor, const Args&... args)
+template <typename... TArgs>
+[[noreturn]] void ThrowYsonToSkiffConversionError(
+    const TComplexTypeFieldDescriptor& descriptor,
+    TFormatString<TArgs...> format,
+    TArgs&&... args)
 {
     THROW_ERROR_EXCEPTION("Yson to Skiff conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(args...);
+        << TError(format, std::forward<TArgs>(args)...);
 }
 
 [[noreturn]] void ThrowBadYsonToken(
@@ -168,12 +171,15 @@ template <typename... Args>
         actual);
 }
 
-template <typename... Args>
-[[noreturn]] void ThrowSkiffToYsonConversionError(const TComplexTypeFieldDescriptor& descriptor, const Args&... args)
+template <typename... TArgs>
+[[noreturn]] void ThrowSkiffToYsonConversionError(
+    const TComplexTypeFieldDescriptor& descriptor,
+    TFormatString<TArgs...> format,
+    TArgs&&... args)
 {
     THROW_ERROR_EXCEPTION("Skiff to Yson conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(args...);
+        << TError(format, std::forward<TArgs>(args)...);
 }
 
 TOptionalTypesMatch MatchOptionalTypes(
@@ -742,6 +748,10 @@ TYsonToSkiffConverter CreateDecimalYsonToSkiffConverter(
             return CreatePrimitiveTypeYsonToSkiffConverter<EYsonItemType::StringValue>(
                 std::move(descriptor),
                 TDecimalSkiffWriter<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return CreatePrimitiveTypeYsonToSkiffConverter<EYsonItemType::StringValue>(
+                std::move(descriptor),
+                TDecimalSkiffWriter<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveTypeYsonToSkiffConverter(std::move(descriptor), wireType);
         default:
@@ -1809,6 +1819,8 @@ TSkiffToYsonConverter CreateDecimalSkiffToYsonConverter(
             return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int64>(precision));
         case EWireType::Int128:
             return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return TPrimitiveTypeSkiffToYsonConverter(TDecimalSkiffParser<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveTypeSkiffToYsonConverter(wireType);
         default:
@@ -1893,6 +1905,8 @@ void CheckSkiffWireTypeForDecimal(int precision, NSkiff::EWireType wireType)
         skiffBinarySize = sizeof(i64);
     } else if (wireType == NSkiff::EWireType::Int128) {
         skiffBinarySize = 2 * sizeof(i64);
+    } else if (wireType == NSkiff::EWireType::Int256) {
+        skiffBinarySize = 4 * sizeof(i64);
     }
 
     if (decimalBinarySize != skiffBinarySize) {

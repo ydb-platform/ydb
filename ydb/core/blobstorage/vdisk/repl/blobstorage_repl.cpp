@@ -175,6 +175,8 @@ namespace NKikimr {
         TEvResumeForce *ResumeForceToken = nullptr;
         TInstant ReplicationEndTime;
         bool UnrecoveredNonphantomBlobs = false;
+        bool RequestedReplicationToken = false;
+        bool HoldingReplicationToken = false;
 
         TWatchdogTimer<TEvReplCheckProgress> ReplProgressWatchdog;
 
@@ -208,7 +210,7 @@ namespace NKikimr {
             CreateQueuesForVDisks(*QueueActorMapPtr, SelfId(), ReplCtx->GInfo, ReplCtx->VCtx,
                     ReplCtx->GInfo->GetVDisks(), ReplCtx->MonGroup.GetGroup(),
                     replQueueClientId, NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead,
-                    "PeerRepl", replInterconnectChannel);
+                    "PeerRepl", replInterconnectChannel, false);
 
             for (const auto& [vdiskId, vdiskActorId] : ReplCtx->VDiskCfg->BaseInfo.DonorDiskIds) {
                 TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
@@ -288,6 +290,12 @@ namespace NKikimr {
                 case Plan:
                     // this is a first quantum of replication, so we have to register it in the broker
                     State = AwaitToken;
+                    Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken);
+                    if (RequestedReplicationToken) {
+                        STLOG(PRI_CRIT, BS_REPL, BSVR38, ReplCtx->VCtx->VDiskLogPrefix << "excessive replication token requested");
+                        break;
+                    }
+                    RequestedReplicationToken = true;
                     if (!Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(ReplCtx->VDiskCfg->BaseInfo.PDiskId))) {
                         HandleReplToken();
                     }
@@ -304,6 +312,10 @@ namespace NKikimr {
         }
 
         void HandleReplToken() {
+            Y_ABORT_UNLESS(RequestedReplicationToken);
+            RequestedReplicationToken = false;
+            HoldingReplicationToken = true;
+
             // switch to replication state
             Transition(AwaitToken, Replication);
             if (!ResumeIfReady()) {
@@ -410,6 +422,9 @@ namespace NKikimr {
                 if (State == WaitQueues || State == Replication) {
                     // release token as we have finished replicating
                     Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                    Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken);
+                    Y_DEBUG_ABORT_UNLESS(HoldingReplicationToken);
+                    HoldingReplicationToken = false;
                 }
                 ResetReplProgressTimer(true);
 
@@ -638,7 +653,15 @@ namespace NKikimr {
 
             // return replication token if we have one
             if (State == AwaitToken || State == WaitQueues || State == Replication) {
-                Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                Y_DEBUG_ABORT_UNLESS(RequestedReplicationToken || HoldingReplicationToken);
+                if (RequestedReplicationToken || HoldingReplicationToken) {
+                    Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
+                }
+            } else {
+                Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken && !HoldingReplicationToken);
+                if (RequestedReplicationToken || HoldingReplicationToken) {
+                    STLOG(PRI_CRIT, BS_REPL, BSVR37, ReplCtx->VCtx->VDiskLogPrefix << "stuck replication token");
+                }
             }
 
             if (ReplJobActorId) {

@@ -4,7 +4,7 @@
 
 [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is a command line utility for working with {{ ydb-short-name }} databases.
 
-{% list tabs %}
+{% list tabs group=os %}
 
 - Linux
 
@@ -28,7 +28,7 @@
 
 {{ ydb-short-name }} Server is a build for running a [YDB cluster](../concepts/glossary.md#cluster) node.
 
-{% list tabs %}
+{% list tabs group=os %}
 
 - Linux
 
@@ -40,7 +40,7 @@
 
 - Source code
 
-   {% include notitle [docker](_includes/server/source_code.md) %}
+   {% include notitle [source_code](_includes/server/source_code.md) %}
 
 {% endlist %}
 

@@ -284,13 +284,15 @@ class YamlConfigState {
                     configsRoot.append(remove);
                     configsRoot.append(head);
                     configsRoot.append(form);
-                    let cm = createEditor(div.get(0), true, 1068);
-                    cm.setValue(volatileConfig.config);
-                    copy.click(function() {
-                        copyToClipboard(cm.getValue());
+                    createEditorPromise.then((createEditor) => {
+                        let cm = createEditor(div.get(0), true, 1068);
+                        cm.setValue(volatileConfig.config);
+                        copy.click(function() {
+                            copyToClipboard(cm.getValue());
+                        });
+    
+                        this.codeMirrors.push(cm);
                     });
-
-                    this.codeMirrors.push(cm);
                 }
             }
         } else {
@@ -396,8 +398,8 @@ class YamlConfigState {
         var rawLabels = yamlCollectLabels();
         for (let label in rawLabels) {
             labels.push({
-                Label: label,
-                Value: rawLabels[label],
+                label: label,
+                value: rawLabels[label],
             });
         }
         var cmd = {
@@ -415,137 +417,139 @@ class YamlConfigState {
 
     initTab() {
         var self = this;
-        this.codeMirror = createEditor($("#main-editor-container").get(0), this.readOnly, 1068);
-        this.config = "";
-        this.codeMirror.setValue(this.config);
+        createEditorPromise.then((createEditor) => {
+            this.codeMirror = createEditor($("#main-editor-container").get(0), this.readOnly, 1068);
+            this.config = "";
+            this.codeMirror.setValue(this.config);
 
-        this.volatileCodeMirror = createEditor(document.getElementById("volatile-yaml-config-item"), false, 1068);
+            this.volatileCodeMirror = createEditor(document.getElementById("volatile-yaml-config-item"), false, 1068);
 
-        this.volatileConfig = "";
-        this.volatileCodeMirror.setValue(this.volatileConfig);
+            this.volatileConfig = "";
+            this.volatileCodeMirror.setValue(this.volatileConfig);
 
-        this.additionalResolveCodeMirror = createEditor($("#additional-yaml-config-resolve").get(0), false, 1034);
-        this.additionalResolveCodeMirror.setValue("");
+            this.additionalResolveCodeMirror = createEditor($("#additional-yaml-config-resolve").get(0), false, 1034);
+            this.additionalResolveCodeMirror.setValue("");
 
-        $("#copy-additional-yaml-config").click(function() {
-            copyToClipboard(self.additionalResolveCodeMirror.getValue());
-        });
+            $("#copy-additional-yaml-config").click(function() {
+                copyToClipboard(self.additionalResolveCodeMirror.getValue());
+            });
 
-        $("#link-additional-yaml-config").click(function() {
-            $(".yaml-btn").first().click();
-            self.volatileCodeMirror.setValue(self.additionalResolveCodeMirror.getValue());
-        });
+            $("#link-additional-yaml-config").click(function() {
+                $(".yaml-btn").first().click();
+                self.volatileCodeMirror.setValue(self.additionalResolveCodeMirror.getValue());
+            });
 
-        this.arbitraryResolveCodeMirror = createEditor($("#arbitrary-yaml-config-resolve").get(0), false, 1034);
-        this.arbitraryResolveCodeMirror.setValue("");
+            this.arbitraryResolveCodeMirror = createEditor($("#arbitrary-yaml-config-resolve").get(0), false, 1034);
+            this.arbitraryResolveCodeMirror.setValue("");
 
-        $("#copy-arbitrary-yaml-config").click(function() {
-            copyToClipboard(self.arbitraryResolveCodeMirror.getValue());
-        });
+            $("#copy-arbitrary-yaml-config").click(function() {
+                copyToClipboard(self.arbitraryResolveCodeMirror.getValue());
+            });
 
-        $("#fold-arbitrary-yaml-config").click(function() {
-            self.arbitraryResolveCodeMirror.trigger('fold', 'editor.foldLevel2');
-        });
+            $("#fold-arbitrary-yaml-config").click(function() {
+                self.arbitraryResolveCodeMirror.trigger('fold', 'editor.foldLevel2');
+            });
 
-        $("#unfold-arbitrary-yaml-config").click(function() {
-            self.arbitraryResolveCodeMirror.trigger('fold', 'editor.unfoldAll');
-        });
+            $("#unfold-arbitrary-yaml-config").click(function() {
+                self.arbitraryResolveCodeMirror.trigger('fold', 'editor.unfoldAll');
+            });
 
-        var elemResolved = $("#yaml-config-resolved");
+            var elemResolved = $("#yaml-config-resolved");
 
-        var copyResolved = $(`
-            <div class="yaml-sticky-btn-wrap copy-yaml-config" style="margin-top: 5px">
-                <div class="yaml-sticky-btn"></div>
-            </div>
-            `);
-
-        elemResolved.parent().prepend(copyResolved);
-
-        this.resolvedCodeMirror = createEditor(elemResolved.get(0), true, 1050);
-        this.resolvedCodeMirror.setValue("");
-
-        copyResolved.click(function() {
-            copyToClipboard(this.resolvedCodeMirror.getValue());
-        });
-
-        $("#yaml-label-add").click(() => addLabel());
-        $("#yaml-label-clear").click(() => clearLabels());
-
-        $(".yaml-floater").children().click(function() {
-            var floater = $(this);
-            var submenu = $(floater.attr('data-target'));
-            if (!$(".yaml-floater").children().hasClass("active")) {
-                floater.addClass("active");
-                submenu.addClass("active");
-                setTimeout(() => hideOnClickOutside(".yaml-submenu"), 100);
-            }
-        });
-
-        $("#link-yaml-config").click(function() {
-            $(".yaml-btn").first().click();
-            $("#yaml-arbitrary-config-tab").click();
-            self.arbitraryResolveCodeMirror.setValue(self.codeMirror.getValue());
-        });
-
-        $("#copy-yaml-config").click(function() {
-            copyToClipboard(self.codeMirror.getValue());
-        });
-
-        $("#fold-yaml-config").click(function() {
-            self.codeMirror.trigger('fold', 'editor.foldLevel2');
-        });
-
-        $("#unfold-yaml-config").click(function() {
-            self.codeMirror.trigger('fold', 'editor.unfoldAll');
-        });
-
-        $("#copy-volatile-yaml-config").click(function() {
-            copyToClipboard(self.volatileCodeMirror.getValue());
-        });
-
-        $("#link-volatile-yaml-config").click(function() {
-            $(".yaml-btn").first().click();
-            $("#yaml-current-config-tab").click();
-            $("#yaml-resolve-include-volatile").prop('checked', true);
-            self.additionalResolveCodeMirror.setValue(self.volatileCodeMirror.getValue());
-        });
-
-        $("#volatile-yaml-resolve-all").click(() => self.resolveAll());
-        $("#volatile-yaml-resolve-for-labels").click(() => self.resolveForLabels());
-
-        $('#volatile-yaml-apply-button').on('click', function(event) {
-            event.preventDefault();
-            showAck("Add volatile config?", " ", "Yes", "No", self.addVolatileConfig.bind(self));
-        });
-
-        $('#volatile-yaml-remove-all').on('click', function(event) {
-            event.preventDefault();
-            showAck("Remove all volatile configs?", " ", "Yes", "No", self.removeAllVolatileConfigs.bind(self));
-        });
-
-        $('.codeeditor-yaml').each(function () {
-            var self = $(this);
-            var copy = $(`
-                <div class="yaml-sticky-btn-wrap copy-yaml-config">
+            var copyResolved = $(`
+                <div class="yaml-sticky-btn-wrap copy-yaml-config" style="margin-top: 5px">
                     <div class="yaml-sticky-btn"></div>
                 </div>
                 `);
 
-            self.parent().prepend(copy);
+            elemResolved.parent().prepend(copyResolved);
 
-            var value = self.text();
-            self.text("");
+            this.resolvedCodeMirror = createEditor(elemResolved.get(0), true, 1050);
+            this.resolvedCodeMirror.setValue("");
 
-            let cm = createEditor(self.get(0), true, 500);
-
-            cm.setValue(value);
-
-            copy.click(function() {
-                copyToClipboard(cm.getValue());
+            copyResolved.click(function() {
+                copyToClipboard(this.resolvedCodeMirror.getValue());
             });
-        });
 
-        this.loadYaml();
+            $("#yaml-label-add").click(() => addLabel());
+            $("#yaml-label-clear").click(() => clearLabels());
+
+            $(".yaml-floater").children().click(function() {
+                var floater = $(this);
+                var submenu = $(floater.attr('data-target'));
+                if (!$(".yaml-floater").children().hasClass("active")) {
+                    floater.addClass("active");
+                    submenu.addClass("active");
+                    setTimeout(() => hideOnClickOutside(".yaml-submenu"), 100);
+                }
+            });
+
+            $("#link-yaml-config").click(function() {
+                $(".yaml-btn").first().click();
+                $("#yaml-arbitrary-config-tab").click();
+                self.arbitraryResolveCodeMirror.setValue(self.codeMirror.getValue());
+            });
+
+            $("#copy-yaml-config").click(function() {
+                copyToClipboard(self.codeMirror.getValue());
+            });
+
+            $("#fold-yaml-config").click(function() {
+                self.codeMirror.trigger('fold', 'editor.foldLevel2');
+            });
+
+            $("#unfold-yaml-config").click(function() {
+                self.codeMirror.trigger('fold', 'editor.unfoldAll');
+            });
+
+            $("#copy-volatile-yaml-config").click(function() {
+                copyToClipboard(self.volatileCodeMirror.getValue());
+            });
+
+            $("#link-volatile-yaml-config").click(function() {
+                $(".yaml-btn").first().click();
+                $("#yaml-current-config-tab").click();
+                $("#yaml-resolve-include-volatile").prop('checked', true);
+                self.additionalResolveCodeMirror.setValue(self.volatileCodeMirror.getValue());
+            });
+
+            $("#volatile-yaml-resolve-all").click(() => self.resolveAll());
+            $("#volatile-yaml-resolve-for-labels").click(() => self.resolveForLabels());
+
+            $('#volatile-yaml-apply-button').on('click', function(event) {
+                event.preventDefault();
+                showAck("Add volatile config?", " ", "Yes", "No", self.addVolatileConfig.bind(self));
+            });
+
+            $('#volatile-yaml-remove-all').on('click', function(event) {
+                event.preventDefault();
+                showAck("Remove all volatile configs?", " ", "Yes", "No", self.removeAllVolatileConfigs.bind(self));
+            });
+
+            $('.codeeditor-yaml').each(function () {
+                var self = $(this);
+                var copy = $(`
+                    <div class="yaml-sticky-btn-wrap copy-yaml-config">
+                        <div class="yaml-sticky-btn"></div>
+                    </div>
+                    `);
+
+                self.parent().prepend(copy);
+
+                var value = self.text();
+                self.text("");
+
+                let cm = createEditor(self.get(0), true, 500);
+
+                cm.setValue(value);
+
+                copy.click(function() {
+                    copyToClipboard(cm.getValue());
+                });
+            });
+
+            this.loadYaml();
+        });
     }
 }
 

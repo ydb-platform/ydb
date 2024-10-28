@@ -3,7 +3,7 @@
 #include "sensor.h"
 #include "percpu.h"
 
-#include <type_traits>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/singleton.h>
 
 #include <library/cpp/yt/assert/assert.h>
@@ -17,8 +17,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSolomonRegistry::TSolomonRegistry()
-{ }
+TSolomonRegistry::TSolomonRegistry() = default;
 
 template <class TBase, class TSimple, class TPerCpu, class TFn>
 TIntrusivePtr<TBase> SelectImpl(bool hot, const TFn& fn)
@@ -35,7 +34,7 @@ TIntrusivePtr<TBase> SelectImpl(bool hot, const TFn& fn)
 }
 
 ICounterImplPtr TSolomonRegistry::RegisterCounter(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -52,7 +51,7 @@ ICounterImplPtr TSolomonRegistry::RegisterCounter(
 }
 
 ITimeCounterImplPtr TSolomonRegistry::RegisterTimeCounter(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -67,7 +66,7 @@ ITimeCounterImplPtr TSolomonRegistry::RegisterTimeCounter(
 }
 
 IGaugeImplPtr TSolomonRegistry::RegisterGauge(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -88,7 +87,7 @@ IGaugeImplPtr TSolomonRegistry::RegisterGauge(
 }
 
 ITimeGaugeImplPtr TSolomonRegistry::RegisterTimeGauge(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -107,7 +106,7 @@ ITimeGaugeImplPtr TSolomonRegistry::RegisterTimeGauge(
 }
 
 ISummaryImplPtr TSolomonRegistry::RegisterSummary(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -120,7 +119,7 @@ ISummaryImplPtr TSolomonRegistry::RegisterSummary(
 }
 
 IGaugeImplPtr TSolomonRegistry::RegisterGaugeSummary(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -134,7 +133,7 @@ IGaugeImplPtr TSolomonRegistry::RegisterGaugeSummary(
 }
 
 ITimeGaugeImplPtr TSolomonRegistry::RegisterTimeGaugeSummary(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -148,7 +147,7 @@ ITimeGaugeImplPtr TSolomonRegistry::RegisterTimeGaugeSummary(
 }
 
 ITimerImplPtr TSolomonRegistry::RegisterTimerSummary(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -163,7 +162,7 @@ ITimerImplPtr TSolomonRegistry::RegisterTimerSummary(
 }
 
 ITimerImplPtr TSolomonRegistry::RegisterTimeHistogram(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -176,7 +175,7 @@ ITimerImplPtr TSolomonRegistry::RegisterTimeHistogram(
 }
 
 IHistogramImplPtr TSolomonRegistry::RegisterGaugeHistogram(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -189,7 +188,7 @@ IHistogramImplPtr TSolomonRegistry::RegisterGaugeHistogram(
 }
 
 IHistogramImplPtr TSolomonRegistry::RegisterRateHistogram(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options)
 {
@@ -202,7 +201,7 @@ IHistogramImplPtr TSolomonRegistry::RegisterRateHistogram(
 }
 
 void TSolomonRegistry::RegisterFuncCounter(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options,
     const TRefCountedPtr& owner,
@@ -215,7 +214,7 @@ void TSolomonRegistry::RegisterFuncCounter(
 }
 
 void TSolomonRegistry::RegisterFuncGauge(
-    const TString& name,
+    const std::string& name,
     const TTagSet& tags,
     TSensorOptions options,
     const TRefCountedPtr& owner,
@@ -228,7 +227,7 @@ void TSolomonRegistry::RegisterFuncGauge(
 }
 
 void TSolomonRegistry::RegisterProducer(
-    const TString& prefix,
+    const std::string& prefix,
     const TTagSet& tags,
     TSensorOptions options,
     const ISensorProducerPtr& producer)
@@ -240,8 +239,8 @@ void TSolomonRegistry::RegisterProducer(
 
 void TSolomonRegistry::RenameDynamicTag(
     const TDynamicTagPtr& tag,
-    const TString& name,
-    const TString& value)
+    const std::string& name,
+    const std::string& value)
 {
     DoRegister([this, tag, name, value] {
         auto tagId = Tags_.Encode(TTag{name, value});
@@ -262,7 +261,7 @@ i64 TSolomonRegistry::GetNextIteration() const
     return Iteration_;
 }
 
-void TSolomonRegistry::SetGridFactor(std::function<int(const TString&)> gridFactor)
+void TSolomonRegistry::SetGridFactor(std::function<int(const std::string&)> gridFactor)
 {
     GridFactor_ = gridFactor;
 }
@@ -414,7 +413,7 @@ void TSolomonRegistry::ReadSensors(
 }
 
 void TSolomonRegistry::ReadRecentSensorValues(
-    const TString& name,
+    const std::string& name,
     const TTagList& tags,
     const TReadOptions& options,
     TFluentAny fluent) const
@@ -499,7 +498,7 @@ const TTagRegistry& TSolomonRegistry::GetTags() const
     return Tags_;
 }
 
-TSensorSet* TSolomonRegistry::FindSet(const TString& name, const TSensorOptions& options)
+TSensorSet* TSolomonRegistry::FindSet(const std::string& name, const TSensorOptions& options)
 {
     if (auto it = Sensors_.find(name); it != Sensors_.end()) {
         it->second.ValidateOptions(options);
@@ -534,8 +533,9 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
             continue;
         }
 
-        auto cube = dump.add_cubes();
-        cube->set_name(name);
+        auto* cube = dump.add_cubes();
+        cube->set_name(ToProto<TProtobufString>(name));
+
         set.DumpCube(cube, extraTags);
     }
 
@@ -547,7 +547,7 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors()
     return DumpSensors({});
 }
 
-NProto::TSensorDump TSolomonRegistry::DumpSensors(const std::optional<TString>& host, const THashMap<TString, TString>& instanceTags)
+NProto::TSensorDump TSolomonRegistry::DumpSensors(const std::optional<std::string>& host, const THashMap<std::string, std::string>& instanceTags)
 {
     std::vector<TTagId> extraTags;
     if (host) {

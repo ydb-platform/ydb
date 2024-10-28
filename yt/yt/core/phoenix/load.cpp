@@ -30,10 +30,6 @@ bool AreFieldSchemasEquivalent(
         if (lhsFieldDescriptor->GetTag() != rhsFieldSchema->Tag) {
             return false;
         }
-
-        if (lhsFieldDescriptor->IsDeprecated() != rhsFieldSchema->Deprecated) {
-            return false;
-        }
     }
 
     return true;
@@ -71,10 +67,10 @@ std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniver
                 << TErrorAttribute("load_template", loadTypeSchema->Template);
         }
 
-        if (auto nativeBaseTypeTags = nativeTypeDescriptor->GetBaseTypeTags(); loadTypeSchema->BaseTypeTags != nativeBaseTypeTags) {
+        if (loadTypeSchema->BaseTypeTags != nativeTypeDescriptor->BaseTypeTags()) {
             THROW_ERROR_EXCEPTION("Type %v has different base types in load schema and in native schema",
                 nativeTypeDescriptor->GetName())
-                << TErrorAttribute("native_base_type_tags", nativeBaseTypeTags)
+                << TErrorAttribute("native_base_type_tags", nativeTypeDescriptor->BaseTypeTags())
                 << TErrorAttribute("load_base_type_tags", loadTypeSchema->BaseTypeTags);
         }
 

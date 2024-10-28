@@ -444,7 +444,8 @@ private:
             computeConnection,
             NProtoInterop::CastFromProto(task.result_ttl()),
             std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
-            S3ActorsFactory
+            S3ActorsFactory,
+            ComputeConfig.GetWorkloadManagerConfig(task.scope())
             );
 
         auto runActorId =

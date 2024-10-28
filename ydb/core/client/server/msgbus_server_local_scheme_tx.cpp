@@ -21,6 +21,7 @@ public:
         Request.Swap(&request);
         TBase::SetSecurityToken(Request.GetSecurityToken());
         TBase::SetRequireAdminAccess(true);
+        TBase::SetPeerName(msg.GetPeerName());
     }
 
     void Handle(TEvTablet::TEvLocalSchemeTxResponse::TPtr &ev, const TActorContext &ctx) {

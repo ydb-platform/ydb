@@ -15,7 +15,7 @@ Currently, the {{ ydb-short-name }}  provider for Terraform is under development
 
 To get started, you need to:
 
-1. Deploy the [{{ ydb-short-name }}](../deploy/index.md) cluster
+1. Deploy the [{{ ydb-short-name }}](../devops/index.md) cluster
 2. Create a database (described in paragraph 1 for the appropriate type of cluster deployment)
 3. Install [Terraform](https://developer.hashicorp.com/terraform/install)
 4. Install and configure [Terraform provider for {{ ydb-short-name }}](https://github.com/ydb-platform/terraform-provider-ydb/)
@@ -51,7 +51,7 @@ The provider will be installed in the Terraform plugins folder - `~/.terraform.d
       }
       required_version = ">= 0.13"
     }
-    
+
     provider "ydb" {
       token = "<TOKEN>"
       //OR for static credentials
@@ -93,7 +93,7 @@ The user can transfer the connection string to the database using standard Terra
 
 {% endnote %}
 
-If you are using the creation of `ydb_table_changefeed` or `ydb_topic` resources and authorization is not enabled on the {{ ydb-short-name }} server, then in the DB config [config.yaml](../deploy/configuration/config.md) you need to specify:
+If you are using the creation of `ydb_table_changefeed` or `ydb_topic` resources and authorization is not enabled on the {{ ydb-short-name }} server, then in the DB config [config.yaml](../reference/configuration/index.md) you need to specify:
 
 ```yaml
 ...
@@ -244,10 +244,9 @@ The following arguments are supported:
 
 * `path` - (required) is the path of the table relative to the root of the database (example - `/path/to/table`).
 * `connection_string` — (required) [connection string](#connection_string).
-
 * `column` — (required) column properties (see the [column](#column) argument).
 * `family` - (optional) is a column group (see the [family](#family) argument).
-* `primary_key` — (required) [primary key](../yql/reference/syntax/create_table.md#columns) of the table that contains an ordered list of column names of the primary key.
+* `primary_key` — (required) [primary key](../yql/reference/syntax/create_table/index.md) of the table that contains an ordered list of column names of the primary key.
 * `ttl` — (optional) TTL (see the [ttl](#ttl) argument).
 * `partitioning_settings` — (optional) partitioning settings (see the argument [partitioning_settings](#partitioning-settings)).
 * `key_bloom_filter` — (optional) (bool) use [Bloom filter for primary key](../concepts/datamodel/table.md#bloom-filter), the default value is false.
@@ -255,7 +254,7 @@ The following arguments are supported:
 
 #### column {#column}
 
-The `column` argument describes the [column properties](../yql/reference/syntax/create_table.md#columns) of the table.
+The `column` argument describes the [column properties](../yql/reference/syntax/create_table/index.md) of the table.
 
 {% note warning %}
 
@@ -281,11 +280,11 @@ column {
 
 #### family {#family}
 
-The `family` argument describes [column group properties](../yql/reference/syntax/create_table.md#column-family).
+The `family` argument describes [column group properties](../yql/reference/syntax/create_table/index.md).
 
 * `name` - (required) is the name of the column group.
-* `data` — (required) [storage device type](../yql/reference/syntax/create_table#column-family) for column data of this group.
-* `compression` — (required) [data compression codec](../yql/reference/syntax/create_table#column-family).
+* `data` — (required) [storage device type](../yql/reference/syntax/create_table/index.md) for column data of this group.
+* `compression` — (required) [data compression codec](../yql/reference/syntax/create_table/index.md).
 
 Example:
 
@@ -339,6 +338,7 @@ ttl {
 * `column_name` - (required) is the column name for TTL.
 * `expire_interval` — (required) interval in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format (for example, `P1D` is an interval of 1 day, that is, 24 hours).
 * `unit` — (optional) is set if the column with ttl has a [numeric type](../yql/reference/types/primitive.md#numeric). Supported values:
+
   * `seconds`
   * `milliseconds`
   * `microseconds`
@@ -366,9 +366,8 @@ The following arguments are supported:
 * `table_path` - is the path of the table. Specified if `table_id` is not specified.
 * `connection_string` — [connection string](#connection_string). Specified if `table_id` is not specified.
 * `table_id` - terraform-table identifier. Specify if `table_path` or `connection_string` is not specified.
-
 * `name` - (required) is the name of the index.
-* `type` - (required) is the index type [global_sync | global_async](../yql/reference/syntax/create_table.md#secondary_index).
+* `type` - (required) is the index type [global_sync | global_async](../yql/reference/syntax/create_table/secondary_index.md).
 * `columns` - (required) is an ordered list of column names participating in the index.
 * `cover` - (required) is a list of additional columns for the covering index.
 
@@ -392,7 +391,6 @@ The following arguments are supported:
 * `table_path` - is the path of the table. Specified if `table_id` is not specified.
 * `connection_string` — [connection string](#connection_string). Specified if `table_id` is not specified.
 * `table_id` — terraform-table identifier. Specify if `table_path` or `connection_string` is not specified.
-
 * `name` - (required) is the name of the change stream.
 * `mode` - (required) is the mode of operation of the [change data capture](../yql/reference/syntax/alter_table#changefeed-options).
 * `format` - (required) is the format of the [change data capture](../yql/reference/syntax/alter_table#changefeed-options).
@@ -459,7 +457,7 @@ resource "ydb_table" "ydb_table" {
 resource "ydb_table" "ydb_table" {
   # Path to the table
   path = "path/to/table" # path relative to the base root
-  
+
   # ConnectionString to the database.
   connection_string = "grpc(s)://HOST:PORT/?database=/database/path" #DB connection example
 

@@ -21,9 +21,9 @@
 namespace NYql {
 
 bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster);
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq);
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsReads, bool supportsDq);
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq);
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq);
 TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, TYtState::TPtr state);
 TVector<TYtTableBaseInfo::TPtr> GetInputTableInfos(NNodes::TExprBase input);
 TVector<TYtPathInfo::TPtr> GetInputPaths(NNodes::TExprBase input);
@@ -140,5 +140,7 @@ NNodes::TYtReadTable ConvertContentInputToRead(NNodes::TExprBase input, NNodes::
 size_t GetMapDirectOutputsCount(const NNodes::TYtMapReduce& mapReduce);
 
 bool HasYtRowNumber(const TExprNode& node);
+
+bool IsYtTableSuitableForArrowInput(NNodes::TExprBase table, std::function<void(const TString&)> unsupportedHandler);
 
 }

@@ -51,7 +51,10 @@
                                                 "PlanNodeId": 8,
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Map",
+                                                        "KeyColumns": [
+                                                            "SearchPhrase"
+                                                        ],
+                                                        "Node Type": "HashShuffle",
                                                         "PlanNodeId": 7,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
@@ -73,16 +76,22 @@
                                                                 "PlanNodeId": 6,
                                                                 "Plans": [
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "SearchPhrase"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
+                                                                        "Node Type": "UnionAll",
                                                                         "PlanNodeId": 5,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "TableFullScan",
+                                                                                "Node Type": "Filter-TableFullScan",
                                                                                 "Operators": [
+                                                                                    {
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "string_contains And Not string_contains"
+                                                                                    },
                                                                                     {
                                                                                         "Inputs": [],
                                                                                         "Name": "TableFullScan",
@@ -271,7 +280,7 @@
                                                                                 ],
                                                                                 "Parent Relationship": "InitPlan",
                                                                                 "PlanNodeId": 4,
-                                                                                "Subplan Name": "CTE TableFullScan_9",
+                                                                                "Subplan Name": "CTE Filter-TableFullScan_9",
                                                                                 "Tables": [
                                                                                     "clickbench/plans/column/hits"
                                                                                 ]
@@ -279,10 +288,7 @@
                                                                         ]
                                                                     },
                                                                     {
-                                                                        "KeyColumns": [
-                                                                            "SearchPhrase"
-                                                                        ],
-                                                                        "Node Type": "HashShuffle",
+                                                                        "Node Type": "UnionAll",
                                                                         "PlanNodeId": 3,
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
@@ -303,7 +309,7 @@
                                                                                 "PlanNodeId": 2,
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "CTE Name": "TableFullScan_9",
+                                                                                        "CTE Name": "Filter-TableFullScan_9",
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",
                                                                                             "UserID"
@@ -331,7 +337,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

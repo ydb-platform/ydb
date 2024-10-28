@@ -11,9 +11,9 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TAuthenticationIdentity::TAuthenticationIdentity(TString user, TString userTag)
-    : User(std::move(user))
-    , UserTag(std::move(userTag))
+TAuthenticationIdentity::TAuthenticationIdentity(const std::string& user, const std::string& userTag)
+    : User(user)
+    , UserTag(userTag)
 { }
 
 void Serialize(const TAuthenticationIdentity& identity, IYsonConsumer* consumer)
@@ -63,7 +63,7 @@ void SetCurrentAuthenticationIdentity(const TAuthenticationIdentity* identity)
 void FormatValue(TStringBuilderBase* builder, const TAuthenticationIdentity& value, TStringBuf /*spec*/)
 {
     builder->AppendFormat("{User: %v", value.User);
-    if (!value.UserTag.Empty() && value.UserTag != value.User) {
+    if (!value.UserTag.empty() && value.UserTag != value.User) {
         builder->AppendFormat(", UserTag: %v", value.UserTag);
     }
     builder->AppendChar('}');

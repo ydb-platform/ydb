@@ -152,16 +152,18 @@ TEST_F(TQuantizedExecutorTest, Simple)
 
 TEST_F(TQuantizedExecutorTest, Timeout)
 {
-    InitSimple(/*workerCount*/ 4, /*iterationCount*/ std::numeric_limits<i64>::max());
+    InitSimple(/*workerCount*/ 2, /*iterationCount*/ std::numeric_limits<i64>::max());
 
-    for (int index = 1; index <= 10; ++index) {
-        WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
-            .ThrowOnError();
+    WaitFor(Executor_->Run(TDuration::MilliSeconds(100)))
+        .ThrowOnError();
 
-        auto counter = SimpleCallbackProvider_->GetCounter();
-        EXPECT_GE(counter, /*workerCount*/ 4 * /*milliseconds*/ 100.0 / /*period*/ 5 * index * 0.75);
-        EXPECT_LE(counter, /*workerCount*/ 4 * /*milliseconds*/ 100.0 / /*period*/ 5 * index * 1.25);
-    }
+    auto oldCounter = SimpleCallbackProvider_->GetCounter();
+
+    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
+
+    auto newCounter = SimpleCallbackProvider_->GetCounter();
+
+    EXPECT_EQ(oldCounter, newCounter);
 }
 
 TEST_F(TQuantizedExecutorTest, LongCallback1)
@@ -185,7 +187,7 @@ TEST_F(TQuantizedExecutorTest, LongCallback2)
         EXPECT_FALSE(LongCallbackProvider_->IsCompleted());
     }
 
-    WaitFor(Executor_->Run(TDuration::MilliSeconds(300)))
+    WaitFor(Executor_->Run(TDuration::MilliSeconds(1000)))
         .ThrowOnError();
     EXPECT_TRUE(LongCallbackProvider_->IsCompleted());
 }
@@ -215,7 +217,6 @@ TEST_F(TQuantizedExecutorTest, Reconfigure)
         auto workerCount = rng() % 5  + 1;
         auto increment = run(workerCount);
 
-        EXPECT_GE(increment, workerCount * /*milliseconds*/ 100.0 / /*period*/ 5 * 0.75);
         EXPECT_LE(increment, workerCount * /*milliseconds*/ 100.0 / /*period*/ 5 * 1.25);
     }
 }

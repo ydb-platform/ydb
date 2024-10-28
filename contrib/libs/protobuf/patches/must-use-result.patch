@@ -1,0 +1,11 @@
+--- a/src/google/protobuf/stubs/common.h
++++ b/src/google/protobuf/stubs/common.h
+@@ -45,6 +45,8 @@
+ #include "google/protobuf/stubs/platform_macros.h"
+ #include "google/protobuf/stubs/port.h"
+ 
++#define Y_PROTOBUF_SUPPRESS_NODISCARD [[maybe_unused]] bool Y_GENERATE_UNIQUE_ID(pb_checker)=
++
+ #if defined(__APPLE__)
+ #include <TargetConditionals.h>  // for TARGET_OS_IPHONE
+ #endif

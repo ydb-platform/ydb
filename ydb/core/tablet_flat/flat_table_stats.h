@@ -8,7 +8,8 @@ namespace NTable {
 
     struct TPartStats {
         ui64 PartsCount = 0;    /* Total used TPart units in db    */
-        ui64 IndexBytes = 0;
+        ui64 FlatIndexBytes = 0;
+        ui64 BTreeIndexBytes = 0;
         ui64 OtherBytes = 0;    /* Other metadata and sys. indexes */
         ui64 ByKeyBytes = 0;
         ui64 PlainBytes = 0;    /* Plain data pages size           */

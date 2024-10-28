@@ -6,7 +6,6 @@ SRCS(
     guid.cpp
     source_location.cpp
     thread_name.cpp
-    variant.cpp
 )
 
 PEERDIR(

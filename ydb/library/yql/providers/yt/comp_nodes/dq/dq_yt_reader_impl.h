@@ -92,7 +92,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -138,7 +138,7 @@ public:
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(static_cast<const TDqYtReadWrapperBase<T, IS>*>(this))), structPtrType, "self", block);

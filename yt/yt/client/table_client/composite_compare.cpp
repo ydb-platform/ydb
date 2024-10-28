@@ -1,5 +1,7 @@
 #include "composite_compare.h"
 
+#include "private.h"
+
 #include <yt/yt/client/table_client/row_base.h>
 
 #include <yt/yt/core/yson/pull_parser.h>
@@ -20,7 +22,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "YsonCompositeCompare");
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -215,6 +217,25 @@ i64 GetMinResultingSize(const TYsonItem& item, bool isInsideList)
 
 } // namespace
 
+int CompareDoubleValues(double lhs, double rhs)
+{
+    if (lhs < rhs) {
+        return -1;
+    } else if (lhs > rhs) {
+        return +1;
+    } else if (std::isnan(lhs)) {
+        if (std::isnan(rhs)) {
+            return 0;
+        } else {
+            return 1;
+        }
+    } else if (std::isnan(rhs)) {
+        return -1;
+    }
+
+    return 0;
+}
+
 int CompareYsonValues(TYsonStringBuf lhs, TYsonStringBuf rhs)
 {
     YT_ASSERT(lhs.GetType() == EYsonType::Node);
@@ -289,7 +310,7 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
             break;
         case EYsonItemType::StringValue: {
             auto string = item.UncheckedAsString();
-            result = FarmFingerprint(FarmFingerprint(string.Data(), string.size()));
+            result = FarmFingerprint(FarmFingerprint(string.data(), string.size()));
             break;
         }
         case EYsonItemType::EndOfStream:
@@ -330,7 +351,7 @@ TFingerprint CompositeFarmHash(TYsonStringBuf value)
                 continue;
             case EYsonItemType::StringValue: {
                 auto string = item.UncheckedAsString();
-                result = FarmFingerprint(result, FarmFingerprint(string.Data(), string.size()));
+                result = FarmFingerprint(result, FarmFingerprint(string.data(), string.size()));
                 continue;
             }
             case EYsonItemType::EndOfStream:

@@ -86,6 +86,10 @@ public:
         PeerName = peerName;
     }
 
+    const TString& GetPeerName() const {
+        return PeerName;
+    }
+
     void SetRequireAdminAccess(bool requireAdminAccess) {
         RequireAdminAccess = requireAdminAccess;
     }

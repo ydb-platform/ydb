@@ -8,12 +8,12 @@ Before executing the examples, [create a topic](../ydb-cli/topic-create.md) and 
 
 The examples use:
 
- * `ydb:9093` — host name and port.
- * `/Root/Database` — database name.
- * `/Root/Database/Topic-1` — topic name. It is allowed to specify either the full name (along with the database) or just the topic name.
- * `user@/Root/Database` — username. The username includes the database name, which is specified after `@`.
- * `*****` — user password.
- * `consumer-1` — consumer name.
+* `ydb:9093` — host name and port.
+* `/Root/Database` — database name.
+* `/Root/Database/Topic-1` — topic name. It is allowed to specify either the full name (along with the database) or just the topic name.
+* `user@/Root/Database` — username. The username includes the database name, which is specified after `@`.
+* `*****` — user password.
+* `consumer-1` — consumer name.
 
 
 ## Writing data to a topic
@@ -22,69 +22,69 @@ The examples use:
 
 This example includes a code snippet for writing data to a topic via [Kafka API](https://kafka.apache.org/documentation/).
 
-  ```java
-  String HOST = "ydb:9093";
-  String TOPIC = "/Root/Database/Topic-1";
-  String USER = "user@/Root/Database";
-  String PASS = "*****";
+```java
+String HOST = "ydb:9093";
+String TOPIC = "/Root/Database/Topic-1";
+String USER = "user@/Root/Database";
+String PASS = "*****";
 
-  Properties props = new Properties();
-  props.put("bootstrap.servers", HOST);
-  props.put("acks", "all");
+Properties props = new Properties();
+props.put("bootstrap.servers", HOST);
+props.put("acks", "all");
 
-  props.put("key.serializer", StringSerializer.class.getName());
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.serializer", StringSerializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
+props.put("key.serializer", StringSerializer.class.getName());
+props.put("key.deserializer", StringDeserializer.class.getName());
+props.put("value.serializer", StringSerializer.class.getName());
+props.put("value.deserializer", StringDeserializer.class.getName());
 
-  props.put("security.protocol", "SASL_SSL");
-  props.put("sasl.mechanism", "PLAIN");
-  props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+props.put("security.protocol", "SASL_SSL");
+props.put("sasl.mechanism", "PLAIN");
+props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
 
-  props.put("compression.type", "none");
+props.put("compression.type", "none");
 
-  Producer<String, String> producer = new KafkaProducer<>(props);
-  producer.send(new ProducerRecord<String, String>(TOPIC, "msg-key", "msg-body"));
-  producer.flush();
-  producer.close();
-  ```
+Producer<String, String> producer = new KafkaProducer<>(props);
+producer.send(new ProducerRecord<String, String>(TOPIC, "msg-key", "msg-body"));
+producer.flush();
+producer.close();
+```
 
 ### Writing via Logstash
 
 To configure [Logstash](https://github.com/elastic/logstash), use the following parameters:
 
-  ```
-  output {
-    kafka {
-      codec => json
-      topic_id => "/Root/Database/Topic-1"
-      bootstrap_servers => "ydb:9093"
-      compression_type => none
-      security_protocol => SASL_SSL
-      sasl_mechanism => PLAIN
-      sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='user@/Root/Database' password='*****';"
-    }
+```ruby
+output {
+  kafka {
+    codec => json
+    topic_id => "/Root/Database/Topic-1"
+    bootstrap_servers => "ydb:9093"
+    compression_type => none
+    security_protocol => SASL_SSL
+    sasl_mechanism => PLAIN
+    sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='user@/Root/Database' password='*****';"
   }
+}
   ```
 
 ### Writing via Fluent Bit
 
 To configure [Fluent Bit](https://github.com/fluent/fluent-bit), use the following parameters:
 
-  ```
-  [OUTPUT]
-    name                          kafka
-    match                         *
-    Brokers                       ydb:9093
-    Topics                        /Root/Database/Topic-1
-    rdkafka.client.id             Fluent-bit
-    rdkafka.request.required.acks 1
-    rdkafka.log_level             7
-    rdkafka.security.protocol     SASL_SSL
-    rdkafka.sasl.mechanism        PLAIN
-    rdkafka.sasl.username         user@/Root/Database
-    rdkafka.sasl.password         *****
-  ```
+```ini
+[OUTPUT]
+  name                          kafka
+  match                         *
+  Brokers                       ydb:9093
+  Topics                        /Root/Database/Topic-1
+  rdkafka.client.id             Fluent-bit
+  rdkafka.request.required.acks 1
+  rdkafka.log_level             7
+  rdkafka.security.protocol     SASL_SSL
+  rdkafka.sasl.mechanism        PLAIN
+  rdkafka.sasl.username         user@/Root/Database
+  rdkafka.sasl.password         *****
+```
 
 ## Reading data from a topic
 
@@ -123,13 +123,12 @@ while (true) {
         System.out.println(record.key() + ":" + record.value());
     }
 }
-
 ```
 
 ### Reading data from a topic via Kafka Java SDK without a consumer group
+
 This example shows a code snippet for reading data from a topic via Kafka API without a consumer group (Manual Partition Assignment).
 You don't need to create a consumer for this reading mode.
-
 
 ```java
 String HOST = "ydb:9093";
@@ -178,7 +177,7 @@ The data in Kafka Connect is handled by worker processes.
 
 {% note warning %}
 
-Kafka Connect instances for working with YDB should only be deployed in standalone mode. YDB does not support Kafka Connect in distributed mode.
+Kafka Connect instances for working with {{ ydb-short-name }} should only be deployed in standalone mode. {{ ydb-short-name }} does not support Kafka Connect in distributed mode.
 
 {% endnote %}
 
@@ -200,7 +199,6 @@ For more information about Kafka Connect and its configuration, see the [Apache 
 
 
 1. Create a directory with the executor process settings:
-
 
     ```bash
     sudo mkdir --parents /etc/kafka-connect-worker
@@ -241,8 +239,7 @@ For more information about Kafka Connect and its configuration, see the [Apache 
     offset.storage.file.filename=/etc/kafka-connect-worker/worker.offset
     ```
 
-1. Create a FileSink connector settings file `/etc/kafka-connect-worker/file-sink.properties` to move data from YDB topics to a file:
-
+1. Create a FileSink connector settings file `/etc/kafka-connect-worker/file-sink.properties` to move data from {{ ydb-short-name }} topics to a file:
 
     ```ini
     name=local-file-sink
@@ -258,6 +255,7 @@ For more information about Kafka Connect and its configuration, see the [Apache 
     * `topics` - the name of the topics from which the connector will read data.
 
 1. Start Kafka Connect in Standalone mode:
+
     ```bash
     cd ~/opt/kafka/bin/ && \
     sudo ./connect-standalone.sh \
@@ -267,8 +265,10 @@ For more information about Kafka Connect and its configuration, see the [Apache 
 
 ### Sample settings files for other connectors
 
-#### From File to YDB
+#### From File to {{ ydb-short-name }}
+
 Sample FileSource settings file of the connector `/etc/kafka-connect-worker/file-sink.properties` to move data from file to topic:
+
 ```ini
 name=local-file-source
 connector.class=FileStreamSource
@@ -277,8 +277,10 @@ file=/etc/kafka-connect-worker/file_to_read.json
 topic=Topic-1
 ```
 
-#### From YDB to PostgreSQL
+#### From {{ ydb-short-name }} to PostgreSQL
+
 Sample JDBCSink connector `/etc/kafka-connect-worker/jdbc-sink.properties` configuration file for moving data from a topic to a PostgreSQL table. The [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc) is used.
+
 ```ini
 name=postgresql-sink
 connector.class=io.confluent.connect.jdbc.JdbcSinkConnector
@@ -301,8 +303,10 @@ pk.mode=none
 auto.evolve=true
 ```
 
-#### From PostgreSQL to YDB
+#### From PostgreSQL to {{ ydb-short-name }}
+
 Sample JDBCSource Connector `/etc/kafka-connect-worker/jdbc-source.properties` settings file for moving data from PostgreSQL table to topic. The [Kafka Connect JDBC Connector](https://github.com/confluentinc/kafka-connect-jdbc) is used.
+
 ```ini
 name=postgresql-source
 connector.class=io.confluent.connect.jdbc.JdbcSourceConnector
@@ -318,8 +322,10 @@ poll.interval.ms=1000
 validate.non.null=false
 ```
 
-#### From YDB to S3
+#### From {{ ydb-short-name }} to S3
+
 Sample S3Sink connector `/etc/kafka-connect-worker/s3-sink.properties` settings file for moving data from a topic to S3. The [Aiven's S3 Sink Connector for Apache Kafka](https://github.com/Aiven-Open/s3-connector-for-apache-kafka) is used.
+
 ```ini
 name=s3-sink
 connector.class=io.aiven.kafka.connect.s3.AivenKafkaConnectS3SinkConnector

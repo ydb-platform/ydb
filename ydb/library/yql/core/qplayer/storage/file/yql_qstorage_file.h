@@ -5,6 +5,7 @@ namespace NYql {
 
 struct TFileQStorageSettings {
     bool BufferUntilCommit = true;
+    bool AlwaysFlushIndex = false;
 };
 
 IQStoragePtr MakeFileQStorage(const TString& folder = {}, const TFileQStorageSettings& settings = {});

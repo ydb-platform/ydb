@@ -5,6 +5,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/library/yql/dq/proto/dq_transport.proto";
 
 package Yql.DqsProto;
 
@@ -25,6 +26,7 @@ message ResponseMetric {
 message ExecuteQueryResult {
     Ydb.ResultSet result = 1;
     bytes yson = 2;
+    repeated NYql.NDqProto.TData sample = 3;
 }
 
 message TFile {

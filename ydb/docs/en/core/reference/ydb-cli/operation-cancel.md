@@ -9,7 +9,6 @@ General format of the command:
 ```
 
 * `global options`: [Global parameters](commands/global-options.md).
-* `options`: [Parameters of the subcommand](#options).
 * `id`: The ID of the long-running operation. The ID contains characters that can be interpreted by your command shell. If necessary, use shielding, for example, `'<id>'` for bash.
 
 View a description of the command to obtain the status of a long-running operation:

@@ -1,1 +1,3 @@
-```cargo add ydb```
+```bash
+cargo add ydb
+```

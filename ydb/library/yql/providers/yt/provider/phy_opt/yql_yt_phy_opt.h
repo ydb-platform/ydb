@@ -34,11 +34,17 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> DqWrite(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> Materialize(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> DqMaterialize(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> YtDqProcessWrite(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Write(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Fill(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> FillToMaterialize(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> TakeOrSkip(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
@@ -73,7 +79,8 @@ private:
     NNodes::TMaybeNode<NNodes::TExprBase> FuseInnerMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> FuseOuterMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
-    NNodes::TMaybeNode<NNodes::TExprBase> AssumeSorted(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> AssumeConstraints(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> LambdaFieldsSubset(NNodes::TYtWithUserJobsOpBase op, size_t lambdaIdx, TExprContext& ctx, const TGetParents& getParents) const;
 
@@ -122,15 +129,13 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> MapToMerge(NNodes::TExprBase node, TExprContext& ctx) const;
 
-    NNodes::TMaybeNode<NNodes::TExprBase> UnorderedPublishTarget(NNodes::TExprBase node, TExprContext& ctx) const;
-
-    NNodes::TMaybeNode<NNodes::TExprBase> AddTrivialMapperForNativeYtTypes(NNodes::TExprBase node, TExprContext& ctx) const;
-
     NNodes::TMaybeNode<NNodes::TExprBase> YtDqWrite(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> PushDownYtMapOverSortedMerge(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> MergeToCopy(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> ForceTransform(NNodes::TExprBase node, TExprContext& ctx) const;
 
     template <typename TLMapType>
     NNodes::TMaybeNode<NNodes::TExprBase> LMap(NNodes::TExprBase node, TExprContext& ctx) const;

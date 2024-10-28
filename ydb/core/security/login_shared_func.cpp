@@ -38,6 +38,9 @@ NKikimrScheme::TEvLogin CreateLoginRequest(const TAuthCredentials& credentials, 
         }
         default: {}
     }
+    if (config.HasLoginTokenExpireTime()) {
+        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
+    }
     return record;
 }
 

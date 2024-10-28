@@ -10,13 +10,15 @@
 
 #include <yt/yt/core/rpc/public.h>
 
-
 namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Function for temporary use: to gradually allow types supported in Sequoia.
 bool IsScalarType(NObjectClient::EObjectType type);
+
+//! Checks if the given type is a Sequoia node.
+bool IsSequoiaNode(NObjectClient::EObjectType type);
 
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
@@ -78,8 +80,14 @@ bool IsSystemTransactionType(EObjectType type);
 //! Checks if the given type if an upload transaction.
 bool IsUploadTransactionType(EObjectType type);
 
+//! Checks if the given type is an externalized Cypress transaction.
+bool IsExternalizedTransactionType(EObjectType type);
+
 //! Checks if node with the given type can contain other nodes.
 bool IsCompositeNodeType(EObjectType type);
+
+//! Checks if the given type is either Link or SequoiaLink.
+bool IsLinkType(EObjectType);
 
 //! Extracts the type component from #id.
 EObjectType TypeFromId(TObjectId id);
@@ -110,6 +118,9 @@ EObjectType SchemaTypeFromType(EObjectType type);
 
 //! Returns the regular type for a given schema #type.
 EObjectType TypeFromSchemaType(EObjectType type);
+
+//! Formats object type into string (taking schemas into account).
+TString FormatObjectType(EObjectType type);
 
 //! Constructs the id from its parts.
 TObjectId MakeId(

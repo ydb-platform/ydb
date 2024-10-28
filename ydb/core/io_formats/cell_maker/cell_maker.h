@@ -11,8 +11,8 @@
 
 namespace NKikimr::NFormats {
 
-bool MakeCell(TCell& cell, TStringBuf value, NScheme::TTypeInfo type, TMemoryPool& pool, TString& err);
-bool MakeCell(TCell& cell, const NJson::TJsonValue& value, NScheme::TTypeInfo type, TMemoryPool& pool, TString& err);
-bool CheckCellValue(const TCell& cell, NScheme::TTypeInfo type);
+bool MakeCell(TCell& cell, TStringBuf value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err);
+bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err);
+bool CheckCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo);
 
 }

@@ -62,6 +62,14 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetWaitInputTimeUs(taskStats.WaitInputTime.MicroSeconds());
     protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
 
+    protoTask->SetSpillingComputeWriteBytes(taskStats.SpillingComputeWriteBytes);
+    protoTask->SetSpillingChannelWriteBytes(taskStats.SpillingChannelWriteBytes);
+
+    protoTask->SetSpillingComputeReadTimeUs(taskStats.SpillingComputeReadTime.MicroSeconds());
+    protoTask->SetSpillingComputeWriteTimeUs(taskStats.SpillingComputeWriteTime.MicroSeconds());
+    protoTask->SetSpillingChannelReadTimeUs(taskStats.SpillingChannelReadTime.MicroSeconds());
+    protoTask->SetSpillingChannelWriteTimeUs(taskStats.SpillingChannelWriteTime.MicroSeconds());
+
     if (StatsLevelCollectProfile(level)) {
         if (taskStats.ComputeCpuTimeByRun) {
             auto snapshot = taskStats.ComputeCpuTimeByRun->Snapshot();

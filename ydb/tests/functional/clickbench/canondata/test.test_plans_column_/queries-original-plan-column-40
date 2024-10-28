@@ -89,17 +89,16 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Aggregate-TableRangeScan",
+                                                                                "Node Type": "Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
-                                                                                        "Aggregation": "{_yql_agg_0: SUM(state._yql_agg_0,1)}",
-                                                                                        "GroupBy": "",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
-                                                                                        "Name": "Aggregate"
+                                                                                        "Name": "Filter",
+                                                                                        "Predicate": "IsRefresh == 0 And TraficSourceID == -1 Or TraficSourceID == 6 And RefererHash == 3594120000172545465"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],
@@ -311,6 +310,28 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
+                                                                                                    "GroupBy": {
+                                                                                                        "Aggregates": [
+                                                                                                            {
+                                                                                                                "Column": {
+                                                                                                                    "Id": 117
+                                                                                                                },
+                                                                                                                "Function": {
+                                                                                                                    "Id": 2
+                                                                                                                }
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "KeyColumns": [
+                                                                                                            {
+                                                                                                                "Id": 6
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 104
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                },
+                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -318,6 +339,9 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 104
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "Id": 117
                                                                                                             }
                                                                                                         ]
                                                                                                     }
@@ -350,7 +374,10 @@
                             }
                         ]
                     }
-                ]
+                ],
+                "Stats": {
+                    "ResourcePoolId": "default"
+                }
             },
             "tables": [
                 {

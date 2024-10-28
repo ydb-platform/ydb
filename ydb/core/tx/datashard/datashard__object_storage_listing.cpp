@@ -68,7 +68,7 @@ public:
         for (ui32 ki = 0; ki < prefixColumns.GetCells().size(); ++ki) {
             // TODO: check prefix column type
             auto &cell = prefixColumns.GetCells()[ki];
-            auto &type = tableInfo.KeyColumnTypes[ki];
+            NScheme::TTypeId type = tableInfo.KeyColumnTypes[ki].GetTypeId();
             key.emplace_back(cell.Data(), cell.Size(), type);
             endKey.emplace_back(cell.Data(), cell.Size(), type);
         }
@@ -87,12 +87,12 @@ public:
             if (Ev->Get()->Record.HasLastPath()) {
                 TString reqLastPath = Ev->Get()->Record.GetLastPath();
 
-                key.emplace_back(reqLastPath, NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+                key.emplace_back(reqLastPath, NScheme::NTypeIds::Utf8);
 
                 startAfterPath = reqLastPath;
             } else {
                 minKeyInclusive = true;
-                key.emplace_back(pathPrefix.data(), pathPrefix.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+                key.emplace_back(pathPrefix.data(), pathPrefix.size(), NScheme::NTypeIds::Utf8);
                 key.resize(columnCount);
             }
         } else {
@@ -102,18 +102,18 @@ public:
             if (Ev->Get()->Record.HasLastPath()) {
                 TString reqLastPath = Ev->Get()->Record.GetLastPath();
                 
-                key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize]);
+                key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
 
                 for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
-                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki]);
+                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
                 }
                 
                 startAfterPath = reqLastPath;
             } else {
                 for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
-                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki]);
+                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
                 }
                 startAfterPath = TString(suffixColumns.GetCells()[0].Data(), suffixColumns.GetCells()[0].Size());
             }
@@ -128,7 +128,7 @@ public:
         if (LastPath) {
             const size_t pathColIdx =  prefixColumns.GetCells().size();
             key.resize(pathColIdx);
-            key.emplace_back(LastPath.data(), LastPath.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+            key.emplace_back(LastPath.data(), LastPath.size(), NScheme::NTypeIds::Utf8);
             key.resize(columnCount);
 
             lastCommonPath = LastCommonPath;
@@ -138,7 +138,7 @@ public:
 
         const TString pathEndPrefix = NextPrefix(pathPrefix);
         if (pathEndPrefix) {
-            endKey.emplace_back(pathEndPrefix.data(), pathEndPrefix.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+            endKey.emplace_back(pathEndPrefix.data(), pathEndPrefix.size(), NScheme::NTypeIds::Utf8);
             while (endKey.size() < tableInfo.KeyColumnTypes.size()) {
                 endKey.emplace_back();
             }
@@ -354,7 +354,7 @@ public:
 
                 // Skip to the next key after path+separator
                 key.resize(prefixColumns.GetCells().size());
-                key.emplace_back(lookup.data(), lookup.size(), NScheme::TTypeInfo(NScheme::NTypeIds::Utf8));
+                key.emplace_back(lookup.data(), lookup.size(), NScheme::NTypeIds::Utf8);
                 key.resize(columnCount);
 
                 if (!iter->SkipTo(key, /* inclusive = */ true)) {

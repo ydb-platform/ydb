@@ -16,7 +16,7 @@ PEERDIR(
 )
 
 SRCS(
-    main.cpp
+    backup_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
@@ -24,6 +24,12 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 SIZE(MEDIUM)
 
-REQUIREMENTS(ram:16)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16 cpu:4)
+ENDIF()
 
 END()
+
+RECURSE(
+    s3_path_style
+)

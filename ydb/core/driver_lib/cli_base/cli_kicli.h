@@ -43,6 +43,8 @@ int HandleResponse(const NThreading::TFuture<ResultType>& future, std::function<
     return callback(result);
 }
 
+std::optional<TString> AcquireSecurityToken(TClientCommand::TConfig& config);
+
 int InvokeThroughKikimr(TClientCommand::TConfig& config, std::function<int(NClient::TKikimr&)> handler);
 
 template <typename RequestType>

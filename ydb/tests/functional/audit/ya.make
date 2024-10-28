@@ -23,6 +23,8 @@ PEERDIR(
     ydb/public/sdk/python
 )
 
-REQUIREMENTS(ram:10)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:10 cpu:1)
+ENDIF()
 
 END()

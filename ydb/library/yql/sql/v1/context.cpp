@@ -63,6 +63,8 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"UnorderedResult", &TContext::UnorderedResult},
     {"CompactNamedExprs", &TContext::CompactNamedExprs},
     {"ValidateUnusedExprs", &TContext::ValidateUnusedExprs},
+    {"AnsiImplicitCrossJoin", &TContext::AnsiImplicitCrossJoin},
+    {"DistinctOverWindow", &TContext::DistinctOverWindow},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
@@ -261,7 +263,7 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
     if (Settings.AssumeYdbOnClusterWithSlash && clusterPtr->StartsWith('/')) {
         return false;
     }
-    return !Settings.DynamicClusterProvider.Empty();
+    return !Settings.DynamicClusterProvider.empty();
 }
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {

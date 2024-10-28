@@ -6,6 +6,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 
+#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
+
 #include <vector>
 
 namespace NKikimr::NKqp {
@@ -106,7 +108,10 @@ public:
     struct TCreateArgs {
         const NActors::TActorId& ExecuterId;
         const ui64 TxId;
+        const TMaybe<ui64> LockTxId;
+        const ui32 LockNodeId;
         NYql::NDqProto::TDqTask* Task;
+        TIntrusivePtr<NRm::TTxState> TxInfo;
         const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
@@ -119,8 +124,11 @@ public:
         const TInstant& Deadline;
         const bool ShareMailbox;
         const TMaybe<NYql::NDqProto::TRlPath>& RlPath;
+        const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
+
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
+        TComputeActorSchedulingOptions SchedulingOptions = {};
     };
 
     typedef std::variant<TActorId, NKikimr::NKqp::NRm::TKqpRMAllocateResult> TActorStartResult;

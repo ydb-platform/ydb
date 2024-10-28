@@ -49,7 +49,7 @@ namespace NCodecs {
             tmp.reserve(set->size());
 
             for (const auto& it : *set) {
-                Y_ENSURE(it.Str.Size() <= maxlen);
+                Y_ENSURE(it.Str.size() <= maxlen);
                 tmp.push_back(std::make_pair(-it.Score, it.Str));
             }
 

@@ -207,7 +207,7 @@ public:
     int Collect();
 
     void ReadSensors(
-        const TString& name,
+        const std::string& name,
         TReadOptions readOptions,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;

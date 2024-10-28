@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.65.0](https://github.com/googleapis/python-api-common-protos/compare/v1.64.0...v1.65.0) (2024-08-27)
+
+
+### Features
+
+* Add field `experimental_features` to message `PythonSettings` ([#249](https://github.com/googleapis/python-api-common-protos/issues/249)) ([139490f](https://github.com/googleapis/python-api-common-protos/commit/139490fedcebf1a6674d9cf058226e6814208619))
+
+## [1.64.0](https://github.com/googleapis/python-api-common-protos/compare/v1.63.2...v1.64.0) (2024-08-26)
+
+
+### Features
+
+* Add FieldInfo.referenced_types for generics ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+
+
+### Bug Fixes
+
+* Un-deprecate Endpoint.aliases field ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+
+
+### Documentation
+
+* Fix formatting in http.proto comments ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+* Improve MethodSettings selector examples ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+* Reformat comments in context proto ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+* Update ResourceDescriptor.plural docs with AIP-122 nested collections guidance ([2ba3577](https://github.com/googleapis/python-api-common-protos/commit/2ba35774cb6ea31513b1985e3a391c5c3435e7be))
+
+## [1.63.2](https://github.com/googleapis/python-api-common-protos/compare/v1.63.1...v1.63.2) (2024-06-19)
+
+
+### Bug Fixes
+
+* **deps:** Require protobuf&gt;=3.20.2 ([c77c0dc](https://github.com/googleapis/python-api-common-protos/commit/c77c0dc5d29ef780d781a3c5d757736a9ed09674))
+* Regenerate pb2 files for compatibility with protobuf 5.x ([c77c0dc](https://github.com/googleapis/python-api-common-protos/commit/c77c0dc5d29ef780d781a3c5d757736a9ed09674))
+
 ## [1.63.1](https://github.com/googleapis/python-api-common-protos/compare/v1.63.0...v1.63.1) (2024-05-30)
 
 

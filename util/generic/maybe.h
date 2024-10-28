@@ -18,9 +18,9 @@ namespace NMaybe {
     struct TPolicyUndefinedFail {
         [[noreturn]] static void OnEmpty(const std::type_info& valueTypeInfo);
     };
-}
+} // namespace NMaybe
 
-struct TNothing {
+struct [[nodiscard]] TNothing {
     explicit constexpr TNothing(int) noexcept {
     }
 };
@@ -858,7 +858,7 @@ constexpr bool operator>=(const U& value, const TMaybe<T, TPolicy>& maybe) {
 class IOutputStream;
 
 template <class T, class TPolicy>
-inline IOutputStream& operator<<(IOutputStream& out, const TMaybe<T, TPolicy>& maybe) {
+inline IOutputStream& operator<<(IOutputStream& out Y_LIFETIME_BOUND, const TMaybe<T, TPolicy>& maybe) {
     if (maybe.Defined()) {
         out << *maybe;
     } else {

@@ -1,5 +1,6 @@
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include "mvp_tokens.h"
@@ -8,8 +9,8 @@
 
 namespace NMVP {
 
-TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile) {
-    return new TMvpTokenator(tokensConfig, httpProxy, authProfile);
+TMvpTokenator* TMvpTokenator::CreateTokenator(const NMvp::TTokensConfig& tokensConfig,  const NActors::TActorId& httpProxy) {
+    return new TMvpTokenator(tokensConfig, httpProxy);
 }
 
 TString TMvpTokenator::GetToken(const TString& name) {
@@ -24,9 +25,8 @@ TString TMvpTokenator::GetToken(const TString& name) {
     return token;
 }
 
-TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy, const NMVP::EAuthProfile authProfile)
+TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TActorId& httpProxy)
     : HttpProxy(httpProxy)
-    , AuthProfile(authProfile)
 {
     if (tokensConfig.HasStaffApiUserTokenInfo()) {
         UpdateStaffApiUserToken(&tokensConfig.staffapiusertokeninfo());
@@ -43,6 +43,7 @@ TMvpTokenator::TMvpTokenator(NMvp::TTokensConfig tokensConfig, const NActors::TA
     for (const NMvp::TStaticCredentialsInfo& staticCredentialsInfo : tokensConfig.staticcredentialsinfo()) {
         TokenConfigs.StaticCredentialsConfigs[staticCredentialsInfo.name()] = staticCredentialsInfo;
     }
+    TokenConfigs.AccessServiceType = tokensConfig.accessservicetype();
 }
 
 void TMvpTokenator::Bootstrap() {
@@ -246,8 +247,8 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
     std::set<std::string> audience;
     audience.insert(jwtInfo->audience());
 
-    switch (AuthProfile) {
-        case NMVP::EAuthProfile::Yandex: {
+    switch (TokenConfigs.AccessServiceType) {
+        case NMvp::yandex_v2: {
             auto algorithm = jwt::algorithm::ps256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -265,7 +266,7 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
 
             break;
         }
-        case NMVP::EAuthProfile::Nebius: {
+        case NMvp::nebius_v1: {
             auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
             auto encodedToken = jwt::create()
                     .set_key_id(keyId)
@@ -297,6 +298,45 @@ void TMvpTokenator::UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo) {
                        yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
                        yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
                        TEvPrivate::TEvUpdateIamTokenYandex>(oauthInfo->name(), oauthInfo->endpoint(), request, &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreate);
+}
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamTokenRequest& request) {
+    yandex::cloud::priv::iam::v1::CreateIamTokenRequest copy = request;
+    switch (copy.identity_case()) {
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kYandexPassportOauthToken:
+        copy.set_yandex_passport_oauth_token(NKikimr::MaskTicket(copy.yandex_passport_oauth_token()));
+        break;
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kJwt:
+        copy.set_jwt(NKikimr::MaskTicket(copy.jwt()));
+        break;
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kIamCookie:
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::kYandexPassportCookies:
+    case yandex::cloud::priv::iam::v1::CreateIamTokenRequest::IDENTITY_NOT_SET:
+        break;
+    }
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const yandex::cloud::priv::iam::v1::CreateIamTokenResponse& request) {
+    yandex::cloud::priv::iam::v1::CreateIamTokenResponse copy = request;
+    copy.set_iam_token(NKikimr::MaskTicket(copy.iam_token()));
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const nebius::iam::v1::ExchangeTokenRequest& request) {
+    nebius::iam::v1::ExchangeTokenRequest copy = request;
+    copy.set_subject_token(NKikimr::MaskTicket(copy.subject_token()));
+    return copy.ShortDebugString();
+}
+
+template<>
+TString SecureShortDebugString(const nebius::iam::v1::CreateTokenResponse& request) {
+    nebius::iam::v1::CreateTokenResponse copy = request;
+    copy.set_access_token(NKikimr::MaskTicket(copy.access_token()));
+    return copy.ShortDebugString();
 }
 
 }

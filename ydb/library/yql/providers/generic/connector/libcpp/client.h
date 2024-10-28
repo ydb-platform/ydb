@@ -96,4 +96,4 @@ namespace NYql::NConnector {
     };
 
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg);
-}
+} // namespace NYql::NConnector

@@ -103,7 +103,7 @@ TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& c
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx);
 
 constexpr std::initializer_list<std::string_view> SkippableCallables = {"Unordered", "AssumeSorted", "AssumeUnique", "AssumeDistinct",
-    "AssumeChopped", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce"};
+    "AssumeChopped", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce", "AssumeConstraints"};
 
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables);
 
@@ -167,5 +167,7 @@ TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExp
 // generates column names with pattern "prefixN" that do not clash with source columns
 // prefix should start with "_yql"
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count);
+
+bool CheckSupportedTypes(const TTypeAnnotationNode::TListType& typesToCheck, const TSet<TString>& typesSupported, const TSet<NUdf::EDataSlot>& dataSlotsSupported, std::function<void(const TString&)> unsupportedTypeHandler);
 
 }

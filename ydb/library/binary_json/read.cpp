@@ -156,7 +156,7 @@ TBinaryJsonReader::TBinaryJsonReader(TStringBuf buffer)
     );
 
     Y_ENSURE(
-        Header.StringOffset < Buffer.Size(),
+        Header.StringOffset < Buffer.size(),
         "StringOffset must be inside buffer"
     );
 
@@ -199,14 +199,14 @@ const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
     }
     const auto entry = ReadPOD<TSEntry>(offset);
     const ui32 endOffset = entry.Value - 1;
-    Y_ENSURE(startOffset <= endOffset && startOffset <= Buffer.Size() && endOffset <= Buffer.Size(), "Incorrect string bounds");
-    return TStringBuf(Buffer.Data() + startOffset, endOffset - startOffset);
+    Y_ENSURE(startOffset <= endOffset && startOffset <= Buffer.size() && endOffset <= Buffer.size(), "Incorrect string bounds");
+    return TStringBuf(Buffer.data() + startOffset, endOffset - startOffset);
 }
 
 double TBinaryJsonReader::ReadNumber(ui32 offset) const {
     double result;
-    Y_ENSURE(offset <= Buffer.Size() && offset + sizeof(result) <= Buffer.Size(), "Incorrect number bounds");
-    MemCopy(reinterpret_cast<char*>(&result), Buffer.Data() + offset, sizeof(result));
+    Y_ENSURE(offset <= Buffer.size() && offset + sizeof(result) <= Buffer.size(), "Incorrect number bounds");
+    MemCopy(reinterpret_cast<char*>(&result), Buffer.data() + offset, sizeof(result));
     return result;
 }
 
@@ -348,7 +348,7 @@ namespace {
 
 struct TPODReader {
     TPODReader(TStringBuf buffer)
-        : TPODReader(buffer, 0, buffer.Size())
+        : TPODReader(buffer, 0, buffer.size())
     {
     }
 
@@ -357,7 +357,7 @@ struct TPODReader {
         , Pos(start)
         , End(end)
     {
-        Y_DEBUG_ABORT_UNLESS(Pos <= End && End <= Buffer.Size());
+        Y_DEBUG_ABORT_UNLESS(Pos <= End && End <= Buffer.size());
     }
 
     template <typename T>
@@ -366,7 +366,7 @@ struct TPODReader {
         if (Pos + sizeof(T) > End) {
             return Nothing();
         }
-        TMaybe<T> result{ReadUnaligned<T>(Buffer.Data() + Pos)};
+        TMaybe<T> result{ReadUnaligned<T>(Buffer.data() + Pos)};
         Pos += sizeof(T);
         return result;
     }
@@ -401,13 +401,13 @@ struct TBinaryJsonValidator {
         if (header->Version > EVersion::MaxVersion) {
             return "Invalid version"sv;
         }
-        if (header->StringOffset >= Buffer.Size()) {
+        if (header->StringOffset >= Buffer.size()) {
             return "String index offset points outside of buffer"sv;
         }
         StringIndexStart = header->StringOffset;
 
         // Validate String index
-        TPODReader stringReader(Buffer, /* start */ StringIndexStart, /* end */ Buffer.Size());
+        TPODReader stringReader(Buffer, /* start */ StringIndexStart, /* end */ Buffer.size());
         const auto stringCount = stringReader.Read<ui32>();
         if (!stringCount.Defined()) {
             return "Missing string index size"sv;
@@ -433,16 +433,16 @@ struct TBinaryJsonValidator {
         }
 
         NumberIndexStart = StringDataStart + totalLength;
-        if (NumberIndexStart > Buffer.Size()) {
+        if (NumberIndexStart > Buffer.size()) {
             return "Total length of strings in String index exceeds Buffer size"sv;
         }
 
         // Validate Number index
-        if ((Buffer.Size() - NumberIndexStart) % sizeof(double) != 0) {
+        if ((Buffer.size() - NumberIndexStart) % sizeof(double) != 0) {
             return "Number index cannot be split into doubles"sv;
         }
 
-        TPODReader numberReader(Buffer, /* start */ NumberIndexStart, /* end */ Buffer.Size());
+        TPODReader numberReader(Buffer, /* start */ NumberIndexStart, /* end */ Buffer.size());
         TMaybe<double> current;
         while (current = numberReader.Read<double>()) {
             if (std::isnan(*current)) {
@@ -484,7 +484,7 @@ private:
                 return IsValidStringOffset(entry->Value);
             case EEntryType::Number: {
                 const auto numberOffset = entry->Value;
-                if (numberOffset < NumberIndexStart || numberOffset >= Buffer.Size()) {
+                if (numberOffset < NumberIndexStart || numberOffset >= Buffer.size()) {
                     return "Number offset cannot point outside of Number index"sv;
                 }
                 if ((numberOffset - NumberIndexStart) % sizeof(double) != 0) {

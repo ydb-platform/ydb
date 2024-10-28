@@ -70,11 +70,11 @@ enum class EYtSettingType: ui64 {
     StatColumns              /* "statcolumns" */,
     SysColumns               /* "syscolumns" */,
     IgnoreTypeV3             /* "ignoretypev3" "ignore_type_v3" */,
-    // Table content         
+    // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
     RowFactor                /* "rowFactor" */,
-    // Operations            
+    // Operations
     Ordered                  /* "ordered" */,                  // hybrid supported
     KeyFilter                /* "keyFilter" */,
     KeyFilter2               /* "keyFilter2" */,
@@ -86,6 +86,7 @@ enum class EYtSettingType: ui64 {
     ReduceBy                 /* "reduceBy" */,                 // hybrid supported
     ReduceFilterBy           /* "reduceFilterBy" */,
     ForceTransform           /* "forceTransform" */,           // hybrid supported
+    TransformColGroups       /* "transformColGroups" */,       // hybrid supported
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
@@ -95,16 +96,18 @@ enum class EYtSettingType: ui64 {
     Flow                     /* "flow" */,                     // hybrid supported
     KeepSorted               /* "keepSorted" */,               // hybrid supported
     KeySwitch                /* "keySwitch" */,                // hybrid supported
-    // Out tables            
+    BlockInputReady          /* "blockInputReady" */,          // hybrid supported
+    BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
+    // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,
-    // Operations            
+    // Operations
     MapOutputType            /* "mapOutputType" */,            // hybrid supported
     ReduceInputType          /* "reduceInputType" */,          // hybrid supported
     NoDq                     /* "noDq" */,
-    // Read      
+    // Read
     Split                    /* "split" */,
-    // Write hints           
+    // Write hints
     CompressionCodec         /* "compression_codec" "compressioncodec"*/,
     ErasureCodec             /* "erasure_codec" "erasurecodec" */,
     Expiration               /* "expiration" */,
@@ -133,7 +136,7 @@ public:
     using ::NYql::EYtSettingTypes::bitset::bitset;
 
     EYtSettingTypes(EYtSettingType type)
-        : TBase(std::bitset<YtSettingTypesCount>(1) << static_cast<ui64>(type)) 
+        : TBase(std::bitset<YtSettingTypesCount>(1) << static_cast<ui64>(type))
     {}
 
     EYtSettingTypes& operator|=(const EYtSettingTypes& other) {
@@ -164,8 +167,8 @@ EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
-                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
-                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded;
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
+                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::TransformColGroups;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

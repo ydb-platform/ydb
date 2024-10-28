@@ -1,71 +1,97 @@
 # TPC-H workload
 
-The workload is based on the TPC-H [documentation](https://www.tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.17.1.pdf), and the queries and table schema are adapted for {{ ydb-short-name }}.
+The workload is based on the TPC-H [documentation](https://www.tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.17.1.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
 
-The test generates a typical decision support workload.
+The benchmark generates a workload typical for decision support systems.
 
-## Initializing a load test {#init}
+## Common command options
+
+All commands support the common `--path` option, which specifies the path to the directory containing tables in the database:
+
+```bash
+{{ ydb-cli }} workload tpch --path tpch/s1 ...
+```
+
+### Available options {#common_options}
+
+Name | Description | Default value
+---|---|---
+`--path` or `-p` | Path to the directory with tables. | `/`
+
+## Initializing a load test { #init }
 
 Before running the benchmark, create a table:
 
 ```bash
-{{ ydb-cli }} workload tpch init
+{{ ydb-cli }} workload tpch --path tpch/s1 init
 ```
 
-See the description of the command to run the data load:
+See the command description:
 
 ```bash
 {{ ydb-cli }} workload tpch init --help
 ```
 
-### Available parameters {#init-options}
+{% include [init_options](./_includes/workload/init_options_tpc.md) %}
 
-| Option name | Option description |
----|---
-| `--path <value>` | Directory to create tables in. Default value - empty string. |
-| `--store <value>` | Type of table storage. Acceptable values: `row`, `column`. Default value: `row`. |
+## Loading data into a table { #load }
 
-## Uploading data to the table {#load}
-
-You can download the dataset generator for the TPC-H benchmark by the [link](http://tpc.org/tpc_documents_current_versions/current_specifications5.asp).
-Then follow the instructions from README.
-In the `dss.h` file, you can specify a field separator: Default: `#define SEPARATOR '|'`.
-In the sample data upload script, `'\t'` is used as a separator.
+The data will be generated and loaded into a table directly by {{ ydb-cli }}:
 
 ```bash
-for table in region nation supplier customer part partsupp orders lineitem; do
-    echo "Start data load to $table"
-    {{ ydb-cli }} import file tsv --header --path "$table" --input-file $table.tsv --newline-delimited
-    echo "Finish data load to $table"
-done
+{{ ydb-cli }} workload tpch --path tpch/s1 import generator --scale 1
 ```
 
-## Running a load test {#run}
+See the command description:
+
+```bash
+{{ ydb-cli }} workload tpch import --help
+```
+
+### Available options { #load_files_options }
+
+Name | Description | Default value
+---|---|---
+`--scale <value>` | Data scale. Powers of ten are usually used. |
+`--tables <value>` | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`. | All tables
+`--proccess-count <value>` or `-C <value>` | Data generation can be split into several processes, this parameter specifies the number of processes. | 1
+`--proccess-index <value>` or `-i <value>` | Data generation can be split into several processes, this parameter specifies the process number. | 0
+`--state <path>` | Path to the generation state file. If the generation was interrupted for some reason, the download will be continued from the same place when it is started again. |
+`--clear-state` | Relevant if the `--state` parameter is specified. Clear the state file and start the download from the beginning. |
+
+{% include [load_options](./_includes/workload/load_options.md) %}
+
+## Run the load test { #run }
 
 Run the load:
 
 ```bash
-{{ ydb-cli }} workload tpch run
+{{ ydb-cli }} workload tpch --path tpch/s1 run
 ```
 
-During this test, workload statistics for each query are displayed on the screen.
+During the test, load statistics are displayed for each request.
 
-See the description of the command to run the data load:
+See the command description:
+
 
 ```bash
 {{ ydb-cli }} workload tpch run --help
 ```
 
-### Global parameters for all types of load {#run-options}
+{% include [run_options](./_includes/workload/run_options.md) %}
 
-| Option name | Option description |
----|---
-| `--path <value>` | Directory to create tables in. Default value - empty string. |
-| `--output <value>` | The name of the file in which the query execution results will be saved. The default value is `results.out`. |
-| `--iterations <value>` | The number of executions of each load generating query. The default value is `1`. |
-| `--json` | The name of the file in which the query execution statistics will be saved in `json` format. By default, the file is not saved. |
-| `--ministat` | The name of the file in which the query execution statistics will be saved in `ministat` format. By default, the file is not saved. |
-| `--query-settings` | Query execution settings. By default, not specified. |
-| `--ext-queries-dir` | Name of the directory with external queries used to apply the workload. |
-| `--include` | The numbers or number sections of the queries to be executed as part of the load. By default, all queries are executed. Separated by commas, for example, `1,2,4-6`. |
-| `--exclude` | The numbers or number sections of the queries to be excluded as part of the load. By default, all queries are executed. Separated by commas, for example, `1,2,4-6`. |
+### TPC-H-specific options { #run_tpch_options }
+
+Name | Description | Default value
+---|---|---
+`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-23].sql`. |
+
+## Test data cleaning { #cleanup }
+
+Run cleaning:
+
+```bash
+{{ ydb-cli }} workload tpch --path tpch/s1 clean
+```
+
+The command has no parameters.

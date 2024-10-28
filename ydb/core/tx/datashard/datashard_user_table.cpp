@@ -231,6 +231,10 @@ bool TUserTable::IsReplicated() const {
     }
 }
 
+bool TUserTable::IsIncrementalRestore() const {
+    return IncrementalBackupConfig.Mode == NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP;
+}
+
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 {
     // We expect schemeshard to send us full list of storage rooms
@@ -311,6 +315,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
+    IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
 
     CheckSpecialColumns();
 
@@ -393,6 +398,7 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
     ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+    IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
 
     schema.SetName(Name);
     schema.SetPath(Path);
@@ -444,8 +450,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-        alter.AddPgColumn(tid, column.Name, columnId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -548,8 +553,7 @@ void TUserTable::ApplyAlter(
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                ui32 pgTypeId = columnType.TypeInfo ? columnType.TypeInfo->GetPgTypeId() : 0;
-                alter.AddPgColumn(tid, column.Name, colId, columnType.TypeId, pgTypeId, column.TypeMod, column.NotNull);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
             }
         }
 

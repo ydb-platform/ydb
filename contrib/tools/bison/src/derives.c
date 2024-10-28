@@ -1,6 +1,6 @@
 /* Match rules with nonterminals for bison,
 
-   Copyright (C) 1984, 1989, 2000-2003, 2005, 2009-2015, 2018-2019 Free
+   Copyright (C) 1984, 1989, 2000-2003, 2005, 2009-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include <config.h>
 #include "system.h"
@@ -40,17 +40,14 @@ rule ***derives;
 static void
 print_derives (void)
 {
-  int i;
-
   fputs ("DERIVES\n", stderr);
 
-  for (i = ntokens; i < nsyms; i++)
+  for (symbol_number i = ntokens; i < nsyms; ++i)
     {
-      rule **rp;
       fprintf (stderr, "  %s derives\n", symbols[i]->tag);
-      for (rp = derives[i - ntokens]; *rp; ++rp)
+      for (rule **rp = derives[i - ntokens]; *rp; ++rp)
         {
-          fprintf (stderr, "    %3d ", (*rp)->user_number);
+          fprintf (stderr, "    %3d ", (*rp)->code);
           rule_rhs_print (*rp, stderr);
           fprintf (stderr, "\n");
         }
@@ -63,20 +60,16 @@ print_derives (void)
 void
 derives_compute (void)
 {
-  symbol_number i;
-  rule_number r;
-  rule **q;
-
   /* DSET[NTERM - NTOKENS] -- A linked list of the numbers of the rules
      whose LHS is NTERM.  */
-  rule_list **dset = xcalloc (nvars, sizeof *dset);
+  rule_list **dset = xcalloc (nnterms, sizeof *dset);
 
   /* DELTS[RULE] -- There are NRULES rule number to attach to nterms.
      Instead of performing NRULES allocations for each, have an array
      indexed by rule numbers.  */
   rule_list *delts = xnmalloc (nrules, sizeof *delts);
 
-  for (r = nrules - 1; r >= 0; --r)
+  for (rule_number r = nrules - 1; r >= 0; --r)
     {
       symbol_number lhs = rules[r].lhs->number;
       rule_list *p = &delts[r];
@@ -89,10 +82,11 @@ derives_compute (void)
   /* DSET contains what we need under the form of a linked list.  Make
      it a single array.  */
 
-  derives = xnmalloc (nvars, sizeof *derives);
-  q = xnmalloc (nvars + nrules, sizeof *q);
+  derives = xnmalloc (nnterms, sizeof *derives);
+  /* Q is the storage for DERIVES[...] (DERIVES[0] = q).  */
+  rule **q = xnmalloc (nnterms + nrules, sizeof *q);
 
-  for (i = ntokens; i < nsyms; i++)
+  for (symbol_number i = ntokens; i < nsyms; ++i)
     {
       rule_list *p = dset[i - ntokens];
       derives[i - ntokens] = q;
@@ -115,6 +109,9 @@ derives_compute (void)
 void
 derives_free (void)
 {
-  free (derives[0]);
-  free (derives);
+  if (derives)
+    {
+      free (derives[0]);
+      free (derives);
+    }
 }

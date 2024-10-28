@@ -218,7 +218,7 @@ TSha256Hmac CreateSha256HmacImpl(TStringBuf key, TStringBuf message)
 {
     TSha256Hmac hmac;
     unsigned int opensslIsInsane;
-    auto *result = HMAC(
+    auto* result = HMAC(
         EVP_sha256(),
         key.data(),
         key.size(),
@@ -288,10 +288,10 @@ TString GenerateCryptoStrongRandomString(int length)
 {
     std::vector<unsigned char> bytes(length);
     if (RAND_bytes(bytes.data(), bytes.size())) {
-        auto *data = reinterpret_cast<char*>(bytes.data());
+        auto* data = reinterpret_cast<char*>(bytes.data());
         return TString{data, static_cast<size_t>(length)};
     } else {
-        THROW_ERROR_EXCEPTION("Failed to generate %v random bytes")
+        THROW_ERROR_EXCEPTION("Failed to generate %v random bytes", length)
             << TErrorAttribute("openssl_error_code", ERR_get_error());
     }
 }
@@ -328,7 +328,7 @@ void FromProto(std::optional<NYT::NCrypto::TMD5Hasher>* hasher, const NCrypto::N
 
 void ToProto(NCrypto::NProto::TMD5Hash* protoHash, const std::optional<NYT::NCrypto::TMD5Hash>& hash)
 {
-    auto* outputBytes = protoHash->mutable_md5sum();
+    auto* outputBytes = protoHash->mutable_data();
     outputBytes->clear();
     if (!hash) {
         return;
@@ -339,7 +339,7 @@ void ToProto(NCrypto::NProto::TMD5Hash* protoHash, const std::optional<NYT::NCry
 
 void FromProto(std::optional<NYT::NCrypto::TMD5Hash>* hash, const NCrypto::NProto::TMD5Hash& protoHash)
 {
-    const auto& inputBytes = protoHash.md5sum();
+    const auto& inputBytes = protoHash.data();
     hash->reset();
     if (inputBytes.empty()) {
         return;

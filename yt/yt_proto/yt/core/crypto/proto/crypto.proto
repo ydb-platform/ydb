@@ -10,7 +10,7 @@ message TMD5Hasher
 
 message TMD5Hash
 {
-    required bytes md5sum = 1;
+    required bytes data = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

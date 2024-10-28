@@ -858,6 +858,48 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch1.GetId(), epoch.GetId() + 5);
     }
 
+    Y_UNIT_TEST(TestListNodesEpochDeltas)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 10);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+
+        auto epoch0 = GetEpoch(runtime, sender);
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1, epoch0.GetNextEnd());
+        auto epoch1 = CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch0.GetVersion());
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, NODE2, epoch1.GetNextEnd());
+        auto epoch2 = CheckFilteredNodesList(runtime, sender, {NODE2}, {}, 0, epoch1.GetVersion());
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.6",
+                          1, 2, 3, 6, TStatus::OK, NODE3, epoch2.GetNextEnd());
+        auto epoch3 = CheckFilteredNodesList(runtime, sender, {NODE3}, {}, 0, epoch2.GetVersion());
+
+        CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch0.GetVersion());
+        CheckFilteredNodesList(runtime, sender, {NODE2, NODE3}, {}, 0, epoch1.GetVersion());
+        CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch3.GetVersion());
+
+        RebootTablet(runtime, MakeNodeBrokerID(), sender);
+        CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch3.GetVersion());
+
+        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
+                          1, 2, 3, 7, TStatus::OK, NODE4, epoch3.GetNextEnd());
+        auto epoch4 = CheckFilteredNodesList(runtime, sender, {NODE4}, {}, 0, epoch3.GetVersion());
+
+        // NodeBroker doesn't have enough history in memory and replies with the full node list
+        CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3, NODE4}, {}, 0, epoch2.GetVersion());
+
+        WaitForEpochUpdate(runtime, sender);
+        auto epoch5 = GetEpoch(runtime, sender);
+        CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch5.GetVersion());
+
+        // New epoch may remove nodes, so deltas are not returned on epoch change
+        CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3, NODE4}, {}, 0, epoch3.GetVersion());
+    }
+
     Y_UNIT_TEST(TestRandomActions)
     {
         TTestBasicRuntime runtime(8, false);

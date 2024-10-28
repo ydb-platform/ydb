@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(pyparsing)
 
-VERSION(3.1.2)
+VERSION(3.1.4)
 
 LICENSE(MIT)
 

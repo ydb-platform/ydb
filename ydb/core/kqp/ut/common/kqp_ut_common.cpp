@@ -120,8 +120,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+    appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
+    ServerSettings->FeatureFlags.SetEnableImmediateWritingOnBulkUpsert(true);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);
     ServerSettings->SetEnableDataColumnForIndexTable(true);
@@ -129,10 +131,15 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
-    ServerSettings->SetEnableUniqConstraint(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
+    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+    ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
+
+    if (!settings.FeatureFlags.HasEnableOlapCompression()) {
+        ServerSettings->SetEnableOlapCompression(true);
+    }
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -502,6 +509,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
     SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
+    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
     SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
     SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
@@ -1338,26 +1346,30 @@ void WaitForZeroSessions(const NKqp::TKqpCounters& counters) {
     UNIT_ASSERT_C(count, "Unable to wait for proper active session count, it looks like cancelation doesn`t work");
 }
 
-NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt) {
+NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
     if (auto ops = opt.GetMapSafe().find("Operators"); ops != opt.GetMapSafe().end()) {
         auto opName = ops->second.GetArraySafe()[0].GetMapSafe().at("Name").GetStringSafe();
-        if (opName.find("Join") != TString::npos || opName.find("Union") != TString::npos ) {
+        if (
+            opName.find("Join") != TString::npos || 
+            opName.find("Union") != TString::npos ||
+            (opName.find("Filter") != TString::npos && params.IncludeFilters)
+        ) {
             NJson::TJsonValue newChildren;
 
             for (auto c : opt.GetMapSafe().at("Plans").GetArraySafe()) {
-                newChildren.AppendValue(SimplifyPlan(c));
+                newChildren.AppendValue(SimplifyPlan(c, params));
             }
 
             opt["Plans"] = newChildren;
             return opt;
         }
-        else if (opName.find("Table") != TString::npos ) {
+        else if (opName.find("Table") != TString::npos) {
             return opt;
         }
     }
 
     auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
-    return SimplifyPlan(firstPlan);
+    return SimplifyPlan(firstPlan, params);
 }
 
 bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValue& ref) {
@@ -1392,7 +1404,7 @@ bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValu
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(optimized, &optRoot, true);
-    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
     
     NJson::TJsonValue refRoot;
     NJson::ReadJsonTree(reference, &refRoot, true);
@@ -1401,11 +1413,18 @@ bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference){
 }
 
 /* Temporary solution to canonize tests */
-NJson::TJsonValue CanonizeJoinOrderImpl(const NJson::TJsonValue& opt) {
+NJson::TJsonValue GetDetailedJoinOrderImpl(const NJson::TJsonValue& opt, const TGetPlanParams& params) {
     NJson::TJsonValue res;
+
+    if (!opt.GetMapSafe().contains("Plans") && !params.IncludeTables) {
+        return res;
+    }
 
     auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
     res["op_name"] = op.GetMapSafe().at("Name").GetStringSafe();
+    if (params.IncludeOptimizerEstimation && op.GetMapSafe().contains("E-Rows")) {
+        res["e-size"] = op.GetMapSafe().at("E-Rows").GetStringSafe();
+    }
 
 
     if (!opt.GetMapSafe().contains("Plans")) {
@@ -1414,18 +1433,59 @@ NJson::TJsonValue CanonizeJoinOrderImpl(const NJson::TJsonValue& opt) {
     }
     
     auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
-    for (size_t i = 0; i< subplans.size(); ++i) {
-        res["args"].AppendValue(CanonizeJoinOrderImpl(subplans[i]));
+    for (size_t i = 0; i < subplans.size(); ++i) {
+        res["args"].AppendValue(GetDetailedJoinOrderImpl(subplans[i], params));
     }
     return res;
 }
 
-/* Temporary solution to canonize tests */
-NJson::TJsonValue CanonizeJoinOrder(const TString& deserializedPlan) {
+NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TGetPlanParams& params) {
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
-    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"));
-    return CanonizeJoinOrderImpl(SimplifyPlan(optRoot));
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), params);
+    return GetDetailedJoinOrderImpl(optRoot, params);
+}
+
+NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("Plans")) {
+        auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
+        return op.GetMapSafe().at("Table").GetStringSafe();
+    }
+
+    NJson::TJsonValue res;
+
+    auto subplans = opt.GetMapSafe().at("Plans").GetArraySafe();
+    for (size_t i = 0; i < subplans.size(); ++i) {
+        res.AppendValue(GetJoinOrderImpl(subplans[i]));
+    }
+
+    return res;
+}
+
+NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedPlan, &optRoot, true);
+    optRoot = SimplifyPlan(optRoot.GetMapSafe().at("SimplifiedPlan"), {});
+    return GetJoinOrderImpl(optRoot);
+}
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("table")) {
+        NJson::TJsonValue res;
+        auto args = opt.GetMapSafe().at("args").GetArraySafe();
+        for (size_t i = 0; i < args.size(); ++i) {
+            res.AppendValue(GetJoinOrderFromDetailedJoinOrderImpl(args[i]));
+        }
+        return res;
+    }
+
+    return opt.GetMapSafe().at("table");
+}
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedDetailedJoinOrder, &optRoot, true);
+    return GetJoinOrderFromDetailedJoinOrderImpl(optRoot);
 }
 
 } // namspace NKqp

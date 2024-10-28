@@ -48,6 +48,7 @@
     void N(NUnitTest::TTestContext&)
 
 #define Y_UNIT_TEST_LLVM(N) Y_UNIT_TEST_TWIN(N, LLVM)
+#define Y_UNIT_TEST_LLVM_SPILLING(N) Y_UNIT_TEST_QUAD(N, LLVM, SPILLING)
 
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
     template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
@@ -79,7 +80,7 @@ struct TUdfModuleInfo {
     NUdf::TUniquePtr<NUdf::IUdfModule> Module;
 };
 
-template<bool UseLLVM>
+template<bool UseLLVM, bool EnableSpilling = false>
 struct TSetup {
     explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {})
         : Alloc(__LOCATION__)
@@ -95,6 +96,8 @@ struct TSetup {
 
             FunctionRegistry = mutableRegistry;
         }
+
+        Alloc.Ref().ForcefullySetMemoryYellowZone(EnableSpilling);
 
         RandomProvider = CreateDeterministicRandomProvider(1);
         TimeProvider = CreateDeterministicTimeProvider(10000000);
@@ -121,6 +124,27 @@ struct TSetup {
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));
         return graph;
+    }
+
+    void RenameCallable(TRuntimeNode pgm, TString originalName, TString newName) {
+        const auto renameProvider = [originalName = std::move(originalName), newName = std::move(newName)](TInternName name) -> TCallableVisitFunc {
+            if (name == originalName) {
+                return [name, newName = std::move(newName)](TCallable& callable, const TTypeEnvironment& env) {
+                    TCallableBuilder callableBuilder(env, newName,
+                        callable.GetType()->GetReturnType(), false);
+                    for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
+                        callableBuilder.Add(callable.GetInput(i));
+                    }
+                    return TRuntimeNode(callableBuilder.Build(), false);
+                };
+            } else {
+                return TCallableVisitFunc();
+            }
+        };
+        TExploringNodeVisitor explorer;
+        explorer.Walk(pgm.GetNode(), *Env);
+        bool wereChanges = false;
+        SinglePassVisitCallables(pgm, explorer, renameProvider, *Env, true, wereChanges);
     }
 
     void Reset() {

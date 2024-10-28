@@ -23,6 +23,8 @@ DECLARE_REFCOUNTED_STRUCT(IFairShareActionQueue)
 
 DECLARE_REFCOUNTED_STRUCT(IQuantizedExecutor)
 
+DECLARE_REFCOUNTED_CLASS(TAsyncLooper);
+
 namespace NDetail {
 
 DECLARE_REFCOUNTED_STRUCT(TDelayedExecutorEntry)
@@ -49,6 +51,7 @@ DECLARE_REFCOUNTED_STRUCT(IAsyncZeroCopyOutputStream)
 DECLARE_REFCOUNTED_STRUCT(IFairShareThreadPool)
 
 DECLARE_REFCOUNTED_CLASS(TAsyncStreamPipe)
+DECLARE_REFCOUNTED_CLASS(TBoundedAsyncStreamPipe)
 
 DEFINE_ENUM(EWaitForStrategy,
     (WaitFor)

@@ -76,6 +76,7 @@ public:
     NMetrics::TAverageValue<TResourceRawValues, 20> AveragedResourceTotalValues;
     double NodeTotalUsage = 0;
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
+    NMetrics::TAverageValue<double, 20> AveragedNodeTotalCpuUsage;
     TResourceRawValues ResourceMaximumValues;
     TInstant StartTime;
     TNodeLocation Location;
@@ -231,7 +232,7 @@ public:
         }
     }
 
-    bool CanBeDeleted() const;
+    bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
     void Ping();

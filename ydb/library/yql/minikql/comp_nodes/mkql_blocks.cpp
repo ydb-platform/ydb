@@ -149,7 +149,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto second_cond = BasicBlock::Create(context, "second_cond", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -355,7 +355,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue())
+        if (state.IsInvalid())
             MakeState(ctx, state);
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
@@ -402,7 +402,7 @@ public:
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(work, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, work, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -506,7 +506,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue())
+        if (state.IsInvalid())
             MakeState(ctx, state);
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
@@ -586,7 +586,7 @@ public:
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -786,7 +786,7 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
 
             const auto s = static_cast<TState*>(state.AsBoxed().Get());
@@ -1041,7 +1041,7 @@ public:
         const auto fill = BasicBlock::Create(context, "fill", ctx.Func);
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
@@ -1132,7 +1132,7 @@ private:
     }
 
     TBlockState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
 
             auto& s = *static_cast<TBlockState*>(state.AsBoxed().Get());

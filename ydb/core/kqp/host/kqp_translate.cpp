@@ -1,6 +1,8 @@
 #include "kqp_translate.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/library/yql/sql/sql.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 
 namespace NKikimr {
@@ -52,7 +54,7 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
             YQL_ENSURE(false, "Unexpected query type: " << type);
     }
 }
-           
+
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
@@ -60,6 +62,10 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     if (settings.PgParser) {
         settings.AutoParametrizeEnabled = IsEnablePgConstsToParams ;
         settings.AutoParametrizeValuesStmt = IsEnablePgConstsToParams;
+    }
+
+    if (!settings.PgParser) {
+        settings.Antlr4Parser = IsEnableAntlr4Parser;
     }
 
     if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
@@ -84,6 +90,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.SaveWorldDependencies = true;
     }
 
+    settings.PGDisable = !IsEnablePgSyntax;
     settings.InferSyntaxVersion = true;
     settings.V0ForceDisable = false;
     settings.WarnOnV0 = false;
@@ -151,13 +158,14 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
 }
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
-        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName) {
+        NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
+        NSQLTranslation::TTranslationSettings* effectiveSettings) {
     NYql::TAstParseResult astRes;
     settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         auto settings = settingsBuilder.Build(ctx);
         NYql::TStmtParseInfo stmtParseInfo;
-        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo);
+        auto ast = NSQLTranslation::SqlToYql(queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
         deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
         sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
         keepInCache = stmtParseInfo.KeepInCache;

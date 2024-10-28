@@ -35,6 +35,7 @@ TEST_SRCS(
     test_push_down.py
     test_s3_0.py
     test_s3_1.py
+    test_streaming_join.py
     test_size_limit.py
     test_statistics.py
     test_test_connection.py
@@ -51,13 +52,15 @@ DATA(
     arcadia/ydb/tests/fq/s3
 )
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:16)
 
 END()

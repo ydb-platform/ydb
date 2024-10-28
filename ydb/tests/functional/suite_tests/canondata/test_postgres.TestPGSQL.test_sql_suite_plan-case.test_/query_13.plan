@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,49 +14,58 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-TableFullScan",
+                                        "Node Type": "Limit",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "i"
-                                                ],
-                                                "ReadLimit": "1001",
-                                                "ReadRanges": [
-                                                    "i (-\u221e, +\u221e)"
-                                                ],
-                                                "Scan": "Sequential",
-                                                "Table": "postgres_case.test_plan/CASE_TBL"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "postgres_case.test_plan/CASE_TBL"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "i"
+                                                        ],
+                                                        "ReadLimit": "1001",
+                                                        "ReadRanges": [
+                                                            "i (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Sequential",
+                                                        "Table": "postgres_case.test_plan/CASE_TBL"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "postgres_case.test_plan/CASE_TBL"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ]
@@ -65,7 +74,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

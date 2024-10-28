@@ -1,11 +1,13 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_active_transaction.h"
+#include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
@@ -305,6 +307,46 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         ApplyChanges(server, shards.at(0), tableId, "my-source", {
             TChange{ .Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11 },
         }, NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED);
+    }
+
+    Y_UNIT_TEST(ApplyChangesWithConcurrentTx) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistency(EReplicationConsistency::Weak)
+        );
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+
+        ApplyChanges(server, shards.at(0), tableId, "my-source", {
+            TChange{ .Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11 },
+        });
+
+        TString sessionId;
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, "SELECT key, value FROM `/Root/table-1`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
+
+        ApplyChanges(server, shards.at(0), tableId, "my-source", {
+            TChange{ .Offset = 1, .WriteTxId = 0, .Key = 1, .Value = 21 },
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT key, value FROM `/Root/table-1`;"),
+            "{ items { uint32_value: 1 } items { uint32_value: 11 } }");
     }
 
 }

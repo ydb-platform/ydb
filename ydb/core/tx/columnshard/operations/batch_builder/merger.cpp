@@ -1,6 +1,6 @@
 #include "merger.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {
 
@@ -60,17 +60,19 @@ NKikimr::TConclusionStatus TUpdateMerger::OnEqualKeys(const NArrow::NMerger::TSo
     return TConclusionStatus::Success();
 }
 
-TUpdateMerger::TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists /*= {}*/)
+TUpdateMerger::TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
+    const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists /*= {}*/)
     : TBase(incoming, actualSchema)
     , Builder(actualSchema->GetIndexInfo().ArrowSchema()->fields())
     , DefaultExists(defaultExists)
+    , InsertDenyReason(insertDenyReason)
 {
-    for (auto&& i : actualSchema->GetIndexInfo().ArrowSchema()->field_names()) {
-        auto fIdx = IncomingData->schema()->GetFieldIndex(i);
+    for (auto&& f : actualSchema->GetIndexInfo().ArrowSchema()->fields()) {
+        auto fIdx = IncomingData->schema()->GetFieldIndex(f->name());
         if (fIdx == -1) {
             IncomingColumnRemap.emplace_back();
         } else {
-            auto fExistsIdx = IncomingData->schema()->GetFieldIndex("$$EXISTS::" + i);
+            auto fExistsIdx = IncomingData->schema()->GetFieldIndex("$$EXISTS::" + f->name());
             std::shared_ptr<arrow::Array> flagsArray;
             if (fExistsIdx != -1) {
                 AFL_VERIFY(IncomingData->column(fExistsIdx)->type_id() == arrow::Type::BOOL);

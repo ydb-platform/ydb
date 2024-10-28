@@ -6,6 +6,10 @@
 
 #include <yt/yt/client/object_client/helpers.h>
 
+#include <library/cpp/yt/logging/logger.h>
+
+#include "private.h"
+
 namespace NYT::NChunkClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -213,60 +217,128 @@ inline bool IsPhysicalChunkId(TChunkId id)
     return IsPhysicalChunkType(NObjectClient::TypeFromId(id));
 }
 
-inline bool IsJournalChunkType(NObjectClient::EObjectType type)
+inline bool IsJournalChunkTypeImpl(NObjectClient::EObjectType type)
 {
     return
         type == NObjectClient::EObjectType::JournalChunk ||
         type == NObjectClient::EObjectType::ErasureJournalChunk;
 }
 
-inline bool IsJournalChunkId(TChunkId id)
+inline bool IsJournalChunkType(NObjectClient::EObjectType type)
 {
-    return IsJournalChunkType(NObjectClient::TypeFromId(id));
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsJournalChunkType (Type: %v)",
+        type);
+    return IsJournalChunkTypeImpl(type);
 }
 
-inline bool IsBlobChunkType(NObjectClient::EObjectType type)
+inline bool IsJournalChunkId(TChunkId id)
+{
+    auto type = NObjectClient::TypeFromId(id);
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsJournalChunkId (ChunkId: %v)",
+        id);
+    return IsJournalChunkTypeImpl(type);
+}
+
+inline bool IsBlobChunkTypeImpl(NObjectClient::EObjectType type)
 {
     return
         type == NObjectClient::EObjectType::Chunk ||
         type == NObjectClient::EObjectType::ErasureChunk;
 }
 
-inline bool IsBlobChunkId(TChunkId id)
+inline bool IsBlobChunkType(NObjectClient::EObjectType type)
 {
-    return IsBlobChunkType(NObjectClient::TypeFromId(id));
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsBlobChunkType (Type: %v)",
+        type);
+    return IsBlobChunkTypeImpl(type);
 }
 
-inline bool IsErasureChunkType(NObjectClient::EObjectType type)
+inline bool IsBlobChunkId(TChunkId id)
+{
+    auto type = NObjectClient::TypeFromId(id);
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsBlobChunkId (ChunkId: %v)",
+        id);
+    return IsBlobChunkTypeImpl(type);
+}
+
+inline bool IsErasureChunkTypeImpl(NObjectClient::EObjectType type)
 {
     return
         type == NObjectClient::EObjectType::ErasureChunk ||
         type == NObjectClient::EObjectType::ErasureJournalChunk;
 }
 
+inline bool IsErasureChunkType(NObjectClient::EObjectType type)
+{
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsErasureChunkType (Type: %v)",
+        type);
+    return IsErasureChunkTypeImpl(type);
+}
+
 inline bool IsErasureChunkId(TChunkId id)
 {
-    return IsErasureChunkType(NObjectClient::TypeFromId(id));
+    auto type = NObjectClient::TypeFromId(id);
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsErasureChunkId (ChunkId: %v)",
+        id);
+    return IsErasureChunkTypeImpl(type);
+}
+
+inline bool IsErasureChunkPartType(NObjectClient::EObjectType type)
+{
+    return
+        (type >= NObjectClient::MinErasureChunkPartType && type <= NObjectClient::MaxErasureChunkPartType) ||
+        (type >= NObjectClient::MinErasureJournalChunkPartType && type <= NObjectClient::MaxErasureJournalChunkPartType);
 }
 
 inline bool IsErasureChunkPartId(TChunkId id)
 {
-    auto type = NObjectClient::TypeFromId(id);
-    return
-        type >= NObjectClient::MinErasureChunkPartType && type <= NObjectClient::MaxErasureChunkPartType ||
-        type >= NObjectClient::MinErasureJournalChunkPartType && type <= NObjectClient::MaxErasureJournalChunkPartType;
+    return IsErasureChunkPartType(NObjectClient::TypeFromId(id));
 }
 
-inline bool IsRegularChunkType(NObjectClient::EObjectType type)
+inline bool IsRegularChunkTypeImpl(NObjectClient::EObjectType type)
 {
     return
         type == NObjectClient::EObjectType::Chunk ||
         type == NObjectClient::EObjectType::JournalChunk;
 }
 
+inline bool IsRegularChunkType(NObjectClient::EObjectType type)
+{
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsRegularChunkType (Type: %v)",
+        type);
+    return IsRegularChunkTypeImpl(type);
+}
+
 inline bool IsRegularChunkId(TChunkId id)
 {
-    return IsRegularChunkType(NObjectClient::TypeFromId(id));
+    auto type = NObjectClient::TypeFromId(id);
+    constexpr auto& Logger = ChunkClientLogger;
+    YT_LOG_ALERT_IF(
+        IsErasureChunkPartType(type),
+        "Erasure chunk part type passed to IsRegularChunkId (ChunkId: %v)",
+        id);
+    return IsRegularChunkTypeImpl(type);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

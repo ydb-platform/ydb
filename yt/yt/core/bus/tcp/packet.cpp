@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/string/guid.h>
 
+#include <library/cpp/yt/misc/unaligned.h>
+
 namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,8 +84,6 @@ protected:
 
     TCompactVector<char, TypicalVariableHeaderSize> VariableHeader_;
     size_t VariableHeaderSize_;
-    ui32* PartSizes_;
-    ui64* PartChecksums_;
 
     int PartIndex_ = -1;
     TSharedRefArray Message_;
@@ -148,6 +148,32 @@ protected:
     {
         return static_cast<TDerived*>(this);
     }
+
+
+    ui32 GetPartSize(int index) const
+    {
+        return UnalignedLoad(PartSizes_ + index);
+    }
+
+    void SetPartSize(int index, ui32 size)
+    {
+        UnalignedStore(PartSizes_ + index, size);
+    }
+
+
+    ui64 GetPartChecksum(int index) const
+    {
+        return UnalignedLoad(PartChecksums_ + index);
+    }
+
+    void SetPartChecksum(int index, ui64 checksum)
+    {
+        UnalignedStore(PartChecksums_ + index, checksum);
+    }
+
+private:
+    ui32* PartSizes_;
+    ui64* PartChecksums_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,7 +309,7 @@ private:
     bool EndVariableHeaderPhase()
     {
         if (VerifyChecksum_) {
-            auto expectedChecksum = PartChecksums_[FixedHeader_.PartCount];
+            auto expectedChecksum = GetPartChecksum(FixedHeader_.PartCount);
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetVariableChecksum();
                 if (expectedChecksum != actualChecksum) {
@@ -295,7 +321,7 @@ private:
         }
 
         for (int index = 0; index < static_cast<int>(FixedHeader_.PartCount); ++index) {
-            ui32 partSize = PartSizes_[index];
+            ui32 partSize = GetPartSize(index);
             if (partSize != NullPacketPartSize && partSize > MaxMessagePartSize) {
                 YT_LOG_ERROR("Invalid packet part size (PacketId: %v, PartIndex: %v, PartSize: %v)",
                     FixedHeader_.PacketId,
@@ -312,7 +338,7 @@ private:
     bool EndMessagePartPhase()
     {
         if (VerifyChecksum_) {
-            auto expectedChecksum = PartChecksums_[PartIndex_];
+            auto expectedChecksum = GetPartChecksum(PartIndex_);
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetChecksum(Parts_[PartIndex_]);
                 if (expectedChecksum != actualChecksum) {
@@ -337,7 +363,7 @@ private:
                 break;
             }
 
-            ui32 partSize = PartSizes_[PartIndex_];
+            ui32 partSize = GetPartSize(PartIndex_);
             if (partSize == NullPacketPartSize) {
                 Parts_.push_back(TSharedRef());
             } else if (partSize == 0) {
@@ -411,19 +437,18 @@ public:
             AllocateVariableHeader();
 
             for (int index = 0; index < static_cast<int>(Message_.Size()); ++index) {
-                const auto& part = Message_[index];
-                if (part) {
-                    PartSizes_[index] = part.Size();
-                    PartChecksums_[index] = generateChecksums && index < checksummedPartCount
-                        ? GetChecksum(part)
-                        : NullChecksum;
+                if (const auto& part = Message_[index]) {
+                    SetPartSize(index, part.Size());
+                    SetPartChecksum(
+                        index,
+                        generateChecksums && index < checksummedPartCount ? GetChecksum(part) : NullChecksum);
                 } else {
-                    PartSizes_[index] = NullPacketPartSize;
-                    PartChecksums_[index] = NullChecksum;
+                    SetPartSize(index, NullPacketPartSize);
+                    SetPartChecksum(index, NullChecksum);
                 }
             }
 
-            PartChecksums_[Message_.Size()] = generateChecksums ? GetVariableChecksum() : NullChecksum;
+            SetPartChecksum(Message_.Size(),  generateChecksums ? GetVariableChecksum() : NullChecksum);
         }
 
         BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof (TPacketHeader));

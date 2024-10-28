@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
             .AddRDN(TCertificateAuthorizationParams::TRDN("O").AddValue("YA"))
             .AddRDN(TCertificateAuthorizationParams::TRDN("OU").AddValue("UtTest").AddValue("OtherUnit"))
             .AddRDN(TCertificateAuthorizationParams::TRDN("CN").AddValue("localhost").AddSuffix(".yandex.ru"));
-            TCertificateAuthorizationParams authParams(std::move(dn));
+            TCertificateAuthorizationParams authParams(std::move(dn), std::nullopt);
 
             {
                 std::unordered_map<TString, std::vector<TString>> subjectTerms;
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("localhost");
 
-                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms, {}));
             }
 
             {
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("OtherUnit");
                 subjectTerms["CN"].push_back("localhost");
 
-                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms, {}));
             }
 
             {
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("WrongUnit");
                 subjectTerms["CN"].push_back("localhost");
 
-                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms, {}));
             }
 
             {
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.yandex.ru");
 
-                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms, {}));
             }
 
             {
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["CN"].push_back("test.yandex.ru");
                 subjectTerms["ELSE"].push_back("WhatEver");
 
-                UNIT_ASSERT(authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(authParams.CheckSubject(subjectTerms, {}));
             }
 
             {
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.yandex.ru");
 
-                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms, {}));
             }
 
             {
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.not-yandex.ru");
 
-                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms, {}));
             }
 
             {
@@ -127,7 +127,19 @@ Y_UNIT_TEST_SUITE(TCertificateAuthUtilsTest) {
                 subjectTerms["OU"].push_back("UtTest");
                 subjectTerms["CN"].push_back("test.yandex.ru");
 
-                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms));
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms, {}));
+            }
+
+            {
+                std::unordered_map<TString, std::vector<TString>> subjectTerms;
+                //subjectTerms["C"] = "RU";
+                subjectTerms["ST"].push_back("MSK");
+                subjectTerms["L"].push_back("MSK");
+                subjectTerms["O"].push_back("YA");
+                subjectTerms["OU"].push_back("UtTest");
+                subjectTerms["CN"].push_back("test.yandex.ru");
+
+                UNIT_ASSERT(!authParams.CheckSubject(subjectTerms, {"test.yandex.ru"}));
             }
         }
     }

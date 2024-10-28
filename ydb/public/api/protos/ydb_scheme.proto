@@ -5,6 +5,7 @@ package Ydb.Scheme;
 option java_package = "com.yandex.ydb.scheme";
 option java_outer_classname = "SchemeOperationProtos";
 
+import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
@@ -12,7 +13,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 // All intermediate directories must be created
 message MakeDirectoryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string path = 2;
+    string path = 2 [(required) = true];
 }
 
 message MakeDirectoryResponse {
@@ -22,7 +23,7 @@ message MakeDirectoryResponse {
 // Remove directory
 message RemoveDirectoryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string path = 2;
+    string path = 2 [(required) = true];
 }
 
 message RemoveDirectoryResponse {
@@ -32,7 +33,7 @@ message RemoveDirectoryResponse {
 // List directory
 message ListDirectoryRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string path = 2;
+    string path = 2 [(required) = true];
 }
 
 message ListDirectoryResponse {
@@ -64,6 +65,7 @@ message Entry {
         EXTERNAL_TABLE = 18;
         EXTERNAL_DATA_SOURCE = 19;
         VIEW = 20;
+        RESOURCE_POOL = 21;
     }
 
     // Name of scheme entry (dir2 of /dir1/dir2)
@@ -92,7 +94,7 @@ message ListDirectoryResult {
 // Returns information about object with given path
 message DescribePathRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string path = 2;
+    string path = 2 [(required) = true];
 }
 
 message DescribePathResponse {
@@ -120,7 +122,7 @@ message PermissionsAction {
 // Modify permissions of given object
 message ModifyPermissionsRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string path = 2;
+    string path = 2 [(required) = true];
     repeated PermissionsAction actions = 3;
     // Clear all permissions on the object for all subjects
     bool clear_permissions = 4;

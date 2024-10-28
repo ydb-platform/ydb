@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet",
-                "PlanNodeId": 4,
+                "PlanNodeId": 5,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,54 +14,63 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 2
+                                        "ExternalPlanNodeId": 3
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 3,
+                        "PlanNodeId": 4,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 2,
+                                "PlanNodeId": 3,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-TableFullScan",
+                                        "Node Type": "Limit",
                                         "Operators": [
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 1
+                                                        "ExternalPlanNodeId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "Limit"
-                                            },
-                                            {
-                                                "Inputs": [],
-                                                "Name": "TableFullScan",
-                                                "ReadColumns": [
-                                                    "a",
-                                                    "b"
-                                                ],
-                                                "ReadLimit": "1001",
-                                                "ReadRanges": [
-                                                    "a (-\u221e, +\u221e)",
-                                                    "b (-\u221e, +\u221e)",
-                                                    "c (-\u221e, +\u221e)",
-                                                    "d (-\u221e, +\u221e)",
-                                                    "e (-\u221e, +\u221e)"
-                                                ],
-                                                "Scan": "Sequential",
-                                                "Table": "sqllogictest_select1-1.test_plan/t1"
                                             }
                                         ],
-                                        "PlanNodeId": 1,
-                                        "Tables": [
-                                            "sqllogictest_select1-1.test_plan/t1"
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "ReadColumns": [
+                                                            "a",
+                                                            "b"
+                                                        ],
+                                                        "ReadLimit": "1001",
+                                                        "ReadRanges": [
+                                                            "a (-\u221e, +\u221e)",
+                                                            "b (-\u221e, +\u221e)",
+                                                            "c (-\u221e, +\u221e)",
+                                                            "d (-\u221e, +\u221e)",
+                                                            "e (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Sequential",
+                                                        "Table": "sqllogictest_select1-1.test_plan/t1"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1,
+                                                "Tables": [
+                                                    "sqllogictest_select1-1.test_plan/t1"
+                                                ]
+                                            }
                                         ]
                                     }
                                 ],
@@ -74,7 +83,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(AskActor) {
             UNIT_ASSERT_EXCEPTION_CONTAINS(
                 fut.ExtractValueSync(),
                 yexception,
-                "received unexpected response HelloWorld: Pong");
+                "received unexpected response NActors::TEvents::TEvPong");
         }
     }
 

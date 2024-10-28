@@ -30,6 +30,10 @@ void ToProto(
     NProto::TTransactionalOptions* proto,
     const NApi::TTransactionalOptions& options);
 
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto);
+
 void ToProto(
     NProto::TPrerequisiteOptions* proto,
     const NApi::TPrerequisiteOptions& options);
@@ -106,6 +110,14 @@ void FromProto(
     NApi::TListJobsResult* result,
     const NProto::TListJobsResult& proto);
 
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result);
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto);
+
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
 
@@ -135,14 +147,6 @@ void ToProto(
 void FromProto(
     NQueryClient::TQueryStatistics* statistics,
     const NProto::TQueryStatistics& protoStatistics);
-
-void ToProto(
-    NProto::TVersionedReadOptions* protoOptions,
-    const NTableClient::TVersionedReadOptions& options);
-
-void FromProto(
-    NTableClient::TVersionedReadOptions* options,
-    const NProto::TVersionedReadOptions& protoOptions);
 
 void ToProto(
     NProto::TOperation* protoOperation,
@@ -279,6 +283,43 @@ NProto::EQueryState ConvertQueryStateToProto(
 
 NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
     NProto::EQueryState proto);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options);
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options);
+
+void ParseRequest(
+    TDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteTableFragment* req,
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options);
+
+void ParseRequest(
+    TFragmentWriteCookiePtr* mutableCookie,
+    TFragmentTableWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req);
+
 } // namespace NProto
 
 ////////////////////////////////////////////////////////////////////////////////

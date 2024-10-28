@@ -360,11 +360,13 @@ public:
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env,
-        TType* returnType) const final {
+        TType* returnType,
+        ui32 hint) const final {
         Y_UNUSED(tupleType);
         Y_UNUSED(argsColumns);
         Y_UNUSED(env);
         Y_UNUSED(returnType);
+        Y_UNUSED(hint);
         return PrepareCountAll<TFinalizeKeysTag>(std::optional<ui32>(), argsColumns[0]);
     }
 };
@@ -395,11 +397,13 @@ public:
         TTupleType* tupleType,
         const std::vector<ui32>& argsColumns,
         const TTypeEnvironment& env,
-        TType* returnType) const final {
+        TType* returnType,
+        ui32 hint) const final {
         Y_UNUSED(tupleType);
         Y_UNUSED(argsColumns);
         Y_UNUSED(env);
         Y_UNUSED(returnType);
+        Y_UNUSED(hint);
         return PrepareCount<TFinalizeKeysTag>(std::optional<ui32>(), argsColumns[0]);
     }
 };

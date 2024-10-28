@@ -1,5 +1,7 @@
 # Аутентификация при помощи файла сервисного аккаунта
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 {% include [work in progress message](_includes/addition.md) %}
 
 Ниже приведены примеры кода аутентификации при помощи файла сервисного аккаунта в разных {{ ydb-short-name }} SDK.
@@ -151,7 +153,7 @@
           'temp_dir'       => './tmp', // Temp directory
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)ы
       ],
-              
+
       'credentials' => new JwtWithJsonAuthentication('./jwtjson.json')
   ];
 
@@ -175,10 +177,10 @@
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
 
       ],
-      
+
       'credentials' => new JwtWithPrivateKeyAuthentication(
           "ajexxxxxxxxx","ajeyyyyyyyyy",'./private.key')
-          
+
   ];
 
   $ydb = new Ydb($config);

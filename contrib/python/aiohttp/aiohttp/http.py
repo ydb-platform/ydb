@@ -1,5 +1,5 @@
-import http.server
 import sys
+from http import HTTPStatus
 from typing import Mapping, Tuple
 
 from . import __version__
@@ -63,10 +63,10 @@ __all__ = (
 )
 
 
-SERVER_SOFTWARE = "Python/{0[0]}.{0[1]} aiohttp/{1}".format(
+SERVER_SOFTWARE: str = "Python/{0[0]}.{0[1]} aiohttp/{1}".format(
     sys.version_info, __version__
-)  # type: str
+)
 
-RESPONSES = (
-    http.server.BaseHTTPRequestHandler.responses
-)  # type: Mapping[int, Tuple[str, str]]
+RESPONSES: Mapping[int, Tuple[str, str]] = {
+    v: (v.phrase, v.description) for v in HTTPStatus.__members__.values()
+}

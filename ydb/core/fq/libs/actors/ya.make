@@ -43,7 +43,6 @@ PEERDIR(
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
-    ydb/core/fq/libs/exceptions
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils

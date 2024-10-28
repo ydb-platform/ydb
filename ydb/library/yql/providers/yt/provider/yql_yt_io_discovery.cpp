@@ -152,8 +152,13 @@ public:
                             .Name().Value(ToString(EYtSettingType::Anonymous)).Build()
                         .Build()
                         .Done();
-                } else if (tableInfo.Name.StartsWith("//")) {
-                    tableInfo.Name = tableInfo.Name.substr(2);
+                } else if (tableInfo.Name.StartsWith(NYT::TConfig::Get()->Prefix)) {
+                    tableInfo.Name = tableInfo.Name.substr(NYT::TConfig::Get()->Prefix.size());
+                }
+
+                if (tableInfo.Name.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(write.Pos()), "Table name must not be empty"));
+                    return {};
                 }
 
                 if (flush) {

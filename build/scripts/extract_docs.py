@@ -36,7 +36,10 @@ def main():
         if not os.path.exists(dest_dir):
             os.makedirs(dest_dir)
         with tarfile.open(src, 'r') as tar_file:
-            tar_file.extractall(dest_dir)
+            if sys.version_info >= (3, 12):
+                tar_file.extractall(dest_dir, filter='data')
+            else:
+                tar_file.extractall(dest_dir)
 
 
 if __name__ == '__main__':

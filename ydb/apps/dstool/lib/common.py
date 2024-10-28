@@ -684,6 +684,15 @@ def build_pdisk_map(base_config):
     return pdisk_map
 
 
+def build_donors_per_pdisk_map(base_config):
+    donors_per_vdisk = defaultdict(int)
+    for vslot in base_config.VSlot:
+        for donor in vslot.Donors:
+            pdisk_id = get_pdisk_id(donor.VSlotId)
+            donors_per_vdisk[pdisk_id] += 1
+    return donors_per_vdisk
+
+
 def build_pdisk_static_slots_map(base_config):
     pdisk_static_slots_map = {
         get_pdisk_id(pdisk): pdisk.NumStaticSlots
@@ -818,20 +827,23 @@ def fetch_json_info(entity, nodes=None, enums=1):
     elif entity == 'vdiskinfo':
         section, keycols = 'VDiskStateInfo', ['NodeId', 'PDiskId', 'VDiskSlotId']
 
-        def merge(x, y):
+        def merge_fn(x, y):
             return max([x, y], key=lambda x: x.get('GroupGeneration', 0))
+        merge = merge_fn
     elif entity == 'tabletinfo':
         section, keycols = 'TabletStateInfo', ['TabletId']
 
-        def merge(x, y):
+        def merge_fn(x, y):
             return max([x, y], key=lambda x: x.get('Generation', 0))
+        merge = merge_fn
     elif entity == 'bsgroupinfo':
         section, keycols = 'BSGroupStateInfo', ['GroupID']
 
-        def merge(x, y):
+        def merge_fn(x, y):
             return x if x.get('GroupGeneration', 0) > y.get('GroupGeneration', 0) else \
                 y if y.get('GroupGeneration', 0) > x.get('GroupGeneration', 0) else \
                 x if x.get('VDiskIds', []) else y
+        merge = merge_fn
     else:
         assert False
     res = {}

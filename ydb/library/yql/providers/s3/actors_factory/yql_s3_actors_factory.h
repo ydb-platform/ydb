@@ -48,9 +48,11 @@ namespace NYql::NDq {
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& cfg = {},
-            ::NMonitoring::TDynamicCounterPtr counters = nullptr) = 0;
+            ::NMonitoring::TDynamicCounterPtr counters = nullptr,
+            bool allowLocalFiles = false) = 0;
     };
 
     std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();
 
+    TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
 }

@@ -1,0 +1,11 @@
+--- a/PIL/__main__.py
++++ b/PIL/__main__.py
+@@ -3 +3,7 @@ from .features import pilinfo
+-pilinfo()
++
++def main():
++    pilinfo()
++
++
++if __name__ == '__main__':
++    main()

@@ -1,4 +1,6 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
+#include "setup_sys_locks.h"
 
 #include <util/string/escape.h>
 
@@ -24,6 +26,9 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
+        TDataShardLocksDb locksDb(*Self, txc);
+        TSetupSysLocks guardLocks(*Self, &locksDb);
+
         if (Self->State != TShardState::Ready) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
@@ -32,11 +37,11 @@ public:
             return true;
         }
 
-        if (!Self->IsReplicated()) {
+        if (!Self->IsReplicated() && !Self->IsIncrementalRestore()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                TStringBuilder() << "Table is not replicated");
+                TStringBuilder() << "Table is nor replicated nor under incremental restore");
             return true;
         }
 
@@ -84,6 +89,7 @@ public:
         }
 
         if (MvccReadWriteVersion) {
+            Self->PromoteImmediatePostExecuteEdges(*MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
             Pipeline.AddCommittingOp(*MvccReadWriteVersion);
         }
 
@@ -92,6 +98,7 @@ public:
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
         }
 
+        Self->SysLocksTable().ApplyLocks();
         return true;
     }
 
@@ -106,13 +113,13 @@ public:
             TTransactionContext& txc, const TTableId& tableId, const TUserTable& userTable,
             TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
     {
-        Y_ABORT_UNLESS(userTable.IsReplicated());
+        Y_ABORT_UNLESS(userTable.IsReplicated() || Self->IsIncrementalRestore());
 
         // TODO: check source and offset, persist new values
         i64 sourceOffset = change.GetSourceOffset();
 
         ui64 writeTxId = change.GetWriteTxId();
-        if (userTable.ReplicationConfig.HasWeakConsistency()) {
+        if (userTable.ReplicationConfig.HasWeakConsistency() || userTable.IncrementalBackupConfig.HasWeakConsistency()) {
             if (writeTxId) {
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
@@ -150,7 +157,7 @@ public:
         TVector<TRawTypeValue> key;
         key.reserve(keyCellVec.GetCells().size());
         for (size_t i = 0; i < keyCellVec.GetCells().size(); ++i) {
-            key.emplace_back(keyCellVec.GetCells()[i].AsRef(), userTable.KeyColumnTypes[i]);
+            key.emplace_back(keyCellVec.GetCells()[i].AsRef(), userTable.KeyColumnTypes[i].GetTypeId());
         }
 
         NTable::ERowOp rop = NTable::ERowOp::Absent;
@@ -238,7 +245,7 @@ public:
                     TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " is updating a primary key column " << tag);
                 return false;
             }
-            update.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type));
+            update.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type.GetTypeId()));
         }
         return true;
     }

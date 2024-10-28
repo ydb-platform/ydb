@@ -48,7 +48,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -63,6 +63,7 @@
 #include <ydb/library/yql/public/udf/arrow/block_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
+#include <ydb/library/yql/utils/exceptions.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
@@ -125,11 +126,11 @@
     LOG_TRACE_S(GetActorContext(), NKikimrServices::KQP_COMPUTE, "TS3ReadCoroImpl: " << SelfActorId << ", CA: " << ComputeActorId << ", TxId: " << TxId \
     << " [" << Path << "]. RETRY{ Offset: " << RetryStuff->Offset << ", Delay: " << RetryStuff->NextRetryDelay << ", RequestId: " << RetryStuff->RequestId << "}. " << stream)
 
-#define THROW_ARROW_NOT_OK(status)                                     \
+#define THROW_ARROW_NOT_OK(code, status)                               \
     do                                                                 \
     {                                                                  \
         if (::arrow::Status _s = (status); !_s.ok())                   \
-            throw yexception() << _s.ToString(); \
+            ythrow TCodeLineException(code) << _s.ToString(); \
     } while (false)
 
 namespace NYql::NDq {
@@ -150,6 +151,12 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
+void ThrowParquetNotOk(arrow::Status status) {
+    if (!status.ok()) {
+        throw parquet::ParquetException(status.ToString());
+    }
+}
+
 using namespace NKikimr::NMiniKQL;
 
 ui64 SubtractSaturating(ui64 lhs, ui64 rhs) {
@@ -167,7 +174,11 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName CHColumns;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
-    TString Format, Compression;
+    // It's very important to keep here std::string instead of TString 
+    // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
+    // This behaviour can be found in the getInputFormat call
+    std::string Format;  
+    TString Compression;
     ui64 SizeLimit = 0;
     ui32 BlockLengthPosition = 0;
     std::vector<ui32> ColumnReorder;
@@ -186,7 +197,7 @@ struct TRetryStuff {
         const TString& requestId,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy
     ) : Gateway(std::move(gateway))
-      , Url(UrlEscapeRet(url, true))
+      , Url(NS3Util::UrlEscapeRet(url))
       , Headers(headers)
       , Offset(0U)
       , SizeLimit(sizeLimit)
@@ -564,7 +575,7 @@ public:
     void HandleEvent(TEvS3Provider::TEvReadResult2::THandle& event) {
 
         if (event.Get()->Failure) {
-            throw yexception() << event.Get()->Issues.ToOneLineString();
+            ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << event.Get()->Issues.ToOneLineString();
         }
         auto readyRange = event.Get()->ReadRange;
         LOG_CORO_D("Download FINISHED [" << readyRange.Offset << "-" << readyRange.Length << "], cookie: " << event.Cookie);
@@ -637,8 +648,8 @@ public:
 
         // init the 1st reader, get meta/rg count
         readers.resize(1);
-        THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
-        THROW_ARROW_NOT_OK(builder.Build(&readers[0]));
+        ThrowParquetNotOk(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit)));
+        ThrowParquetNotOk(builder.Build(&readers[0]));
         auto fileMetadata = readers[0]->parquet_reader()->metadata();
 
         bool hasPredicate = ReadSpec->Predicate.payload_case() != NYql::NConnector::NApi::TPredicate::PayloadCase::PAYLOAD_NOT_SET;
@@ -647,7 +658,7 @@ public:
 
         if (numGroups) {
             std::shared_ptr<arrow::Schema> schema;
-            THROW_ARROW_NOT_OK(readers[0]->GetSchema(&schema));
+            ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
 
@@ -684,17 +695,17 @@ public:
                 // init other readers if any
                 readers.resize(readerCount);
                 for (ui64 i = 1; i < readerCount; i++) {
-                    THROW_ARROW_NOT_OK(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit),
+                    ThrowParquetNotOk(builder.Open(std::make_shared<THttpRandomAccessFile>(this, RetryStuff->SizeLimit),
                                     parquet::default_reader_properties(),
                                     fileMetadata));
-                    THROW_ARROW_NOT_OK(builder.Build(&readers[i]));
+                    ThrowParquetNotOk(builder.Build(&readers[i]));
                 }
             }
 
             for (ui64 i = 0; i < readerCount; i++) {
                 if (!columnIndices.empty()) {
                     CurrentRowGroupIndex = i;
-                    THROW_ARROW_NOT_OK(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
+                    ThrowParquetNotOk(readers[i]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[i]) : static_cast<int>(i) }, columnIndices));
                     SourceContext->IncChunkCount();
                 }
                 RowGroupReaderIndex[i] = i;
@@ -736,7 +747,7 @@ public:
                 std::shared_ptr<arrow::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
-                THROW_ARROW_NOT_OK(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
@@ -762,9 +773,7 @@ public:
                 if (StopIfConsumedEnough(numRows)) {
                     isCancelled = true;
                 }
-                if (!status.ok()) {
-                    throw yexception() << status.ToString();
-                }
+                ThrowParquetNotOk(status);
                 SourceContext->UpdateProgress(downloadedBytes, decodedBytes, table->num_rows());
                 if (RawInflightSize) {
                     RawInflightSize->Sub(downloadedBytes);
@@ -772,7 +781,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
-                        THROW_ARROW_NOT_OK(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
+                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
                     RowGroupReaderIndex[nextGroup] = readyReaderIndex;
@@ -806,11 +815,11 @@ public:
         properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
         properties.set_pre_buffer(true);
         builder.properties(properties);
-        THROW_ARROW_NOT_OK(builder.Open(arrowFile));
-        THROW_ARROW_NOT_OK(builder.Build(&fileReader));
+        ThrowParquetNotOk(builder.Open(arrowFile));
+        ThrowParquetNotOk(builder.Build(&fileReader));
 
         std::shared_ptr<arrow::Schema> schema;
-        THROW_ARROW_NOT_OK(fileReader->GetSchema(&schema));
+        ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
 
@@ -829,7 +838,7 @@ public:
 
             std::shared_ptr<arrow::Table> table;
             ui64 ingressBytes = IngressBytes;
-            THROW_ARROW_NOT_OK(fileReader->ReadRowGroup(group, columnIndices, &table));
+            ThrowParquetNotOk(fileReader->ReadRowGroup(group, columnIndices, &table));
             ui64 downloadedBytes = IngressBytes - ingressBytes;
             auto reader = std::make_unique<arrow::TableBatchReader>(*table);
 
@@ -851,9 +860,7 @@ public:
             if (StopIfConsumedEnough(numRows)) {
                 isCancelled = true;
             }
-            if (!status.ok()) {
-                throw yexception() << status.ToString();
-            }
+            ThrowParquetNotOk(status);
             SourceContext->UpdateProgress(downloadedBytes, decodedBytes, table->num_rows());
             if (isCancelled) {
                 LOG_CORO_D("RunCoroBlockArrowParserOverFile - STOPPED ON SATURATION");
@@ -941,10 +948,13 @@ public:
     }
 
     void Handle(TEvS3Provider::TEvDecompressDataResult::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
         DeferredDecompressedDataParts.push(std::move(ev->Release()));
+        
     }
 
     void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr& ev) {
+        CpuTime += ev->Get()->CpuTime;
         DecompressedInputFinished = true;
     }
 
@@ -962,6 +972,7 @@ public:
                 message = ErrorText;
             }
             Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));
+            FatalCode = StatusFromS3ErrorCode(errorCode);
         }
 
         if (ev->Get()->Issues) {
@@ -1112,7 +1123,7 @@ private:
             DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression));
         }
 
-        NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+        FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
 
         StartCycleCount = GetCycleCountFast();
 
@@ -1120,7 +1131,7 @@ private:
             if (ReadSpec->Arrow) {
                 if (ReadSpec->Compression) {
                     Issues.AddIssue(TIssue("Blocks optimisations are incompatible with external compression"));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                 } else {
                     try {
                         if (Url.StartsWith("file://")) {
@@ -1130,7 +1141,7 @@ private:
                         }
                     } catch (const parquet::ParquetException& ex) {
                         Issues.AddIssue(TIssue(ex.what()));
-                        fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                        FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
                         RetryStuff->Cancel();
                     }
                 }
@@ -1146,7 +1157,12 @@ private:
                     LOG_CORO_D("S3 read ERROR");
                 } catch (const NDB::Exception& ex) {
                     Issues.AddIssue(TIssue(ex.message()));
-                    fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    FatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
+                    RetryStuff->Cancel();
+                } catch (const TCodeLineException& ex) {
+                    LOG_CORO_D(ex.what());
+                    Issues.AddIssue(ex.GetRawMessage());
+                    FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(ex.Code);
                     RetryStuff->Cancel();
                 }
             }
@@ -1157,9 +1173,14 @@ private:
             // Stop any activity instantly
             RetryStuff->Cancel();
             return;
+        } catch (const TCodeLineException& err) {
+            LOG_CORO_E(err.what());
+            Issues.AddIssue(err.GetRawMessage());
+            FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(err.Code);
+            RetryStuff->Cancel();
         } catch (const std::exception& err) {
             Issues.AddIssue(TIssue(err.what()));
-            fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+            FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
 
@@ -1167,7 +1188,7 @@ private:
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
         if (issues)
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), fatalCode));
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(issues), FatalCode));
         else
             Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit));
     }
@@ -1227,6 +1248,7 @@ private:
     bool ServerReturnedError = false;
     TString ErrorText;
     TIssues Issues;
+    NYql::NDqProto::StatusIds::StatusCode FatalCode;
 
     NActors::TActorId DecompressorActorId;
     std::size_t LastOffset = 0;
@@ -1268,7 +1290,7 @@ public:
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
         const TString& url,
-        const TS3Credentials::TAuthInfo& authInfo,
+        const TS3Credentials& credentials,
         const TString& pattern,
         ES3PatternVariant patternVariant,
         TPathList&& paths,
@@ -1289,7 +1311,8 @@ public:
         ui64 fileQueueBatchObjectCountLimit,
         ui64 fileQueueConsumersCountDelta,
         bool asyncDecoding,
-        bool asyncDecompressing
+        bool asyncDecompressing,
+        bool allowLocalFiles
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -1298,7 +1321,7 @@ public:
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
         , Url(url)
-        , AuthInfo(authInfo)
+        , Credentials(credentials)
         , Pattern(pattern)
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
@@ -1316,7 +1339,8 @@ public:
         , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta)
         , AsyncDecoding(asyncDecoding)
-        , AsyncDecompressing(asyncDecompressing) {
+        , AsyncDecompressing(asyncDecompressing)
+        , AllowLocalFiles(allowLocalFiles) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1349,7 +1373,7 @@ public:
         // After exact mem control implementation, this allocation should be deleted
         if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight)) {
             TIssues issues;
-            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate read buffer"});
+            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << ReadActorFactoryCfg.DataInflight << "b read buffer"});
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::OVERLOADED));
             return;
         }
@@ -1368,12 +1392,7 @@ public:
             DecodedChunkSizeHist,
             HttpInflightSize,
             HttpDataRps,
-            DeferredQueueSize,
-            ReadSpec->Format,
-            ReadSpec->Compression,
-            ReadSpec->ArrowSchema,
-            ReadSpec->RowSpec,
-            ReadSpec->Settings
+            DeferredQueueSize
         );
 
         if (!UseRuntimeListing) {
@@ -1390,10 +1409,11 @@ public:
                 Gateway,
                 RetryPolicy,
                 Url,
-                AuthInfo,
+                Credentials,
                 Pattern,
                 PatternVariant,
-                ES3PatternType::Wildcard));
+                ES3PatternType::Wildcard,
+                AllowLocalFiles));
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
@@ -1454,10 +1474,11 @@ public:
                                       << pathIndex);
 
         TActorId actorId;
+        const auto& authInfo = Credentials.GetAuthInfo();
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + object.GetPath(),
-            IHTTPGateway::MakeYcHeaders(requestId, AuthInfo.GetToken(), {}, AuthInfo.GetAwsUserPwd(), AuthInfo.GetAwsSigV4()),
+            IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             object.GetSize(),
             TxId,
             requestId,
@@ -1712,7 +1733,7 @@ private:
         IssuesFromMessage(result->Get()->Record.GetIssues(), issues);
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), result->Get()->Record.GetFatalCode()));
     }
 
     void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
@@ -1856,7 +1877,7 @@ private:
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
 
     const TString Url;
-    const TS3Credentials::TAuthInfo AuthInfo;
+    const TS3Credentials Credentials;
     const TString Pattern;
     const ES3PatternVariant PatternVariant;
     TPathList Paths;
@@ -1900,6 +1921,7 @@ private:
     ui64 FileQueueConsumersCountDelta;
     const bool AsyncDecoding;
     const bool AsyncDecompressing;
+    const bool AllowLocalFiles;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2008,11 +2030,11 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializat
                 return std::make_shared<const NDB::DataTypeDecimal<NDB::Decimal128>>(precision, scale);
             }
             default:
-                throw yexception() << "Unsupported data slot in MetaToClickHouse: " << slot;
+                ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Unsupported data slot in MetaToClickHouse: " << slot;
             }
         }
         default:
-            throw yexception() << "Unsupported type kind in MetaToClickHouse: " << type->GetKindAsStr();
+            ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Unsupported type kind in MetaToClickHouse: " << type->GetKindAsStr();
     }
     return nullptr;
 }
@@ -2063,15 +2085,16 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TS3ReadActorFactoryConfig& cfg,
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
-    IMemoryQuotaManager::TPtr memoryQuotaManager)
+    IMemoryQuotaManager::TPtr memoryQuotaManager,
+    bool allowLocalFiles)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
     TPathList paths;
-    ReadPathsList(params, taskParams, readRanges, paths);
+    ReadPathsList(taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto authInfo = GetAuthInfo(credentialsFactory, token);
+    const TS3Credentials credentials(credentialsFactory, token);
 
     const auto& settings = params.GetSettings();
     TString pathPattern = "*";
@@ -2082,17 +2105,18 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     if (hasDirectories) {
         auto pathPatternValue = settings.find("pathpattern");
         if (pathPatternValue == settings.cend()) {
-            ythrow yexception() << "'pathpattern' must be configured for directory listing";
+            ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR)
+                << "'pathpattern' must be configured for directory listing";
         }
         pathPattern = pathPatternValue->second;
 
         auto pathPatternVariantValue = settings.find("pathpatternvariant");
         if (pathPatternVariantValue == settings.cend()) {
-            ythrow yexception()
+            ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR)
                 << "'pathpatternvariant' must be configured for directory listing";
         }
         if (!TryFromString(pathPatternVariantValue->second, pathPatternVariant)) {
-            ythrow yexception()
+            ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR)
                 << "Unknown 'pathpatternvariant': " << pathPatternVariantValue->second;
         }
     }
@@ -2175,13 +2199,16 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                 std::shared_ptr<arrow::DataType> dataType;
 
                 YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
-                THROW_ARROW_NOT_OK(builder.AddField(std::make_shared<arrow::Field>(std::string(memberName), dataType, memberType->IsOptional())));
+                THROW_ARROW_NOT_OK(
+                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                    builder.AddField(std::make_shared<arrow::Field>(std::string(memberName), dataType, memberType->IsOptional()))
+                );
                 readSpec->ColumnReorder.push_back(i);
                 readSpec->RowSpec.emplace(memberName, memberType);
             }
 
             auto res = builder.Finish();
-            THROW_ARROW_NOT_OK(res.status());
+            THROW_ARROW_NOT_OK(NYql::NDqProto::StatusIds::INTERNAL_ERROR, res.status());
             readSpec->ArrowSchema = std::move(res).ValueOrDie();
         } else {
             readSpec->CHColumns.resize(structType->GetMembersCount());
@@ -2249,11 +2276,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             sizeLimit = FromString<ui64>(it->second);
         }
 
-        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing());
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
 
         return {actor, actor};
     } else {
@@ -2261,10 +2288,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
             sizeLimit = FromString<ui64>(it->second);
 
-        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), authInfo, pathPattern, pathPatternVariant,
+        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                             std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
-                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta);
+                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);
     }
 }
 

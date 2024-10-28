@@ -46,6 +46,8 @@ void Serialize(
             .OptionalItem("suspended", operation.Suspended)
             .OptionalItem("result", operation.Result)
             .OptionalItem("events", operation.Events)
+            .OptionalItem("scheduling_attributes_per_pool_tree", operation.SchedulingAttributesPerPoolTree)
+            // COMPAT(omgronny)
             .OptionalItem("slot_index_per_pool_tree", operation.SlotIndexPerPoolTree)
             .OptionalItem("alerts", operation.Alerts)
             .OptionalItem("alert_events", operation.AlertEvents)
@@ -121,6 +123,7 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
     setField(operation.Suspended, "suspended");
     setField(operation.Events, "events");
     setField(operation.Result, "result");
+    setField(operation.SchedulingAttributesPerPoolTree, "scheduling_attributes_per_pool_tree");
     setField(operation.SlotIndexPerPoolTree, "slot_index_per_pool_tree");
     setField(operation.Alerts, "alerts");
     setField(operation.AlertEvents, "alert_events");
@@ -214,12 +217,72 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
         .EndMap();
 }
 
+void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("operation_id").Value(traceEvent.OperationId)
+            .Item("job_id").Value(traceEvent.JobId)
+            .Item("trace_id").Value(traceEvent.TraceId)
+            .Item("event_index").Value(traceEvent.EventIndex)
+            .Item("event").Value(traceEvent.Event)
+            .Item("event_time").Value(traceEvent.EventTime.MicroSeconds())
+        .EndMap();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TListOperationsAccessFilter::Register(TRegistrar registrar)
 {
     registrar.Parameter("subject", &TThis::Subject);
     registrar.Parameter("permissions", &TThis::Permissions);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TGetJobStderrResponse TGetJobStderrResponse::MakeJobStderr(const TSharedRef& data, const TGetJobStderrOptions& options)
+{
+    auto totalSize = std::ssize(data);
+    auto endOffset = totalSize;
+    auto offset = options.Offset.value_or(0);
+    auto limit = options.Limit.value_or(0);
+
+    if (!offset && !limit) {
+        return {
+            .Data = data,
+            .TotalSize = totalSize,
+            .EndOffset = endOffset,
+        };
+    };
+
+    size_t firstPos = 0;
+    if (offset > 0) {
+        firstPos = offset;
+    }
+
+    if (firstPos >= data.size()) {
+        return {
+            .Data = TSharedRef{},
+            .TotalSize = totalSize,
+            .EndOffset = 0,
+        };
+    } else {
+        auto lastPos = firstPos;
+        if (limit > 0) {
+            lastPos += limit;
+        } else {
+            lastPos += data.size();
+        }
+        if (lastPos > data.size()) {
+            lastPos = data.size();
+        }
+        const auto dataCut = data.Slice(firstPos, lastPos);
+        return {
+            .Data = dataCut,
+            .TotalSize = totalSize,
+            .EndOffset = limit ? static_cast<i64>(firstPos + dataCut.size()) : endOffset,
+        };
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

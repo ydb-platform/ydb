@@ -25,6 +25,7 @@ ENDIF()
 PEERDIR(
     ydb/core/base
     ydb/core/protos
+    ydb/core/util
 )
 
 END()

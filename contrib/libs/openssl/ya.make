@@ -11,7 +11,7 @@ IF (OPENSOURCE_REPLACE_OPENSSL AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE OpenSSL
         CMAKE_TARGET OpenSSL::OpenSSL
-        CONAN openssl/${OPENSOURCE_REPLACE_OPENSSL} "&& conan-requires" openssl/${OPENSOURCE_REPLACE_OPENSSL}
+        CONAN openssl/${OPENSOURCE_REPLACE_OPENSSL}
     )
 
 ELSE()
@@ -215,6 +215,7 @@ SRCS(
     ssl/ssl_sess.c
     ssl/ssl_stat.c
     ssl/ssl_txt.c
+    ssl/ssl_quic.c
     ssl/ssl_utst.c
     ssl/statem/extensions.c
     ssl/statem/extensions_clnt.c
@@ -224,6 +225,7 @@ SRCS(
     ssl/statem/statem_clnt.c
     ssl/statem/statem_dtls.c
     ssl/statem/statem_lib.c
+    ssl/statem/statem_quic.c
     ssl/statem/statem_srvr.c
     ssl/t1_enc.c
     ssl/t1_lib.c

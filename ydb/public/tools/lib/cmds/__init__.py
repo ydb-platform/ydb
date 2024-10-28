@@ -10,14 +10,15 @@ import typing  # noqa: F401
 import sys
 from six.moves.urllib.parse import urlparse
 
+import yatest
+
 from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
-from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator, KikimrFixedNodePortAllocator
+from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAllocator
 from library.python.testing.recipe import set_env
 
 
@@ -56,7 +57,7 @@ def parse_erasure(args):
 
 
 def driver_path_packages(package_path):
-    return yatest_common.build_path(
+    return yatest.commmon.build_path(
         "{}/Berkanavt/kikimr/bin/kikimr".format(
             package_path
         )
@@ -64,7 +65,7 @@ def driver_path_packages(package_path):
 
 
 def udfs_path_packages(package_path):
-    return yatest_common.build_path(
+    return yatest.commmon.build_path(
         "{}/Berkanavt/kikimr/libs".format(
             package_path
         )
@@ -93,7 +94,7 @@ def write_file(args, suffix, content):
         write_file_flushed(os.path.join(args.ydb_working_dir, suffix), content)
         return
 
-    write_file_flushed(os.path.join(yatest_common.output_path(suffix)), content)
+    write_file_flushed(os.path.join(yatest.common.output_path(suffix)), content)
 
     try:
         write_file_flushed(suffix, content)
@@ -106,7 +107,7 @@ def read_file(args, suffix):
         with open(os.path.join(args.ydb_working_dir, suffix), 'r') as fd:
             return fd.read()
 
-    with open(os.path.join(yatest_common.output_path(suffix)), 'r') as fd:
+    with open(os.path.join(yatest.common.output_path(suffix)), 'r') as fd:
         return fd.read()
 
 
@@ -222,7 +223,7 @@ class Recipe(object):
         if self.arguments.ydb_working_dir:
             self.data_path = self.arguments.ydb_working_dir
             return self.data_path
-        self.data_path = yatest_common.output_path(self.data_path_template % random_string())
+        self.data_path = yatest.common.output_path(self.data_path_template % random_string())
         return ensure_path_exists(self.data_path)
 
 
@@ -332,7 +333,7 @@ def deploy(arguments):
     port_allocator = None
     if getattr(arguments, 'fixed_ports', False):
         base_port_offset = getattr(arguments, 'base_port_offset', 0)
-        port_allocator = KikimrFixedPortAllocator(base_port_offset, [KikimrFixedNodePortAllocator(base_port_offset=base_port_offset)])
+        port_allocator = KikimrFixedPortAllocator(base_port_offset)
 
     optionals = {}
     if enable_tls():
@@ -350,8 +351,8 @@ def deploy(arguments):
         optionals['pg_compatible_expirement'] = True
 
     configuration = KikimrConfigGenerator(
-        parse_erasure(arguments),
-        arguments.ydb_binary_path,
+        erasure=parse_erasure(arguments),
+        binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,
         output_path=recipe.generate_data_path(),
         pdisk_store_path=pdisk_store_path,
         domain_name='local',
@@ -388,7 +389,6 @@ def deploy(arguments):
             'mon_port': node.mon_port,
             'command': node.command,
             'cwd': node.cwd,
-            'stdin_file': node.stdin_file_name,
             'stderr_file': node.stderr_file_name,
             'stdout_file': node.stdout_file_name,
             'pdisks': [
@@ -471,7 +471,6 @@ def start(arguments):
         files = {}
         if node_meta['stderr_file'] is not None and os.path.exists(node_meta['stderr_file']):
             files = {
-                'stdin_file': node_meta['stdin_file'],
                 'stderr_file': node_meta['stderr_file'],
                 'stdout_file': node_meta['stdout_file'],
             }
@@ -515,7 +514,6 @@ def produce_arguments(args):
     parser.add_argument("--fixed-ports", action='store_true', default=False)
     parser.add_argument("--base-port-offset", action="store", type=int, default=0)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
-    parser.add_argument("--enable-datastreams", action='store_true', default=False)
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
     parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
@@ -529,7 +527,6 @@ def produce_arguments(args):
         arguments.debug_logging = parsed.debug_logging
     arguments.enable_pq = parsed.enable_pq
     arguments.pq_client_service_types = parsed.pq_client_service_type
-    arguments.enable_datastreams = parsed.enable_datastreams
     arguments.enable_pqcd = parsed.enable_pqcd
     return arguments
 

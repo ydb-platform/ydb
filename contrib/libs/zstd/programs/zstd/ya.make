@@ -4,6 +4,8 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
+VERSION(1.5.6)
+
 PEERDIR(
     contrib/libs/zstd
 )

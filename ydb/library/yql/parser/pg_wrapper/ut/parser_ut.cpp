@@ -28,7 +28,7 @@ const TStringBuf ExpectedSelect1 = "({RAWSTMT :stmt {SELECTSTMT :distinctClause 
 
 const TString Error1 = "ERROR:  syntax error at or near \"SELECT1\"\n";
 
-Y_UNIT_TEST_SUITE(TWrapperTests) {
+Y_UNIT_TEST_SUITE(ParseTests) {
     Y_UNIT_TEST(TestOk) {
         TEvents events;
         PGParse(TString("SELECT 1"), events);
@@ -47,11 +47,34 @@ Y_UNIT_TEST_SUITE(TWrapperTests) {
         UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 2);
         UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 3);
     }
+
+    Y_UNIT_TEST(TestErrorPosUtf8) {
+        {
+            TEvents events;
+            PGParse(TString("/* привет */SELECT1"), events);
+            UNIT_ASSERT(!events.Result);
+            UNIT_ASSERT(events.Issue);
+            auto msg = events.Issue->GetMessage();
+            UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 1);
+            UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 13);
+        }
+
+        {
+            TEvents events;
+            PGParse(TString("/* привет */\n\nSELECT1"), events);
+            UNIT_ASSERT(!events.Result);
+            UNIT_ASSERT(events.Issue);
+            auto msg = events.Issue->GetMessage();
+            UNIT_ASSERT_NO_DIFF(msg, Error1);
+            UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 3);
+            UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 1);
+        }
+    }
 }
 
 const ui32 threadsCount = 10;
 
-Y_UNIT_TEST_SUITE(TMTWrapperTests) {
+Y_UNIT_TEST_SUITE(MTParseTests) {
     Y_UNIT_TEST(TestOk) {
         TVector<THolder<TThread>> threads;
         for (ui32 i = 0; i < threadsCount; ++i) {

@@ -18,6 +18,8 @@ PEERDIR(
     ydb/core/kqp/session_actor
     ydb/core/tx/tx_proxy
     ydb/core/tx/columnshard/engines/storage/chunks
+    ydb/core/tx/columnshard/engines/storage/indexes/max
+    ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch
     ydb/core/tx
     ydb/core/mind
     ydb/library/yql/minikql/comp_nodes/llvm14
@@ -40,6 +42,7 @@ CFLAGS(
 
 SRCS(
     ut_splitter.cpp
+    batch_slice.cpp
 )
 
 END()

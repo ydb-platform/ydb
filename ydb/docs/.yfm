@@ -15,6 +15,7 @@ docs-viewer:
   gtm: 
     id: GTM-W7ZBL4X
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
+  unrestrict-revision-access: true
   
   logo-options:
     url:

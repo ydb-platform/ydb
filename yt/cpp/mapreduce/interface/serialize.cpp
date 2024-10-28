@@ -134,6 +134,8 @@ void Deserialize(EValueType& valueType, const TNode& node)
         {"datetime64", VT_DATETIME64},
         {"timestamp64", VT_TIMESTAMP64},
         {"interval64", VT_INTERVAL64},
+
+        {"uuid", VT_UUID},
     };
 
     auto it = str2ValueType.find(nodeStr);
@@ -509,6 +511,7 @@ void Deserialize(TTableColumnarStatistics& statistics, const TNode& node)
 {
     const auto& nodeMap = node.AsMap();
     DESERIALIZE_ITEM("column_data_weights", statistics.ColumnDataWeight);
+    DESERIALIZE_ITEM("column_estimated_unique_counts", statistics.ColumnEstimatedUniqueCounts);
     DESERIALIZE_ITEM("legacy_chunks_data_weight", statistics.LegacyChunksDataWeight);
     DESERIALIZE_ITEM("timestamp_total_weight", statistics.TimestampTotalWeight);
 }

@@ -83,7 +83,7 @@ CREATE TABLE `/Root/test/tpcc/customer` (
             );
 
 CREATE TABLE `/Root/test/tpcc/history` (
-                H_C_W_ID    Int32,
+                H_C_W_ID    Int32       NOT NULL,
                 H_C_ID      Int32,
                 H_C_D_ID    Int32,
                 H_D_ID      Int32,

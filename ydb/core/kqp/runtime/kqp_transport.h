@@ -21,7 +21,7 @@ public:
     ~TKqpProtoBuilder();
 
     Ydb::ResultSet BuildYdbResultSet(TVector<NYql::NDq::TDqSerializedBatch>&& data,
-        NKikimr::NMiniKQL::TType* srcRowType, const TVector<ui32>* columnOrder = nullptr);
+        NKikimr::NMiniKQL::TType* srcRowType, const TVector<ui32>* columnOrder = nullptr, const TVector<TString>* columnHints = nullptr);
 
 private:
     NMiniKQL::TScopedAlloc* Alloc = nullptr;

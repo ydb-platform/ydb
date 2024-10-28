@@ -15,8 +15,8 @@ using namespace NHttp;
 
 void FillResponseHeaders(const TOutputEncodingContext& outputEncodingContext, const THeadersPtr& headers)
 {
-    headers->Set("Content-Type", TString{::NMonitoring::ContentTypeByFormat(outputEncodingContext.Format)});
-    headers->Set("Content-Encoding", TString{::NMonitoring::ContentEncodingByCompression(outputEncodingContext.Compression)});
+    headers->Set("Content-Type", std::string{::NMonitoring::ContentTypeByFormat(outputEncodingContext.Format)});
+    headers->Set("Content-Encoding", std::string{::NMonitoring::ContentEncodingByCompression(outputEncodingContext.Compression)});
 }
 
 TOutputEncodingContext CreateOutputEncodingContextFromHeaders(const THeadersPtr& headers)

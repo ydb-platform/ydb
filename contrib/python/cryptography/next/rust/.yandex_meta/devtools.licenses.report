@@ -1,0 +1,596 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           0e6ebdd63ff415a9c0272bd0e9287dc0
+BELONGS ya.make
+    License text:
+        * Cryptography has been relicensed from the Apache Software License, Version
+          2.0, to being available under *either* the Apache Software License, Version
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 38.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CHANGELOG.rst [2044:2045]
+
+KEEP     BSD-3-Clause AND Apache-2.0 48e86ffd8dd73b11dce0ebe9131c7a8e
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: src/rust/src/x509/certificate.rs at line 2
+    License text:
+        // This file is dual licensed under the terms of the Apache License, Version
+        // 2.0, and the BSD License. See the LICENSE file in the root of this repository
+        // for complete details.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/rust/src/x509/certificate.rs [1:3]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/rust/src/x509/certificate.rs [1:3]
+
+KEEP     BSD-3-Clause AND Apache-2.0 4b4efb2aa724f63fa41482374f4fd35c
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: src/rust/build.rs at line 2, src/rust/cryptography-cffi/build.rs at line 2, src/rust/cryptography-cffi/src/lib.rs at line 2, src/rust/cryptography-openssl/build.rs at line 2, src/rust/cryptography-openssl/src/fips.rs at line 2, src/rust/cryptography-openssl/src/hmac.rs at line 2, src/rust/cryptography-openssl/src/lib.rs at line 2, src/rust/cryptography-x509/src/certificate.rs at line 2, src/rust/cryptography-x509/src/common.rs at line 2, src/rust/cryptography-x509/src/crl.rs at line 2, src/rust/cryptography-x509/src/csr.rs at line 2, src/rust/cryptography-x509/src/extensions.rs at line 2, src/rust/cryptography-x509/src/lib.rs at line 2, src/rust/cryptography-x509/src/name.rs at line 2, src/rust/cryptography-x509/src/ocsp_req.rs at line 2, src/rust/cryptography-x509/src/ocsp_resp.rs at line 2, src/rust/cryptography-x509/src/oid.rs at line 2, src/rust/cryptography-x509/src/pkcs7.rs at line 2, src/rust/src/asn1.rs at line 2, src/rust/src/backend/dh.rs at line 2, src/rust/src/backend/dsa.rs at line 2, src/rust/src/backend/ed25519.rs at line 2, src/rust/src/backend/ed448.rs at line 2, src/rust/src/backend/hashes.rs at line 2, src/rust/src/backend/hmac.rs at line 2, src/rust/src/backend/kdf.rs at line 2, src/rust/src/backend/mod.rs at line 2, src/rust/src/backend/poly1305.rs at line 2, src/rust/src/backend/utils.rs at line 2, src/rust/src/backend/x25519.rs at line 2, src/rust/src/backend/x448.rs at line 2, src/rust/src/buf.rs at line 2, src/rust/src/error.rs at line 2, src/rust/src/exceptions.rs at line 2, src/rust/src/lib.rs at line 2, src/rust/src/oid.rs at line 2, src/rust/src/pkcs7.rs at line 2, src/rust/src/pool.rs at line 2, src/rust/src/x509/common.rs at line 2, src/rust/src/x509/crl.rs at line 2, src/rust/src/x509/csr.rs at line 2, src/rust/src/x509/extensions.rs at line 2, src/rust/src/x509/mod.rs at line 2, src/rust/src/x509/ocsp.rs at line 2, src/rust/src/x509/ocsp_req.rs at line 2, src/rust/src/x509/ocsp_resp.rs at line 2, src/rust/src/x509/sct.rs at line 2, src/rust/src/x509/sign.rs at line 2
+    License text:
+        // This file is dual licensed under the terms of the Apache License, Version
+        // 2.0, and the BSD License. See the LICENSE file in the root of this repository
+        // for complete details.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/rust/build.rs [1:3]
+        src/rust/cryptography-cffi/build.rs [1:3]
+        src/rust/cryptography-cffi/src/lib.rs [1:3]
+        src/rust/cryptography-openssl/build.rs [1:3]
+        src/rust/cryptography-openssl/src/fips.rs [1:3]
+        src/rust/cryptography-openssl/src/hmac.rs [1:3]
+        src/rust/cryptography-openssl/src/lib.rs [1:3]
+        src/rust/cryptography-x509/src/certificate.rs [1:3]
+        src/rust/cryptography-x509/src/common.rs [1:3]
+        src/rust/cryptography-x509/src/crl.rs [1:3]
+        src/rust/cryptography-x509/src/csr.rs [1:3]
+        src/rust/cryptography-x509/src/extensions.rs [1:3]
+        src/rust/cryptography-x509/src/lib.rs [1:3]
+        src/rust/cryptography-x509/src/name.rs [1:3]
+        src/rust/cryptography-x509/src/ocsp_req.rs [1:3]
+        src/rust/cryptography-x509/src/ocsp_resp.rs [1:3]
+        src/rust/cryptography-x509/src/oid.rs [1:3]
+        src/rust/cryptography-x509/src/pkcs7.rs [1:3]
+        src/rust/src/asn1.rs [1:3]
+        src/rust/src/backend/dh.rs [1:3]
+        src/rust/src/backend/dsa.rs [1:3]
+        src/rust/src/backend/ed25519.rs [1:3]
+        src/rust/src/backend/ed448.rs [1:3]
+        src/rust/src/backend/hashes.rs [1:3]
+        src/rust/src/backend/hmac.rs [1:3]
+        src/rust/src/backend/kdf.rs [1:3]
+        src/rust/src/backend/mod.rs [1:3]
+        src/rust/src/backend/poly1305.rs [1:3]
+        src/rust/src/backend/utils.rs [1:3]
+        src/rust/src/backend/x25519.rs [1:3]
+        src/rust/src/backend/x448.rs [1:3]
+        src/rust/src/buf.rs [1:3]
+        src/rust/src/error.rs [1:3]
+        src/rust/src/exceptions.rs [1:3]
+        src/rust/src/lib.rs [1:3]
+        src/rust/src/oid.rs [1:3]
+        src/rust/src/pkcs7.rs [1:3]
+        src/rust/src/pool.rs [1:3]
+        src/rust/src/x509/common.rs [1:3]
+        src/rust/src/x509/crl.rs [1:3]
+        src/rust/src/x509/csr.rs [1:3]
+        src/rust/src/x509/extensions.rs [1:3]
+        src/rust/src/x509/mod.rs [1:3]
+        src/rust/src/x509/ocsp.rs [1:3]
+        src/rust/src/x509/ocsp_req.rs [1:3]
+        src/rust/src/x509/ocsp_resp.rs [1:3]
+        src/rust/src/x509/sct.rs [1:3]
+        src/rust/src/x509/sign.rs [1:3]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        src/rust/build.rs [1:3]
+        src/rust/cryptography-cffi/build.rs [1:3]
+        src/rust/cryptography-cffi/src/lib.rs [1:3]
+        src/rust/cryptography-openssl/build.rs [1:3]
+        src/rust/cryptography-openssl/src/fips.rs [1:3]
+        src/rust/cryptography-openssl/src/hmac.rs [1:3]
+        src/rust/cryptography-openssl/src/lib.rs [1:3]
+        src/rust/cryptography-x509/src/certificate.rs [1:3]
+        src/rust/cryptography-x509/src/common.rs [1:3]
+        src/rust/cryptography-x509/src/crl.rs [1:3]
+        src/rust/cryptography-x509/src/csr.rs [1:3]
+        src/rust/cryptography-x509/src/extensions.rs [1:3]
+        src/rust/cryptography-x509/src/lib.rs [1:3]
+        src/rust/cryptography-x509/src/name.rs [1:3]
+        src/rust/cryptography-x509/src/ocsp_req.rs [1:3]
+        src/rust/cryptography-x509/src/ocsp_resp.rs [1:3]
+        src/rust/cryptography-x509/src/oid.rs [1:3]
+        src/rust/cryptography-x509/src/pkcs7.rs [1:3]
+        src/rust/src/asn1.rs [1:3]
+        src/rust/src/backend/dh.rs [1:3]
+        src/rust/src/backend/dsa.rs [1:3]
+        src/rust/src/backend/ed25519.rs [1:3]
+        src/rust/src/backend/ed448.rs [1:3]
+        src/rust/src/backend/hashes.rs [1:3]
+        src/rust/src/backend/hmac.rs [1:3]
+        src/rust/src/backend/kdf.rs [1:3]
+        src/rust/src/backend/mod.rs [1:3]
+        src/rust/src/backend/poly1305.rs [1:3]
+        src/rust/src/backend/utils.rs [1:3]
+        src/rust/src/backend/x25519.rs [1:3]
+        src/rust/src/backend/x448.rs [1:3]
+        src/rust/src/buf.rs [1:3]
+        src/rust/src/error.rs [1:3]
+        src/rust/src/exceptions.rs [1:3]
+        src/rust/src/lib.rs [1:3]
+        src/rust/src/oid.rs [1:3]
+        src/rust/src/pkcs7.rs [1:3]
+        src/rust/src/pool.rs [1:3]
+        src/rust/src/x509/common.rs [1:3]
+        src/rust/src/x509/crl.rs [1:3]
+        src/rust/src/x509/csr.rs [1:3]
+        src/rust/src/x509/extensions.rs [1:3]
+        src/rust/src/x509/mod.rs [1:3]
+        src/rust/src/x509/ocsp.rs [1:3]
+        src/rust/src/x509/ocsp_req.rs [1:3]
+        src/rust/src/x509/ocsp_resp.rs [1:3]
+        src/rust/src/x509/sct.rs [1:3]
+        src/rust/src/x509/sign.rs [1:3]
+
+KEEP     BSD-3-Clause         4cab4f6cef2c399a5e325aa4849ce81f
+BELONGS ya.make
+FILE_INCLUDE LICENSE.BSD found in files: MANIFEST.in at line 5
+    License text:
+        include LICENSE.BSD
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        MANIFEST.in [5:5]
+
+KEEP     BSD-3-Clause         5564266eba2c69814d2732192939ad86
+BELONGS ya.make
+    License text:
+            "License :: OSI Approved :: BSD License",
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pyproject.toml [25:25]
+
+KEEP     Apache-2.0           56d4124ad7af6218ddfd361870cfed11
+BELONGS ya.make
+    License text:
+            "License :: OSI Approved :: Apache Software License",
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pyproject.toml [24:24]
+
+KEEP     Apache-2.0           5e31f0b7dea386822177cf44cd85bda5
+BELONGS ya.make
+FILE_INCLUDE LICENSE.APACHE found in files: MANIFEST.in at line 4
+    License text:
+        include LICENSE.APACHE
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        MANIFEST.in [4:4]
+
+KEEP     BSD-3-Clause         798fe0a03129e9a9c30a9a5c344ac047
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.07
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE.BSD [4:27]
+
+KEEP     BSD-3-Clause         959658b0f9238eab7fd5d490805b0d80
+BELONGS ya.make
+    License text:
+          2.0, or the BSD license.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        CHANGELOG.rst [2046:2046]
+
+KEEP     Apache-2.0           c01a0c36d4b55de69ee5d85e766ea95c
+BELONGS ya.make
+    License text:
+          2.0, to being available under *either* the Apache Software License, Version
+          2.0, or the BSD license.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 38.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        CHANGELOG.rst [2045:2046]
+
+KEEP     BSD-3-Clause AND Apache-2.0 c31058d9df12eb0c238aa5bdecc9c7ab
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: .github/compare_benchmarks.py at line 2, noxfile.py at line 2, release.py at line 2, setup.py at line 4, src/_cffi_src/build_openssl.py at line 2, src/_cffi_src/openssl/__init__.py at line 2, src/_cffi_src/openssl/asn1.py at line 2, src/_cffi_src/openssl/bignum.py at line 2, src/_cffi_src/openssl/bio.py at line 2, src/_cffi_src/openssl/callbacks.py at line 2, src/_cffi_src/openssl/cmac.py at line 2, src/_cffi_src/openssl/crypto.py at line 2, src/_cffi_src/openssl/cryptography.py at line 2, src/_cffi_src/openssl/dh.py at line 2, src/_cffi_src/openssl/dsa.py at line 2, src/_cffi_src/openssl/ec.py at line 2, src/_cffi_src/openssl/ecdsa.py at line 2, src/_cffi_src/openssl/engine.py at line 2, src/_cffi_src/openssl/err.py at line 2, src/_cffi_src/openssl/evp.py at line 2, src/_cffi_src/openssl/evp_aead.py at line 2, src/_cffi_src/openssl/fips.py at line 2, src/_cffi_src/openssl/nid.py at line 2, src/_cffi_src/openssl/objects.py at line 2, src/_cffi_src/openssl/opensslv.py at line 2, src/_cffi_src/openssl/pem.py at line 2, src/_cffi_src/openssl/pkcs12.py at line 2, src/_cffi_src/openssl/pkcs7.py at line 2, src/_cffi_src/openssl/provider.py at line 2, src/_cffi_src/openssl/rand.py at line 2, src/_cffi_src/openssl/rsa.py at line 2, src/_cffi_src/openssl/ssl.py at line 2, src/_cffi_src/openssl/x509.py at line 2, src/_cffi_src/openssl/x509_vfy.py at line 2, src/_cffi_src/openssl/x509name.py at line 2, src/_cffi_src/openssl/x509v3.py at line 2, src/_cffi_src/utils.py at line 2, src/cryptography/__about__.py at line 2, src/cryptography/__init__.py at line 2, src/cryptography/exceptions.py at line 2, src/cryptography/fernet.py at line 2, src/cryptography/hazmat/__init__.py at line 2, src/cryptography/hazmat/_oid.py at line 2, src/cryptography/hazmat/backends/__init__.py at line 2, src/cryptography/hazmat/backends/openssl/__init__.py at line 2, src/cryptography/hazmat/backends/openssl/aead.py at line 2, src/cryptography/hazmat/backends/openssl/backend.py at line 2, src/cryptography/hazmat/backends/openssl/ciphers.py at line 2, src/cryptography/hazmat/backends/openssl/cmac.py at line 2, src/cryptography/hazmat/backends/openssl/decode_asn1.py at line 2, src/cryptography/hazmat/backends/openssl/ec.py at line 2, src/cryptography/hazmat/backends/openssl/rsa.py at line 2, src/cryptography/hazmat/backends/openssl/utils.py at line 2, src/cryptography/hazmat/bindings/__init__.py at line 2, src/cryptography/hazmat/bindings/_rust/__init__.pyi at line 2, src/cryptography/hazmat/bindings/_rust/_openssl.pyi at line 2, src/cryptography/hazmat/bindings/_rust/asn1.pyi at line 2, src/cryptography/hazmat/bindings/_rust/exceptions.pyi at line 2, src/cryptography/hazmat/bindings/_rust/ocsp.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/__init__.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/dh.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/dsa.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/ed25519.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/ed448.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/hashes.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/hmac.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/kdf.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/poly1305.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/x25519.pyi at line 2, src/cryptography/hazmat/bindings/_rust/openssl/x448.pyi at line 2, src/cryptography/hazmat/bindings/_rust/x509.pyi at line 2, src/cryptography/hazmat/bindings/openssl/__init__.py at line 2, src/cryptography/hazmat/bindings/openssl/_conditional.py at line 2, src/cryptography/hazmat/bindings/openssl/binding.py at line 2, src/cryptography/hazmat/primitives/__init__.py at line 2, src/cryptography/hazmat/primitives/_asymmetric.py at line 2, src/cryptography/hazmat/primitives/_cipheralgorithm.py at line 2, src/cryptography/hazmat/primitives/_serialization.py at line 2, src/cryptography/hazmat/primitives/asymmetric/__init__.py at line 2, src/cryptography/hazmat/primitives/asymmetric/dh.py at line 2, src/cryptography/hazmat/primitives/asymmetric/dsa.py at line 2, src/cryptography/hazmat/primitives/asymmetric/ec.py at line 2, src/cryptography/hazmat/primitives/asymmetric/ed25519.py at line 2, src/cryptography/hazmat/primitives/asymmetric/ed448.py at line 2, src/cryptography/hazmat/primitives/asymmetric/padding.py at line 2, src/cryptography/hazmat/primitives/asymmetric/rsa.py at line 2, src/cryptography/hazmat/primitives/asymmetric/types.py at line 2, src/cryptography/hazmat/primitives/asymmetric/utils.py at line 2, src/cryptography/hazmat/primitives/asymmetric/x25519.py at line 2, src/cryptography/hazmat/primitives/asymmetric/x448.py at line 2, src/cryptography/hazmat/primitives/ciphers/__init__.py at line 2, src/cryptography/hazmat/primitives/ciphers/aead.py at line 2, src/cryptography/hazmat/primitives/ciphers/algorithms.py at line 2, src/cryptography/hazmat/primitives/ciphers/base.py at line 2, src/cryptography/hazmat/primitives/ciphers/modes.py at line 2, src/cryptography/hazmat/primitives/cmac.py at line 2, src/cryptography/hazmat/primitives/constant_time.py at line 2, src/cryptography/hazmat/primitives/hashes.py at line 2, src/cryptography/hazmat/primitives/hmac.py at line 2, src/cryptography/hazmat/primitives/kdf/__init__.py at line 2, src/cryptography/hazmat/primitives/kdf/concatkdf.py at line 2, src/cryptography/hazmat/primitives/kdf/hkdf.py at line 2, src/cryptography/hazmat/primitives/kdf/kbkdf.py at line 2, src/cryptography/hazmat/primitives/kdf/pbkdf2.py at line 2, src/cryptography/hazmat/primitives/kdf/scrypt.py at line 2, src/cryptography/hazmat/primitives/kdf/x963kdf.py at line 2, src/cryptography/hazmat/primitives/keywrap.py at line 2, src/cryptography/hazmat/primitives/padding.py at line 2, src/cryptography/hazmat/primitives/poly1305.py at line 2, src/cryptography/hazmat/primitives/serialization/__init__.py at line 2, src/cryptography/hazmat/primitives/serialization/base.py at line 2, src/cryptography/hazmat/primitives/serialization/pkcs12.py at line 2, src/cryptography/hazmat/primitives/serialization/pkcs7.py at line 2, src/cryptography/hazmat/primitives/serialization/ssh.py at line 2, src/cryptography/hazmat/primitives/twofactor/__init__.py at line 2, src/cryptography/hazmat/primitives/twofactor/hotp.py at line 2, src/cryptography/hazmat/primitives/twofactor/totp.py at line 2, src/cryptography/utils.py at line 2, src/cryptography/x509/__init__.py at line 2, src/cryptography/x509/base.py at line 2, src/cryptography/x509/certificate_transparency.py at line 2, src/cryptography/x509/extensions.py at line 2, src/cryptography/x509/general_name.py at line 2, src/cryptography/x509/name.py at line 2, src/cryptography/x509/ocsp.py at line 2, src/cryptography/x509/oid.py at line 2
+    License text:
+        \# This file is dual licensed under the terms of the Apache License, Version
+        \# 2.0, and the BSD License. See the LICENSE file in the root of this repository
+        \# for complete details.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        .github/compare_benchmarks.py [1:3]
+        noxfile.py [1:3]
+        release.py [1:3]
+        setup.py [3:5]
+        src/_cffi_src/build_openssl.py [1:3]
+        src/_cffi_src/openssl/__init__.py [1:3]
+        src/_cffi_src/openssl/asn1.py [1:3]
+        src/_cffi_src/openssl/bignum.py [1:3]
+        src/_cffi_src/openssl/bio.py [1:3]
+        src/_cffi_src/openssl/callbacks.py [1:3]
+        src/_cffi_src/openssl/cmac.py [1:3]
+        src/_cffi_src/openssl/crypto.py [1:3]
+        src/_cffi_src/openssl/cryptography.py [1:3]
+        src/_cffi_src/openssl/dh.py [1:3]
+        src/_cffi_src/openssl/dsa.py [1:3]
+        src/_cffi_src/openssl/ec.py [1:3]
+        src/_cffi_src/openssl/ecdsa.py [1:3]
+        src/_cffi_src/openssl/engine.py [1:3]
+        src/_cffi_src/openssl/err.py [1:3]
+        src/_cffi_src/openssl/evp.py [1:3]
+        src/_cffi_src/openssl/evp_aead.py [1:3]
+        src/_cffi_src/openssl/fips.py [1:3]
+        src/_cffi_src/openssl/nid.py [1:3]
+        src/_cffi_src/openssl/objects.py [1:3]
+        src/_cffi_src/openssl/opensslv.py [1:3]
+        src/_cffi_src/openssl/pem.py [1:3]
+        src/_cffi_src/openssl/pkcs12.py [1:3]
+        src/_cffi_src/openssl/pkcs7.py [1:3]
+        src/_cffi_src/openssl/provider.py [1:3]
+        src/_cffi_src/openssl/rand.py [1:3]
+        src/_cffi_src/openssl/rsa.py [1:3]
+        src/_cffi_src/openssl/ssl.py [1:3]
+        src/_cffi_src/openssl/x509.py [1:3]
+        src/_cffi_src/openssl/x509_vfy.py [1:3]
+        src/_cffi_src/openssl/x509name.py [1:3]
+        src/_cffi_src/openssl/x509v3.py [1:3]
+        src/_cffi_src/utils.py [1:3]
+        src/cryptography/__about__.py [1:3]
+        src/cryptography/__init__.py [1:3]
+        src/cryptography/exceptions.py [1:3]
+        src/cryptography/fernet.py [1:3]
+        src/cryptography/hazmat/__init__.py [1:3]
+        src/cryptography/hazmat/_oid.py [1:3]
+        src/cryptography/hazmat/backends/__init__.py [1:3]
+        src/cryptography/hazmat/backends/openssl/__init__.py [1:3]
+        src/cryptography/hazmat/backends/openssl/aead.py [1:3]
+        src/cryptography/hazmat/backends/openssl/backend.py [1:3]
+        src/cryptography/hazmat/backends/openssl/ciphers.py [1:3]
+        src/cryptography/hazmat/backends/openssl/cmac.py [1:3]
+        src/cryptography/hazmat/backends/openssl/decode_asn1.py [1:3]
+        src/cryptography/hazmat/backends/openssl/ec.py [1:3]
+        src/cryptography/hazmat/backends/openssl/rsa.py [1:3]
+        src/cryptography/hazmat/backends/openssl/utils.py [1:3]
+        src/cryptography/hazmat/bindings/__init__.py [1:3]
+        src/cryptography/hazmat/bindings/_rust/__init__.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/_openssl.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/asn1.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/exceptions.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/ocsp.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/__init__.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/dh.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/dsa.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/ed25519.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/ed448.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/hashes.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/hmac.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/kdf.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/poly1305.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/x25519.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/x448.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/x509.pyi [1:3]
+        src/cryptography/hazmat/bindings/openssl/__init__.py [1:3]
+        src/cryptography/hazmat/bindings/openssl/_conditional.py [1:3]
+        src/cryptography/hazmat/bindings/openssl/binding.py [1:3]
+        src/cryptography/hazmat/primitives/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/_asymmetric.py [1:3]
+        src/cryptography/hazmat/primitives/_cipheralgorithm.py [1:3]
+        src/cryptography/hazmat/primitives/_serialization.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/dh.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/dsa.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/ec.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/ed25519.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/ed448.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/padding.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/rsa.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/types.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/utils.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/x25519.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/x448.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/aead.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/algorithms.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/base.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/modes.py [1:3]
+        src/cryptography/hazmat/primitives/cmac.py [1:3]
+        src/cryptography/hazmat/primitives/constant_time.py [1:3]
+        src/cryptography/hazmat/primitives/hashes.py [1:3]
+        src/cryptography/hazmat/primitives/hmac.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/concatkdf.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/hkdf.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/kbkdf.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/pbkdf2.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/scrypt.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/x963kdf.py [1:3]
+        src/cryptography/hazmat/primitives/keywrap.py [1:3]
+        src/cryptography/hazmat/primitives/padding.py [1:3]
+        src/cryptography/hazmat/primitives/poly1305.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/base.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/pkcs12.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/pkcs7.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/ssh.py [1:3]
+        src/cryptography/hazmat/primitives/twofactor/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/twofactor/hotp.py [1:3]
+        src/cryptography/hazmat/primitives/twofactor/totp.py [1:3]
+        src/cryptography/utils.py [1:3]
+        src/cryptography/x509/__init__.py [1:3]
+        src/cryptography/x509/base.py [1:3]
+        src/cryptography/x509/certificate_transparency.py [1:3]
+        src/cryptography/x509/extensions.py [1:3]
+        src/cryptography/x509/general_name.py [1:3]
+        src/cryptography/x509/name.py [1:3]
+        src/cryptography/x509/ocsp.py [1:3]
+        src/cryptography/x509/oid.py [1:3]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        .github/compare_benchmarks.py [1:3]
+        noxfile.py [1:3]
+        release.py [1:3]
+        setup.py [3:5]
+        src/_cffi_src/build_openssl.py [1:3]
+        src/_cffi_src/openssl/__init__.py [1:3]
+        src/_cffi_src/openssl/asn1.py [1:3]
+        src/_cffi_src/openssl/bignum.py [1:3]
+        src/_cffi_src/openssl/bio.py [1:3]
+        src/_cffi_src/openssl/callbacks.py [1:3]
+        src/_cffi_src/openssl/cmac.py [1:3]
+        src/_cffi_src/openssl/crypto.py [1:3]
+        src/_cffi_src/openssl/cryptography.py [1:3]
+        src/_cffi_src/openssl/dh.py [1:3]
+        src/_cffi_src/openssl/dsa.py [1:3]
+        src/_cffi_src/openssl/ec.py [1:3]
+        src/_cffi_src/openssl/ecdsa.py [1:3]
+        src/_cffi_src/openssl/engine.py [1:3]
+        src/_cffi_src/openssl/err.py [1:3]
+        src/_cffi_src/openssl/evp.py [1:3]
+        src/_cffi_src/openssl/evp_aead.py [1:3]
+        src/_cffi_src/openssl/fips.py [1:3]
+        src/_cffi_src/openssl/nid.py [1:3]
+        src/_cffi_src/openssl/objects.py [1:3]
+        src/_cffi_src/openssl/opensslv.py [1:3]
+        src/_cffi_src/openssl/pem.py [1:3]
+        src/_cffi_src/openssl/pkcs12.py [1:3]
+        src/_cffi_src/openssl/pkcs7.py [1:3]
+        src/_cffi_src/openssl/provider.py [1:3]
+        src/_cffi_src/openssl/rand.py [1:3]
+        src/_cffi_src/openssl/rsa.py [1:3]
+        src/_cffi_src/openssl/ssl.py [1:3]
+        src/_cffi_src/openssl/x509.py [1:3]
+        src/_cffi_src/openssl/x509_vfy.py [1:3]
+        src/_cffi_src/openssl/x509name.py [1:3]
+        src/_cffi_src/openssl/x509v3.py [1:3]
+        src/_cffi_src/utils.py [1:3]
+        src/cryptography/__about__.py [1:3]
+        src/cryptography/__init__.py [1:3]
+        src/cryptography/exceptions.py [1:3]
+        src/cryptography/fernet.py [1:3]
+        src/cryptography/hazmat/__init__.py [1:3]
+        src/cryptography/hazmat/_oid.py [1:3]
+        src/cryptography/hazmat/backends/__init__.py [1:3]
+        src/cryptography/hazmat/backends/openssl/__init__.py [1:3]
+        src/cryptography/hazmat/backends/openssl/aead.py [1:3]
+        src/cryptography/hazmat/backends/openssl/backend.py [1:3]
+        src/cryptography/hazmat/backends/openssl/ciphers.py [1:3]
+        src/cryptography/hazmat/backends/openssl/cmac.py [1:3]
+        src/cryptography/hazmat/backends/openssl/decode_asn1.py [1:3]
+        src/cryptography/hazmat/backends/openssl/ec.py [1:3]
+        src/cryptography/hazmat/backends/openssl/rsa.py [1:3]
+        src/cryptography/hazmat/backends/openssl/utils.py [1:3]
+        src/cryptography/hazmat/bindings/__init__.py [1:3]
+        src/cryptography/hazmat/bindings/_rust/__init__.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/_openssl.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/asn1.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/exceptions.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/ocsp.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/__init__.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/dh.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/dsa.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/ed25519.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/ed448.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/hashes.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/hmac.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/kdf.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/poly1305.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/x25519.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/openssl/x448.pyi [1:3]
+        src/cryptography/hazmat/bindings/_rust/x509.pyi [1:3]
+        src/cryptography/hazmat/bindings/openssl/__init__.py [1:3]
+        src/cryptography/hazmat/bindings/openssl/_conditional.py [1:3]
+        src/cryptography/hazmat/bindings/openssl/binding.py [1:3]
+        src/cryptography/hazmat/primitives/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/_asymmetric.py [1:3]
+        src/cryptography/hazmat/primitives/_cipheralgorithm.py [1:3]
+        src/cryptography/hazmat/primitives/_serialization.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/dh.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/dsa.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/ec.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/ed25519.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/ed448.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/padding.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/rsa.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/types.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/utils.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/x25519.py [1:3]
+        src/cryptography/hazmat/primitives/asymmetric/x448.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/aead.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/algorithms.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/base.py [1:3]
+        src/cryptography/hazmat/primitives/ciphers/modes.py [1:3]
+        src/cryptography/hazmat/primitives/cmac.py [1:3]
+        src/cryptography/hazmat/primitives/constant_time.py [1:3]
+        src/cryptography/hazmat/primitives/hashes.py [1:3]
+        src/cryptography/hazmat/primitives/hmac.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/concatkdf.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/hkdf.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/kbkdf.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/pbkdf2.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/scrypt.py [1:3]
+        src/cryptography/hazmat/primitives/kdf/x963kdf.py [1:3]
+        src/cryptography/hazmat/primitives/keywrap.py [1:3]
+        src/cryptography/hazmat/primitives/padding.py [1:3]
+        src/cryptography/hazmat/primitives/poly1305.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/base.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/pkcs12.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/pkcs7.py [1:3]
+        src/cryptography/hazmat/primitives/serialization/ssh.py [1:3]
+        src/cryptography/hazmat/primitives/twofactor/__init__.py [1:3]
+        src/cryptography/hazmat/primitives/twofactor/hotp.py [1:3]
+        src/cryptography/hazmat/primitives/twofactor/totp.py [1:3]
+        src/cryptography/utils.py [1:3]
+        src/cryptography/x509/__init__.py [1:3]
+        src/cryptography/x509/base.py [1:3]
+        src/cryptography/x509/certificate_transparency.py [1:3]
+        src/cryptography/x509/extensions.py [1:3]
+        src/cryptography/x509/general_name.py [1:3]
+        src/cryptography/x509/name.py [1:3]
+        src/cryptography/x509/ocsp.py [1:3]
+        src/cryptography/x509/oid.py [1:3]
+
+KEEP     Apache-2.0           cac6cbe8ed5a3da569f7c01e4e486688
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.APACHE [2:202]
+
+KEEP     BSD-3-Clause AND Apache-2.0 fb4b1826cb15b4715a1a70cdb1bd23a9
+BELONGS ya.make
+FILE_INCLUDE LICENSE.APACHE found in files: LICENSE at line 2
+FILE_INCLUDE LICENSE.BSD found in files: LICENSE at line 2
+    License text:
+        This software is made available under the terms of *either* of the licenses
+        found in LICENSE.APACHE or LICENSE.BSD. Contributions to cryptography are made
+        under the terms of *both* these licenses.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 90.91
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [1:3]
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 90.91
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [1:3]
+
+KEEP     Apache-2.0 AND BSD-3-Clause fd915d08f7e33b029373b336716ab7db
+BELONGS ya.make
+    License text:
+        license = {text = "Apache-2.0 OR BSD-3-Clause"}
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        pyproject.toml [20:20]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        pyproject.toml [20:20]

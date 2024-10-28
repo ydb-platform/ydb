@@ -6,6 +6,7 @@
 #include "log.h"
 #include "random_access_gzip.h"
 #include "stream_output.h"
+#include "system_log_event_provider.h"
 #include "compression.h"
 #include "log_writer_factory.h"
 #include "zstd_compression.h"
@@ -33,11 +34,16 @@ class TFileLogWriter
 public:
     TFileLogWriter(
         std::unique_ptr<ILogFormatter> formatter,
+        std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
         TString name,
-        TFileLogWriterConfigPtr config,
+        const TFileLogWriterConfigPtr& config,
         ILogWriterHost* host)
-        : TStreamLogWriterBase(std::move(formatter), std::move(name))
-        , Config_(std::move(config))
+        : TStreamLogWriterBase(
+            std::move(formatter),
+            std::move(systemEventProvider),
+            std::move(name),
+            config)
+        , Config_(config)
         , Host_(host)
         , DirectoryName_(NFS::GetDirectoryName(Config_->FileName))
         , FileNamePrefix_(NFS::GetFileName(Config_->FileName))
@@ -146,9 +152,26 @@ private:
 
             TFlags<EOpenModeFlag> openMode;
             if (Config_->EnableCompression) {
-                openMode = OpenAlways|RdWr|CloseOnExec;
+                switch (Config_->CompressionMethod) {
+                    case ECompressionMethod::Zstd:
+                        openMode = OpenAlways|RdWr|CloseOnExec;
+                        if (Config_->EnableNoReuse) {
+                            openMode = openMode|NoReuse;
+                        }
+                        break;
+
+                    case ECompressionMethod::Gzip:
+                        openMode = OpenAlways|RdWr|CloseOnExec;
+                        break;
+
+                    default:
+                        YT_ABORT();
+                }
             } else {
                 openMode = OpenAlways|ForAppend|WrOnly|Seq|CloseOnExec;
+                if (Config_->EnableNoReuse) {
+                    openMode = openMode|NoReuse;
+                }
             }
 
             // Generate filename.
@@ -189,9 +212,11 @@ private:
                 Formatter_->WriteLogReopenSeparator(GetOutputStream());
             }
 
-            Formatter_->WriteLogStartEvent(GetOutputStream());
+            if (auto logStartEvent = SystemEventProvider_->GetStartLogEvent()) {
+                Formatter_->WriteFormatted(GetOutputStream(), *logStartEvent);
+            }
 
-            ResetCurrentSegment(File_->GetLength());
+            ResetSegmentSize(File_->GetLength());
         } catch (const std::exception& ex) {
             Disabled_ = true;
             YT_LOG_ERROR(ex, "Failed to open log file (FileName: %v)",
@@ -299,12 +324,14 @@ private:
 
 IFileLogWriterPtr CreateFileLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
+    std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
     TString name,
     TFileLogWriterConfigPtr config,
     ILogWriterHost* host)
 {
     return New<TFileLogWriter>(
         std::move(formatter),
+        std::move(systemEventProvider),
         std::move(name),
         std::move(config),
         host);
@@ -328,10 +355,13 @@ public:
         const NYTree::IMapNodePtr& configNode,
         ILogWriterHost* host) noexcept override
     {
+        auto config = ParseConfig(configNode);
+        auto eventProvider = CreateDefaultSystemLogEventProvider(config);
         return CreateFileLogWriter(
             std::move(formatter),
+            std::move(eventProvider),
             std::move(name),
-            ParseConfig(configNode),
+            std::move(config),
             host);
     }
 

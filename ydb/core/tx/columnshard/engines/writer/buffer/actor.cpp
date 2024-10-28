@@ -48,7 +48,8 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     auto* evBase = ev->Get();
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
     SumSize += evBase->GetWriteData()->GetSize();
-    Aggregations.emplace_back(std::make_shared<NOlap::TWriteAggregation>(*evBase->GetWriteData(), std::move(evBase->MutableBlobsToWrite())));
+    Aggregations.emplace_back(
+        std::make_shared<NOlap::TWriteAggregation>(*evBase->GetWriteData(), std::move(evBase->MutableBlobsToWrite()), evBase->GetRecordBatch()));
     if (SumSize > 4 * 1024 * 1024 || Aggregations.size() > 750 || !FlushDuration) {
         Flush();
     }

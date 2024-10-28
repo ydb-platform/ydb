@@ -23,7 +23,6 @@
 #include "flat_abi_evol.h"
 #include "probes.h"
 #include "shared_sausagecache.h"
-#include "shared_cache_memtable.h"
 #include "util_fmt_desc.h"
 
 #include <ydb/core/base/appdata.h>
@@ -61,34 +60,34 @@ struct TCompactionChangesCtx {
     { }
 };
 
-class TSharedPageCacheMemTableObserver : public NSharedCache::ISharedPageCacheMemTableObserver {
+class TMemTableMemoryConsumersCollection : public NTable::IMemTableMemoryConsumersCollection {
 public:
-    TSharedPageCacheMemTableObserver(TActorSystem* actorSystem, TActorId owner)
+    TMemTableMemoryConsumersCollection(TActorSystem* actorSystem, TActorId owner)
         : ActorSystem(actorSystem)
         , Owner(owner)
-        , SharedCacheId(MakeSharedPageCacheId())
+        , MemoryControllerId(NMemory::MakeMemoryControllerId())
     {}
 
     void Register(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableRegister(table));
+        Send(new NMemory::TEvMemTableRegister(table));
     }
 
     void Unregister(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableUnregister(table));
+        Send(new NMemory::TEvMemTableUnregister(table));
     }
 
-    void CompactionComplete(TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration) override {
-        Send(new NSharedCache::TEvMemTableCompacted(std::move(registration)));
+    void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) override {
+        Send(new NMemory::TEvMemTableCompacted(std::move(consumer)));
     }
 
 private:
     void Send(IEventBase* ev) {
-        ActorSystem->Send(new IEventHandle(SharedCacheId, Owner, ev));
+        ActorSystem->Send(new IEventHandle(MemoryControllerId, Owner, ev));
     }
 
     TActorSystem* ActorSystem;
     const TActorId Owner;
-    const TActorId SharedCacheId;
+    const TActorId MemoryControllerId;
 };
 
 TTableSnapshotContext::TTableSnapshotContext() = default;
@@ -157,6 +156,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Broker = new TBroker(this, Emitter);
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
+    MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
     AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
@@ -198,7 +198,7 @@ void TExecutor::Broken() {
 
     if (Owner) {
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
         Owner->Detach(OwnerCtx());
     }
 
@@ -415,7 +415,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     Become(&TThis::StateFollower);
     Stats->IsActive = true;
-    Stats->IsFollower = true;
+    Stats->FollowerId = FollowerId;
 
     PlanTransactionActivation();
 
@@ -446,8 +446,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager->Start(this, Owner->Tablet(), &Step0, Counters.Get());
 
-    auto sharedPageCacheMemTableObserver = MakeHolder<TSharedPageCacheMemTableObserver>(NActors::TActivationContext::ActorSystem(), SelfId());
-    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(std::move(sharedPageCacheMemTableObserver), Logger.Get(), Broker.Get(), this, loadedState->Comp,
+    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
@@ -466,7 +465,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     Become(&TThis::StateWork);
     Stats->IsActive = true;
-    Stats->IsFollower = false;
+    Stats->FollowerId = 0;
 
     CompactionLogic->Start();
 
@@ -708,9 +707,9 @@ TExecutorCaches TExecutor::CleanupState() {
 }
 
 void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
-    if (Stats->IsFollower) {
+    if (Stats->IsFollower()) {
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     }
 
     if (!Counters) {
@@ -723,7 +722,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
 
     Become(&TThis::StateBoot);
     Stats->IsActive = false;
-    Stats->IsFollower = false;
+    Stats->FollowerId = 0;
 
     TEvTablet::TEvBoot *msg = ev->Get();
     Generation0 = msg->Generation;
@@ -761,8 +760,6 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
     RegisterTabletFlatProbes();
 
     Become(&TThis::StateFollowerBoot);
-    Stats->IsActive = false;
-    Stats->IsFollower = true;
 
     TEvTablet::TEvFBoot *msg = ev->Get();
     Generation0 = msg->Generation;
@@ -770,6 +767,9 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
     Launcher = msg->Launcher;
     Memory->SetProfiles(msg->ResourceProfiles);
     FollowerId = msg->FollowerID;
+
+    Stats->IsActive = false;
+    Stats->FollowerId = FollowerId;
 
     const ui64 maxBootBytesInFly = 12 * 1024 * 1024;
 
@@ -799,7 +799,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 
 void TExecutor::DetachTablet(const TActorContext &) {
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-        Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
+        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     return PassAway();
 }
 
@@ -1301,7 +1301,7 @@ void TExecutor::Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorConte
 
 void TExecutor::AdvancePendingPartSwitches() {
     while (PendingPartSwitches && ApplyReadyPartSwitches()) {
-        if (Stats->IsFollower) {
+        if (Stats->IsFollower()) {
             ApplyFollowerPostponedUpdates();
         }
     }
@@ -1561,7 +1561,7 @@ TExecutor::TLeaseCommit* TExecutor::AttachLeaseCommit(TLogCommit* commit, bool f
 }
 
 TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
     Y_ABORT_UNLESS(at >= LeaseEnd);
 
     if (!LeaseEnabled) {
@@ -1597,7 +1597,7 @@ TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
 }
 
 void TExecutor::ConfirmReadOnlyLease(TMonotonic at) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
     LeaseUsed = true;
 
     if (LeaseEnabled && at < LeaseEnd) {
@@ -1608,7 +1608,7 @@ void TExecutor::ConfirmReadOnlyLease(TMonotonic at) {
 }
 
 void TExecutor::ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
     LeaseUsed = true;
 
     if (LeaseEnabled && at < LeaseEnd) {
@@ -1626,7 +1626,7 @@ void TExecutor::ConfirmReadOnlyLease(std::function<void()> callback) {
 }
 
 bool TExecutor::CanExecuteTransaction() const {
-    return Stats->IsActive && (Stats->IsFollower || PendingPartSwitches.empty()) && !BrokenTransaction;
+    return Stats->IsActive && (Stats->IsFollower() || PendingPartSwitches.empty()) && !BrokenTransaction;
 }
 
 void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
@@ -1711,7 +1711,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     Database->Begin(Stamp(), env);
 
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
-    
+
     txc.StartExecutionSpan();
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
     txc.FinishExecutionSpan();
@@ -1944,7 +1944,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
                 }
                 logl << "]";
             }
-            
+
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;
@@ -2017,7 +2017,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     const double currentExecTime = seat->CPUExecTime;
 
     if (isTerminated) {
-        if (Stats->IsFollower) {
+        if (Stats->IsFollower()) {
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
             seat->Terminate(seat->TerminationReason, OwnerCtx());
@@ -2026,7 +2026,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
         }
     } else if (isReadOnly) {
-        if (Stats->IsFollower) {
+        if (Stats->IsFollower()) {
             // todo: extract completion counters from txloglogic
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
@@ -2036,7 +2036,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
         }
     } else {
-        Y_ABORT_UNLESS(!Stats->IsFollower);
+        Y_ABORT_UNLESS(!Stats->IsFollower());
 
         const bool allowBatching = Scheme().Executor.AllowLogBatching;
         const bool force = !allowBatching
@@ -2221,7 +2221,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                     Y_ABORT_UNLESS(srcSubset->Frozen.empty(), "Unexpected frozen parts in src subset");
 
                     // Check scheme compatibility (it may have changed due to alter)
-                    srcSubset->Scheme->CheckCompatability(*dstSubset->Scheme);
+                    auto tableInfo = Database->GetScheme().Tables.FindPtr(src);
+                    srcSubset->Scheme->CheckCompatibility(tableInfo ? tableInfo->Name : "", *dstSubset->Scheme);
 
                     // Don't do anything if there's nothing to move
                     if (srcSubset->Flatten.empty()) {
@@ -3579,7 +3580,9 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
             { /* Memory consumption of common for leader and follower components */
                 Counters->Simple()[TExecutorCounters::DB_WARM_BYTES].Set(dbCounters.MemTableBytes);
                 Counters->Simple()[TExecutorCounters::DB_META_BYTES].Set(Stats->PacksMetaBytes);
-                Counters->Simple()[TExecutorCounters::DB_INDEX_BYTES].Set(dbCounters.Parts.IndexBytes);
+                Counters->Simple()[TExecutorCounters::DB_FLAT_INDEX_BYTES].Set(dbCounters.Parts.FlatIndexBytes);
+                Counters->Simple()[TExecutorCounters::DB_B_TREE_INDEX_BYTES].Set(dbCounters.Parts.BTreeIndexBytes);
+                Counters->Simple()[TExecutorCounters::DB_INDEX_BYTES].Set(dbCounters.Parts.FlatIndexBytes + dbCounters.Parts.BTreeIndexBytes);
                 Counters->Simple()[TExecutorCounters::DB_OTHER_BYTES].Set(dbCounters.Parts.OtherBytes);
                 Counters->Simple()[TExecutorCounters::DB_BYKEY_BYTES].Set(dbCounters.Parts.ByKeyBytes);
                 Counters->Simple()[TExecutorCounters::USED_TABLET_MEMORY].Set(UsedTabletMemory);
@@ -3655,7 +3658,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
             executorCounters = Counters->MakeDiffForAggr(*CountersBaseline);
             Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
 
-            if (ResourceMetrics && !Stats->IsFollower) {
+            if (ResourceMetrics && !Stats->IsFollower()) {
                 // N.B. DB_UNIQUE_OUTER_BYTES is already part of DB_UNIQUE_DATA_BYTES, due to how BackingSize works
                 // We also include DB_UNIQUE_KEEP_BYTES as unreferenced data that cannot be deleted
                 ui64 storageSize = Counters->Simple()[TExecutorCounters::DB_UNIQUE_DATA_BYTES].Get()
@@ -3682,7 +3685,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         auto tabletType = Owner->TabletType();
         auto tenantPathId = Owner->Info()->TenantPathId;
 
-        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower);
+        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
             CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
 
@@ -3702,7 +3705,7 @@ float TExecutor::GetRejectProbability() const {
     }
 
     // Followers do not control compaction so let's always allow to read the data from follower
-    if (Stats->IsFollower)
+    if (Stats->IsFollower())
         return 0.0;
 
     auto sigmoid = [](float x) -> float {
@@ -3891,15 +3894,15 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableRegistered::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
-        CompactionLogic->ProvideSharedPageCacheMemTableRegistration(msg->Table, std::move(msg->Registration));
+        CompactionLogic->ProvideMemTableMemoryConsumer(msg->Table, std::move(msg->Consumer));
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableCompact::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableCompact::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
@@ -3955,8 +3958,8 @@ STFUNC(TExecutor::StateWork) {
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
-        hFunc(NSharedCache::TEvMemTableRegistered, Handle);
-        hFunc(NSharedCache::TEvMemTableCompact, Handle);
+        hFunc(NMemory::TEvMemTableRegistered, Handle);
+        hFunc(NMemory::TEvMemTableCompact, Handle);
     default:
         break;
     }
@@ -4223,7 +4226,7 @@ void TExecutor::UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) {
 }
 
 void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
 
     NKikimrExecutorFlat::TFollowerAux proto;
     proto.SetUserAuxUpdate(std::move(upd));
@@ -4659,7 +4662,7 @@ void TExecutor::Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const
 void TExecutor::CommitCompactionChanges(
         ui32 tableId,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     if (!changes.SliceChanges && !changes.StateChanges) {
         // Don't bother unless there's something to do
@@ -4690,7 +4693,7 @@ void TExecutor::CommitCompactionChanges(
 void TExecutor::ApplyCompactionChanges(
         TCompactionChangesCtx& ctx,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     const ui32 tableId = ctx.Proto.GetTableId();
 

@@ -1,6 +1,7 @@
 #include "helpers.h"
 #include "config.h"
 #include "private.h"
+#include "stockpile.h"
 
 #include <yt/yt/core/ytalloc/bindings.h>
 
@@ -9,6 +10,8 @@
 #include <yt/yt/core/misc/ref_counted_tracker_profiler.h>
 
 #include <yt/yt/core/bus/tcp/dispatcher.h>
+
+#include <yt/yt/library/oom/oom.h>
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
 
@@ -60,9 +63,10 @@ class TCMallocLimitsAdjuster
 public:
     void Adjust(const TTCMallocConfigPtr& config)
     {
-        i64 totalMemory = GetContainerMemoryLimit();
+        i64 totalMemory = GetAnonymousMemoryLimit();
         AdjustPageHeapLimit(totalMemory, config);
         AdjustAggressiveReleaseThreshold(totalMemory, config);
+        SetupMemoryLimitHandler(config);
     }
 
     i64 GetAggressiveReleaseThreshold()
@@ -103,27 +107,46 @@ private:
         }
     }
 
-    i64 GetContainerMemoryLimit() const
+    void SetupMemoryLimitHandler(const TTCMallocConfigPtr& config)
+    {
+        TTCMallocLimitHandlerOptions handlerOptions {
+            .HeapDumpDirectory = config->HeapSizeLimit->DumpMemoryProfilePath,
+            .Timeout = config->HeapSizeLimit->DumpMemoryProfileTimeout,
+        };
+
+        if (config->HeapSizeLimit->DumpMemoryProfileOnViolation) {
+            EnableTCMallocLimitHandler(handlerOptions);
+        } else {
+            DisableTCMallocLimitHandler();
+        }
+    }
+
+    i64 GetAnonymousMemoryLimit() const
     {
         auto resourceTracker = NProfiling::GetResourceTracker();
         if (!resourceTracker) {
             return 0;
         }
 
-        return resourceTracker->GetTotalMemoryLimit();
+        return resourceTracker->GetAnonymousMemoryLimit();
     }
 
     TAllocatorMemoryLimit ProposeHeapMemoryLimit(i64 totalMemory, const TTCMallocConfigPtr& config) const
     {
-        const auto& heapLimitConfig = config->HeapSizeLimit;
+        const auto& heapSizeConfig = config->HeapSizeLimit;
 
-        if (totalMemory == 0 || !heapLimitConfig->ContainerMemoryRatio) {
+        if (totalMemory == 0 || !heapSizeConfig->ContainerMemoryRatio && !heapSizeConfig->ContainerMemoryMargin) {
             return {};
         }
 
         TAllocatorMemoryLimit proposed;
-        proposed.limit = *heapLimitConfig->ContainerMemoryRatio * totalMemory;
-        proposed.hard = heapLimitConfig->Hard;
+        proposed.hard = heapSizeConfig->Hard;
+
+        if (heapSizeConfig->ContainerMemoryMargin) {
+            proposed.limit = totalMemory - *heapSizeConfig->ContainerMemoryMargin;
+        } else {
+            proposed.limit = *heapSizeConfig->ContainerMemoryRatio * totalMemory;
+        }
 
         return proposed;
     }
@@ -221,7 +244,7 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
 
     ConfigureTCMalloc(config->TCMalloc);
 
-    ConfigureStockpile(*config->Stockpile);
+    TStockpileManager::Get()->Reconfigure(*config->Stockpile);
 
     if (config->EnableRefCountedTrackerProfiling) {
         EnableRefCountedTrackerProfiling();
@@ -235,6 +258,13 @@ void ConfigureSingletons(const TSingletonsConfigPtr& config)
     }
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop);
+}
+
+TTCMallocConfigPtr MergeTCMallocDynamicConfig(const TTCMallocConfigPtr& staticConfig, const TTCMallocConfigPtr& dynamicConfig)
+{
+    auto mergedConfig = CloneYsonStruct(dynamicConfig);
+    mergedConfig->HeapSizeLimit->DumpMemoryProfilePath = staticConfig->HeapSizeLimit->DumpMemoryProfilePath;
+    return mergedConfig;
 }
 
 void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletonsDynamicConfigPtr& dynamicConfig)
@@ -271,9 +301,13 @@ void ReconfigureSingletons(const TSingletonsConfigPtr& config, const TSingletons
     }
 
     if (dynamicConfig->TCMalloc) {
-        ConfigureTCMalloc(dynamicConfig->TCMalloc);
+        ConfigureTCMalloc(MergeTCMallocDynamicConfig(config->TCMalloc, dynamicConfig->TCMalloc));
     } else if (config->TCMalloc) {
         ConfigureTCMalloc(config->TCMalloc);
+    }
+
+    if (dynamicConfig->Stockpile) {
+        TStockpileManager::Get()->Reconfigure(*config->Stockpile->ApplyDynamic(dynamicConfig->Stockpile));
     }
 
     NYson::SetProtobufInteropConfig(config->ProtobufInterop->ApplyDynamic(dynamicConfig->ProtobufInterop));

@@ -74,9 +74,11 @@ public:
         result.PlanAst = planAst;
         return result;
     }
-    static TQueryBenchmarkResult Error(const TString& error) {
+    static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst) {
         TQueryBenchmarkResult result;
         result.ErrorInfo = error;
+        result.QueryPlan = queryPlan;
+        result.PlanAst = planAst;
         return result;
     }
     operator bool() const {
@@ -84,11 +86,18 @@ public:
     }
 };
 
+struct TQueryBenchmarkDeadline {
+    TInstant Deadline = TInstant::Max();
+    TString Name;
+};
+
 TString FullTablePath(const TString& database, const TString& table);
 void ThrowOnError(const TStatus& status);
 bool HasCharsInString(const TString& str);
-TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client);
-TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client);
+TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
 NJson::TJsonValue GetQueryLabels(ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId);
 NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId);

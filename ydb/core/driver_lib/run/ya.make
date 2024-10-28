@@ -1,9 +1,20 @@
 LIBRARY(run)
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ELSE()
+    PEERDIR(
+        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+    )
+ENDIF()
+
 SRCS(
     auto_config_initializer.cpp
     config.cpp
     config.h
+    config_helpers.cpp
     config_parser.cpp
     config_parser.h
     driver.h
@@ -82,6 +93,7 @@ PEERDIR(
     ydb/core/load_test
     ydb/core/local_pgwire
     ydb/core/log_backend
+    ydb/core/memory_controller
     ydb/core/metering
     ydb/core/mind
     ydb/core/mind/address_classification
@@ -98,8 +110,8 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/security/ldap_auth_provider
-    ydb/core/statistics
     ydb/core/statistics/aggregator
+    ydb/core/statistics/service
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -111,6 +123,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
     ydb/core/tx/limiter/service
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/datashard
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
@@ -162,6 +175,8 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/tablet
+    ydb/services/view
     ydb/services/ydb
 )
 

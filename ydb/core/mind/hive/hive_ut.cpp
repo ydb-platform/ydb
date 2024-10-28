@@ -21,6 +21,7 @@
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/mediator/mediator.h>
+#include <ydb/core/util/random.h>
 
 #include <ydb/core/mind/hive/hive_events.h>
 
@@ -28,7 +29,6 @@
 
 #include <library/cpp/malloc/api/malloc.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <util/random/entropy.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
 #include <util/string/subst.h>
@@ -419,9 +419,9 @@ void FormatPDiskForTest(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid,
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
         chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap,
@@ -1063,6 +1063,105 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
             runtime.DispatchEvents(options);
         }
+
+        createTablets();
+
+        UNIT_ASSERT(!isNodeEmpty(nodeId));
+    }
+
+    Y_UNIT_TEST(DrainWithHiveRestart) {
+        // 1. Drain a node
+        // 2. Kill it & wait for hive to delete it
+        // 3. Start the node again
+        // 4. Restart hive
+        // 5. Ensure node is not down (by creating tablets)
+        const int NUM_NODES = 3;
+        const int NUM_TABLETS = 10;
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        Setup(runtime, true, 2, [](TAppPrepare& app) {
+            app.HiveConfig.SetNodeDeletePeriod(1);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::unordered_set<TTabletId> tablets;
+        TActorId senderA = runtime.AllocateEdgeActor(0);
+        auto createTablets = [&] {
+            for (int i = 0; i < NUM_TABLETS; ++i) {
+                THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + tablets.size(), tabletType, BINDED_CHANNELS));
+                runtime.SendToPipe(hiveTablet, senderA, ev.Release(), 0, GetPipeConfigWithRetries());
+                TAutoPtr<IEventHandle> handle;
+                auto createTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
+                ui64 tabletId = createTabletReply->Record.GetTabletID();
+                tablets.insert(tabletId);
+            }
+            NTabletPipe::TClientConfig pipeConfig;
+            pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+            for (TTabletId tabletId : tablets) {
+                MakeSureTabletIsUp(runtime, tabletId, 0, &pipeConfig);
+            }
+        };
+
+        createTablets();
+
+        ui32 nodeId = runtime.GetNodeId(2);
+        {
+            Ctest << "1. Drain a node\n";
+
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvDrainNode(nodeId));
+
+            Ctest << "2. Kill it & wait for hive to delete it\n";
+
+            SendKillLocal(runtime, 0);
+            {
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(NHive::TEvPrivate::EvDeleteNode);
+                runtime.DispatchEvents(options, TDuration::Seconds(6));
+            }
+        }
+
+        auto isNodeEmpty = [&](ui32 nodeId) -> bool {
+            bool empty = true;
+            TAutoPtr<IEventHandle> handle;
+            TActorId whiteboard = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
+            runtime.Send(new IEventHandle(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
+            NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse* wbResponse = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>(handle);
+            for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : wbResponse->Record.GetTabletStateInfo()) {
+                if (tablets.contains(tabletInfo.GetTabletId()) && tabletInfo.GetState() != NKikimrWhiteboard::TTabletStateInfo::Dead) {
+                    Ctest << "Tablet " << tabletInfo.GetTabletId() << "." << tabletInfo.GetFollowerId()
+                        << " is not dead yet (" << NKikimrWhiteboard::TTabletStateInfo::ETabletState_Name(tabletInfo.GetState()) << ")" << Endl;
+                    empty = false;
+                }
+            }
+            return empty;
+        };
+
+        Ctest << "3. Start the node again\n";
+        CreateLocal(runtime, 0);
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus);
+            runtime.DispatchEvents(options);
+        }
+
+        Ctest << "4. Restart hive\n";
+
+        runtime.Register(CreateTabletKiller(hiveTablet));
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+
+        Ctest << "5. Ensure node is not down (by creating tablets)\n";
 
         createTablets();
 
@@ -3603,6 +3702,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         runtime.EnableScheduleForActor(hiveActor);
 
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
 
         // creating NUM_TABLETS tablets
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
@@ -3640,7 +3746,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateLocal(runtime, 2);
         CreateLocal(runtime, 3);
 
-        // kill all tablets
+        // no need to kill all tablets, hive must update followers on its own
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
+            runtime.DispatchEvents(options);
+        }
+        /*
         for (ui64 tabletId : tablets) {
             runtime.Register(CreateTabletKiller(tabletId));
 
@@ -3649,7 +3761,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
              // leader (death, start) + new extra follower
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvLocal::EvTabletStatus, 3));
             runtime.DispatchEvents(options);
-        }
+        }*/
 
         {
             int leaders = 0;
@@ -3675,7 +3787,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateLocal(runtime, 4);
         CreateLocal(runtime, 5);
 
-        // kill all tablets
+        /*
         for (ui64 tabletId : tablets) {
             runtime.Register(CreateTabletKiller(tabletId));
 
@@ -3683,6 +3795,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TDispatchOptions options;
              // leader (death, start) + new extra follower
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvLocal::EvTabletStatus, 3));
+            runtime.DispatchEvents(options);
+        }
+        */
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
             runtime.DispatchEvents(options);
         }
 
@@ -6414,7 +6532,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 auto* record = event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord();
                 TSubDomainKey resolvingSubdomainKey(record->GetPathOwnerId(), record->GetPathId());
                 if (resolvingSubdomainKey == subdomainKey) {
-                    record->MutablePathDescription()->MutableDomainDescription()->SetSharedHive(sharedHiveTablet);   
+                    record->MutablePathDescription()->MutableDomainDescription()->SetSharedHive(sharedHiveTablet);
                 }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -6423,13 +6541,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // Start local for subdomain
         SendKillLocal(runtime, 1);
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
-        
+
         bool seenLocalRegistrationInSharedHive = false;
         TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == TEvLocal::EvRegisterNode) {
                 const auto& record = event->Get<TEvLocal::TEvRegisterNode>()->Record;
-                if (record.GetHiveId() == sharedHiveTablet 
+                if (record.GetHiveId() == sharedHiveTablet
                     && !record.GetServicedDomains().empty()
                     && TSubDomainKey(record.GetServicedDomains().Get(0)) == subdomainKey) {
                         seenLocalRegistrationInSharedHive = true;
@@ -6500,7 +6618,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // Start local for subdomain
         SendKillLocal(runtime, 1);
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
-        
+
         THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
         createTablet->Record.AddAllowedDomains();
         createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
@@ -6508,7 +6626,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createTablet->Record.MutableObjectDomain()->SetSchemeShard(subdomainKey.GetSchemeShard());
         createTablet->Record.MutableObjectDomain()->SetPathId(subdomainKey.GetPathId());
         ui64 dummyTabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
-        
+
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 0); // started in allowed domain
 
@@ -6533,7 +6651,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.DispatchEvents(options);
         }
         CreateLocal(runtime, 0);
-        
+
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 1); // started in object domain
 
@@ -6606,7 +6724,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // Start local for subdomain
         SendKillLocal(runtime, 1);
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
-        
+
         THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
         createTablet->Record.AddAllowedDomains();
         createTablet->Record.MutableAllowedDomains(0)->SetSchemeShard(TTestTxConfig::SchemeShard);
@@ -6614,7 +6732,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         createTablet->Record.MutableObjectDomain()->SetSchemeShard(subdomainKey.GetSchemeShard());
         createTablet->Record.MutableObjectDomain()->SetPathId(subdomainKey.GetPathId());
         ui64 dummyTabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
-        
+
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 0); // started in allowed domain
 
@@ -6639,7 +6757,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.DispatchEvents(options);
         }
         CreateLocal(runtime, 0);
-        
+
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
         AssertTabletStartedOnNode(runtime, dummyTabletId, 1); // started in object domain
 

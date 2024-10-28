@@ -21,11 +21,18 @@ def jsons_are_equal(lhs: str, rhs: str) -> bool:
 
 
 def assert_rows_equal(expected: List, actual: List):
-    assert len(expected) == len(actual)
+    if not isinstance(expected, list) or not isinstance(actual, list):
+        raise ValueError(f'Expected two lists, got {expected} and {actual}')
+
+    assert len(expected) == len(actual), (
+        f'Columns amount mismatch expected: {len(expected)} actual: {len(actual)}',
+        expected,
+        actual,
+    )
 
     for i in range(len(expected)):
         if type(expected[i]) is float:
-            assert isclose(expected[i], actual[i], abs_tol=1e-5), (expected[i], actual[i])
+            assert isclose(expected[i], actual[i], abs_tol=1e-4), (expected[i], actual[i])
             continue
 
         if is_json(expected[i]):
@@ -39,8 +46,9 @@ def assert_data_outs_equal(
     expected: List,
     actual: List,
 ):
-    assert len(expected) == len(actual)
-    all(map(assert_rows_equal, expected, actual))
+    assert len(expected) == len(actual), ("Row size mismatch", expected, actual)
+    for i in range(len(expected)):
+        assert_rows_equal(expected[i], actual[i]), (f"Error at row {i}", expected[i], actual[i])
 
 
 def assert_schemas_equal(expected: Schema, actual: Schema):

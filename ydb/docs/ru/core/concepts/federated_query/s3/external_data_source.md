@@ -4,7 +4,7 @@
 
 Пример запроса для чтения данных:
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -26,7 +26,7 @@ WITH
 
 В {{ objstorage-full-name }} данные хранятся в файлах. Для чтения данных необходимо указать формат данных в файлах, сжатие, списки полей. Для этого используется следующее SQL-выражение:
 
-```sql
+```yql
 SELECT
   <expression>
 FROM
@@ -41,22 +41,23 @@ WHERE
 
 Где:
 
-* `object_storage_connection_name` — название [внешнего источника данных](#create_connection), ведущего на бакет  с S3 ({{ objstorage-full-name }}).
+* `object_storage_connection_name` — название внешнего источника данных, ведущего на бакет с S3 ({{ objstorage-full-name }}).
 * `file_path` — путь к файлу или файлам внутри бакета. Поддерживаются wildcards `*`, подробнее [в разделе](#path_format).
 * `file_format` — [формат данных](formats.md#formats) в файлах.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
 * `compression` — [формат сжатия](formats.md#compression_formats) файлов.
 
-### Описание схемы данных { #schema }
+### Описание схемы данных {#schema}
 
 Описание схемы данных состоит из набора полей:
+
 - Названия поля.
 - Типа поля.
 - Признака обязательности данных.
 
 Например, схема данных ниже описывает поле схемы с названием `Year` типа `Int32` и требованием наличия этого поля в данных:
 
-```
+```text
 Year Int32 NOT NULL
 ```
 
@@ -72,7 +73,7 @@ Year Int32 NOT NULL
 
 Пример запроса для чтения данных из S3 ({{ objstorage-full-name }}):
 
-```sql
+```yql
 SELECT
     *
 FROM

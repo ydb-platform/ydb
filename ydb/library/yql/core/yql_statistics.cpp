@@ -4,6 +4,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <sstream>
+
 using namespace NYql;
 
 static TString ConvertToStatisticsTypeString(EStatisticsType type) {
@@ -20,6 +22,26 @@ static TString ConvertToStatisticsTypeString(EStatisticsType type) {
     return "";
 }
 
+static TString ConvertToStatisticsTypeString(EStorageType storageType) {
+    switch (storageType) {
+        case EStorageType::NA:
+            return "NA";
+        case EStorageType::RowStorage:
+            return "RowStorage";
+        case EStorageType::ColumnStorage:
+            return "ColumnStorage";
+        default:
+            Y_ENSURE(false,"Unknown Storage type");
+    }
+    return "";
+}
+
+TString TOptimizerStatistics::ToString() const {
+    std::stringstream ss;
+    ss << *this;
+    return ss.str();
+}
+
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
@@ -28,6 +50,8 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
             os << ", " << c;
         }
     }
+    os << ", Sel: " << s.Selectivity;
+    os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     return os;
 }
 
@@ -43,7 +67,8 @@ TOptimizerStatistics::TOptimizerStatistics(
     double cost,
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
-    std::unique_ptr<IProviderStatistics> specific)
+    EStorageType storageType,
+    std::shared_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
     , Ncols(ncols)
@@ -51,6 +76,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Cost(cost)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
+    , StorageType(storageType)
     , Specific(std::move(specific))
 {
 }
@@ -64,7 +90,7 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
 }
 
 std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats) {
-    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics);
+    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics, s.StorageType, s.Specific);
 
     auto dbStats = stats->GetMapSafe();
 
@@ -116,7 +142,7 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
                 TString countMinRaw{};
                 Base64StrictDecode(countMinBase64, countMinRaw);
                 
-                cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.Data(), countMinRaw.Size()));
+                cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.data(), countMinRaw.size()));
             }
 
             res->ColumnStatistics->Data[columnName] = cStat;

@@ -19,6 +19,4 @@ SRCS(
     access_service_ut.cpp
 )
 
-REQUIREMENTS(ram:10)
-
 END()

@@ -16,7 +16,7 @@
 
 #include <library/cpp/yt/misc/concepts.h>
 #include <library/cpp/yt/misc/enum.h>
-#include <library/cpp/yt/misc/wrapper_traits.h>
+#include <library/cpp/yt/misc/source_location.h>
 
 #include <util/generic/maybe.h>
 
@@ -30,113 +30,13 @@
     #include <filesystem>
 #endif
 
+#ifdef __cpp_lib_source_location
+#include <source_location>
+#endif // __cpp_lib_source_location
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-inline char* TStringBuilderBase::Preallocate(size_t size)
-{
-    Reserve(size + GetLength());
-    return Current_;
-}
-
-inline void TStringBuilderBase::Reserve(size_t size)
-{
-    if (Y_UNLIKELY(End_ - Begin_ < static_cast<ssize_t>(size))) {
-        size_t length = GetLength();
-        auto newLength = std::max(size, MinBufferLength);
-        DoReserve(newLength);
-        Current_ = Begin_ + length;
-    }
-}
-
-inline size_t TStringBuilderBase::GetLength() const
-{
-    return Current_ ? Current_ - Begin_ : 0;
-}
-
-inline TStringBuf TStringBuilderBase::GetBuffer() const
-{
-    return TStringBuf(Begin_, Current_);
-}
-
-inline void TStringBuilderBase::Advance(size_t size)
-{
-    Current_ += size;
-    YT_ASSERT(Current_ <= End_);
-}
-
-inline void TStringBuilderBase::AppendChar(char ch)
-{
-    *Preallocate(1) = ch;
-    Advance(1);
-}
-
-inline void TStringBuilderBase::AppendChar(char ch, int n)
-{
-    YT_ASSERT(n >= 0);
-    if (Y_LIKELY(0 != n)) {
-        char* dst = Preallocate(n);
-        ::memset(dst, ch, n);
-        Advance(n);
-    }
-}
-
-inline void TStringBuilderBase::AppendString(TStringBuf str)
-{
-    if (Y_LIKELY(str)) {
-        char* dst = Preallocate(str.length());
-        ::memcpy(dst, str.begin(), str.length());
-        Advance(str.length());
-    }
-}
-
-inline void TStringBuilderBase::AppendString(const char* str)
-{
-    AppendString(TStringBuf(str));
-}
-
-inline void TStringBuilderBase::Reset()
-{
-    Begin_ = Current_ = End_ = nullptr;
-    DoReset();
-}
-
-template <class... TArgs>
-void TStringBuilderBase::AppendFormat(TStringBuf format, TArgs&& ... args)
-{
-    Format(this, TRuntimeFormat{format}, std::forward<TArgs>(args)...);
-}
-
-template <size_t Length, class... TArgs>
-void TStringBuilderBase::AppendFormat(const char (&format)[Length], TArgs&& ... args)
-{
-    Format(this, TRuntimeFormat{format}, std::forward<TArgs>(args)...);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-inline TString TStringBuilder::Flush()
-{
-    Buffer_.resize(GetLength());
-    auto result = std::move(Buffer_);
-    Reset();
-    return result;
-}
-
-inline void TStringBuilder::DoReset()
-{
-    Buffer_ = {};
-}
-
-inline void TStringBuilder::DoReserve(size_t newLength)
-{
-    Buffer_.ReserveAndResize(newLength);
-    auto capacity = Buffer_.capacity();
-    Buffer_.ReserveAndResize(capacity);
-    Begin_ = &*Buffer_.begin();
-    End_ = Begin_ + capacity;
-}
 
 inline void FormatValue(TStringBuilderBase* builder, const TStringBuilder& value, TStringBuf /*spec*/)
 {
@@ -222,24 +122,67 @@ void FormatPointerValue(
 // so that someone doesn't accidentally implement the
 // "SimpleRange" concept and have a non-trivial
 // formatting procedure at the same time.
+// Sadly, clang is bugged and thus we must do implementation by hand
+// if we want to use this concept in class specializations.
 
 template <class R>
-concept CKnownRange =
-    requires (R r) { [] <class... Ts> (std::vector<Ts...>) { } (r); } ||
-    requires (R r) { [] <class T, size_t E> (std::span<T, E>) { } (r); } ||
-    requires (R r) { [] <class T, size_t N> (TCompactVector<T, N>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (std::set<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashSet<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashMultiSet<Ts...>) { } (r); };
+constexpr bool CKnownRange = false;
+
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::vector<Ts...>*) {} (t); }
+constexpr bool CKnownRange<T> = true;
+template <class T, size_t E>
+constexpr bool CKnownRange<std::span<T, E>> = true;
+template <class T, size_t N>
+constexpr bool CKnownRange<std::array<T, N>> = true;
+template <class T, size_t N>
+constexpr bool CKnownRange<TCompactVector<T, N>> = true;
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::set<Ts...>*) {} (t); }
+constexpr bool CKnownRange<T> = true;
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::multiset<Ts...>*) {} (t); }
+constexpr bool CKnownRange<T> = true;
+template <class... Ts>
+constexpr bool CKnownRange<THashSet<Ts...>> = true;
+template <class... Ts>
+constexpr bool CKnownRange<THashMultiSet<Ts...>> = true;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class R>
-concept CKnownKVRange =
-    requires (R r) { [] <class... Ts> (std::map<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (std::multimap<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashMap<Ts...>) { } (r); } ||
-    requires (R r) { [] <class... Ts> (THashMultiMap<Ts...>) { } (r); };
+constexpr bool CKnownKVRange = false;
+
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::map<Ts...>*) {} (t); }
+constexpr bool CKnownKVRange<T> = true;
+template <class T>
+    requires requires (T* t) { [] <class... Ts> (std::multimap<Ts...>*) {} (t); }
+constexpr bool CKnownKVRange<T> = true;
+template <class... Ts>
+constexpr bool CKnownKVRange<THashMap<Ts...>> = true;
+template <class... Ts>
+constexpr bool CKnownKVRange<THashMultiMap<Ts...>> = true;
+
+// TODO(arkady-e1ppa): Uncomment me when
+// https://github.com/llvm/llvm-project/issues/58534 is shipped.
+// template <class R>
+// concept CKnownRange =
+//     requires (R r) { [] <class... Ts> (std::vector<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class T, size_t E> (std::span<T, E>) { } (r); } ||
+//     requires (R r) { [] <class T, size_t N> (TCompactVector<T, N>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (std::set<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashSet<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashMultiSet<Ts...>) { } (r); };
+
+// ////////////////////////////////////////////////////////////////////////////////
+
+// template <class R>
+// concept CKnownKVRange =
+//     requires (R r) { [] <class... Ts> (std::map<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (std::multimap<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashMap<Ts...>) { } (r); } ||
+//     requires (R r) { [] <class... Ts> (THashMultiMap<Ts...>) { } (r); };
 
 } // namespace NDetail
 
@@ -299,6 +242,22 @@ concept CFormattableKVRange =
     NDetail::CKnownKVRange<R> &&
     CFormattable<typename R::key_type> &&
     CFormattable<typename R::value_type>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Specializations of TFormatArg for ranges
+template <class R>
+    requires CFormattableRange<std::remove_cvref_t<R>>
+struct TFormatArg<R>
+    : public TFormatArgBase
+{
+    using TUnderlying = typename std::remove_cvref_t<R>::value_type;
+
+    static constexpr auto ConversionSpecifiers = TFormatArg<TUnderlying>::ConversionSpecifiers;
+
+    static constexpr auto FlagSpecifiers = TFormatArg<TUnderlying>::FlagSpecifiers;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -533,6 +492,58 @@ inline void FormatValue(TStringBuilderBase* builder, const std::filesystem::path
 }
 #endif
 
+#ifdef __cpp_lib_source_location
+// std::source_location
+inline void FormatValue(TStringBuilderBase* builder, const std::source_location& location, TStringBuf /*spec*/)
+{
+    if (location.file_name() != nullptr) {
+        builder->AppendFormat(
+            "%v:%v:%v",
+            location.file_name(),
+            location.line(),
+            location.column());
+    } else {
+        builder->AppendString("<unknown>");
+    }
+}
+#endif // __cpp_lib_source_location
+
+// TSourceLocation
+inline void FormatValue(TStringBuilderBase* builder, const TSourceLocation& location, TStringBuf /*spec*/)
+{
+    if (location.GetFileName() != nullptr) {
+        builder->AppendFormat(
+            "%v:%v",
+            location.GetFileName(),
+            location.GetLine());
+    } else {
+        builder->AppendString("<unknown>");
+    }
+}
+
+// std::monostate
+inline void FormatValue(TStringBuilderBase* builder, const std::monostate&, TStringBuf /*spec*/)
+{
+    builder->AppendString(TStringBuf("<monostate>"));
+}
+
+// std::variant
+template <class... Ts>
+    requires (CFormattable<Ts> && ...)
+void FormatValue(TStringBuilderBase* builder, const std::variant<Ts...>& variant, TStringBuf spec)
+{
+    [&] <size_t... Ids> (std::index_sequence<Ids...>) {
+        ([&] {
+            if (variant.index() == Ids) {
+                FormatValue(builder, std::get<Ids>(variant), spec);
+                return false;
+            }
+
+            return true;
+        } () && ...);
+    } (std::index_sequence_for<Ts...>());
+}
+
 // char
 inline void FormatValue(TStringBuilderBase* builder, char value, TStringBuf spec)
 {
@@ -740,9 +751,9 @@ void FormatValue(TStringBuilderBase* builder, const TEnumIndexedArray<E, T>& col
 
 // One-valued ranges
 template <CFormattableRange TRange>
-void FormatValue(TStringBuilderBase* builder, const TRange& collection, TStringBuf /*spec*/)
+void FormatValue(TStringBuilderBase* builder, const TRange& collection, TStringBuf spec)
 {
-    NYT::FormatRange(builder, collection, TDefaultFormatter());
+    NYT::FormatRange(builder, collection, TSpecBoundFormatter(spec));
 }
 
 // Two-valued ranges

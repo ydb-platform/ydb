@@ -6,7 +6,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #endif
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 namespace NKikimr {
 namespace NKqp {

@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/core/tx/scheme_board/events.h>
 
 namespace {
 

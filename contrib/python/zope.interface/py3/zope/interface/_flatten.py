@@ -24,7 +24,7 @@ def _flatten(implements, include_None=0):
         r = implements.flattened()
     except AttributeError:
         if implements is None:
-            r=()
+            r = ()
         else:
             r = Declaration(implements).flattened()
 

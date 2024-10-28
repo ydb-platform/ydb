@@ -246,7 +246,7 @@ public:
         if (WaitingOnly) {
             tabletIdIndex.reserve(Self->BootQueue.WaitQueue.size());
             for (const TBootQueue::TBootQueueRecord& rec : Self->BootQueue.WaitQueue) {
-                TTabletInfo* tablet = Self->FindTablet(rec.TabletId);
+                TTabletInfo* tablet = Self->FindTablet(rec.TabletId, rec.FollowerId);
                 if (tablet != nullptr) {
                     tabletIdIndex.push_back({tabletIndexFunction(*tablet), tablet});
                 }
@@ -836,6 +836,7 @@ public:
         UpdateConfig(db, "MinStorageScatterToBalance", configUpdates);
         UpdateConfig(db, "MinGroupUsageToBalance", configUpdates);
         UpdateConfig(db, "StorageBalancerInflight", configUpdates);
+        UpdateConfig(db, "LessSystemTabletsMoves", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1182,6 +1183,7 @@ public:
         ShowConfig(out, "MinStorageScatterToBalance");
         ShowConfig(out, "MinGroupUsageToBalance");
         ShowConfig(out, "StorageBalancerInflight");
+        ShowConfig(out, "LessSystemTabletsMoves");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";
@@ -4020,8 +4022,14 @@ public:
             auto group = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Group>();
             bool filterOk = (filterTabletId == id) || (filterGroupId == group) || (filterTabletId == (ui64)-1 && filterGroupId == (ui64)-1);
             if (filterOk) {
+                TLeaderTabletInfo* tablet = Self->FindTablet(id);
                 ui32 channel = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Channel>();
-                out << "<tr>";
+                bool isLatest = (tablet && tablet->TabletStorageInfo->Version == tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::Version>(0));
+                if (isLatest) {
+                    out << "<tr style='font-weight:bold'>";
+                } else {
+                    out << "<tr>";
+                }
                 out << "<td><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
                 out << "<td>" << channel << "</td>";
                 out << "<td>" << group << "</td>";
@@ -4037,7 +4045,6 @@ public:
                     out << "<td></td>";
                 }
                 TString unitSize;
-                TTabletInfo* tablet = Self->FindTablet(id);
                 if (tablet) {
                     TLeaderTabletInfo& leader = tablet->GetLeader();
                     if (channel < leader.GetChannelCount()) {
@@ -4349,7 +4356,7 @@ bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorConte
     TCgiParameters cgi(httpInfo->Cgi());
     TStringBuilder keyData;
     keyData << cgi.Get("tablet") << cgi.Get("owner") << cgi.Get("owner_idx");
-    if (keyData.Empty()) {
+    if (keyData.empty()) {
         ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
         return false;
     }

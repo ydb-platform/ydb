@@ -441,6 +441,7 @@ class TExecutor
     TAutoPtr<TCommitManager> CommitManager;
     TAutoPtr<TScans> Scans;
     TAutoPtr<TMemory> Memory;
+    TAutoPtr<NTable::IMemTableMemoryConsumersCollection> MemTableMemoryConsumersCollection;
     TAutoPtr<TLogicSnap> LogicSnap;
     TAutoPtr<TLogicRedo> LogicRedo;
     TAutoPtr<TLogicAlter> LogicAlter;
@@ -614,17 +615,17 @@ class TExecutor
     void CommitCompactionChanges(
             ui32 tableId,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
     void ApplyCompactionChanges(
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
 
 public:
     void Describe(IOutputStream &out) const noexcept override
     {
         out
-            << (Stats->IsFollower ? "Follower" : "Leader")
+            << (Stats->IsFollower() ? "Follower" : "Leader")
             << "{" << Owner->TabletID()
             << ":" << Generation() << ":" << Step() << "}";
     }
@@ -656,8 +657,8 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
-    void Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev);
-    void Handle(NSharedCache::TEvMemTableCompact::TPtr &ev);
+    void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
+    void Handle(NMemory::TEvMemTableCompact::TPtr &ev);
 
     void AllowBorrowedGarbageCompaction(ui32 tableId) override;
 

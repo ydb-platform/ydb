@@ -204,45 +204,6 @@ private:
     bool Continue;
 };
 
-class TResultPrinter: public TActor<TResultPrinter> {
-public:
-    static constexpr char ActorName[] = "YQL_DQ_RESULT_PRINTER";
-
-    TResultPrinter(IOutputStream& output, NThreading::TPromise<void>& promise)
-        : TActor<TResultPrinter>(&TResultPrinter::Handler)
-        , Output(output)
-        , Promise(promise)
-    {
-    }
-
-private:
-    STRICT_STFUNC(Handler, { HFunc(TEvQueryResponse, OnQueryResult); })
-
-    void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        if (!ev->Get()->Record.HasResultSet()&&ev->Get()->Record.GetYson().empty()) {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
-            Cerr << issues.ToString() << Endl;
-        } else {
-            auto ysonString = !ev->Get()->Record.GetYson().empty()
-                ? ev->Get()->Record.GetYson()
-                : NYdb::FormatResultSetYson(ev->Get()->Record.GetResultSet(), NYson::EYsonFormat::Binary);
-            auto ysonNode = NYT::NodeFromYsonString(ysonString, NYson::EYsonType::Node);
-            YQL_ENSURE(ysonNode.GetType() == NYT::TNode::EType::List);
-            for (const auto& row : ysonNode.AsList()) {
-                Output << NYT::NodeToYsonString(row) << "\n";
-            }
-        }
-
-        Promise.SetValue();
-        PassAway();
-    }
-
-private:
-    IOutputStream& Output;
-    NThreading::TPromise<void>& Promise;
-};
-
 } // unnamed
 
 THolder<NActors::IActor> MakeResultAggregator(

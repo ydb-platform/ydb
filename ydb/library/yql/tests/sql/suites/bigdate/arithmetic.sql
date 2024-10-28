@@ -99,4 +99,5 @@ select 0, -$interval64_max, -$interval64_min, -$interval64_zero
 , 8, $interval64_zero/$ui64_max, $interval64_zero/$i64_max, $interval64_plus1/$ui64_max, $interval64_plus1/$i64_max, $interval64_minus1/$ui64_max, $interval64_minus1/$i64_max
 , 9, $interval64_max/cast($interval64_max as int64), $interval64_min/cast($interval64_min as int64)
 , 10, abs($interval64_max), abs($interval64_min), abs($interval64_zero)
+, 11, cast(4294967296l as interval64) * 4294967296l, 4294967296ul * cast(4294967296l as interval64)
 ;

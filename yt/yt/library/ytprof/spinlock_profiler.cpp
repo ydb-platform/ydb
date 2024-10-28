@@ -94,7 +94,7 @@ void TSpinlockProfiler::OnEvent(const void* lock, int64_t waitCycles)
     HandlingEvent_.store(false);
 }
 
-void TSpinlockProfiler::AnnotateProfile(NProto::Profile* profile, const std::function<i64(const TString&)>& stringify)
+void TSpinlockProfiler::AnnotateProfile(NProto::Profile* profile, const TStringify& stringify)
 {
     auto sampleType = profile->add_sample_type();
     sampleType->set_type(stringify("sample"));
@@ -117,7 +117,6 @@ i64 TSpinlockProfiler::EncodeValue(i64 value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 
 TBlockingProfiler::TBlockingProfiler(TSpinlockProfilerOptions options)
     : TSignalSafeProfiler(options)
@@ -204,7 +203,7 @@ void TBlockingProfiler::OnEvent(
     HandlingEvent_.store(false);
 }
 
-void TBlockingProfiler::AnnotateProfile(NProto::Profile* profile, const std::function<i64(const TString&)>& stringify)
+void TBlockingProfiler::AnnotateProfile(NProto::Profile* profile, const TStringify& stringify)
 {
     auto sampleType = profile->add_sample_type();
     sampleType->set_type(stringify("sample"));

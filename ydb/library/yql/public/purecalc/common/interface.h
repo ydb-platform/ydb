@@ -592,10 +592,26 @@ namespace NYql {
             virtual const NKikimr::NMiniKQL::TStructType* GetInputType(bool original = false) const = 0;
 
             /**
+             * MiniKQL input struct type of the specified input for this program.
+             * The returned type is the actual type of the specified input node.
+             */
+            virtual const NKikimr::NMiniKQL::TStructType* GetRawInputType(ui32) const = 0;
+            /**
+             * Overload for single-input programs.
+             */
+            virtual const NKikimr::NMiniKQL::TStructType* GetRawInputType() const = 0;
+
+            /**
              * MiniKQL output struct type for this program. The returned type is equivalent to the deduced output
              * schema (see IWorker::MakeFullOutputSchema()).
              */
             virtual const NKikimr::NMiniKQL::TType* GetOutputType() const = 0;
+
+            /**
+             * MiniKQL output struct type for this program. The returned type is
+             * the actual type of the root node.
+             */
+            virtual const NKikimr::NMiniKQL::TType* GetRawOutputType() const = 0;
 
             /**
              * Make input type schema for specified input as deduced by program optimizer. This schema is equivalent
@@ -795,7 +811,7 @@ namespace NYql {
                 return AllVirtualColumns_;
             }
 
-            static constexpr bool ProvidesBlocks = false;
+            virtual bool ProvidesBlocks() const { return false; }
         };
 
         /**
@@ -840,7 +856,7 @@ namespace NYql {
                 OutputColumnsFilter_ = outputColumnsFilter;
             }
 
-            static constexpr bool AcceptsBlocks = false;
+            virtual bool AcceptsBlocks() const { return false; }
         };
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////

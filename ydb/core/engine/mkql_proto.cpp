@@ -192,7 +192,7 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             if (v.HasBytes()) {
                 c = TCell(v.GetBytes().data(), v.GetBytes().size());
             } else if (v.HasText()) {
-                auto typeDesc = types[i].GetTypeDesc();
+                auto typeDesc = types[i].GetPgTypeDesc();
                 auto convert = NPg::PgNativeBinaryFromNativeText(v.GetText(), NPg::PgTypeIdFromTypeDesc(typeDesc));
                 if (convert.Error) {
                     CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), i));
@@ -223,6 +223,19 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             }
             break;
         }
+        case NScheme::NTypeIds::Decimal:
+        {
+            if (v.HasLow128() && v.HasHi128()) {
+                NYql::NDecimal::TInt128 int128 = NYql::NDecimal::FromProto(v);
+                auto &data = memoryOwner.emplace_back();
+                data.resize(sizeof(NYql::NDecimal::TInt128));
+                std::memcpy(data.Detach(), &int128, sizeof(NYql::NDecimal::TInt128));
+                c = TCell(data);                
+            } else {
+                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, i));
+            }
+            break;
+        }        
         default:
             CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, i));
             break;
@@ -328,8 +341,15 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetText(c.Data(), c.Size());
         break;
 
+    case NScheme::NTypeIds::Decimal: {
+        const auto loHi = c.AsValue<std::pair<ui64, i64>>();
+        val.MutableOptional()->SetLow128(loHi.first);
+        val.MutableOptional()->SetHi128(loHi.second);
+        break;
+    }
+
     case NScheme::NTypeIds::Pg: {
-        auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetTypeDesc());
+        auto convert = NPg::PgNativeTextFromNativeBinary(c.AsBuf(), type.GetPgTypeDesc());
         if (convert.Error) {
             errStr = *convert.Error;
             return false;

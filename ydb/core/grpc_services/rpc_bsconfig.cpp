@@ -21,41 +21,6 @@ using namespace NActors;
 using namespace Ydb;
 
 bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
-    /*auto& yamlConfig = from.yaml_config();
-    auto yamlNode = YAML::Load(yamlConfig);
-    NJson::TJsonValue replaceJson = Yaml2Json(yamlNode, true);
-    Ydb::BSConfig::StorageConfig storageConfig;
-    NProtobufJson::MergeJson2Proto(replaceJson, storageConfig, GetJsonToProtoConfig());
-    for (const auto& hostConfig: storageConfig.host_config()) {
-        auto *defineHostConfig = to->AddCommand()->MutableDefineHostConfig();
-        defineHostConfig->SetHostConfigId(hostConfig.host_config_id());
-        for (const auto& drive: hostConfig.drive()) {
-            auto *newDrive = defineHostConfig->AddDrive();
-            newDrive->SetPath(drive.path());
-            newDrive->SetType(static_cast<decltype(newDrive->GetType())>(drive.type()));
-            newDrive->SetSharedWithOs(drive.shared_with_os());
-            newDrive->SetReadCentric(drive.read_centric());
-            newDrive->SetKind(drive.kind());
-            newDrive->MutablePDiskConfig()->SetExpectedSlotCount(drive.expected_slot_count());
-        }
-        defineHostConfig->SetItemConfigGeneration(storageConfig.item_config_generation());
-    }
-    auto *defineBox = to->AddCommand()->MutableDefineBox();
-    defineBox->SetBoxId(1);
-    defineBox->SetItemConfigGeneration(storageConfig.item_config_generation());
-    for (const auto& host: storageConfig.host()) {
-        auto *newHost = defineBox->AddHost();
-        newHost->SetHostConfigId(host.host_config_id());
-        auto *newKey = newHost->MutableKey();
-        auto& key = host.key();
-        if (key.has_node_id()) {
-            newKey->SetNodeId(key.node_id());
-        }
-        else {
-            newKey->SetFqdn(key.endpoint().fqdn());
-            newKey->SetIcPort(key.endpoint().ic_port());
-        }
-    }*/
     to->CopyFrom(NKikimr::NYaml::BuildInitDistributedStorageCommand(from.yaml_config()));
     return true;
 }
@@ -63,7 +28,7 @@ bool CopyToConfigRequest(const Ydb::BSConfig::ReplaceStorageConfigRequest &from,
 void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &/*from*/, Ydb::BSConfig::ReplaceStorageConfigResult */*to*/) {
 }
 
-bool CopyToConfigRequest(const Ydb::BSConfig::FetchStorageConfigRequest &from, NKikimrBlobStorage::TConfigRequest *to) {
+bool CopyToConfigRequest(const Ydb::BSConfig::FetchStorageConfigRequest &/*from*/, NKikimrBlobStorage::TConfigRequest *to) {
     to->AddCommand()->MutableReadHostConfig();
     to->AddCommand()->MutableReadBox();
     return true;

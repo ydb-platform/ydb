@@ -8,7 +8,7 @@ Applying `DISTINCT` to calculated values is not currently implemented. For this 
 
 {% endnote %}
 
-**Example**
+## Example
 
 ```yql
 SELECT DISTINCT value -- only unique values from the table

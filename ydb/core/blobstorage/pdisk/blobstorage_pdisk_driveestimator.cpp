@@ -1,4 +1,5 @@
 #include "blobstorage_pdisk_driveestimator.h"
+#include "blobstorage_pdisk.h"
 
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/wcache.h>
@@ -236,7 +237,7 @@ TDriveEstimator::TDriveEstimator(const TString filename)
     , ActorSystemCreator(new TActorSystemCreator)
     , ActorSystem(ActorSystemCreator->GetActorSystem())
     , QueueDepth(4)
-    , Device(CreateRealBlockDevice(filename, 0, PDiskMon, 50, 0, QueueDepth, TDeviceMode::LockFile, 128, nullptr, nullptr))
+    , Device(CreateRealBlockDevice(filename, PDiskMon, 50, 0, QueueDepth, TDeviceMode::LockFile, 128, 1, nullptr, nullptr))
     , BufferPool(CreateBufferPool(BufferSize, 1, false, {}))
     , Buffer(BufferPool->Pop())
 {
@@ -244,7 +245,7 @@ TDriveEstimator::TDriveEstimator(const TString filename)
     bool isBlockDevice = false;
     ActorSystem->AppData<TAppData>()->IoContextFactory->DetectFileParameters(filename, DriveSize, isBlockDevice);
     Y_ABORT_UNLESS(Buffer->Size() * Repeats < DriveSize);
-    Device->Initialize(ActorSystem, {});
+    Device->Initialize(std::make_shared<TPDiskCtx>(ActorSystem));
     Y_VERIFY_S(Device->IsGood(), "Cannot Initialize TBlockDevice");
 }
 

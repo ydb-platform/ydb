@@ -393,6 +393,7 @@ public:
 
             if (checks) {
                 if (parentPath->IsTable()) {
+                    checks.NotBackupTable();
                     // allow immediately inside a normal table
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations

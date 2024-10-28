@@ -1,0 +1,308 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 02578fd01d3e29e6c82aba69bdb82970
+BELONGS ya.make
+    License text:
+         *    Copyright 2013-2013 Tilera Corporation(jiwang@tilera.com). All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sljit/sljitNativeTILEGX-encoder.c [4:4]
+        sljit/sljitNativeTILEGX_64.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 029b66de29e9893a9af854e4049ff264
+BELONGS ya.make
+    License text:
+        Copyright(c) 2009-2021 Zoltan Herczeg
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENCE [50:51]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e873553d39834f61b495e45fcd01679
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2005, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcre_scanner.cc [1:2]
+        pcre_scanner.h [1:2]
+        pcre_stringpiece.cc [1:2]
+        pcre_stringpiece.h [1:2]
+        pcrecpp.h [1:2]
+        pcrecpp_internal.h [6:7]
+        pcrecpparg.h [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 20b71da944b9e6967071fc4782c1355f
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2010, Google Inc.
+        // All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcrecpp.cc [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ae28e7dc2a24b7c7ecd4b6d57ca4d94
+BELONGS ya.make
+    License text:
+                               Written by Philip Hazel
+                   Copyright (c) 1997-2017 University of Cambridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcre_dfa_exec.c [9:10]
+        pcre_tables.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 50a557143a871aeb8473a4c0c56687f2
+BELONGS ya.make
+    License text:
+                   Copyright (c) 1997-2014 University of Cambridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcre.h [8:8]
+        pcre_byte_order.c [8:9]
+        pcre_globals.c [8:9]
+        pcre_string_utils.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 592125ca0e46e64eae2bb2293e947755
+BELONGS ya.make
+    License text:
+                               Written by Philip Hazel
+                   Copyright (c) 1997-2020 University of Cambridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcreposix.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71499817b900aaf04d853fdffdc657b0
+BELONGS ya.make
+    License text:
+           Copyright (C) 1994-1996, 1999-2002, 2004-2016 Free Software
+        Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71a195031e61150b1a1da7b8f788beec
+BELONGS ya.make
+    License text:
+        Copyright (c) 2007-2012, Google Inc.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENCE [59:60]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9370509aa40e84590d30bdafb0dac440
+BELONGS ya.make
+    License text:
+         *    Copyright Zoltan Herczeg (hzmester@freemail.hu). All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sljit/sljitConfig.h [4:4]
+        sljit/sljitConfigInternal.h [4:4]
+        sljit/sljitExecAllocator.c [4:4]
+        sljit/sljitLir.c [4:4]
+        sljit/sljitLir.h [4:4]
+        sljit/sljitNativeARM_32.c [4:4]
+        sljit/sljitNativeARM_64.c [4:4]
+        sljit/sljitNativeARM_T2_32.c [4:4]
+        sljit/sljitNativeMIPS_32.c [4:4]
+        sljit/sljitNativeMIPS_64.c [4:4]
+        sljit/sljitNativeMIPS_common.c [4:4]
+        sljit/sljitNativePPC_32.c [4:4]
+        sljit/sljitNativePPC_64.c [4:4]
+        sljit/sljitNativePPC_common.c [4:4]
+        sljit/sljitNativeSPARC_32.c [4:4]
+        sljit/sljitNativeSPARC_common.c [4:4]
+        sljit/sljitNativeTILEGX-encoder.c [5:5]
+        sljit/sljitNativeTILEGX_64.c [5:5]
+        sljit/sljitNativeX86_32.c [4:4]
+        sljit/sljitNativeX86_64.c [4:4]
+        sljit/sljitNativeX86_common.c [4:4]
+        sljit/sljitUtils.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93ea79c5b4cd71715061d76f9f2a8a6e
+BELONGS ya.make
+    License text:
+                               Written by Philip Hazel
+                   Copyright (c) 1997-2016 University of Cambridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcre_internal.h [9:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97c1bd68d12fc7ffbf6b6583c204031e
+BELONGS ya.make
+    License text:
+        Copyright (c) 1997-2021 University of Cambridge
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENCE [28:29]
+        pcre_compile.c [8:9]
+        pcre_exec.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d2e7c83484cc274d175a441339febefd
+BELONGS ya.make
+    License text:
+                               Written by Philip Hazel
+                   Copyright (c) 1997-2013 University of Cambridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcre16_valid_utf16.c [8:9]
+        pcre32_valid_utf32.c [8:9]
+        pcre_fullinfo.c [8:9]
+        pcre_jit_compile.c [8:9]
+        pcre_valid_utf8.c [8:9]
+        pcre_xclass.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f210bdfe8075eda540c36de510ed81c0
+BELONGS ya.make
+    License text:
+        Copyright(c) 2010-2021 Zoltan Herczeg
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENCE [39:40]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f28a4750d9101477330316879bfef000
+BELONGS ya.make
+    License text:
+                               Written by Philip Hazel
+                   Copyright (c) 1997-2012 University of Cambridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcre16_byte_order.c [8:9]
+        pcre16_chartables.c [8:9]
+        pcre16_compile.c [8:9]
+        pcre16_config.c [8:9]
+        pcre16_dfa_exec.c [8:9]
+        pcre16_exec.c [8:9]
+        pcre16_fullinfo.c [8:9]
+        pcre16_get.c [8:9]
+        pcre16_globals.c [8:9]
+        pcre16_jit_compile.c [8:9]
+        pcre16_maketables.c [8:9]
+        pcre16_newline.c [8:9]
+        pcre16_ord2utf16.c [8:9]
+        pcre16_refcount.c [8:9]
+        pcre16_string_utils.c [8:9]
+        pcre16_study.c [8:9]
+        pcre16_tables.c [8:9]
+        pcre16_ucd.c [8:9]
+        pcre16_utf16_utils.c [8:9]
+        pcre16_version.c [8:9]
+        pcre16_xclass.c [8:9]
+        pcre32_byte_order.c [8:9]
+        pcre32_chartables.c [8:9]
+        pcre32_compile.c [8:9]
+        pcre32_config.c [8:9]
+        pcre32_dfa_exec.c [8:9]
+        pcre32_exec.c [8:9]
+        pcre32_fullinfo.c [8:9]
+        pcre32_get.c [8:9]
+        pcre32_globals.c [8:9]
+        pcre32_jit_compile.c [8:9]
+        pcre32_maketables.c [8:9]
+        pcre32_newline.c [8:9]
+        pcre32_ord2utf32.c [8:9]
+        pcre32_refcount.c [8:9]
+        pcre32_string_utils.c [8:9]
+        pcre32_study.c [8:9]
+        pcre32_tables.c [8:9]
+        pcre32_ucd.c [8:9]
+        pcre32_utf32_utils.c [8:9]
+        pcre32_version.c [8:9]
+        pcre32_xclass.c [8:9]
+        pcre_config.c [8:9]
+        pcre_get.c [8:9]
+        pcre_maketables.c [8:9]
+        pcre_newline.c [8:9]
+        pcre_ord2utf8.c [8:9]
+        pcre_refcount.c [8:9]
+        pcre_study.c [8:9]
+        pcre_version.c [8:9]
+        pcreposix.h [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f739539008599df8a5179e14aed6a3a4
+BELONGS ya.make
+    License text:
+          The machine code generator part (this module) was written by Zoltan Herczeg
+                              Copyright (c) 2010-2013
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        pcre_jit_compile.c [11:12]

@@ -278,7 +278,7 @@ public:
         UNIT_ASSERT(!Server_);
 
         NetDataFile = MakeHolder<TTempFileHandle>();
-        NetDataFile->Write(netDataTsv.Data(), netDataTsv.Size());
+        NetDataFile->Write(netDataTsv.data(), netDataTsv.size());
         NetDataFile->FlushData();
 
         Settings_.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());

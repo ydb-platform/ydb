@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    local_pgwire_auth_actor.cpp
     local_pgwire_connection.cpp
     local_pgwire.cpp
     local_pgwire.h
@@ -18,6 +19,7 @@ PEERDIR(
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/kqp/executer_actor
+    ydb/core/base
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/protos
@@ -25,6 +27,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/public/api/grpc
     ydb/public/lib/operation_id/protos
+    ydb/services/persqueue_v1/actors
 )
 
 YQL_LAST_ABI_VERSION()

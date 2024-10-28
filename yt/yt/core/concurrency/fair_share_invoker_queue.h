@@ -52,7 +52,7 @@ public:
     void Reconfigure(std::vector<double> weights);
 
 private:
-    constexpr static i64 UnitWeight = 1'000;
+    static constexpr i64 UnitWeight = 1'000;
 
     struct TBucket
     {

@@ -43,6 +43,7 @@ __thread int			NLocBuffer = 0;		/* until buffers are initialized */
 
 __thread BufferDesc *LocalBufferDescriptors = NULL;
 __thread Block	   *LocalBufferBlockPointers = NULL;
+Block** ImplPtrLocalBufferBlockPointers() { return &LocalBufferBlockPointers; }
 __thread int32	   *LocalRefCount = NULL;
 
 static __thread int	nextFreeLocalBufId = 0;

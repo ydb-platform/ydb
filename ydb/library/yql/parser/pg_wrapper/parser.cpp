@@ -60,6 +60,8 @@ extern "C" {
 #undef locale_t
 }
 
+#include "utils.h"
+
 extern "C" {
 
 extern __thread Latch LocalLatchData;
@@ -206,11 +208,22 @@ void PGParse(const TString& input, IPGParseEvents& events) {
     };
 
     if (parsetree_and_error.error) {
-        TPosition position(1, 1);
-        TTextWalker walker(position);
-        size_t distance = Min(size_t(parsetree_and_error.error->cursorpos), input.Size());
-        for (size_t i = 0; i < distance; ++i) {
-            walker.Advance(input[i]);
+        TPosition position(0, 1);
+        // cursorpos is about codepoints, not bytes
+        TTextWalker walker(position, true);
+        auto cursorpos = parsetree_and_error.error->cursorpos;
+        size_t codepoints = 0;
+        if (cursorpos >= 0) {
+            for (size_t i = 0; i < input.size(); ++i) {
+                if (codepoints == cursorpos) {
+                    break;
+                }
+
+                if (!TTextWalker::IsUtf8Intermediate(input[i])) {
+                    ++codepoints;
+                }
+                walker.Advance(input[i]);
+            }
         }
 
         events.OnError(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
@@ -237,6 +250,7 @@ TString GetCommandName(Node* node) {
 extern "C" void setup_pg_thread_cleanup() {
     struct TThreadCleanup {
         ~TThreadCleanup() {
+            NYql::TExtensionsRegistry::Instance().CleanupThread();
             destroy_timezone_hashtable();
             destroy_typecache_hashtable();
             RE_cleanup_cache();

@@ -3,8 +3,8 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-// EOutputFormat to be used in operations related to structured data
-enum class EOutputFormat {
+// EDataFormat to be used in operations related to structured data
+enum class EDataFormat {
     Default /* "default" */,
     Pretty /* "pretty" */,
     PrettyTable /* "pretty-table" */,
@@ -34,6 +34,20 @@ enum class EMessagingFormat {
 
     JsonStreamConcat /* "json-stream-concat" */,
     JsonArray /* "json-array" */,
+};
+
+// EFramingFormat to be used in operations related to structured data
+enum class EFramingFormat {
+    Default /* "default" */,
+    NoFraming /* "no-framing" */,
+    NewlineDelimited /* "newline-delimited" */,
+};
+
+// EBinaryStringEncoding to be used in operations over binary strings
+enum class EBinaryStringEncodingFormat {
+    Default /* "default" */,
+    Unicode /* "unicode" */,
+    Base64 /* "base64" */,
 };
 
 }

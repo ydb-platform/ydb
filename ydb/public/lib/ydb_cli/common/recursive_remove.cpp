@@ -195,7 +195,7 @@ TStatus RemoveDirectoryRecursive(
     return RemoveDirectoryRecursive(schemeClient, &tableClient, &topicClient, path, prompt, settings, removeSelf, createProgressBar);
 }
 
-NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::TTableClient& tableClient, NTopic::TTopicClient& topicClient, const TString& path, ERecursiveRemovePrompt prompt, const NScheme::TRemoveDirectorySettings& settings /*= {}*/, bool createProgressBar /*= true*/) {
+NYdb::TStatus RemovePathRecursive(NScheme::TSchemeClient& schemeClient, NTable::TTableClient& tableClient, NTopic::TTopicClient& topicClient, const TString& path, ERecursiveRemovePrompt prompt, const TRemovePathRecursiveSettings& settings /*= {}*/, bool createProgressBar /*= true*/) {
     auto entity = schemeClient.DescribePath(path).ExtractValueSync();
     if (!entity.IsSuccess()) {
         if (settings.NotExistsIsOk_ && entity.GetStatus() == EStatus::SCHEME_ERROR && entity.GetIssues().ToString().find("Path not found") != TString::npos) {

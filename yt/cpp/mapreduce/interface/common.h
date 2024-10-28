@@ -412,6 +412,9 @@ enum EValueType : int
     VT_TIMESTAMP64,
     // Interval64, difference between two timestamps64 (signed)
     VT_INTERVAL64,
+
+    // Universally unique identifier according to RFC-4122.
+    VT_UUID,
 };
 
 ///
@@ -646,11 +649,6 @@ public:
     NTi::TTypePtr TypeV3() const;
     /// @}
 
-    ///
-    /// @brief Raw yson representation of column type
-    /// @deprecated Prefer to use `TypeV3` methods.
-    FLUENT_FIELD_OPTION_ENCAPSULATED(TNode, RawTypeV3);
-
     /// Column sort order
     FLUENT_FIELD_OPTION_ENCAPSULATED(ESortOrder, SortOrder);
 
@@ -693,10 +691,21 @@ public:
     TColumnSchema Type(EValueType type, bool required) &&;
     /// @}
 
+    ///
+    /// @{
+    ///
+    /// @brief Raw yson representation of column type
+    /// @deprecated Prefer to use `TypeV3` methods.
+    const TMaybe<TNode>& RawTypeV3() const;
+    TColumnSchema& RawTypeV3(TNode rawTypeV3)&;
+    TColumnSchema RawTypeV3(TNode rawTypeV3)&&;
+    /// @}
+
+
 private:
     friend void Deserialize(TColumnSchema& columnSchema, const TNode& node);
     NTi::TTypePtr TypeV3_;
-    bool Required_ = false;
+    TMaybe<TNode> RawTypeV3_;
 };
 
 /// Equality check checks all fields of column schema.
@@ -1192,6 +1201,9 @@ struct TTableColumnarStatistics
 {
     /// Total data weight for all chunks for each of requested columns.
     THashMap<TString, i64> ColumnDataWeight;
+
+    /// Estimated number of unique elements for each column.
+    THashMap<TString, ui64> ColumnEstimatedUniqueCounts;
 
     /// Total weight of all old chunks that don't keep columnar statistics.
     i64 LegacyChunksDataWeight = 0;

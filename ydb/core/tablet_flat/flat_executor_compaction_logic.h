@@ -5,10 +5,10 @@
 #include "flat_store_bundle.h"
 #include "flat_exec_broker.h"
 #include "logic_redo_eggs.h"
-#include "shared_cache_memtable.h"
 #include "util_fmt_line.h"
 #include <ydb/core/base/localdb.h>
 #include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/base/memory_controller_iface.h>
 
 namespace NKikimr {
 
@@ -82,11 +82,11 @@ struct TCompactionLogicState {
 
         // This identifies currently active strategy type
         // The default value is used as a marker for uninitialized strategies
-        NKikimrSchemeOp::ECompactionStrategy StrategyType = NKikimrSchemeOp::CompactionStrategyUnset;
+        NKikimrCompaction::ECompactionStrategy StrategyType = NKikimrCompaction::CompactionStrategyUnset;
 
         THolder<NTable::ICompactionStrategy> Strategy;
 
-        TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> SharedPageCacheMemTableRegistration;
+        TIntrusivePtr<NMemory::IMemoryConsumer> MemTableMemoryConsumer;
 
         TDeque<TSnapRequest> SnapRequests;
 
@@ -127,7 +127,7 @@ struct TCompactionLogicState {
         // The default value is used for compatibility, i.e. tablets that did
         // not have any strategy markers in their history are assumed to have
         // used the generational compaction.
-        NKikimrSchemeOp::ECompactionStrategy Strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+        NKikimrCompaction::ECompactionStrategy Strategy = NKikimrCompaction::CompactionStrategyGenerational;
     };
 
     TMap<ui32, TTableInfo> Tables;
@@ -138,7 +138,7 @@ class TFlatTableScan;
 
 struct TTableCompactionResult {
     NTable::TCompactionChanges Changes;
-    NKikimrSchemeOp::ECompactionStrategy Strategy;
+    NKikimrCompaction::ECompactionStrategy Strategy;
     TVector<TIntrusivePtr<TTableSnapshotContext>> CompleteSnapshots;
     bool MemCompacted = false;
 };
@@ -146,20 +146,20 @@ struct TTableCompactionResult {
 struct TTableCompactionChanges {
     ui32 Table;
     NTable::TCompactionChanges Changes;
-    NKikimrSchemeOp::ECompactionStrategy Strategy;
+    NKikimrCompaction::ECompactionStrategy Strategy;
 };
 
 struct TReflectSchemeChangesResult {
     struct TStrategyChange {
         ui32 Table;
-        NKikimrSchemeOp::ECompactionStrategy Strategy;
+        NKikimrCompaction::ECompactionStrategy Strategy;
     };
 
     TVector<TStrategyChange> StrategyChanges;
 };
 
 class TCompactionLogic {
-    THolder<NSharedCache::ISharedPageCacheMemTableObserver> SharedPageCacheMemTableObserver;
+    NTable::IMemTableMemoryConsumersCollection * const MemTableMemoryConsumersCollection;
     NUtil::ILogger * const Logger;
     NTable::IResourceBroker * const Broker;
     NTable::ICompactionBackend * const Backend;
@@ -179,7 +179,7 @@ class TCompactionLogic {
 
     bool BeginMemTableCompaction(ui64 taskId, ui32 tableId);
 
-    THolder<NTable::ICompactionStrategy> CreateStrategy(ui32 tableId, NKikimrSchemeOp::ECompactionStrategy);
+    THolder<NTable::ICompactionStrategy> CreateStrategy(ui32 tableId, NKikimrCompaction::ECompactionStrategy);
 
     void StopTable(TCompactionLogicState::TTableInfo &table);
     void StrategyChanging(TCompactionLogicState::TTableInfo &table);
@@ -193,7 +193,7 @@ public:
     static constexpr ui32 BAD_PRIORITY = Max<ui32>();
 
     TCompactionLogic(
-        THolder<NSharedCache::ISharedPageCacheMemTableObserver> sharedPageCacheMemTableObserver,
+        NTable::IMemTableMemoryConsumersCollection*,
         NUtil::ILogger*,
         NTable::IResourceBroker*,
         NTable::ICompactionBackend*,
@@ -229,7 +229,7 @@ public:
     void AllowBorrowedGarbageCompaction(ui32 table);
 
     TReflectSchemeChangesResult ReflectSchemeChanges();
-    void ProvideSharedPageCacheMemTableRegistration(ui32 table, TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration);
+    void ProvideMemTableMemoryConsumer(ui32 table, TIntrusivePtr<NMemory::IMemoryConsumer> memTableMemoryConsumer);
     void ReflectRemovedRowVersions(ui32 table);
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
     void CheckInMemStats(ui32 table);

@@ -48,6 +48,10 @@ struct TEnvironmentSetup {
         const ui32 MinHugeBlobInBytes = 0;
         const float DiskTimeAvailableScale = 1;
         const bool UseFakeConfigDispatcher = false;
+        const float SlowDiskThreshold = 2;
+        const float VDiskPredictedDelayMultiplier = 1;
+        const bool UseActorSystemTimeInBSQueue = true;
+        const ui32 MaxNumOfSlowDisks = 2;
     };
 
     const TSettings Settings;
@@ -149,7 +153,6 @@ struct TEnvironmentSetup {
     }
 
     static void SetupEnv() {
-        TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         ui64 seed = RandomNumber<ui64>();
         if (const TString& s = GetEnv("SEED", "")) {
             seed = FromString<ui64>(s);
@@ -198,6 +201,7 @@ struct TEnvironmentSetup {
 
     void Initialize() {
         Runtime = MakeRuntime();
+        TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
         }
@@ -363,6 +367,7 @@ struct TEnvironmentSetup {
                 auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
+                config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }
@@ -396,6 +401,11 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleHDD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
                 ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleSSD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
                 ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleNVME", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+
+                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplier", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                
 #undef ADD_ICB_CONTROL
 
                 {
@@ -808,8 +818,14 @@ struct TEnvironmentSetup {
     }
 
     void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,
-            NKikimrBlobStorage::EDecommitStatus decommitStatus) {
+            NKikimrBlobStorage::EDecommitStatus decommitStatus, bool force = false) {
         NKikimrBlobStorage::TConfigRequest request;
+        if (force) {
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            request.SetIgnoreGroupSanityChecks(true);
+        }
         auto *cmd = request.AddCommand();
         auto *ds = cmd->MutableUpdateDriveStatus();
         ds->MutableHostKey()->SetNodeId(nodeId);

@@ -26,18 +26,18 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
 
     if (Tiering) {
         AFL_VERIFY(TieringColumnId);
-        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMax(*TieringColumnId);
+        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
-        if (!indexMeta) {
-            max = portion.MaxValue(*TieringColumnId);
-            if (!max) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_not_max");
-                return {};
-            }
-        } else {
+        if (indexMeta) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
             max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+        } else if (*TieringColumnId == portionSchema->GetIndexInfo().GetPKColumnIds().front()) {
+            NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
+            max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no data for ttl usage (need to create index or use first pk column)");
+            return {};
         }
         auto tieringInfo = Tiering->GetTierToMove(max, now);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());
@@ -123,7 +123,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
             for (auto&& p : portions) {
                 auto portion = externalContext.GetPortionVerified(p);
                 if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                    if (!portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
+                    if (!portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized) || portion->HasInsertWriteId()) {
                         Counters.SkipEvictionForCompaction->Add(1);
                         continue;
                     }
@@ -174,7 +174,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
     Tiering = info;
     if (Tiering) {
-        TieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetTtlColumn());
+        TieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
     } else {
         TieringColumnId = {};
     }

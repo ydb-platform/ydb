@@ -28,6 +28,7 @@ SRCS(
     yql_join.cpp
     yql_join.h
     yql_library_compiler.cpp
+    yql_opt_hopping.cpp
     yql_opt_match_recognize.cpp
     yql_opt_match_recognize.h
     yql_opt_proposed_by_data.cpp
@@ -108,6 +109,7 @@ RECURSE(
     facade
     file_storage
     issue
+    pg_ext
     peephole_opt
     qplayer
     services

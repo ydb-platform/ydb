@@ -18,10 +18,21 @@ IQStoragePtr MakeUnbufferedFileQStorage() {
     return MakeFileQStorage({}, settings);
 }
 
+IQStoragePtr MakeUnbufferedFileWithFlushIndexQStorage() {
+    TFileQStorageSettings settings;
+    settings.BufferUntilCommit = false;
+    settings.AlwaysFlushIndex = true;
+    return MakeFileQStorage({}, settings);
+}
+
 Y_UNIT_TEST_SUITE(TQStorageBufferedFileTests) {
-    GENERATE_TESTS(MakeBufferedFileQStorage)
+    GENERATE_TESTS(MakeBufferedFileQStorage, false)
 }
 
 Y_UNIT_TEST_SUITE(TQStorageUnbufferedFileTests) {
-    GENERATE_TESTS(MakeUnbufferedFileQStorage)
+    GENERATE_TESTS(MakeUnbufferedFileQStorage, false)
+}
+
+Y_UNIT_TEST_SUITE(TQStorageUnbufferedFileWithFlushIndexTests) {
+    GENERATE_TESTS(MakeUnbufferedFileWithFlushIndexQStorage, true)
 }

@@ -12,4 +12,4 @@ namespace NYql {
 
     // Validates cluster config. Throws exception in case of error.
     void ValidateGenericClusterConfig(const NYql::TGenericClusterConfig& clusterConfig, const TString& context);
-}
+} // namespace NYql

@@ -134,7 +134,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto& state = ctx.MutableValues[StateIndex_];
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -189,7 +189,7 @@ public:
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -218,7 +218,7 @@ public:
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(static_cast<const TYtBaseInputWrapper*>(this))), structPtrType, "self", block);
@@ -252,11 +252,13 @@ using TBaseComputation = TPairStateWideFlowCodegeneratorNode<TYtWideInputWrapper
 public:
     TYtWideInputWrapper(TComputationMutables& mutables, ui32 width, const TMkqlIOSpecs& specs, NYT::IReaderImplBase* input)
         : TBaseComputation(mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Embedded)
-        , TYtBaseInputWrapper(specs, input), Width(width)
-    {}
+        , TYtBaseInputWrapper(specs, input)
+        , Width(width)
+    {
+    }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, NUdf::TUnboxedValue& current, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -299,7 +301,7 @@ public:
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(static_cast<const TYtBaseInputWrapper*>(this))), structPtrType, "self", block);

@@ -410,8 +410,7 @@ bool FillIndexTablePartitioning(
     Ydb::StatusIds::StatusCode& code, TString& error
 ) {
     auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions) {
-        indexImplTableDescriptions.push_back({});
-        auto& indexImplTableDescription = indexImplTableDescriptions.back();
+        auto& indexImplTableDescription = indexImplTableDescriptions.emplace_back();
 
         if (settings.has_partitioning_settings()) {
             if (!FillPartitioningPolicy(*indexImplTableDescription.MutablePartitionConfig(), settings, code, error)) {

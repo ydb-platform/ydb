@@ -1,0 +1,12 @@
+requirements:
+  - aiohttp: null
+  - enum-compat: contrib/deprecated/python/enum34
+exclude:
+  - kikimr/*
+  - ydb/public/*
+  - ydb/_grpc/*
+  - ydb/aio/*
+  - ydb/tornado/*
+mark_as_tests:
+  - "**/*_test.py"
+

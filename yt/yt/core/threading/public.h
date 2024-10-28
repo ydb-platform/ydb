@@ -2,12 +2,11 @@
 
 #include <yt/yt/core/misc/public.h>
 
+#include <library/cpp/yt/threading/public.h>
+
 namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-using TThreadId = size_t;
-constexpr size_t InvalidThreadId = 0;
 
 DEFINE_ENUM(EThreadPriority,
     (Normal)

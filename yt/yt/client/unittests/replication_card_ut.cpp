@@ -1,4 +1,5 @@
 #include <yt/yt/client/chaos_client/replication_card.h>
+#include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
 #include <yt/yt/core/test_framework/framework.h>
 
@@ -6,6 +7,8 @@ namespace NYT::NChaosClient {
 namespace {
 
 using namespace NTabletClient;
+using namespace NYTree;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -190,6 +193,138 @@ INSTANTIATE_TEST_SUITE_P(
             ETableReplicaState::Enabled,
             std::vector<TReplicaHistoryItem>(),
             false)
+));
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TReplicationCardComputeReplicasLagTest
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        THashMap<TReplicaId, TReplicaInfo>,
+        THashMap<TReplicaId, TDuration>>>
+{
+public:
+
+    using TTestData = std::tuple<THashMap<TReplicaId, TReplicaInfo>, THashMap<TReplicaId, TDuration>>;
+
+    static TTestData CreateTestDataNormal1()
+    {
+        auto syncReplicaId = TReplicaId::Create();
+        auto syncReplicaInfo = TReplicaInfo{
+            .Mode = ETableReplicaMode::Sync,
+            .State = ETableReplicaState::Enabled,
+            .ReplicationProgress = ConvertTo<TReplicationProgress>(
+                // 1073741824
+                TYsonStringBuf("{segments=[{lower_key=[];timestamp=21474836480}];upper_key=[<type=max>#]}")),
+            .History = {
+                TReplicaHistoryItem{
+                    .Era = 1,
+                    .Timestamp = 10ull << 30,
+                    .Mode = ETableReplicaMode::Sync,
+                    .State = ETableReplicaState::Enabled,
+                }
+            },
+        };
+
+        auto asyncReplicaId = TReplicaId::Create();
+        auto asyncReplicaInfo = TReplicaInfo{
+            .Mode = ETableReplicaMode::Async,
+            .State = ETableReplicaState::Enabled,
+            .ReplicationProgress = ConvertTo<TReplicationProgress>(
+                TYsonStringBuf("{segments=[{lower_key=[];timestamp=16106127360}];upper_key=[<type=max>#]}")),
+            .History = {
+                TReplicaHistoryItem{
+                    .Era = 1,
+                    .Timestamp = 10ull << 30,
+                    .Mode = ETableReplicaMode::Async,
+                    .State = ETableReplicaState::Enabled,
+                }
+            },
+        };
+
+        return {
+            THashMap{
+                std::pair(syncReplicaId, syncReplicaInfo),
+                std::pair(asyncReplicaId, asyncReplicaInfo)
+            },
+            THashMap{
+                std::pair(syncReplicaId, TDuration::Zero()),
+                std::pair(asyncReplicaId, TDuration::Seconds(4))
+            }
+        };
+    }
+
+    static TTestData CreateTestDataLaggingSyncReplica()
+    {
+        auto syncReplicaId = TReplicaId::Create();
+        auto syncReplicaInfo = TReplicaInfo{
+            .Mode = ETableReplicaMode::Sync,
+            .State = ETableReplicaState::Enabled,
+            .ReplicationProgress = ConvertTo<TReplicationProgress>(
+                // 1073741824
+                TYsonStringBuf("{segments=[{lower_key=[];timestamp=21474836480}];upper_key=[<type=max>#]}")),
+            .History = {
+                TReplicaHistoryItem{
+                    .Era = 1,
+                    .Timestamp = 10ull << 30,
+                    .Mode = ETableReplicaMode::Async,
+                    .State = ETableReplicaState::Enabled,
+                },
+                TReplicaHistoryItem{
+                    .Era = 2,
+                    .Timestamp = 30ull << 30,
+                    .Mode = ETableReplicaMode::Async,
+                    .State = ETableReplicaState::Enabled,
+                }
+            },
+        };
+
+        auto asyncReplicaId = TReplicaId::Create();
+        auto asyncReplicaInfo = TReplicaInfo{
+            .Mode = ETableReplicaMode::Async,
+            .State = ETableReplicaState::Enabled,
+            .ReplicationProgress = ConvertTo<TReplicationProgress>(
+                TYsonStringBuf("{segments=[{lower_key=[];timestamp=16106127360}];upper_key=[<type=max>#]}")),
+            .History = {
+                TReplicaHistoryItem{
+                    .Era = 1,
+                    .Timestamp = 10ull << 30,
+                    .Mode = ETableReplicaMode::Async,
+                    .State = ETableReplicaState::Enabled,
+                }
+            },
+        };
+
+        return {
+            THashMap{
+                std::pair(syncReplicaId, syncReplicaInfo),
+                std::pair(asyncReplicaId, asyncReplicaInfo)
+            },
+            THashMap{
+                std::pair(syncReplicaId, TDuration::Seconds(9)),
+                std::pair(asyncReplicaId, TDuration::Seconds(14))
+            }
+        };
+    }
+};
+
+TEST_P(TReplicationCardComputeReplicasLagTest, ComputeReplicasLag)
+{
+    const auto& params = GetParam();
+    const auto& replicas = std::get<0>(params);
+    const auto& expected = std::get<1>(params);
+
+    auto actual = ComputeReplicasLag(replicas);
+
+    EXPECT_EQ(actual, expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationCardComputeReplicasLagTest,
+    TReplicationCardComputeReplicasLagTest,
+    ::testing::Values(
+        TReplicationCardComputeReplicasLagTest::CreateTestDataNormal1(),
+        TReplicationCardComputeReplicasLagTest::CreateTestDataLaggingSyncReplica()
 ));
 
 ////////////////////////////////////////////////////////////////////////////////

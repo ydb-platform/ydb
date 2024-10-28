@@ -13,7 +13,10 @@ SRCS(
     filter.cpp
     portion_info.cpp
     tier_info.cpp
+    defs.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION(column_engine_logs.h)
 
 PEERDIR(
     contrib/libs/apache/arrow

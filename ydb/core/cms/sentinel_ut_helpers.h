@@ -17,6 +17,7 @@ const auto& MockConfig = TFakeNodeWhiteboardService::Config;
 auto& MockNodes = TFakeNodeWhiteboardService::Info;
 
 static constexpr ui32 DefaultStateLimit = 5;
+static constexpr ui32 GoodStateLimit = 5;
 static constexpr ui32 DefaultErrorStateLimit = 60;
 auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
 

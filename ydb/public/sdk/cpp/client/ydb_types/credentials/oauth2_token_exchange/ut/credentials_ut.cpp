@@ -929,6 +929,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
 
         server.Check.ExpectedInputParams.erase("scope");
         server.Check.ExpectedInputParams.emplace("resource", "test_res");
+        server.Check.ExpectedInputParams.emplace("resource", "test_res_2");
         server.Check.ExpectedInputParams.emplace("actor_token", "act_token");
         server.Check.ExpectedInputParams.emplace("actor_token_type", "act_token_type");
         server.Run(
@@ -936,7 +937,8 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .TokenEndpoint(server.GetEndpoint())
                 .AppendAudience("test_aud")
                 .AppendAudience("test_aud_2")
-                .Resource("test_res")
+                .AppendResource("test_res")
+                .AppendResource("test_res_2")
                 .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type"))
                 .ActorTokenSource(CreateFixedTokenSource("act_token", "act_token_type")),
             "Bearer hello_token"
@@ -949,6 +951,8 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         server.Check.ExpectedInputParams.emplace("requested_token_type", "test_requested_token_type");
         server.Check.ExpectedInputParams.emplace("subject_token", "test_token");
         server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
+        server.Check.ExpectedInputParams.emplace("resource", "r1");
+        server.Check.ExpectedInputParams.emplace("resource", "r2");
         server.Check.Response = R"({"access_token": "received_token", "token_type": "bEareR", "expires_in": 42})";
         server.RunFromConfig(
             TTestConfigFile()
@@ -956,6 +960,10 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
                 .Field("unknown", "unknown value")
                 .Field("grant-type", "test_grant_type")
                 .Field("requested-token-type", "test_requested_token_type")
+                .Array("res")
+                    .Value("r1")
+                    .Value("r2")
+                    .Build()
                 .SubMap("subject-credentials")
                     .Field("type", "Fixed")
                     .Field("token", "test_token")

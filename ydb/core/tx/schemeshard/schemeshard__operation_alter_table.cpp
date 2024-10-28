@@ -86,7 +86,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     if (!hasSchemaChanges
         && !copyAlter.HasPartitionConfig()
         && !copyAlter.HasTTLSettings()
-        && !copyAlter.HasReplicationConfig())
+        && !copyAlter.HasReplicationConfig()
+        && !copyAlter.HasIncrementalBackupConfig())
     {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
@@ -144,11 +145,16 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
     const TSchemeLimits& limits = subDomain.GetSchemeLimits();
+    const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
+        .EnableTablePgTypes = context.SS->EnableTablePgTypes,
+        .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
+        .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+    };
 
 
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        context.SS->EnableTablePgTypes, context.SS->EnableTableDatetime64, errStr, localSequences);
+        featureFlags, errStr, localSequences);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -365,6 +371,10 @@ public:
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();
 
+        if (!table->IsAsyncReplica()) {
+            path->SetAsyncReplica(false);
+        }
+
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables[pathId] = table;
@@ -519,8 +529,10 @@ public:
                 .IsTable()
                 .NotUnderOperation();
 
-            if (!Transaction.GetInternal()) {
-                checks.NotAsyncReplicaTable();
+            if (checks && !Transaction.GetInternal()) {
+                checks
+                    .NotAsyncReplicaTable()
+                    .NotBackupTable();
             }
 
             if (!context.IsAllowedPrivateTables) {
@@ -722,6 +734,10 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
+    if (path.IsBackupTable()) {
+        return {CreateAlterTable(id, tx)};
+    }
+
     TPath parent = path.Parent();
 
     if (!parent.IsTableIndex()) {
@@ -731,7 +747,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     // Admins can alter indexImplTable unconditionally.
     // Regular users can only alter allowed fields.
     if (!IsSuperUser(context.UserToken.Get())
-        && (!CheckAllowedFields(alter, {"Name", "PartitionConfig"})
+        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
             || (alter.HasPartitionConfig()
                 && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
             )
@@ -744,6 +760,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     {
         auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
         alterIndex->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

@@ -1,6 +1,6 @@
 /* Subroutines for bison
 
-   Copyright (C) 1984, 1989, 2000-2002, 2007, 2009-2015, 2018-2019 Free
+   Copyright (C) 1984, 1989, 2000-2002, 2007, 2009-2015, 2018-2021 Free
    Software Foundation, Inc.
 
    This file is part of Bison, the GNU Compiler Compiler.
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #ifndef CLOSURE_H_
 # define CLOSURE_H_
@@ -27,31 +27,28 @@
    data so that closure can be called.  n is the number of elements to
    allocate for itemset.  */
 
-void new_closure (unsigned n);
+void closure_new (int n);
 
 
-/* Given the kernel (aka core) of a state (a sorted vector of item numbers
+/* Given the kernel (aka core) of a state (a sorted vector of item indices
    ITEMS, of length N), set up RULESET and ITEMSET to indicate what
    rules could be run and which items could be accepted when those
-   items are the active ones.
+   items are the active ones.  */
 
-   RULESET contains a bit for each rule.  CLOSURE sets the bits for
-   all rules which could potentially describe the next input to be
-   read.
+void closure (item_index const *items, size_t n);
 
-   ITEMSET is a sorted vector of item numbers; NITEMSET is its size
+
+/* Free ITEMSET, RULESET and internal data.  */
+
+void closure_free (void);
+
+
+/* ITEMSET is a sorted vector of item indices; NITEMSET is its size
    (actually, points to just beyond the end of the part of it that is
    significant).  CLOSURE places there the indices of all items which
    represent units of input that could arrive next.  */
 
-void closure (item_number const *items, size_t n);
-
-
-/* Frees ITEMSET, RULESET and internal data.  */
-
-void free_closure (void);
-
-extern item_number *itemset;
+extern item_index *itemset;
 extern size_t nitemset;
 
 #endif /* !CLOSURE_H_ */

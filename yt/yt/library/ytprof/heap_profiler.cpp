@@ -4,59 +4,21 @@
 
 #include <library/cpp/yt/backtrace/cursors/libunwind/libunwind_cursor.h>
 
+#include <yt/yt/core/misc/protobuf_helpers.h>
+
+#include <library/cpp/yt/memory/allocation_tags_hooks.h>
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 #include <library/cpp/yt/memory/leaky_singleton.h>
 #include <library/cpp/yt/memory/new.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-
-#include <util/generic/hash_set.h>
 #include <util/string/join.h>
-#include <util/string/cast.h>
 
-#include <tcmalloc/malloc_extension.h>
+#include <util/system/thread.h>
 
+#include <mutex>
 #include <thread>
 
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-Y_WEAK void* CreateAllocationTagsData()
-{
-    return nullptr;
-}
-
-Y_WEAK void* CopyAllocationTagsData(void* userData)
-{
-    return userData;
-}
-
-Y_WEAK void DestroyAllocationTagsData(void* /*userData*/)
-{ }
-
-Y_WEAK const std::vector<std::pair<TString, TString>>* ReadAllocationTagsData(void* /*userData*/)
-{
-    return nullptr;
-}
-
-Y_WEAK std::optional<TString> FindTagValue(
-    const std::vector<std::pair<TString, TString>>& tags,
-    const TString& key)
-{
-    Y_UNUSED(tags);
-    Y_UNUSED(key);
-    return ::ToString(NullMemoryTag);
-}
-
-Y_WEAK void StartAllocationTagsCleanupThread(TDuration /*cleanupInterval*/)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NYTProf {
-
-using namespace NThreading;
+namespace NYT::NYTProf {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -65,25 +27,29 @@ NProto::Profile ConvertAllocationProfile(const tcmalloc::Profile& snapshot)
     NProto::Profile profile;
     profile.add_string_table();
 
-    auto addString = [&] (TString str) {
+    auto addString = [&] (const std::string& str) {
         auto index = profile.string_table_size();
-        profile.add_string_table(str);
+        profile.add_string_table(ToProto<TProtobufString>(str));
         return index;
     };
 
-    auto sampleType = profile.add_sample_type();
-    sampleType->set_type(addString("allocations"));
-    sampleType->set_unit(addString("count"));
-
-    sampleType = profile.add_sample_type();
-    sampleType->set_type(addString("space"));
-
     auto bytesUnitId = addString("bytes");
-    sampleType->set_unit(bytesUnitId);
 
-    auto periodType = profile.mutable_period_type();
-    periodType->set_type(sampleType->type());
-    periodType->set_unit(sampleType->unit());
+    {
+        auto* sampleType = profile.add_sample_type();
+        sampleType->set_type(addString("allocations"));
+        sampleType->set_unit(addString("count"));
+    }
+
+    {
+        auto* sampleType = profile.add_sample_type();
+        sampleType->set_type(addString("space"));
+        sampleType->set_unit(bytesUnitId);
+
+        auto* periodType = profile.mutable_period_type();
+        periodType->set_type(sampleType->type());
+        periodType->set_unit(sampleType->unit());
+    }
 
     profile.set_period(snapshot.Period());
 
@@ -93,21 +59,21 @@ NProto::Profile ConvertAllocationProfile(const tcmalloc::Profile& snapshot)
 
     THashMap<void*, ui64> locations;
     snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
-        auto sampleProto = profile.add_sample();
-        sampleProto->add_value(sample.count);
-        sampleProto->add_value(sample.sum);
+        auto* protoSample = profile.add_sample();
+        protoSample->add_value(sample.count);
+        protoSample->add_value(sample.sum);
 
-        auto allocatedSizeLabel = sampleProto->add_label();
+        auto* allocatedSizeLabel = protoSample->add_label();
         allocatedSizeLabel->set_key(allocatedSizeId);
         allocatedSizeLabel->set_num(sample.allocated_size);
         allocatedSizeLabel->set_num_unit(bytesUnitId);
 
-        auto requestedSizeLabel = sampleProto->add_label();
+        auto* requestedSizeLabel = protoSample->add_label();
         requestedSizeLabel->set_key(requestedSizeId);
         requestedSizeLabel->set_num(sample.requested_size);
         requestedSizeLabel->set_num_unit(bytesUnitId);
 
-        auto requestedAlignmentLabel = sampleProto->add_label();
+        auto* requestedAlignmentLabel = protoSample->add_label();
         requestedAlignmentLabel->set_key(requestedAlignmentId);
         requestedAlignmentLabel->set_num(sample.requested_alignment);
         requestedAlignmentLabel->set_num_unit(bytesUnitId);
@@ -117,27 +83,25 @@ NProto::Profile ConvertAllocationProfile(const tcmalloc::Profile& snapshot)
 
             auto it = locations.find(ip);
             if (it != locations.end()) {
-                sampleProto->add_location_id(it->second);
+                protoSample->add_location_id(it->second);
                 continue;
             }
 
             auto locationId = locations.size() + 1;
 
-            auto location = profile.add_location();
+            auto* location = profile.add_location();
             location->set_address(reinterpret_cast<ui64>(ip));
             location->set_id(locationId);
 
-            sampleProto->add_location_id(locationId);
+            protoSample->add_location_id(locationId);
             locations[ip] = locationId;
         }
 
         // TODO(gepardo): Deduplicate values in string table
-        if (const auto* data = ReadAllocationTagsData(sample.user_data)) {
-            for (const auto& [key, value] : *data) {
-                auto label = sampleProto->add_label();
-                label->set_key(addString(key));
-                label->set_str(addString(value));
-            }
+        for (const auto& [key, value] : GetAllocationTagsHooks().ReadAllocationTags(sample.user_data)) {
+            auto* label = protoSample->add_label();
+            label->set_key(addString(key));
+            label->set_str(addString(value));
         }
     });
 
@@ -158,72 +122,13 @@ NProto::Profile ReadHeapProfile(tcmalloc::ProfileType profileType)
     return ConvertAllocationProfile(snapshot);
 }
 
-TMemoryUsageSnapshot::TMemoryUsageSnapshot(TMemoryUsageSnapshot::TData&& data) noexcept
-    : Data_(std::move(data))
-{ }
-
-const THashMap<TString, size_t>& TMemoryUsageSnapshot::GetUsage(const TString& tagName) const noexcept
-{
-    if (auto it = Data_.find(tagName)) {
-        return it->second;
-    }
-
-    return EmptyHashMap_;
-}
-
-size_t TMemoryUsageSnapshot::GetUsage(const TString& tagName, const TString& tag) const noexcept
-{
-    if (auto it = Data_.find(tagName)) {
-        if (auto usageIt = it->second.find(tag)) {
-            return usageIt->second;
-        }
-    }
-
-    return 0;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TMemoryUsageSnapshotStorage
-{
-    TAtomicIntrusivePtr<TMemoryUsageSnapshot> Snapshot{New<TMemoryUsageSnapshot>()};
-};
-
-TMemoryUsageSnapshotPtr CollectMemoryUsageSnapshot()
-{
-    TMemoryUsageSnapshot::TData usage;
-
-    auto snapshot = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
-    snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
-        if (const auto* data = ReadAllocationTagsData(sample.user_data)) {
-            for (const auto& [tagName, tag] : *data) {
-                usage[tagName][tag] += sample.sum;
-            }
-        }
-    });
-
-    return New<TMemoryUsageSnapshot>(std::move(usage));
-}
-
-void UpdateMemoryUsageSnapshot(TMemoryUsageSnapshotPtr usageSnapshot)
-{
-    auto snapshot = LeakySingleton<TMemoryUsageSnapshotStorage>();
-    snapshot->Snapshot.Store(std::move(usageSnapshot));
-}
-
-TMemoryUsageSnapshotPtr GetMemoryUsageSnapshot()
-{
-    const auto snapshot = LeakySingleton<TMemoryUsageSnapshotStorage>();
-    return snapshot->Snapshot.Acquire();
-}
-
 int AbslStackUnwinder(
     void** frames,
-    int*,
+    int* /*framesSizes*/,
     int maxFrames,
     int skipFrames,
-    const void*,
-    int*)
+    const void* /*uc*/,
+    int* /*minDroppedFrames*/)
 {
     NBacktrace::TLibunwindCursor cursor;
 
@@ -246,34 +151,96 @@ int AbslStackUnwinder(
     return count;
 }
 
-void EnableMemoryProfilingTags(std::optional<TDuration> updateSnapshotPeriod)
+////////////////////////////////////////////////////////////////////////////////
+
+TMemoryUsageSnapshot::TMemoryUsageSnapshot(TMemoryUsageSnapshot::TData&& data) noexcept
+    : Data_(std::move(data))
+{ }
+
+const THashMap<TAllocationTagValue, size_t>& TMemoryUsageSnapshot::GetUsageSlice(const TAllocationTagKey& key) const noexcept
 {
-    StartAllocationTagsCleanupThread(TDuration::Seconds(1));
-    tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
-        &CreateAllocationTagsData,
-        &CopyAllocationTagsData,
-        &DestroyAllocationTagsData);
-
-    if (updateSnapshotPeriod) {
-        std::thread backgroundThread([updateSnapshotPeriod] {
-            TInstant lastUpdateTime;
-            TInstant currentTime;
-
-            while (true) {
-                lastUpdateTime = Now();
-                UpdateMemoryUsageSnapshot(CollectMemoryUsageSnapshot());
-
-                currentTime = Now();
-                if (lastUpdateTime + updateSnapshotPeriod.value() > currentTime) {
-                    Sleep(lastUpdateTime + updateSnapshotPeriod.value() - currentTime);
-                }
-            }
-        });
-        backgroundThread.detach();
+    if (auto it = Data_.find(key)) {
+        return it->second;
     }
+
+    static const THashMap<TAllocationTagValue, size_t> empty;
+    return empty;
+}
+
+size_t TMemoryUsageSnapshot::GetUsage(const TAllocationTagKey& key, const TAllocationTagKey& value) const noexcept
+{
+    if (auto it = Data_.find(key)) {
+        if (auto usageIt = it->second.find(value)) {
+            return usageIt->second;
+        }
+    }
+
+    return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYTProf
-} // namespace NYT
+struct TGlobalMemoryUsageSnapshot
+{
+    static TGlobalMemoryUsageSnapshot* Get()
+    {
+        return LeakySingleton<TGlobalMemoryUsageSnapshot>();
+    }
+
+    TAtomicIntrusivePtr<TMemoryUsageSnapshot> Snapshot{New<TMemoryUsageSnapshot>()};
+};
+
+TMemoryUsageSnapshotPtr CollectMemoryUsageSnapshot()
+{
+    TMemoryUsageSnapshot::TData usage;
+
+    auto snapshot = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
+    snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
+        for (const auto& [tagKey, tagValue] : GetAllocationTagsHooks().ReadAllocationTags(sample.user_data)) {
+            usage[tagKey][tagValue] += sample.sum;
+        }
+    });
+
+    return New<TMemoryUsageSnapshot>(std::move(usage));
+}
+
+void SetGlobalMemoryUsageSnapshot(TMemoryUsageSnapshotPtr snapshot)
+{
+    TGlobalMemoryUsageSnapshot::Get()->Snapshot.Store(std::move(snapshot));
+}
+
+TMemoryUsageSnapshotPtr GetGlobalMemoryUsageSnapshot()
+{
+    return TGlobalMemoryUsageSnapshot::Get()->Snapshot.Acquire();
+}
+
+void EnableMemoryProfilingTags(std::optional<TDuration> snapshotUpdatePeriod)
+{
+    static std::once_flag onceFlag;
+    std::call_once(onceFlag, [&] {
+        const auto& hooks = GetAllocationTagsHooks();
+        tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
+            hooks.CreateAllocationTags,
+            hooks.CopyAllocationTags,
+            hooks.DestroyAllocationTags);
+
+        if (snapshotUpdatePeriod) {
+            std::thread thread([snapshotUpdatePeriod] {
+                TThread::SetCurrentThreadName("MemSnapUpdate");
+                while (true) {
+                    auto lastUpdateTime = Now();
+                    SetGlobalMemoryUsageSnapshot(CollectMemoryUsageSnapshot());
+                    auto currentTime = Now();
+                    if (lastUpdateTime + *snapshotUpdatePeriod > currentTime) {
+                        Sleep(lastUpdateTime + *snapshotUpdatePeriod - currentTime);
+                    }
+                }
+            });
+            thread.detach();
+        }
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYTProf

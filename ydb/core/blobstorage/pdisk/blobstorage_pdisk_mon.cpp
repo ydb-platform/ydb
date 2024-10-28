@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_requestimpl.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 
@@ -120,6 +121,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(DeviceGroup, DeviceIoErrors, true);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWaitTimeMs, true);
 
+    UpdateDurationTracker.SetPDiskId(PDiskId);
     UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true));
 
     // queue subgroup
@@ -142,6 +144,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     HISTOGRAM_INIT(DeviceReadDuration, deviceReadDuration);
     HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
     HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);
+    HISTOGRAM_INIT(DeviceFlushDuration, deviceFlushDuration);
 
     TRACKER_INIT_IF_EXTENDED(LogQueueTime, logQueueTime, Time in millisec);
     TRACKER_INIT_IF_EXTENDED(GetQueueSyncLog, getQueueSyncLog, Time in millisec);

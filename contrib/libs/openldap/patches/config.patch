@@ -1,0 +1,7 @@
+--- a/include/portable-linux.h	(index)
++++ b/include/portable-linux.h	(working tree)
+@@ -104,1 +104,3 @@
+-#define HAVE_BITS_TYPES_H 1
++#ifdef __linux__
++#define HAVE_BITS_TYPES_H 1
++#endif

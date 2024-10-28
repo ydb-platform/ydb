@@ -58,9 +58,16 @@ def simple_write_data(pool, idx):
         logger.exception("Error executing transaction")
 
 
-def simple_write(pool):
-    for i in range(10000):
-        simple_write_data(pool, random.randint(0, (1 << 64) - 1))
+class Workload:
+    def __init__(self):
+        self._stopped = False
+
+    def simple_write(self, pool):
+        while not self._stopped:
+            simple_write_data(pool, random.randint(0, (1 << 64) - 1))
+
+    def stop(self):
+        self._stopped = True
 
 
 class TestEncryption(object):
@@ -74,7 +81,7 @@ class TestEncryption(object):
             )
         )
         cls.cluster.start()
-        cls.discovery_endpoint = "%s:%s" % (cls.cluster.nodes[1].hostname, cls.cluster.nodes[1].grpc_port)
+        cls.discovery_endpoint = "%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].grpc_port)
 
     def test_simple_encryption(self):
         databases = []
@@ -112,10 +119,14 @@ class TestEncryption(object):
         for pool in pools:
             create_sample_table(pool)
 
+        workloads = []
+
         for pool in pools:
+            workload = Workload()
+            workloads.append(workload)
             threads.append(
                 threading.Thread(
-                    target=lambda: simple_write(pool),
+                    target=lambda: workload.simple_write(pool),
                 )
             )
 
@@ -137,6 +148,9 @@ class TestEncryption(object):
                 slot.stop()
                 time.sleep(1)
                 slot.start()
+
+        for workload in workloads:
+            workload.stop()
 
         for thread in threads:
             thread.join()

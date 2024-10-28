@@ -695,7 +695,7 @@ Y_UNIT_TEST_SUITE(TFlatTableReschedule) {
                 TVector<NTable::TTag> tags;
                 tags.push_back(TRowsModel::ColumnValueId);
                 TVector<TRawTypeValue> key;
-                key.emplace_back(&keyId, sizeof(keyId), NScheme::TTypeInfo(NScheme::TInt64::TypeId));
+                key.emplace_back(&keyId, sizeof(keyId), NScheme::TInt64::TypeId);
                 NTable::TRowState row;
                 auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
                 if (ready == NTable::EReady::Page) {
@@ -1347,7 +1347,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
             if (!req.Keys.empty()) {
                 for (auto val : req.Keys) {
                     ui64 key1 = val;
-                    TRawTypeValue key[] = {TRawTypeValue(&key1, sizeof(key1), NScheme::TTypeInfo(NScheme::NTypeIds::Int64))};
+                    TRawTypeValue key[] = {TRawTypeValue(&key1, sizeof(key1), NScheme::NTypeIds::Int64)};
                     NTable::TTag tags[] = {TRowsModel::ColumnKeyId};
                     NTable::TRowState row;
                     txc.DB.Select(TRowsModel::TableId, {key, 1}, {tags, 1}, row);
@@ -2048,7 +2048,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorCompressedSelectRows) {
             TVector<NTable::TTag> tags;
             tags.push_back(TRowsModel::ColumnValueId);
             TVector<TRawTypeValue> key;
-            key.emplace_back(&keyId, sizeof(keyId), NScheme::TTypeInfo(NScheme::TInt64::TypeId));
+            key.emplace_back(&keyId, sizeof(keyId), NScheme::TInt64::TypeId);
 
             for (keyId = 1000000; keyId < 1000512; ++keyId) {
                 NTable::TRowState row;
@@ -2696,7 +2696,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
             TVector<NTable::TTag> tags;
             tags.push_back(TRowsModel::ColumnValueId);
             TVector<TRawTypeValue> key;
-            key.emplace_back(&keyId, sizeof(keyId), NScheme::TTypeInfo(NScheme::TInt64::TypeId));
+            key.emplace_back(&keyId, sizeof(keyId), NScheme::TInt64::TypeId);
 
             for (keyId = 100; keyId <= 400; keyId += 100) {
                 NTable::TRowState row;
@@ -4933,7 +4933,7 @@ Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
             TVector<NTable::TTag> tags;
             tags.push_back(TRowsModel::ColumnValueId);
             TVector<TRawTypeValue> key;
-            key.emplace_back(&keyId, sizeof(keyId), NScheme::TTypeInfo(NScheme::TInt64::TypeId));
+            key.emplace_back(&keyId, sizeof(keyId), NScheme::TInt64::TypeId);
 
             for (keyId = 1; keyId <= 104; ++keyId) {
                 NTable::TRowState row;
@@ -5086,10 +5086,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
     };
 
     void ZeroSharedCache(TMyEnvBase &env) {
-        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
-        env->DispatchEvents(options);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
     Y_UNIT_TEST(CalculateReadSize_FlatIndex) {
@@ -5788,10 +5785,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
     };
     
     void ZeroSharedCache(TMyEnvBase &env) {
-        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
-        env->DispatchEvents(options);
+        env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
     Y_UNIT_TEST(TestNonSticky_FlatIndex) {

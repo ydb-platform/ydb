@@ -47,6 +47,9 @@ Y_UNIT_TEST_SUITE(TParseDouble) {
 
         UNIT_ASSERT_EXCEPTION_CONTAINS(FloatFromString(TStringBuf("info")), std::exception, "unable to parse float from 'info'");
         UNIT_ASSERT_EXCEPTION_CONTAINS(DoubleFromString(TStringBuf("-nana")), std::exception, "unable to parse double from '-nana'");
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(FloatFromString(TStringBuf(nullptr)), std::exception, "unable to parse float from ''");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(DoubleFromString(TStringBuf(nullptr)), std::exception, "unable to parse double from ''");
     }
 }
 }

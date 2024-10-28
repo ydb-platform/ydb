@@ -29,7 +29,7 @@ struct TDistributedTransaction {
                               ui64 extractTabletId);
     void OnPlanStep(ui64 step);
     void OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event);
-    void OnProposePartitionConfigResult(const TEvPQ::TEvProposePartitionConfigResult& event);
+    void OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event);
     void OnReadSet(const NKikimrTx::TEvReadSet& event,
                    const TActorId& sender,
                    std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack);
@@ -66,6 +66,7 @@ struct TDistributedTransaction {
     NKikimrPQ::TPQTabletConfig TabletConfig;
     NKikimrPQ::TBootstrapConfig BootstrapConfig;
     NPersQueue::TTopicConverterPtr TopicConverter;
+    NKikimrPQ::TPartitions PartitionsData;
 
     bool WriteInProgress = false;
 
@@ -75,7 +76,6 @@ struct TDistributedTransaction {
     bool HaveAllRecipientsReceive() const;
 
     void AddCmdWrite(NKikimrClient::TKeyValueRequest& request, EState state);
-    void AddCmdDelete(NKikimrClient::TKeyValueRequest& request);
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
@@ -91,7 +91,9 @@ struct TDistributedTransaction {
     void InitPartitions();
 
     template<class E>
-    void OnPartitionResult(const E& event, EDecision decision);
+    void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
+
+    TString LogPrefix() const;
 
     struct TSerializedMessage {
         ui32 Type;

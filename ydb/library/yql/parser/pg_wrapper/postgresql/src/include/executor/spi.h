@@ -107,8 +107,16 @@ typedef struct _SPI_plan *SPIPlanPtr;
 #define SPI_pop_conditional(pushed) ((void) 0)
 #define SPI_restore_connection()	((void) 0)
 
-extern __thread PGDLLIMPORT uint64 SPI_processed;
-extern __thread PGDLLIMPORT SPITupleTable *SPI_tuptable;
+DECLARE_THREAD_VAR(uint64, SPI_processed);
+#ifdef BUILD_PG_EXTENSION
+#define SPI_processed (*PtrSPI_processed())
+#endif
+
+DECLARE_THREAD_VAR(SPITupleTable*, SPI_tuptable);
+#ifdef BUILD_PG_EXTENSION
+#define SPI_tuptable (*PtrSPI_tuptable())
+#endif
+
 extern __thread PGDLLIMPORT int SPI_result;
 
 extern int	SPI_connect(void);

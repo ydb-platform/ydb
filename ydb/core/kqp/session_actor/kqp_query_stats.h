@@ -8,6 +8,7 @@ namespace NKikimr::NKqp {
 
 struct TKqpQueryStats {
     ui64 DurationUs = 0;
+    ui64 QueuedTimeUs = 0;
     std::optional<TKqpStatsCompile> Compilation;
 
     ui64 WorkerCpuTimeUs = 0;

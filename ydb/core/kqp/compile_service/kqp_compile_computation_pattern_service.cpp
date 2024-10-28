@@ -55,14 +55,14 @@ private:
         size_t patternsToCompileSize = PatternsToCompile.size();
         for (; PatternToCompileIndex < patternsToCompileSize && compilationIntervalMs > 0; ++PatternToCompileIndex) {
             auto& patternToCompile = PatternsToCompile[PatternToCompileIndex];
-            if (!patternToCompile.Entry->IsInCache.load()) {
+            if (!patternToCompile.Entry->IsInCache.load() || patternToCompile.Entry->Pattern->IsCompiled()) {
                 continue;
             }
 
             timer.Reset();
 
             patternToCompile.Entry->Pattern->Compile({}, nullptr);
-            patternCache->NotifyPatternCompiled(patternToCompile.SerializedProgram, patternToCompile.Entry);
+            patternCache->NotifyPatternCompiled(patternToCompile.SerializedProgram);
             patternToCompile.Entry = nullptr;
 
             Counters->CompiledComputationPatterns->Inc();

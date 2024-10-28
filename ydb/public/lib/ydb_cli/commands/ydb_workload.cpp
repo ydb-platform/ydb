@@ -384,7 +384,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
 
 void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
     auto pathsToDelete = workloadGen.GetCleanPaths();
-    NScheme::TRemoveDirectorySettings settings;
+    TRemovePathRecursiveSettings settings;
     settings.NotExistsIsOk(true);
     for (const auto& path : pathsToDelete) {
         Cout << "Remove path " << path << "..."  << Endl;

@@ -4,9 +4,10 @@
 # Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 # License: https://pyasn1.readthedocs.io/en/latest/license.html
 #
+import warnings
+
 from pyasn1 import error
 from pyasn1.codec.ber import encoder
-from pyasn1.compat.octets import str2octs, null
 from pyasn1.type import univ
 from pyasn1.type import useful
 
@@ -116,7 +117,7 @@ class SetOfEncoder(encoder.SequenceOfEncoder):
 
         # sort by serialised and padded components
         if len(chunks) > 1:
-            zero = str2octs('\x00')
+            zero = b'\x00'
             maxLen = max(map(len, chunks))
             paddedChunks = [
                 (x.ljust(maxLen, zero), x) for x in chunks
@@ -125,19 +126,19 @@ class SetOfEncoder(encoder.SequenceOfEncoder):
 
             chunks = [x[1] for x in paddedChunks]
 
-        return null.join(chunks), True, True
+        return b''.join(chunks), True, True
 
 
 class SequenceOfEncoder(encoder.SequenceOfEncoder):
     def encodeValue(self, value, asn1Spec, encodeFun, **options):
 
         if options.get('ifNotEmpty', False) and not len(value):
-            return null, True, True
+            return b'', True, True
 
         chunks = self._encodeComponents(
             value, asn1Spec, encodeFun, **options)
 
-        return null.join(chunks), True, True
+        return b''.join(chunks), True, True
 
 
 class SetEncoder(encoder.SequenceEncoder):
@@ -162,7 +163,7 @@ class SetEncoder(encoder.SequenceEncoder):
 
     def encodeValue(self, value, asn1Spec, encodeFun, **options):
 
-        substrate = null
+        substrate = b''
 
         comps = []
         compsMap = {}
@@ -171,7 +172,8 @@ class SetEncoder(encoder.SequenceEncoder):
             # instance of ASN.1 schema
             inconsistency = value.isInconsistent
             if inconsistency:
-                raise inconsistency
+                raise error.PyAsn1Error(
+                    f"ASN.1 object {value.__class__.__name__} is inconsistent")
 
             namedTypes = value.componentType
 
@@ -260,10 +262,6 @@ TYPE_MAP.update({
     univ.SequenceOf.typeId: SequenceOfEncoder()
 })
 
-# deprecated aliases, https://github.com/pyasn1/pyasn1/issues/9
-tagMap = TAG_MAP
-typeMap = TYPE_MAP
-
 
 class SingleItemEncoder(encoder.SingleItemEncoder):
     fixedDefLengthMode = False
@@ -295,7 +293,7 @@ class Encoder(encoder.Encoder):
 #:
 #: Returns
 #: -------
-#: : :py:class:`bytes` (Python 3) or :py:class:`str` (Python 2)
+#: : :py:class:`bytes`
 #:     Given ASN.1 object encoded into BER octet-stream
 #:
 #: Raises
@@ -325,3 +323,9 @@ class Encoder(encoder.Encoder):
 encode = Encoder()
 
 # EncoderFactory queries class instance and builds a map of tags -> encoders
+
+def __getattr__(attr: str):
+    if newAttr := {"tagMap": "TAG_MAP", "typeMap": "TYPE_MAP"}.get(attr):
+        warnings.warn(f"{attr} is deprecated. Please use {newAttr} instead.", DeprecationWarning)
+        return globals()[newAttr]
+    raise AttributeError(attr)

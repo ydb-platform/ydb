@@ -1,0 +1,55 @@
+--- contrib/python/botocore/py2/botocore/compat.py	(index)
++++ contrib/python/botocore/py2/botocore/compat.py	(working tree)
+@@ -22,7 +22,7 @@ import shlex
+ import os
+ from math import floor
+ 
+-from botocore.vendored import six
++import six
+ from botocore.exceptions import MD5UnavailableError
+ from dateutil.tz import tzlocal
+ from urllib3 import exceptions
+@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
+ 
+ 
+ if six.PY3:
+-    from botocore.vendored.six.moves import http_client
++    from six.moves import http_client
+ 
+     class HTTPHeaders(http_client.HTTPMessage):
+         pass
+--- contrib/python/botocore/py2/botocore/endpoint.py	(index)
++++ contrib/python/botocore/py2/botocore/endpoint.py	(working tree)
+@@ -17,7 +17,7 @@ import logging
+ import time
+ import threading
+ 
+-from botocore.vendored import six
++from botocore.compat import six
+ 
+ from botocore.awsrequest import create_request_object
+ from botocore.exceptions import HTTPClientError
+--- contrib/python/botocore/py2/botocore/httpsession.py	(index)
++++ contrib/python/botocore/py2/botocore/httpsession.py	(working tree)
+@@ -20,8 +20,8 @@ except ImportError:
+     from urllib3.util.ssl_ import SSLContext
+ 
+ import botocore.awsrequest
+-from botocore.vendored import six
+-from botocore.vendored.six.moves.urllib_parse import unquote
++from botocore.compat import six
++from six.moves.urllib_parse import unquote
+ from botocore.compat import filter_ssl_warnings, urlparse
+ from botocore.exceptions import (
+     ConnectionClosedError, EndpointConnectionError, HTTPClientError,
+--- contrib/python/botocore/py2/botocore/utils.py	(index)
++++ contrib/python/botocore/py2/botocore/utils.py	(working tree)
+@@ -35,7 +35,7 @@ from botocore.compat import (
+         json, quote, zip_longest, urlsplit, urlunsplit, OrderedDict,
+         six, urlparse, get_tzinfo_options, get_md5, MD5_AVAILABLE
+ )
+-from botocore.vendored.six.moves.urllib.request import getproxies, proxy_bypass
++from six.moves.urllib.request import getproxies, proxy_bypass
+ from botocore.exceptions import (
+     InvalidExpressionError, ConfigNotFound, InvalidDNSNameError, ClientError,
+     MetadataRetrievalError, EndpointConnectionError, ReadTimeoutError,

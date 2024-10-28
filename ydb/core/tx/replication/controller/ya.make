@@ -20,6 +20,7 @@ SRCS(
     dst_alterer.cpp
     dst_creator.cpp
     dst_remover.cpp
+    event_util.cpp
     lag_provider.cpp
     logging.cpp
     nodes_manager.cpp
@@ -33,7 +34,6 @@ SRCS(
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp
-    target_util.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
     tx_alter_dst_result.cpp

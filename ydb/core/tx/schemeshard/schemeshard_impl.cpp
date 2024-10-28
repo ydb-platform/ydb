@@ -7389,9 +7389,6 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
 }
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
-    if (!EnableStatistics) {
-        return;
-    }
     ResolveSA();
     ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
 }
@@ -7448,6 +7445,10 @@ void TSchemeShard::ConnectToSA() {
 }
 
 TDuration TSchemeShard::SendBaseStatsToSA() {
+    if (!EnableStatistics) {
+        return TDuration::Seconds(30);
+    }
+
     if (!SAPipeClientId) {
         ResolveSA();
         if (!StatisticsAggregatorId) {

@@ -1461,7 +1461,7 @@ public:
                 break;
             }
             case TKikimrKey::Type::BackupCollection: {
-                auto settings = NCommon::ParseWriteBackupCollectionSettings(TExprList(node->Child(4)), ctx);
+                auto settings = ParseWriteBackupCollectionSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
 

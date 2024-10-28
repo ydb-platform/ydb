@@ -1152,9 +1152,8 @@ public:
             auto& op = *tx.MutableCreateBackupCollection();
             op.SetName(pathPair.second);
 
-            auto& properties = *op.MutableProperties();
             if (settings.Settings.IncrementalBackupEnabled) {
-                properties.MutableIncrementalBackupConfig();
+                op.MutableIncrementalBackupConfig();
             }
 
             std::visit(
@@ -1163,16 +1162,16 @@ public:
                         Y_ABORT("unimplemented");
                     },
                     [&](const TVector<TCreateBackupCollectionSettings::TTable>& tables) {
-                        auto& dstTables = *properties.MutableExplicitEntryList();
+                        auto& dstTables = *op.MutableExplicitEntryList();
                         for (const auto& table : tables) {
                             auto& entry = *dstTables.AddEntries();
-                            entry.SetType(NKikimrSchemeOp::TBackupCollectionProperties::TBackupEntry::ETypeTable);
+                            entry.SetType(NKikimrSchemeOp::TBackupCollectionDescription::TBackupEntry::ETypeTable);
                             entry.SetPath(table.Path);
                         }
                     },
             }, settings.Entries);
 
-            properties.SetCluster(::google::protobuf::NULL_VALUE);
+            op.MutableCluster();
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

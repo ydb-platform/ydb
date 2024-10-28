@@ -533,7 +533,7 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Entries", "Type": "TCoBackupCollectionEntryList"},
+                {"Index": 4, "Name": "Entries", "Type": "TKiBackupCollectionEntryList"},
                 {"Index": 5, "Name": "BackupCollectionSettings", "Type": "TCoNameValueTupleList"},
                 {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]

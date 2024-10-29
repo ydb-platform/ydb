@@ -801,16 +801,17 @@ private:
                 TString prefixColumns = PrefixColumns.GetBuffer();
                 TString lastCommonPrefix = NextPrefix(CommonPrefixesRows.back());
                 TSerializedCellVec::UnsafeAppendCells({TCell::Make<TString>(lastCommonPrefix)}, prefixColumns);
-                TSerializedCellVec kkk;
-                kkk.Parse(prefixColumns);
+                TSerializedCellVec afterLastFolderPrefix;
+                afterLastFolderPrefix.Parse(prefixColumns);
                 
                 auto& endKeyPrefix = range->EndKeyPrefix;
 
                 int cmp = CompareTypedCellVectors(
-                            kkk.GetCells().data(),
-                            endKeyPrefix.GetCells().data(),
-                            KeyColumnTypes.data(),
-                            kkk.GetCells().size());
+                        afterLastFolderPrefix.GetCells().data(),
+                        endKeyPrefix.GetCells().data(),
+                        KeyColumnTypes.data(),
+                        afterLastFolderPrefix.GetCells().size()
+                );
 
                 if (cmp >= 0) {
                     // Found a shard whose range end is greater than the lookup key.

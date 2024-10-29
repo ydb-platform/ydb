@@ -54,7 +54,7 @@ public:
                     state.Args[i] = state.HolderFactory.CreateArrowBlock(arrow::Datum(batch.values[i]));
                 }
 
-                const auto ret = Callable_.Run(&state.ValueBuilder, state.Args.data());
+                const auto& ret = Callable_.Run(&state.ValueBuilder, state.Args.data());
                 *res = TArrowBlock::From(ret).GetDatum();
                 return arrow::Status::OK();
             })

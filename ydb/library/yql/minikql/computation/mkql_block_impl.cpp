@@ -351,7 +351,7 @@ void TBlockState::FillArrays() {
 
     for (size_t i = 0U; i < Deques.size(); ++i) {
         Deques[i].clear();
-        if (const auto value = Values[i]) {
+        if (const auto& value = Values[i]) {
             const auto& datum = TArrowBlock::From(value).GetDatum();
             if (datum.is_scalar()) {
                 return;

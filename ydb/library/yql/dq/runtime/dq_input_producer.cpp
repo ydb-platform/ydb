@@ -446,7 +446,7 @@ private:
                         return NUdf::EFetchStatus::Yield;
                     }
                 }
-                NUdf::TUnboxedValue* values = FetchedValues_.Head();
+                const NUdf::TUnboxedValue* values = FetchedValues_.Head();
                 CurrentRow_.clear();
                 for (ui32 i = 0; i < width; ++i) {
                     CurrentRow_.emplace_back(TArrowBlock::From(values[i]).GetDatum());

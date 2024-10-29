@@ -127,7 +127,7 @@ public:
             case LEGACY_TUPLED_BLOCK: {
                 ui64 result = 0;
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
-                    auto value0 = value.GetElement(0);
+                    const auto& value0 = value.GetElement(0);
                     result += NKikimr::NMiniKQL::TArrowBlock::From(value0.GetElement(LegacyBlockLengthIndex)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;

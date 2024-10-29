@@ -140,7 +140,6 @@ public:
 
     static void Validate(const TColumnRecord& rec) {
         AFL_VERIFY(rec.GetColumnId());
-        AFL_VERIFY(rec.BlobRange.IsValid());
     }
 
     static ui32 GetRecordsCount(const TColumnRecord& rec) {
@@ -149,10 +148,8 @@ public:
 
     static void Validate(const TIndexChunk& rec) {
         AFL_VERIFY(rec.GetIndexId());
-        if (const auto* blobData = rec.GetBlobRangeOptional()) {
-            AFL_VERIFY(blobData->IsValid());
-        } else {
-            AFL_VERIFY(rec.GetBlobDataVerified().size());
+        if (const auto* blobData = rec.GetBlobDataOptional()) {
+            AFL_VERIFY(blobData->size());
         }
     }
 

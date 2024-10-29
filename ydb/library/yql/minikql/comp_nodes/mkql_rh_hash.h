@@ -301,8 +301,7 @@ private:
         auto newCapacity = GetNewCapacity();
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
-        Y_ENSURE(newDataEnd - newData == newCapacity);
-        PlacementGrow(newData, newCapacity);
+        PlacementGrow(newData, newDataEnd, newCapacity);
     }
 
     // This will not throw exception even if it fails to allocate more memory but instead returns false (if memory is allocated successfully performs grow and returns true)
@@ -318,8 +317,7 @@ private:
             Y_ENSURE(newData == nullptr && newDataEnd == nullptr);
             return false;
         }
-        Y_ENSURE(newDataEnd - newData == newCapacity);
-        PlacementGrow(newData, newCapacity);
+        PlacementGrow(newData, newDataEnd, newCapacity);
         return true;
     }
 
@@ -335,8 +333,7 @@ private:
         return Capacity * growFactor;
     }
 
-    void PlacementGrow(char *newData, ui64 newCapacity) {
-        char *newDataEnd = newData + newCapacity;
+    void PlacementGrow(char *newData, char *newDataEnd, ui64 newCapacity) {
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         Y_DEFER {
             Allocator.deallocate(newData, newDataEnd - newData);

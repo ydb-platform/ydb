@@ -6,7 +6,6 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 static bool IsIntegerType(NScheme::TTypeInfo type) {
-    // TODO: support pg types
     switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
 

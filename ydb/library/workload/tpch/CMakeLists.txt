@@ -80,12 +80,12 @@ target_link_libraries(library-workload-tpch.global PUBLIC
 target_sources(library-workload-tpch.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/data_generator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/a7560ce62d0f39a0f744f48303710697.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/896fe98b398b0b0080ba0a2c5a1769d5.cpp
 )
 
 
 resources(library-workload-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/a7560ce62d0f39a0f744f48303710697.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/896fe98b398b0b0080ba0a2c5a1769d5.cpp
   INPUTS
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/tpch_schema.sql
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen/tpch-dbgen/dists.dss
@@ -155,6 +155,85 @@ resources(library-workload-tpch.global
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q20.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q21.result
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1_canonical/q22.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q1.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q2.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q3.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q4.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q5.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q6.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q7.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q8.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q9.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q10.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q11.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q12.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q13.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q14.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q15.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q16.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q17.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q18.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q19.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q20.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q21.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10_canonical/q22.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q1.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q2.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q3.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q4.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q5.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q6.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q7.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q8.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q9.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q10.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q11.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q12.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q13.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q14.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q15.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q16.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q17.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q18.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q19.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q20.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q21.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s100_canonical/q22.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q1.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q2.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q3.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q4.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q5.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q6.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q7.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q8.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q9.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q10.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q11.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q12.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q13.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q14.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q15.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q16.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q17.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q18.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q19.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q20.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q21.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s1000_canonical/q22.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q1.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q2.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q3.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q5.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q6.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q7.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q8.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q11.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q12.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q13.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q14.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q15.result
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/s10000_canonical/q22.result
   KEYS
   tpch_schema.sql
   dists.dss
@@ -224,4 +303,83 @@ resources(library-workload-tpch.global
   tpch/s1_canonical/q20.result
   tpch/s1_canonical/q21.result
   tpch/s1_canonical/q22.result
+  tpch/s10_canonical/q1.result
+  tpch/s10_canonical/q2.result
+  tpch/s10_canonical/q3.result
+  tpch/s10_canonical/q4.result
+  tpch/s10_canonical/q5.result
+  tpch/s10_canonical/q6.result
+  tpch/s10_canonical/q7.result
+  tpch/s10_canonical/q8.result
+  tpch/s10_canonical/q9.result
+  tpch/s10_canonical/q10.result
+  tpch/s10_canonical/q11.result
+  tpch/s10_canonical/q12.result
+  tpch/s10_canonical/q13.result
+  tpch/s10_canonical/q14.result
+  tpch/s10_canonical/q15.result
+  tpch/s10_canonical/q16.result
+  tpch/s10_canonical/q17.result
+  tpch/s10_canonical/q18.result
+  tpch/s10_canonical/q19.result
+  tpch/s10_canonical/q20.result
+  tpch/s10_canonical/q21.result
+  tpch/s10_canonical/q22.result
+  tpch/s100_canonical/q1.result
+  tpch/s100_canonical/q2.result
+  tpch/s100_canonical/q3.result
+  tpch/s100_canonical/q4.result
+  tpch/s100_canonical/q5.result
+  tpch/s100_canonical/q6.result
+  tpch/s100_canonical/q7.result
+  tpch/s100_canonical/q8.result
+  tpch/s100_canonical/q9.result
+  tpch/s100_canonical/q10.result
+  tpch/s100_canonical/q11.result
+  tpch/s100_canonical/q12.result
+  tpch/s100_canonical/q13.result
+  tpch/s100_canonical/q14.result
+  tpch/s100_canonical/q15.result
+  tpch/s100_canonical/q16.result
+  tpch/s100_canonical/q17.result
+  tpch/s100_canonical/q18.result
+  tpch/s100_canonical/q19.result
+  tpch/s100_canonical/q20.result
+  tpch/s100_canonical/q21.result
+  tpch/s100_canonical/q22.result
+  tpch/s1000_canonical/q1.result
+  tpch/s1000_canonical/q2.result
+  tpch/s1000_canonical/q3.result
+  tpch/s1000_canonical/q4.result
+  tpch/s1000_canonical/q5.result
+  tpch/s1000_canonical/q6.result
+  tpch/s1000_canonical/q7.result
+  tpch/s1000_canonical/q8.result
+  tpch/s1000_canonical/q9.result
+  tpch/s1000_canonical/q10.result
+  tpch/s1000_canonical/q11.result
+  tpch/s1000_canonical/q12.result
+  tpch/s1000_canonical/q13.result
+  tpch/s1000_canonical/q14.result
+  tpch/s1000_canonical/q15.result
+  tpch/s1000_canonical/q16.result
+  tpch/s1000_canonical/q17.result
+  tpch/s1000_canonical/q18.result
+  tpch/s1000_canonical/q19.result
+  tpch/s1000_canonical/q20.result
+  tpch/s1000_canonical/q21.result
+  tpch/s1000_canonical/q22.result
+  tpch/s10000_canonical/q1.result
+  tpch/s10000_canonical/q2.result
+  tpch/s10000_canonical/q3.result
+  tpch/s10000_canonical/q5.result
+  tpch/s10000_canonical/q6.result
+  tpch/s10000_canonical/q7.result
+  tpch/s10000_canonical/q8.result
+  tpch/s10000_canonical/q11.result
+  tpch/s10000_canonical/q12.result
+  tpch/s10000_canonical/q13.result
+  tpch/s10000_canonical/q14.result
+  tpch/s10000_canonical/q15.result
+  tpch/s10000_canonical/q22.result
 )

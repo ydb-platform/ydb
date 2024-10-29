@@ -37,6 +37,7 @@ target_link_libraries(tx-replication-controller PUBLIC
   ydb-core-discovery
   core-engine-minikql
   ydb-core-protos
+  ydb-core-tablet
   ydb-core-tablet_flat
   tx-replication-common
   tx-replication-ydb_proxy

@@ -376,7 +376,7 @@ public:
     }
 
     static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
-        return CreateGrpcClientSettings(config.GetControlPlaneConnection());
+        return CreateGrpcClientSettings(config.GetExecutionConnection());
     }
 
     void CreateSingleClientActors(const NConfig::TYdbComputeControlPlane::TSingle& singleConfig) {

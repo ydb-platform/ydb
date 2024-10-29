@@ -586,6 +586,8 @@ public:
         return *static_cast<TArrowBlock*>(value.AsRawBoxed());
     }
 
+    inline static const TArrowBlock& From(NUdf::TUnboxedValuePod&& value) = delete;
+
     inline const arrow::Datum& GetDatum() const {
         return Datum_;
     }

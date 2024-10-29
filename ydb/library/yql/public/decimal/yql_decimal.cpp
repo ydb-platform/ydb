@@ -3,6 +3,7 @@
 #include <cstring>
 #include <ostream>
 #include <string>
+#include <charconv>
 
 namespace NYql {
 namespace NDecimal {
@@ -219,8 +220,13 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
             if (!len)
                 return Err();
 
-            const auto exp = std::atoi(++ptr);
-            if (!exp)
+            ++ptr;
+            if (ptr != s + str.size() && *ptr == '+') {
+                ++ptr;
+            }
+
+            int exp;
+            if (std::from_chars(ptr, s + str.size(), exp).ec != std::errc())
                 return Err();
 
             const int p = precision, s = int(scale) + exp;

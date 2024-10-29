@@ -600,7 +600,9 @@ template <typename TOnDemandValue>
         case simdjson::ondemand::json_type::null: {
             auto is_null = value.is_null();
             RETURN_IF_NOT_SUCCESS(is_null.error());
-            Y_ABORT_UNLESS(is_null.value_unsafe());
+            if (Y_UNLIKELY(!is_null.value_unsafe())) {
+                return simdjson::error_code::N_ATOM_ERROR;
+            }
             callbacks.OnNull();
             break;
         }

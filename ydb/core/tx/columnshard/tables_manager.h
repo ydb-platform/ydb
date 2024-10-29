@@ -160,6 +160,10 @@ private:
 public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters);
 
+    const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
+        return LoadTimeCounters;
+    }
+
     bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
     bool TryFinalizeDropPathOnComplete(const ui64 pathId);
 

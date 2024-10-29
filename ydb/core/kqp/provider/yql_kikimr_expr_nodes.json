@@ -523,6 +523,45 @@
         {
             "Name": "TKiBackupCollectionEntryList",
             "ListBase": "TKiBackupCollectionEntry"
+        },
+        {
+            "Name": "TKiCreateBackupCollection",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiCreateBackupCollection!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Entries", "Type": "TKiBackupCollectionEntryList"},
+                {"Index": 5, "Name": "BackupCollectionSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiAlterBackupCollection",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAlterBackupCollection!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "BackupCollectionSettings", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiDropBackupCollection",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiDropBackupCollection!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Cascade", "Type":  "TCoAtom"}
+            ]
         }
     ]
 }

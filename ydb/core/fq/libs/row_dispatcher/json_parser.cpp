@@ -264,7 +264,7 @@ class TJsonParser::TImpl {
 public:
     TImpl(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout)
         : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
-        , TypeEnv(Alloc)
+        , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
         , BatchSize(batchSize)
         , BatchCreationTimeout(batchCreationTimeout)
         , ParsedValues(columns.size())
@@ -273,7 +273,7 @@ public:
 
         with_lock (Alloc) {
             auto functonRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
-            NKikimr::NMiniKQL::TProgramBuilder programBuilder(TypeEnv, *functonRegistry);
+            NKikimr::NMiniKQL::TProgramBuilder programBuilder(*TypeEnv, *functonRegistry);
 
             Columns.reserve(columns.size());
             for (size_t i = 0; i < columns.size(); i++) {
@@ -370,8 +370,12 @@ public:
     }
 
     ~TImpl() {
-        Alloc.Acquire();
-        ClearColumns(0);
+        with_lock (Alloc) {
+            ClearColumns(0);
+            ParsedValues.clear();
+            Columns.clear();
+            TypeEnv.reset();
+        }
     }
 
 private:
@@ -392,7 +396,7 @@ private:
 
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
+    std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
 
     const ui64 BatchSize;
     const TDuration BatchCreationTimeout;
@@ -402,7 +406,7 @@ private:
     TJsonParserBuffer Buffer;
     simdjson::ondemand::parser Parser;
 
-    TVector<std::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue>>> ParsedValues;
+    TVector<NKikimr::NMiniKQL::TUnboxedValueVector> ParsedValues;
 };
 
 TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout)

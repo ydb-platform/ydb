@@ -51,9 +51,9 @@ public:
 
     class TTestInstanceBuilder {
     public:
-        static TChunkMeta Build(const ui64 numRows, const ui64 rawBytes) {
+        static TChunkMeta Build(const ui64 recordsCount, const ui64 rawBytes) {
             TChunkMeta result;
-            result.NumRows = numRows;
+            result.RecordsCount = recordsCount;
             result.RawBytes = rawBytes;
             return result;
         }
@@ -101,8 +101,8 @@ public:
 
     class TTestInstanceBuilder {
     public:
-        static TColumnRecord Build(const ui32 columnId, const ui16 chunkId, const ui64 offset, const ui64 size, const ui64 numRows, const ui64 rawBytes) {
-            TColumnRecord result(TChunkMeta::TTestInstanceBuilder::Build(numRows, rawBytes));
+        static TColumnRecord Build(const ui32 columnId, const ui16 chunkId, const ui64 offset, const ui64 size, const ui64 recordsCount, const ui64 rawBytes) {
+            TColumnRecord result(TChunkMeta::TTestInstanceBuilder::Build(recordsCount, rawBytes));
             result.ColumnId = columnId;
             result.Chunk = chunkId;
             result.BlobRange.Offset = offset;
@@ -138,7 +138,7 @@ public:
     }
 
     NArrow::NSplitter::TSimpleSerializationStat GetSerializationStat() const {
-        return NArrow::NSplitter::TSimpleSerializationStat(BlobRange.Size, Meta.GetNumRows(), Meta.GetRawBytes());
+        return NArrow::NSplitter::TSimpleSerializationStat(BlobRange.Size, Meta.GetRecordsCount(), Meta.GetRawBytes());
     }
 
     const TChunkMeta& GetMeta() const {
@@ -151,10 +151,6 @@ public:
 
     bool IsEqualTest(const TColumnRecord& item) const {
         return ColumnId == item.ColumnId && Chunk == item.Chunk;
-    }
-
-    bool Valid() const {
-        return ColumnId && BlobRange.IsValid();
     }
 
     TString DebugString() const {

@@ -59,6 +59,7 @@ ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[constant-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[count_rows-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-kqprun]
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[constant-dqrun]
@@ -137,10 +138,9 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery_error_if_no_states
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter_missing_fields
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_read_raw_format_with_row_dispatcher
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_scheme_error
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_simple_optional
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
@@ -155,7 +155,6 @@ ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[pg-join_brackets2-default.txt]
 ydb/tests/functional/audit test_auditlog.py.test_cloud_ids_are_logged[attrs0]
 ydb/tests/functional/audit test_auditlog.py.test_cloud_ids_are_logged[attrs1]
 ydb/tests/functional/audit test_auditlog.py.test_dml_requests_arent_logged_when_sid_is_expected
-ydb/tests/functional/audit test_auditlog.py.test_dml_requests_logged_when_sid_is_unexpected
 ydb/tests/functional/audit test_auditlog.py.test_single_dml_query_logged[delete]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach

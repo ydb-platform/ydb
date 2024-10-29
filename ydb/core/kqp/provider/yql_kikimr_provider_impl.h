@@ -75,6 +75,10 @@ private:
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) = 0;
+
+    virtual TStatus HandleCreateBackupCollection(NNodes::TKiCreateBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterBackupCollection(NNodes::TKiAlterBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropBackupCollection(NNodes::TKiDropBackupCollection node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
@@ -89,11 +93,17 @@ public:
         Permission,
         PGObject,
         Replication,
+        BackupCollection,
     };
 
     struct TViewDescription {
         TString Name;
         bool PrimaryFlag = false;
+    };
+
+    struct TBackupCollectionDescription {
+        TString Prefix;
+        TString Name;
     };
 
 public:
@@ -171,6 +181,16 @@ public:
         return *ObjectType;
     }
 
+    TBackupCollectionDescription GetBackupCollectionPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::BackupCollection);
+        Y_DEBUG_ABORT_UNLESS(ExplicitPrefix.Defined());
+        return TBackupCollectionDescription {
+                .Prefix = *ExplicitPrefix,
+                .Name = Target,
+            };
+    }
+
     bool Extract(const TExprNode& key);
 
 private:
@@ -179,6 +199,7 @@ private:
     TString Target;
     TMaybe<TString> ObjectType;
     TMaybe<TViewDescription> View;
+    TMaybe<TString> ExplicitPrefix;
 };
 
 struct TKiDataQueryBlockSettings {

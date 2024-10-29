@@ -74,7 +74,7 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
             }
             WriteUi64(out, taskState.size());
             if (!taskState.empty()) {
-                out.AppendNoAlias(taskState.Data(), taskState.size());
+                out.AppendNoAlias(taskState.data(), taskState.size());
             }
         }
     }

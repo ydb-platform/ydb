@@ -17,11 +17,12 @@ TTieringProcessContext::TTieringProcessContext(const ui64 memoryUsageLimit, cons
 
 }
 
-bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait) {
-    if (!UsedPortions.emplace(info.GetAddress()).second) {
+bool TTieringProcessContext::AddPortion(
+    const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait) {
+    if (!UsedPortions.emplace(info->GetAddress()).second) {
         return true;
     }
-    if (DataLocksManager->IsLocked(info)) {
+    if (DataLocksManager->IsLocked(*info)) {
         return true;
     }
 
@@ -33,7 +34,7 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
         std::vector<TTaskConstructor> tasks = {buildNewTask()};
         it = Tasks.emplace(features.GetRWAddress(), std::move(tasks)).first;
     }
-    if (it->second.back().GetTxWriteVolume() + info.GetTxVolume() > TGlobalLimits::TxWriteLimitBytes / 2 && it->second.back().GetTxWriteVolume()) {
+    if (it->second.back().GetTxWriteVolume() + info->GetTxVolume() > TGlobalLimits::TxWriteLimitBytes / 2 && it->second.back().GetTxWriteVolume()) {
         if (Controller->IsNewTaskAvailable(it->first, it->second.size())) {
             it->second.emplace_back(buildNewTask());
         } else {
@@ -50,19 +51,19 @@ bool TTieringProcessContext::AddPortion(const TPortionInfo& info, TPortionEvicti
             }
             features.OnSkipPortionWithTxLimit(Counters, *dWait);
         }
-        it->second.back().MutableMemoryUsage() = it->second.back().GetMemoryPredictor()->AddPortion(info);
+        it->second.back().MutableMemoryUsage() = it->second.back().GetMemoryPredictor()->AddPortion(*info);
     }
-    it->second.back().MutableTxWriteVolume() += info.GetTxVolume();
+    it->second.back().MutableTxWriteVolume() += info->GetTxVolume();
     if (features.GetTargetTierName() == NTiering::NCommon::DeleteTierName) {
         AFL_VERIFY(dWait);
-        Counters.OnPortionToDrop(info.GetTotalBlobBytes(), *dWait);
+        Counters.OnPortionToDrop(info->GetTotalBlobBytes(), *dWait);
         it->second.back().GetTask()->AddPortionToRemove(info);
         AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     } else {
         if (!dWait) {
             AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
         } else {
-            Counters.OnPortionToEvict(info.GetTotalBlobBytes(), *dWait);
+            Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }
         it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
         AFL_VERIFY(!it->second.back().GetTask()->HasPortionsToRemove())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());

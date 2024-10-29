@@ -57,7 +57,7 @@ def _work_path(name):
     # TODO: remove yatest dependency from harness
     try:
         return yatest.common.work_path(name)
-    except yatest.common.NoRuntimeFormed:
+    except (AttributeError, yatest.common.NoRuntimeFormed):
         return name
 
 

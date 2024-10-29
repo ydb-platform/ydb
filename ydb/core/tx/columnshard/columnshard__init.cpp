@@ -99,8 +99,13 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
 }
 
 bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
-    if (!Precharge(txc)) {
-        return false;
+    TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+    {
+        TLoadTimeSignals::TLoadTimer timer = tManagerLocal.GetLoadTimeCounters()->PrechargeTimeCounters.StartGuard();
+        if (!Precharge(txc)) {
+            timer.AddLoadingFail();
+            return false;
+        }
     }
 
     NIceDb::TNiceDb db(txc.DB);

@@ -7,22 +7,17 @@ def _get_param(name, default):
     # TODO: remove yatest dependency from harness
     try:
         return yatest.common.get_param(name, default)
-    except yatest.common.NoRuntimeFormed:
+    except (AttributeError, yatest.common.NoRuntimeFormed):
         return default
 
 
-config_name = _get_param("kikimr.ci.cluster_name", None)
 ssh_username = _get_param("kikimr.ci.ssh_username", os.getenv('NEMESIS_USER', 'robot-nemesis'))
 deploy_cluster = _get_param("kikimr.ci.deploy_cluster", "false") == "true"
-use_packages = _get_param('kikimr.ci.packages', "false") == "true"
-
-log_level = int(_get_param('kikimr.ci.driver.log_level', 5))
 
 kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
 kikimr_configure_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr_configure'
 kikimr_configuration_deploy_path = '/Berkanavt/kikimr/cfg'
 kikimr_cluster_yaml_deploy_path = '/Berkanavt/kikimr/cfg/cluster.yaml'
-blockstore_configs_deploy_path = '/Berkanavt/nbs-server/cfg'
 kikimr_next_version_deploy_path = '/Berkanavt/kikimr/bin/kikimr_next'
 kikimr_last_version_deploy_path = '/Berkanavt/kikimr/bin/kikimr_last'
 kikimr_home = '/Berkanavt/kikimr'

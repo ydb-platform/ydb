@@ -36,6 +36,12 @@ constexpr unsigned TrieBits = 1;
 constexpr unsigned TrieSize = 1u<<TrieBits;
 static_assert(TrieBits > 0);
 
+#ifdef NDEBUG
+#define DBG(...) /**/
+#else
+volatile enum { INFO, DEBUG, TRACE } debug_level = DEBUG;
+#define DBG(LVL,...) if (debug_level >= LVL) __VA_ARGS__
+#endif
 int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     std::cin.tie(nullptr);
     std::ios_base::sync_with_stdio(false);
@@ -43,7 +49,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     using TPayload = std::string;
     TPayload asn;
     std::unordered_map<uint64_t, std::vector<std::array<unsigned, TrieSize >>> prefixes;
-    uint64_t masks = 0;
+    [[maybe_unused]] uint64_t masks = 0;
     std::unordered_map<TPayload, uint64_t> payloads;
     payloads.emplace(TPayload{}, 0u);
     std::string s;
@@ -56,7 +62,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         r2 = s.substr(c1 + 1, c2 - c1 - 1);
         asn = s.substr(c2 + 1);
         struct in6_addr a1 {}, a2 {};
-        int rc;
+        [[maybe_unused]] int rc;
         constexpr unsigned ipv6PrefixLength = 32;
         constexpr unsigned ipv4PrefixLength = 8;
         if (inet_pton(AF_INET6, r1.c_str(), &a1) > 0)
@@ -69,7 +75,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
             memset((char *)&a2 + offset + 4, 0xff, sizeof(a2) - (offset + 4));
         }
         assert(rc > 0);
-        std::cerr << r1 << '|' << r2 << std::endl;
+        DBG(TRACE, std::cerr << r1 << '|' << r2 << std::endl);
         uint64_t p1, p2;
         uint64_t s2;
         auto id = payloads.emplace(asn, payloads.size());
@@ -77,15 +83,15 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         p1 = bswap_64(p1);
         memcpy(&p2, &a2, sizeof(p2));
         p2 = bswap_64(p2);
-        std::cerr << std::hex << p1 << '|' << std::endl << p2 << std::endl;
+        DBG(TRACE, std::cerr << std::hex << p1 << '|' << std::endl << p2 << std::endl);
         std::memcpy(&s2, ((const char *)&a2) + sizeof(p1), sizeof(s2));
         while(p1 <= p2) {
             unsigned bits = std::min<unsigned>(std::countr_zero(p1), 64 - ipv6PrefixLength);
             while(p1 + (uint64_t(1)<<bits) - 1 > p2)
                 --bits;
             unsigned len = (128 - (bits + 64));
-            std::cerr << std::hex << p1 << std::dec << '/' << len << ' ' << (p1 >> (64 - ipv6PrefixLength)) << std::endl;
-            if (id.first->second != 0) { 
+            DBG(TRACE, std::cerr << std::hex << p1 << std::dec << '/' << len << ' ' << (p1 >> (64 - ipv6PrefixLength)) << std::endl);
+            if (id.first->second != 0) {
                 unsigned h = 0;
                 auto &trie = prefixes.emplace(p1 >> (64 - ipv6PrefixLength), 1).first->second;
 
@@ -102,13 +108,14 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
                     }
 #endif
                     if (alt[1]) {
-                        for (unsigned altbit = 0; altbit < TrieBits; ++altbit)
+                        for (unsigned altbit = 0; altbit < TrieBits; ++altbit) {
                             if (altbit != bit) {
                                 assert(trie[h][bit] == 0);
                                 trie[h][altbit] = trie.size();
                                 trie.emplace_back(alt);
                             }
-                        std::cerr << "push alt" << std::endl;
+                        }
+                        DBG(TRACE, std::cerr << "push alt" << std::endl);
                     }
                     auto &next = trie[h][bit];
                     if (next) {
@@ -137,28 +144,28 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
                 }
                 ++masks;
             } else {
-                std::cerr << '!' << std::endl;
+                DBG(TRACE, std::cerr << '!' << std::endl);
             }
             p1 += (uint64_t(1)<<(bits - 0));
         }
     }
-    size_t maxSizeBytes = 0;
-    size_t sumSizeBytes = 0;
+    [[maybe_unused]] size_t maxSizeBytes = 0;
+    [[maybe_unused]] size_t sumSizeBytes = 0;
     for (auto &[s,trie]: prefixes) {
         auto sizeb = trie.size()*sizeof(trie[0]);
-        std::cerr << std::hex << s << std::dec << ' ' << trie.size() << ' ' << sizeb << std::endl;
+        DBG(TRACE, std::cerr << std::hex << s << std::dec << ' ' << trie.size() << ' ' << sizeb << std::endl);
         maxSizeBytes = std::max(maxSizeBytes, sizeb);
         sumSizeBytes += sizeb;
     }
-    std::cerr 
+    DBG(DEBUG, std::cerr
         << "nprefix=" << prefixes.size() << ' '
         << "maxsize=" << maxSizeBytes << ' '
         << "masks=" << masks << ' '
         << "payloads=" << payloads.size() << ' '
         << "sizeb=" << sumSizeBytes << ' '
-        << std::endl;
-    size_t maxCompressedSize = 0;
-    size_t csum = 0;
+        << std::endl);
+    [[maybe_unused]] size_t maxCompressedSize = 0;
+    [[maybe_unused]] size_t csum = 0;
     auto hashop = [](const auto &a) {
         return std::hash<std::string_view>{}(std::string_view((const char *)&a, sizeof(a)));
     };
@@ -185,11 +192,11 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         dumpHex(trieBitsBytes, trieBitsBytes + sizeof(trieBitsBytes));
         dumpHex((const uint8_t *)ctrie.data(), (const uint8_t *)(ctrie.data() + ctrie.size()));
         std::cout << "\"}\n" << std::dec;
-        std::cerr << std::hex << prefix << std::dec << ' ' << trie.size()*sizeof(trie[0]) << '>' << sizeb << std::endl;
+        DBG(TRACE, std::cerr << std::hex << prefix << std::dec << ' ' << trie.size()*sizeof(trie[0]) << '>' << sizeb << std::endl);
     }
-    std::cerr 
+    DBG(DEBUG, std::cerr
         << "csizeb=" << csum << ' '
         << "maxcsize=" << maxCompressedSize << ' '
-        << std::endl;
+        << std::endl);
     return 0;
 }

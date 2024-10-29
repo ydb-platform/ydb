@@ -582,16 +582,8 @@ public:
     {
     }
 
-    inline static TArrowBlock& From(NUdf::TUnboxedValuePod& value) {
-        return *static_cast<TArrowBlock*>(value.AsRawBoxed());
-    }
-
     inline static const TArrowBlock& From(const NUdf::TUnboxedValuePod& value) {
         return *static_cast<TArrowBlock*>(value.AsRawBoxed());
-    }
-
-    inline arrow::Datum& GetDatum() {
-        return Datum_;
     }
 
     inline const arrow::Datum& GetDatum() const {

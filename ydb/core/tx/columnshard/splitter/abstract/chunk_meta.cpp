@@ -8,7 +8,7 @@ TSimpleChunkMeta::TSimpleChunkMeta(
     const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column) {
     Y_ABORT_UNLESS(column);
     Y_ABORT_UNLESS(column->GetRecordsCount());
-    NumRows = column->GetRecordsCount();
+    RecordsCount = column->GetRecordsCount();
     RawBytes = column->GetRawSizeVerified();
 }
 

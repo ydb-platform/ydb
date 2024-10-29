@@ -10,13 +10,13 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 class TOrderedPortion {
 private:
-    std::shared_ptr<TPortionInfo> Portion;
+    TPortionInfo::TConstPtr Portion;
     NArrow::TReplaceKey Start;
     ui64 PortionId;
     NArrow::NMerger::TSortableBatchPosition StartPosition;
 
 public:
-    const std::shared_ptr<TPortionInfo>& GetPortion() const {
+    const TPortionInfo::TConstPtr& GetPortion() const {
         AFL_VERIFY(Portion);
         return Portion;
     }
@@ -30,7 +30,14 @@ public:
         return StartPosition;
     }
 
-    TOrderedPortion(const std::shared_ptr<TPortionInfo>& portion)
+    TOrderedPortion(const TPortionInfo::TConstPtr& portion)
+        : Portion(portion)
+        , Start(portion->IndexKeyStart())
+        , PortionId(portion->GetPortionId())
+        , StartPosition(Portion->GetMeta().GetFirstLastPK().GetBatch(), 0, false) {
+    }
+
+    TOrderedPortion(const TPortionInfo::TPtr& portion)
         : Portion(portion)
         , Start(portion->IndexKeyStart())
         , PortionId(portion->GetPortionId())
@@ -76,16 +83,16 @@ public:
 
 class TPortionsChain {
 private:
-    std::vector<std::shared_ptr<TPortionInfo>> Portions;
+    std::vector<TPortionInfo::TConstPtr> Portions;
 
-    std::shared_ptr<TPortionInfo> NotIncludedNextPortion;
+    TPortionInfo::TConstPtr NotIncludedNextPortion;
 
 public:
-    const std::vector<std::shared_ptr<TPortionInfo>>& GetPortions() const {
+    const std::vector<TPortionInfo::TConstPtr>& GetPortions() const {
         return Portions;
     }
 
-    const std::shared_ptr<TPortionInfo>& GetNotIncludedNextPortion() const {
+    const TPortionInfo::TConstPtr& GetNotIncludedNextPortion() const {
         return NotIncludedNextPortion;
     }
 
@@ -99,7 +106,7 @@ public:
         }
     }
 
-    TPortionsChain(const std::vector<std::shared_ptr<TPortionInfo>>& portions, const std::shared_ptr<TPortionInfo>& notIncludedNextPortion)
+    TPortionsChain(const std::vector<TPortionInfo::TConstPtr>& portions, const TPortionInfo::TConstPtr& notIncludedNextPortion)
         : Portions(portions)
         , NotIncludedNextPortion(notIncludedNextPortion) {
         AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion);
@@ -108,7 +115,7 @@ public:
 
 class TCompactionTaskData {
 private:
-    YDB_ACCESSOR_DEF(std::vector<std::shared_ptr<TPortionInfo>>, Portions);
+    YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
     const ui64 TargetCompactionLevel = 0;
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> Predictor =
         NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
@@ -140,8 +147,8 @@ public:
         StopSeparation = point;
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetRepackPortions(const ui32 /*levelIdx*/) const {
-        std::vector<std::shared_ptr<TPortionInfo>> result;
+    std::vector<TPortionInfo::TConstPtr> GetRepackPortions(const ui32 /*levelIdx*/) const {
+        std::vector<TPortionInfo::TConstPtr> result;
         if (MemoryUsage > ((ui64)1 << 30)) {
             auto predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
             for (auto&& i : Portions) {
@@ -166,12 +173,12 @@ public:
         return result;
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetMovePortions() const {
+    std::vector<TPortionInfo::TConstPtr> GetMovePortions() const {
         if (MemoryUsage > ((ui64)1 << 30)) {
             return {};
         }
         auto moveIds = GetMovePortionIds();
-        std::vector<std::shared_ptr<TPortionInfo>> result;
+        std::vector<TPortionInfo::TConstPtr> result;
         for (auto&& i : Portions) {
             if (moveIds.contains(i->GetPortionId())) {
                 result.emplace_back(i);
@@ -221,7 +228,7 @@ public:
     NArrow::NMerger::TIntervalPositions GetCheckPositions(const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved);
     std::vector<NArrow::TReplaceKey> GetFinishPoints(const bool withMoved);
 
-    void AddCurrentLevelPortion(const std::shared_ptr<TPortionInfo>& portion, std::optional<TPortionsChain>&& chain, const bool repackMoved) {
+    void AddCurrentLevelPortion(const TPortionInfo::TConstPtr& portion, std::optional<TPortionsChain>&& chain, const bool repackMoved) {
         AFL_VERIFY(UsedPortionIds.emplace(portion->GetPortionId()).second);
         AFL_VERIFY(CurrentLevelPortionIds.emplace(portion->GetPortionId()).second);
         Portions.emplace_back(portion);
@@ -265,8 +272,7 @@ public:
 
 class IPortionsLevel {
 private:
-    virtual void DoModifyPortions(
-        const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
+    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
     virtual ui64 DoGetWeight() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
     virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
@@ -317,7 +323,7 @@ public:
         , NextLevel(nextLevel) {
     }
 
-    bool CanTakePortion(const std::shared_ptr<TPortionInfo>& portion) const {
+    bool CanTakePortion(const TPortionInfo::TConstPtr& portion) const {
         auto chain = GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd());
         if (chain && chain->GetPortions().size()) {
             return false;
@@ -355,7 +361,7 @@ public:
         return DoGetAffectedPortionBytes(from, to);
     }
 
-    void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
+    void ModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
         return DoModifyPortions(add, remove);
     }
 

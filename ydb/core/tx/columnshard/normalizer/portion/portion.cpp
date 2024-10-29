@@ -1,22 +1,22 @@
 #include "portion.h"
 
-#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
-
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 
 namespace NKikimr::NOlap {
 
-class TPortionsNormalizer::TNormalizerResult : public INormalizerChanges {
+class TPortionsNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<std::shared_ptr<TPortionInfo>> Portions;
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+
 public:
     TNormalizerResult(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Portions(std::move(portions))
-        , Schemas(schemas)
-    {}
+        , Schemas(schemas) {
+    }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
@@ -25,7 +25,7 @@ public:
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
-            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
+            TPortionDataAccessor(*portionInfo).SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }
         return true;
     }
@@ -39,11 +39,12 @@ bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, cons
     return KnownPortions.contains(portionInfo.GetAddress());
 }
 
-INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+INormalizerTask::TPtr TPortionsNormalizer::BuildTask(
+    std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
     return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 
- TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
 
     NIceDb::TNiceDb db(txc.DB);
@@ -71,5 +72,4 @@ INormalizerTask::TPtr TPortionsNormalizer::BuildTask(std::vector<std::shared_ptr
     return true;
 }
 
-
-}
+}   // namespace NKikimr::NOlap

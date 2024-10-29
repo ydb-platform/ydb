@@ -111,8 +111,8 @@ public:
             MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
         if (withBlobs) {
-            Indexes = portion.GetIndexes();
-            Records = portion.GetRecords();
+            Indexes = portion.Indexes;
+            Records = portion.Records;
             BlobIds = portion.BlobIds;
         }
     }
@@ -249,7 +249,7 @@ public:
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetNumRows();
+                result += i.GetMeta().GetRecordsCount();
                 columnIdFirst = i.ColumnId;
             }
         }

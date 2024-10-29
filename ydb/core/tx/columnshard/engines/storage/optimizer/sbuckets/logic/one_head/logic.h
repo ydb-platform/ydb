@@ -7,7 +7,7 @@ class TOneHeadLogic: public IOptimizationLogic {
 private:
     const TDuration FreshnessCheckDuration = TDuration::Seconds(300);
 
-    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket,
+    std::vector<TPortionInfo::TConstPtr> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket,
         std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const;
 
     virtual TCalcWeightResult DoCalcWeight(const TInstant now, const TBucketInfo& bucket) const override {
@@ -27,7 +27,7 @@ private:
 
     virtual TCompactionTaskResult DoBuildTask(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const override {
         std::vector<NArrow::TReplaceKey> stopPoints;
-        std::vector<std::shared_ptr<TPortionInfo>> portions = GetPortionsForMerge(now, memLimit, bucket, &stopPoints, nullptr);
+        std::vector<TPortionInfo::TConstPtr> portions = GetPortionsForMerge(now, memLimit, bucket, &stopPoints, nullptr);
         return TCompactionTaskResult(std::move(portions), std::move(stopPoints));
     }
 public:

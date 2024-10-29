@@ -1,7 +1,8 @@
 #pragma once
 #include "container.h"
-#include <ydb/core/tx/columnshard/engines/portion_info.h>
+
 #include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,7 +16,6 @@ private:
     }
 
 public:
-
     bool IsEmpty() const {
         return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
     }
@@ -48,4 +48,4 @@ public:
     std::set<std::string> GetColumnNames() const;
 };
 
-}
+}   // namespace NKikimr::NOlap

@@ -130,7 +130,8 @@ public:
     NTable::TDatabase* DB;
     IDbWrapper& DBWrapper;
     TColumnEngineForLogs& EngineLogs;
-    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs);
+    const TSnapshot Snapshot;
+    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot);
 };
 
 class TChangesFinishContext {
@@ -155,13 +156,15 @@ public:
     const ui64 BytesWritten;
     const TDuration Duration;
     TColumnEngineForLogs& EngineLogs;
-    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten
-        , const TDuration d, TColumnEngineForLogs& engineLogs)
+    const TSnapshot Snapshot;
+    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten, const TDuration d,
+        TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
         : ActorContext(actorContext)
         , BlobsWritten(blobsWritten)
         , BytesWritten(bytesWritten)
         , Duration(d)
         , EngineLogs(engineLogs)
+        , Snapshot(snapshot)
     {
 
     }

@@ -20,7 +20,7 @@ protected:
         return Data;
     }
     virtual ui32 DoGetRecordsCountImpl() const override {
-        return Record.GetMeta().GetNumRows();
+        return Record.GetMeta().GetRecordsCount();
     }
     virtual ui64 DoGetRawBytesImpl() const override {
         return Record.GetMeta().GetRawBytes();

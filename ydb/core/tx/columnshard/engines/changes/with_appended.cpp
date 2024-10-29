@@ -13,11 +13,17 @@ namespace NKikimr::NOlap {
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> usedPortionIds;
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
-    for (auto& [_, portionInfo] : PortionsToRemove) {
-        Y_ABORT_UNLESS(portionInfo.HasRemoveSnapshot());
-        AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-        portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+
+    for (auto&& [_, i] : PortionsToRemove) {
+        Y_ABORT_UNLESS(!i->HasRemoveSnapshot());
+        AFL_VERIFY(usedPortionIds.emplace(i->GetPortionId()).second)("portion_info", i->DebugString(true));
+        const auto pred = [&](TPortionInfo& portionCopy) {
+            portionCopy.SetRemoveSnapshot(context.Snapshot);
+        };
+        context.EngineLogs.GetGranuleVerified(i->GetPathId())
+            .ModifyPortionOnExecute(context.DBWrapper, i, pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
+
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
         auto& portionInfo = item.GetPortionResult();
         if (!!self && !self->TablesManager.HasTable(portionInfo.GetPathId(), false)) {
@@ -32,15 +38,14 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         auto& portionInfo = portionInfoWithBlobs.GetPortionResult();
         AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
-        portionInfo.SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+        TPortionDataAccessor(portionInfo).SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
-    if (PortionsToMove.size()) {
-        for (auto&& [_, i] : PortionsToMove) {
-            const auto pred = [&](TPortionInfo& portionCopy) {
-                portionCopy.MutableMeta().ResetCompactionLevel(TargetCompactionLevel.value_or(0));
-            };
-            context.EngineLogs.GetGranuleVerified(i->GetPathId()).ModifyPortionOnExecute(*context.DB, i, pred);
-        }
+    for (auto&& [_, i] : PortionsToMove) {
+        const auto pred = [&](TPortionInfo& portionCopy) {
+            portionCopy.MutableMeta().ResetCompactionLevel(TargetCompactionLevel.value_or(0));
+        };
+        context.EngineLogs.GetGranuleVerified(i->GetPathId())
+            .ModifyPortionOnExecute(context.DBWrapper, i, pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 }
 
@@ -73,18 +78,14 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("portions", sb)("task_id", GetTaskIdentifier());
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
 
-        THashSet<TUnifiedBlobId> blobsDeactivated;
         for (auto& [_, portionInfo] : PortionsToRemove) {
-            for (auto& rec : portionInfo.Records) {
-                blobsDeactivated.emplace(portionInfo.GetBlobId(rec.BlobRange.GetBlobIdxVerified()));
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, portionInfo->GetBlobIdsCount());
+            for (auto& blobId : portionInfo->GetBlobIds()) {
+                self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
             }
-            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.GetTotalRawBytes());
+            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo->GetTotalRawBytes());
         }
 
-        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
-        for (auto& blobId : blobsDeactivated) {
-            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
-        }
     }
     if (PortionsToMove.size()) {
         THashMap<ui32, TSimplePortionsGroupInfo> portionGroups;
@@ -96,19 +97,21 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             const auto pred = [&](const std::shared_ptr<TPortionInfo>& portion) {
                 portion->MutableMeta().ResetCompactionLevel(TargetCompactionLevel.value_or(0));
             };
-            context.EngineLogs.MutableGranuleVerified(i->GetPathId()).ModifyPortionOnComplete(i, pred);
+            context.EngineLogs.ModifyPortionOnComplete(i, pred);
         }
     }
     {
         auto g = context.EngineLogs.GranulesStorage->GetStats()->StartPackModification();
-        for (auto& [_, portionInfo] : PortionsToRemove) {
-            context.EngineLogs.AddCleanupPortion(portionInfo);
-            const TPortionInfo& oldInfo =
-                context.EngineLogs.GetGranuleVerified(portionInfo.GetPathId()).GetPortionVerified(portionInfo.GetPortion());
-            context.EngineLogs.UpsertPortion(portionInfo, &oldInfo);
+        for (auto&& [_, i] : PortionsToRemove) {
+            Y_ABORT_UNLESS(!i->HasRemoveSnapshot());
+            const auto pred = [&](const std::shared_ptr<TPortionInfo>& portion) {
+                portion->SetRemoveSnapshot(context.Snapshot);
+            };
+            context.EngineLogs.ModifyPortionOnComplete(i, pred);
+            context.EngineLogs.AddCleanupPortion(*i);
         }
         for (auto& portionBuilder : AppendedPortions) {
-            context.EngineLogs.UpsertPortion(portionBuilder.GetPortionResult());
+            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
         }
     }
 }
@@ -118,9 +121,6 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
         i.GetPortionConstructor().SetPortionId(context.NextPortionId());
         i.GetPortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
-    }
-    for (auto& [_, portionInfo] : PortionsToRemove) {
-        portionInfo.SetRemoveSnapshot(context.GetSnapshot());
     }
 }
 

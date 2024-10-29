@@ -11,10 +11,14 @@ private:
     const TDuration DurationToDrop;
     class TOrderedPortion {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
+        YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
 
     public:
-        TOrderedPortion(const std::shared_ptr<TPortionInfo>& portion)
+        TOrderedPortion(const TPortionInfo::TConstPtr& portion)
+            : Portion(portion) {
+        }
+
+        TOrderedPortion(const TPortionInfo::TPtr& portion)
             : Portion(portion) {
         }
 
@@ -46,8 +50,7 @@ private:
         return 0;
     }
 
-    virtual void DoModifyPortions(
-        const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override {
+    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         const bool constructionFlag = Portions.empty();
         if (constructionFlag) {
             std::vector<TOrderedPortion> ordered;

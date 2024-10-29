@@ -26,7 +26,7 @@ TOptimizerPlanner::TOptimizerPlanner(
     RefreshWeights();
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
+std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
     AFL_VERIFY(LevelsByWeight.size());
     auto level = LevelsByWeight.begin()->second;

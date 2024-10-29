@@ -358,28 +358,10 @@ namespace NActors {
 
             GenerateTraffic();
 
-            for (;;) {
-                switch (EUpdateState state = ReceiveContext->UpdateState) {
-                    case EUpdateState::NONE:
-                    case EUpdateState::CONFIRMING:
-                        Y_ABORT("unexpected state");
-
-                    case EUpdateState::INFLIGHT:
-                        // this message we are processing was the only one in flight, so we can reset state to NONE here
-                        if (ReceiveContext->UpdateState.compare_exchange_weak(state, EUpdateState::NONE)) {
-                            return;
-                        }
-                        break;
-
-                    case EUpdateState::INFLIGHT_AND_PENDING:
-                        // there is more messages pending from the input session actor, so we have to inform it to release
-                        // that message
-                        if (ReceiveContext->UpdateState.compare_exchange_weak(state, EUpdateState::CONFIRMING)) {
-                            Send(ev->Sender, new TEvConfirmUpdate);
-                            return;
-                        }
-                        break;
-                }
+            Y_ABORT_UNLESS(ReceiveContext->UpdateInFlight);
+            ReceiveContext->UpdateInFlight = false;
+            if (ReceiveContext->NextUpdatePending) {
+                Send(ev->Sender, new TEvConfirmUpdate);
             }
         }
     }
@@ -1060,7 +1042,7 @@ namespace NActors {
                      flagState == EFlag::YELLOW,
                      flagState == EFlag::ORANGE,
                      flagState == EFlag::RED,
-                     ReceiveContext->ClockSkew_us.load(),
+                     ReceiveContext->ClockSkew_us,
                      reportClockSkew});
         }
 

@@ -100,8 +100,6 @@ namespace NActors {
     };
 
     struct TReceiveContext: public TAtomicRefCount<TReceiveContext> {
-        /* All invokations to these fields should be thread-safe */
-
         ui64 ControlPacketSendTimer = 0;
         ui64 ControlPacketId = 0;
 
@@ -153,6 +151,7 @@ namespace NActors {
         std::array<TPerChannelContext, 16> ChannelArray;
         std::unordered_map<ui16, TPerChannelContext> ChannelMap;
         ui64 LastProcessedSerial = 0;
+        bool Terminated = false;
 
         TReceiveContext() {
             GetTimeFast(&StartTime);

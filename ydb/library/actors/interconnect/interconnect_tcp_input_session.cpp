@@ -147,6 +147,10 @@ namespace NActors {
     STATEFN(TInputSessionTCP::WorkingState) {
         std::unique_ptr<IEventBase> termEv;
 
+        if (Context->Terminated) {
+            return PassAway();
+        }
+
         try {
             WorkingStateImpl(ev);
         } catch (const TExReestablishConnection& ex) {

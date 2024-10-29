@@ -6,6 +6,7 @@
 #include <vector>
 #include <span>
 
+#include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/utils/prefetch.h>
 
 #include <util/digest/city.h>
@@ -110,14 +111,26 @@ public:
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
         if (Size * 2 >= Capacity) {
-            Grow();
+            SafeGrow();
         }
+    }
+
+    // should be called after Insert if isNew is true
+    // Unsafety reasons described in UnsafeGrow
+    // So this is much less preferable then CheckGrow
+    Y_FORCE_INLINE bool UnsafeCheckGrow() {
+        if (Size * 2 >= Capacity) {
+            if (!UnsafeGrow()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
         while (2 * (Size + batchRequest.size()) >= Capacity) {
-            Grow();
+            SafeGrow();
         }
 
         for (size_t i = 0; i < batchRequest.size(); ++i) {
@@ -283,7 +296,58 @@ private:
         }
     }
 
-    Y_NO_INLINE void Grow() {
+    // This can throw exception if allocating new data exceeds memory limit but otherwise will be successful and therefore is safe
+    Y_NO_INLINE void SafeGrow() {
+        auto newCapacity = GetNewCapacity();
+        char *newData, *newDataEnd;
+
+        Cerr << "Hashtable " << (void *)this << " growing: from " << Capacity << " to " << newCapacity <<  "\n";
+        Allocate(newCapacity, newData, newDataEnd);
+        Cerr << "Successfully grow " << (void *)this << "\n";
+
+        Y_DEFER {
+            Allocator.deallocate(newData, newDataEnd - newData);
+        };
+        auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
+
+        CopyData(newData, newDataEnd, newCapacityShift);
+
+        Capacity = newCapacity;
+        CapacityShift = newCapacityShift;
+        std::swap(Data, newData);
+        std::swap(DataEnd, newDataEnd);
+    }
+
+    // This will not throw exception even if it fails to allocate more memory but instead returns false (if memory is allocated successfully performs grow and returns true)
+    // So this call will be successful even if it fails to grow and it is up to caller to gurantee that subsequent operations will not overflow data
+    Y_NO_INLINE bool UnsafeGrow() {
+        auto newCapacity = GetNewCapacity();
+        char *newData, *newDataEnd;
+
+        Cerr << "Hashtable " << (void *)this << " growing: from " << Capacity << " to " << newCapacity <<  "\n";
+        try {
+            Allocate(newCapacity, newData, newDataEnd);
+        } catch (const TMemoryLimitExceededException& e) {
+            Cerr << "Got memory limit expection " << (void *)this << "\n";
+            return false;
+        }
+        Cerr << "Successfully grow " << (void *)this << "\n";
+        Y_DEFER {
+            Allocator.deallocate(newData, newDataEnd - newData);
+        };
+        auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
+
+        CopyData(newData, newDataEnd, newCapacityShift);
+
+        Capacity = newCapacity;
+        CapacityShift = newCapacityShift;
+        std::swap(Data, newData);
+        std::swap(DataEnd, newDataEnd);
+
+        return true;
+    }
+
+    ui64 GetNewCapacity() {
         ui64 growFactor;
         if (Capacity < 100'000) {
             growFactor = 8;
@@ -292,14 +356,10 @@ private:
         } else {
             growFactor = 2;
         }
-        auto newCapacity = Capacity * growFactor;
-        auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
-        char *newData, *newDataEnd;
-        Allocate(newCapacity, newData, newDataEnd);
-        Y_DEFER {
-            Allocator.deallocate(newData, newDataEnd - newData);
-        };
+        return Capacity * growFactor;
+    }
 
+    void CopyData(char *newData, char *newDataEnd, ui64 newCapacityShift) {
         std::array<TInternalBatchRequestItem, PrefetchBatchSize> batch;
         ui32 batchLen = 0;
         for (auto iter = Begin(); iter != End(); Advance(iter)) {
@@ -327,11 +387,6 @@ private:
         }
 
         CopyBatch({batch.data(), batchLen}, newData, newDataEnd);
-
-        Capacity = newCapacity;
-        CapacityShift = newCapacityShift;
-        std::swap(Data, newData);
-        std::swap(DataEnd, newDataEnd);
     }
 
     Y_NO_INLINE void CopyBatch(std::span<TInternalBatchRequestItem> batch, char* newData, char* newDataEnd) {

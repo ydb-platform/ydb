@@ -263,6 +263,9 @@ public:
 
     bool TasteIt() {
         Y_ABORT_UNLESS(!ExtractIt);
+        if (IsOutOfMemory) {
+            throw TMemoryLimitExceededException();
+        }
         bool isNew = false;
         auto itInsert = States.Insert(Tongue, isNew);
         if (isNew) {
@@ -275,20 +278,13 @@ public:
         }
         Throat = States.GetKey(itInsert) + KeyWidth;
         if (isNew) {
-            SafeGrow();
-        }
-        return isNew;
-    }
-
-    void SafeGrow() {
-        if (!IsOutOfMemory) {
-            try {
-                States.CheckGrow();
-            } catch (const TMemoryLimitExceededException& e) {
-                Cerr << "State " << (void *)this << " no longer growing\n";
+            if (!States.UnsafeCheckGrow()) {
+                YQL_LOG(INFO) << "State " << (void *)this << " no longer growing\n";
+                // first out of memory is safe because spilling still can help us
                 IsOutOfMemory = true;
             }
         }
+        return isNew;
     }
 
     bool CheckIsOutOfMemory() const {
@@ -854,6 +850,7 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
+        return false;
         return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
 

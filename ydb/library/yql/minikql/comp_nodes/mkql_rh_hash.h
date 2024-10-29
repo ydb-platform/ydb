@@ -300,46 +300,26 @@ private:
     Y_NO_INLINE void SafeGrow() {
         auto newCapacity = GetNewCapacity();
         char *newData, *newDataEnd;
-
         Allocate(newCapacity, newData, newDataEnd);
-
-        Y_DEFER {
-            Allocator.deallocate(newData, newDataEnd - newData);
-        };
-        auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
-
-        CopyData(newData, newDataEnd, newCapacityShift);
-
-        Capacity = newCapacity;
-        CapacityShift = newCapacityShift;
-        std::swap(Data, newData);
-        std::swap(DataEnd, newDataEnd);
+        Y_ENSURE(newDataEnd - newData == newCapacity);
+        PlacementGrow(newData, newCapacity);
     }
 
     // This will not throw exception even if it fails to allocate more memory but instead returns false (if memory is allocated successfully performs grow and returns true)
     // So this call will be successful even if it fails to grow and it is up to caller to gurantee that subsequent operations will not overflow data
     Y_NO_INLINE bool UnsafeGrow() {
         auto newCapacity = GetNewCapacity();
-        char *newData, *newDataEnd;
-
+        char *newData = nullptr;
+        char *newDataEnd = nullptr;
         try {
             Allocate(newCapacity, newData, newDataEnd);
         } catch (...) {
             YQL_LOG(INFO) << "TRobinHoodHashBase failed to grow from " << Capacity << " to " << newCapacity << "\n";
+            Y_ENSURE(newData == nullptr && newDataEnd == nullptr);
             return false;
         }
-        Y_DEFER {
-            Allocator.deallocate(newData, newDataEnd - newData);
-        };
-        auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
-
-        CopyData(newData, newDataEnd, newCapacityShift);
-
-        Capacity = newCapacity;
-        CapacityShift = newCapacityShift;
-        std::swap(Data, newData);
-        std::swap(DataEnd, newDataEnd);
-
+        Y_ENSURE(newDataEnd - newData == newCapacity);
+        PlacementGrow(newData, newCapacity);
         return true;
     }
 
@@ -355,7 +335,13 @@ private:
         return Capacity * growFactor;
     }
 
-    void CopyData(char *newData, char *newDataEnd, ui64 newCapacityShift) {
+    void PlacementGrow(char *newData, ui64 newCapacity) {
+        char *newDataEnd = newData + newCapacity;
+        auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
+        Y_DEFER {
+            Allocator.deallocate(newData, newDataEnd - newData);
+        };
+
         std::array<TInternalBatchRequestItem, PrefetchBatchSize> batch;
         ui32 batchLen = 0;
         for (auto iter = Begin(); iter != End(); Advance(iter)) {
@@ -383,6 +369,11 @@ private:
         }
 
         CopyBatch({batch.data(), batchLen}, newData, newDataEnd);
+
+        Capacity = newCapacity;
+        CapacityShift = newCapacityShift;
+        std::swap(Data, newData);
+        std::swap(DataEnd, newDataEnd);
     }
 
     Y_NO_INLINE void CopyBatch(std::span<TInternalBatchRequestItem> batch, char* newData, char* newDataEnd) {

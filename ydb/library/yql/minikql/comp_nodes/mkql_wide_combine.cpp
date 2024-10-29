@@ -239,8 +239,8 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), States(hash, equal, CountRowsOnPage) {
+    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = false)
+        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
@@ -263,9 +263,6 @@ public:
 
     bool TasteIt() {
         Y_ABORT_UNLESS(!ExtractIt);
-        if (IsOutOfMemory) {
-            throw TMemoryLimitExceededException();
-        }
         bool isNew = false;
         auto itInsert = States.Insert(Tongue, isNew);
         if (isNew) {
@@ -278,12 +275,19 @@ public:
         }
         Throat = States.GetKey(itInsert) + KeyWidth;
         if (isNew) {
-            if (!States.UnsafeCheckGrow()) {
-                // first out of memory is safe because spilling still can help us
-                IsOutOfMemory = true;
-            }
+            GrowStates();
         }
         return isNew;
+    }
+
+    void GrowStates() {
+        if (IsOutOfMemory < AllowOutOfMemory) {
+            if (!States.UnsafeCheckGrow()) {
+                IsOutOfMemory = true;
+            }
+        } else {
+            States.CheckGrow();
+        }
     }
 
     bool CheckIsOutOfMemory() const {
@@ -341,6 +345,7 @@ public:
 private:
     std::optional<TStorageIterator> ExtractIt;
     const ui32 KeyWidth, StateWidth;
+    const bool AllowOutOfMemory;
     bool IsOutOfMemory = false;
     ui64 CurrentPosition = 0;
     TRow* CurrentPage = nullptr;
@@ -397,7 +402,7 @@ public:
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
-        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
+        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, allowSpilling && ctx.SpillerFactory)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , KeyWidth(keyWidth)

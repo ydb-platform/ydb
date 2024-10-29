@@ -43,12 +43,12 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", GetPortionIdVerified());
     FullValidation();
 
-    if (BlobIdxs.size()) {
-        auto itRecord = Records.begin();
-        auto itIndex = Indexes.begin();
-        auto itBlobIdx = BlobIdxs.begin();
-        while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
-            if (itRecord->GetAddress() < itIndex->GetAddress()) {
+    AFL_VERIFY(BlobIdxs.size());
+    auto itRecord = Records.begin();
+    auto itIndex = Indexes.begin();
+    auto itBlobIdx = BlobIdxs.begin();
+    while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
+        if (itRecord->GetAddress() < itIndex->GetAddress()) {
                 AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
                 itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
                 ++itRecord;

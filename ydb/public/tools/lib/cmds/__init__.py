@@ -57,7 +57,7 @@ def parse_erasure(args):
 
 
 def driver_path_packages(package_path):
-    return yatest.commmon.build_path(
+    return yatest.common.build_path(
         "{}/Berkanavt/kikimr/bin/kikimr".format(
             package_path
         )
@@ -65,7 +65,7 @@ def driver_path_packages(package_path):
 
 
 def udfs_path_packages(package_path):
-    return yatest.commmon.build_path(
+    return yatest.common.build_path(
         "{}/Berkanavt/kikimr/libs".format(
             package_path
         )

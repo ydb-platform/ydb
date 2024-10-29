@@ -16,27 +16,6 @@ TTopicWorkloadWriterProducer::TTopicWorkloadWriterProducer(
         Params_(params),
         StatsCollector_(statsCollector),
         Clock_(clock) {
-    NYdb::NTopic::TWriteSessionSettings settings;
-    settings.Codec((NYdb::NTopic::ECodec) Params_.Codec);
-    settings.Path(Params_.TopicName);
-    settings.ProducerId(ProducerId_);
-
-    NYdb::NTopic::TWriteSessionSettings::TEventHandlers eventHandlers;
-    eventHandlers.AcksHandler([this](auto&& PH1) { HandleAckEvent(std::forward<decltype(PH1)>(PH1)); });
-    eventHandlers.SessionClosedHandler(
-            std::bind(&TTopicWorkloadWriterProducer::HandleSessionClosed, this, std::placeholders::_1));
-    settings.EventHandlers(eventHandlers);
-
-    if (Params_.UseAutoPartitioning) {
-        settings.MessageGroupId(ProducerId_);
-    } else {
-        settings.PartitionId(PartitionId_);
-    }
-
-    settings.DirectWriteToPartition(Params_.Direct);
-
-    WriteSession_ = NYdb::NTopic::TTopicClient(Params_.Driver).CreateWriteSession(settings);
-
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_INFO,
               TStringBuilder() << "Created Producer with id " << ProducerId_ << " for partition " << PartitionId_);
 }
@@ -48,8 +27,14 @@ TTopicWorkloadWriterProducer::~TTopicWorkloadWriterProducer() {
               TStringBuilder() << "Destructor for producer  " << ProducerId_ << " was called");
 }
 
+void TTopicWorkloadWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession) {
+    WriteSession_ = writeSession;
+}
+
 void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
                                         std::optional<NYdb::NTable::TTransaction> transaction) {
+    Y_ASSERT(WriteSession_);
+
     TString data = GetGeneratedMessage();
     InflightMessagesCreateTs_[MessageId_] = createTimestamp;
 
@@ -85,6 +70,8 @@ TString TTopicWorkloadWriterProducer::GetGeneratedMessage() const {
 }
 
 bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {
+    Y_ASSERT(WriteSession_);
+
     NThreading::TFuture<ui64> InitSeqNo = WriteSession_->GetInitSeqNo();
     while (!*Params_.ErrorFlag) {
         if (!InitSeqNo.HasValue() && !InitSeqNo.Wait(TDuration::Seconds(1))) {

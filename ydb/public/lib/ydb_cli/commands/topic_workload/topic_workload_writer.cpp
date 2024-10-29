@@ -14,22 +14,13 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
 {
     Producers = std::vector<TTopicWorkloadWriterProducer>();
     Producers.reserve(Params.ProducersPerThread);
+
     for (ui32 i = 0; i < Params.ProducersPerThread; ++i) {
         // write to random partition, cause workload CLI tool can be launched in several instances
         // and they need to load different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
-        auto clock = NUnifiedAgent::TClock();
-        if (!clock.Configured()) {
-            clock.Configure(); 
-        }
-
-        Producers.emplace_back(
-                Params,
-                StatsCollector,
-                TGUID::CreateTimebased().AsGuidString(), // ProducerId
-                partitionId,
-                std::move(clock)
-        );
+        
+        Producers.push_back(std::move(CreateProducer(partitionId)));
     }
 
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
@@ -159,6 +150,46 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
             Sleep(TDuration::MilliSeconds(1));
         }
     }
+}
+
+TTopicWorkloadWriterProducer TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
+    auto clock = NUnifiedAgent::TClock();
+    if (!clock.Configured()) {
+        clock.Configure(); 
+    }
+    auto producerId = TGUID::CreateTimebased().AsGuidString();
+
+    auto producer = TTopicWorkloadWriterProducer(
+            Params,
+            StatsCollector,
+            producerId,
+            partitionId,
+            std::move(clock)
+    );
+
+    NYdb::NTopic::TWriteSessionSettings settings;
+    settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
+    settings.Path(Params.TopicName);
+    settings.ProducerId(producerId);
+
+    NYdb::NTopic::TWriteSessionSettings::TEventHandlers eventHandlers;
+    eventHandlers.AcksHandler(
+            std::bind(&TTopicWorkloadWriterProducer::HandleAckEvent, &producer, std::placeholders::_1));
+    eventHandlers.SessionClosedHandler(
+            std::bind(&TTopicWorkloadWriterProducer::HandleSessionClosed, &producer, std::placeholders::_1));
+    settings.EventHandlers(eventHandlers);
+
+    if (Params.UseAutoPartitioning) {
+        settings.MessageGroupId(producerId);
+    } else {
+        settings.PartitionId(partitionId);
+    }
+
+    settings.DirectWriteToPartition(Params.Direct);
+
+    producer.SetWriteSession(NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings));
+
+    return producer;
 }
 
 size_t TTopicWorkloadWriterWorker::InflightMessagesSize() {

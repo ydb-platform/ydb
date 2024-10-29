@@ -223,10 +223,13 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
             ++ptr;
             if (ptr != s + str.size() && *ptr == '+') {
                 ++ptr;
+                if (ptr != s + str.size() && *ptr == '-')
+                    return Err();
             }
 
             int exp;
-            if (std::from_chars(ptr, s + str.size(), exp).ec != std::errc())
+            auto [finish, ec] = std::from_chars(ptr, s + str.size(), exp);
+            if (ec != std::errc() || finish != s + str.size())
                 return Err();
 
             const int p = precision, s = int(scale) + exp;

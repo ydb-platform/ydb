@@ -43,43 +43,53 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", GetPortionIdVerified());
     FullValidation();
 
-    AFL_VERIFY(BlobIdxs.size());
-    auto itRecord = Records.begin();
-    auto itIndex = Indexes.begin();
-    auto itBlobIdx = BlobIdxs.begin();
-    while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
-        if (itRecord->GetAddress() < itIndex->GetAddress()) {
+    if (BlobIdxs.size()) {
+        auto itRecord = Records.begin();
+        auto itIndex = Indexes.begin();
+        auto itBlobIdx = BlobIdxs.begin();
+        while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
+            if (itRecord->GetAddress() < itIndex->GetAddress()) {
+                AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
+                itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+                ++itRecord;
+                ++itBlobIdx;
+            } else if (itIndex->GetAddress() < itRecord->GetAddress()) {
+                if (itIndex->HasBlobData()) {
+                    ++itIndex;
+                    continue;
+                }
+                AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
+                itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+                ++itIndex;
+                ++itBlobIdx;
+            } else {
+                AFL_VERIFY(false);
+            }
+        }
+        for (; itRecord != Records.end() && itBlobIdx != BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
             AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
             itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
-            ++itRecord;
-            ++itBlobIdx;
-        } else if (itIndex->GetAddress() < itRecord->GetAddress()) {
+        }
+        for (; itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end(); ++itIndex) {
             if (itIndex->HasBlobData()) {
-                ++itIndex;
                 continue;
             }
             AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
             itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
-            ++itIndex;
             ++itBlobIdx;
-        } else {
-            AFL_VERIFY(false);
+        }
+        AFL_VERIFY(itRecord == Records.end());
+        AFL_VERIFY(itBlobIdx == BlobIdxs.end());
+    } else {
+        for (auto&& i : Records) {
+            AFL_VERIFY(i.BlobRange.IsValid());
+        }
+        for (auto&& i : Indexes) {
+            if (auto* blobId = i.GetBlobRangeOptional()) {
+                AFL_VERIFY(blobId->IsValid());
+            }
         }
     }
-    for (; itRecord != Records.end() && itBlobIdx != BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
-        AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
-        itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
-    }
-    for (; itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end(); ++itIndex) {
-        if (itIndex->HasBlobData()) {
-            continue;
-        }
-        AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
-        itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
-        ++itBlobIdx;
-    }
-    AFL_VERIFY(itRecord == Records.end());
-    AFL_VERIFY(itBlobIdx == BlobIdxs.end());
 
     result.Indexes = std::move(Indexes);
     result.Indexes.shrink_to_fit();

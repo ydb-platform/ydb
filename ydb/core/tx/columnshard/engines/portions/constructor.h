@@ -138,16 +138,16 @@ public:
         return !!RemoveSnapshot;
     }
 
-    void Validate(const TColumnRecord& rec) const {
+    static void Validate(const TColumnRecord& rec) const {
         AFL_VERIFY(rec.GetColumnId());
         AFL_VERIFY(rec.BlobRange.IsValid());
     }
 
-    ui32 GetRecordsCount(const TColumnRecord& rec) const {
+    static ui32 GetRecordsCount(const TColumnRecord& rec) {
         return rec.GetMeta().GetRecordsCount();
     }
 
-    void Validate(const TIndexChunk& rec) const {
+    static void Validate(const TIndexChunk& rec) {
         AFL_VERIFY(rec.GetIndexId());
         if (const auto* blobData = rec.GetBlobRangeOptional()) {
             AFL_VERIFY(blobData->IsValid());
@@ -156,7 +156,7 @@ public:
         }
     }
 
-    ui32 GetRecordsCount(const TIndexChunk& rec) const {
+    static ui32 GetRecordsCount(const TIndexChunk& rec) {
         return rec.GetRecordsCount();
     }
 

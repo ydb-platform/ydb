@@ -84,6 +84,7 @@ namespace NActors {
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
+        ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
             Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
         }

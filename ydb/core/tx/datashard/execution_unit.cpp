@@ -198,7 +198,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         // TODO: Return SCHEME_CHANGED if the shard has been split
         if (writeOp) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
-        } else {        
+        } else {
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
@@ -233,7 +233,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
 
             DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::ChangesQueueOverflow, writeOp->GetWriteResult()->Record);
-        } else {                
+        } else {
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED)
                     ->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
         }
@@ -252,7 +252,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         if (writeOp) {
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, err);
-        } else {            
+        } else {
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
@@ -301,7 +301,7 @@ TOutputOpData::TResultPtr &TExecutionUnit::BuildResult(TOperation::TPtr op,
                                                        NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status)
 {
     auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(op->GetKind());
-    op->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(kind,
+    op->Result().Reset(new NEvDataShard::TEvProposeTransactionResult(kind,
                                                                  DataShard.TabletID(),
                                                                  op->GetTxId(),
                                                                  status));

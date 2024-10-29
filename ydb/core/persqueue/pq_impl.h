@@ -45,7 +45,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void HandleWakeup(const TActorContext&);
 
-    void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
@@ -81,14 +81,14 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters);
 
     //client requests
-    void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionConfigChanged::TPtr& ev, const TActorContext& ctx);
-    void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
+    void ProcessUpdateConfigRequest(TAutoPtr<NEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvOffsets::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvDropTablet::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
@@ -134,7 +134,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
                                      const TActorContext& ctx);
 
     //client request
-    void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
 #define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx);
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
@@ -238,8 +238,8 @@ private:
 
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 
-    TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
-    TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
+    TVector<TAutoPtr<NEvPersQueue::TEvHasDataInfo>> HasDataRequests;
+    TVector<std::pair<TAutoPtr<NEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
 public:
     struct TPipeInfo {
@@ -279,7 +279,7 @@ private:
     ui64 ExecStep = 0;
     ui64 ExecTxId = 0;
 
-    TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
+    TDeque<std::unique_ptr<NEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
@@ -355,9 +355,9 @@ private:
                                      const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx);
-    void HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> event,
+    void HandleDataTransaction(TAutoPtr<NEvPersQueue::TEvProposeTransaction> event,
                                const TActorContext& ctx);
-    void HandleConfigTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> event,
+    void HandleConfigTransaction(TAutoPtr<NEvPersQueue::TEvProposeTransaction> event,
                                  const TActorContext& ctx);
 
     void SendEvProposePartitionConfig(const TActorContext& ctx,
@@ -417,7 +417,7 @@ private:
 
     TMaybe<NKikimrSubDomains::TProcessingParams> ProcessingParams;
 
-    void Handle(TEvPersQueue::TEvProposeTransactionAttach::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvProposeTransactionAttach::TPtr& ev, const TActorContext& ctx);
 
     void StartWatchingTenantPathId(const TActorContext& ctx);
     void StopWatchingTenantPathId(const TActorContext& ctx);
@@ -430,7 +430,7 @@ private:
     TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
 
     void DeleteExpiredTransactions(const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessPlanStepQueue() const;
@@ -442,7 +442,7 @@ private:
     void DestroySession(TPipeInfo& pipeInfo);
     bool UseMediatorTimeCast = true;
 
-    TVector<TEvPersQueue::TEvStatus::TPtr> StatusRequests;
+    TVector<NEvPersQueue::TEvStatus::TPtr> StatusRequests;
     void ProcessStatusRequests(const TActorContext &ctx);
 
     THashMap<ui32, TVector<TEvPQ::TEvCheckPartitionStatusRequest::TPtr>> CheckPartitionStatusRequests;
@@ -457,7 +457,7 @@ private:
     void SaveTxWrites(NKikimrPQ::TTabletTxInfo& info);
 
     void HandleEventForSupportivePartition(const ui64 responseCookie,
-                                           TEvPersQueue::TEvRequest::TPtr& event,
+                                           NEvPersQueue::TEvRequest::TPtr& event,
                                            const TActorId& sender,
                                            const TActorContext& ctx);
     void HandleEventForSupportivePartition(const ui64 responseCookie,

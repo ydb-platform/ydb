@@ -3,12 +3,12 @@
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxCreateReplication: public TTxBase {
-    TEvController::TEvCreateReplication::TPtr Ev;
-    THolder<TEvController::TEvCreateReplicationResult> Result;
+    NEvController::TEvCreateReplication::TPtr Ev;
+    THolder<NEvController::TEvCreateReplicationResult> Result;
     TReplication::TPtr Replication;
 
 public:
-    explicit TTxCreateReplication(TController* self, TEvController::TEvCreateReplication::TPtr& ev)
+    explicit TTxCreateReplication(TController* self, NEvController::TEvCreateReplication::TPtr& ev)
         : TTxBase("TxCreateReplication", self)
         , Ev(ev)
     {
@@ -22,7 +22,7 @@ public:
         CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
 
         auto& record = Ev->Get()->Record;
-        Result = MakeHolder<TEvController::TEvCreateReplicationResult>();
+        Result = MakeHolder<NEvController::TEvCreateReplicationResult>();
         Result->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
         Result->Record.SetOrigin(Self->TabletID());
 
@@ -67,7 +67,7 @@ public:
 
 }; // TTxCreateReplication
 
-void TController::RunTxCreateReplication(TEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
+void TController::RunTxCreateReplication(NEvController::TEvCreateReplication::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxCreateReplication(this, ev), ctx);
 }
 

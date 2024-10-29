@@ -64,9 +64,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         runtime.DispatchEvents(options);
 
         Y_UNUSED(sender);
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvGetShardState(sender));
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NEvDataShard::TEvGetShardState(sender));
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvDataShard::TEvGetShardStateResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvDataShard::TEvGetShardStateResult>(handle);
         UNIT_ASSERT(event);
         UNIT_ASSERT_EQUAL(event->GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(event->GetState(), NDataShard::TShardState::WaitScheme);
@@ -93,8 +93,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         bool dropResolve = restart;
         // Remove table path from propose.
         auto captureTableId = [&](TAutoPtr<IEventHandle> &event) -> auto {
-            if (event->GetTypeRewrite() == TEvDataShard::EvProposeTransaction) {
-                auto &rec = event->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+            if (event->GetTypeRewrite() == NEvDataShard::EvProposeTransaction) {
+                auto &rec = event->Get<NEvDataShard::TEvProposeTransaction>()->Record;
                 if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
                     TString body = rec.GetTxBody();
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
@@ -112,8 +112,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                         }
                     }
                 }
-            } else if (event->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
-                auto &rec = event->Get<TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+            } else if (event->GetTypeRewrite() == NEvSchemeShard::EvDescribeSchemeResult) {
+                auto &rec = event->Get<NEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
                 const bool hasPartitioning = rec.GetPathDescription().TablePartitionsSize();
                 // there are few in-flight TEvDescribeSchemeResult msgs, we need one with no partitioning
                 if (!hasPartitioning && rec.GetPathDescription().GetSelf().GetPathId() == tableId) {
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
             if (oldCreate) {
                 while (!sawResolve) {
                     TDispatchOptions options;
-                    options.FinalEvents.emplace_back(TEvSchemeShard::EvDescribeSchemeResult);
+                    options.FinalEvents.emplace_back(NEvSchemeShard::EvDescribeSchemeResult);
                     runtime.DispatchEvents(options);
                 }
             }

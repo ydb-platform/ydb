@@ -34,10 +34,10 @@ public:
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-    void Handle(TEvSubDomain::TEvConfigure::TPtr& ev);
+    void Handle(NEvSubDomain::TEvConfigure::TPtr& ev);
     void Handle(TEvGraph::TEvSendMetrics::TPtr& ev);
     void Handle(TEvGraph::TEvGetMetrics::TPtr& ev);
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev);
 
 //protected:
     std::vector<TAggregateSettings> AggregateSettings = { // proper ordering is important

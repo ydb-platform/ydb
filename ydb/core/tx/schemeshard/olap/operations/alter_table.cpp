@@ -23,10 +23,10 @@ public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
          return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
@@ -57,7 +57,7 @@ public:
             const TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
             AFL_VERIFY(shard.TabletType == ETabletType::ColumnShard);
             auto txShardString = update->GetShardTxBodyString((ui64)tabletId, seqNo);
-            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+            auto event = std::make_unique<NEvColumnShard::TEvProposeTransaction>(
                 update->GetShardTransactionKind(),
                 context.SS->TabletID(),
                 context.Ctx.SelfID,
@@ -93,11 +93,11 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType});
+            {NEvHive::TEvCreateTabletReply::EventType,
+             NEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -106,7 +106,7 @@ public:
                      << " at tablet: " << ssId
                      << ", stepId: " << step);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -145,7 +145,7 @@ public:
                      DebugHint() << " HandleReply ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -174,12 +174,12 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+            {NEvHive::TEvCreateTabletReply::EventType,
+             NEvColumnShard::TEvProposeTransactionResult::EventType,
+             NEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
@@ -203,7 +203,7 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
             switch (shard.TabletType) {
                 case ETabletType::ColumnShard: {
-                    auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                    auto event = std::make_unique<NEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
 
                     context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
                     txState->ShardsInProgress.insert(shard.Idx);

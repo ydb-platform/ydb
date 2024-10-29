@@ -183,7 +183,7 @@ void CheckGetItems(TTenantTestRuntime &runtime,
                    THashMap<ui64, TConfigItem::TPtr> items,
                    const NKikimrConsole::TGetConfigItemsRequest &request)
 {
-    CheckGetItems<TEvConsole::TEvGetConfigItemsRequest, TEvConsole::TEvGetConfigItemsResponse>
+    CheckGetItems<NEvConsole::TEvGetConfigItemsRequest, NEvConsole::TEvGetConfigItemsResponse>
         (runtime, items, request);
 }
 
@@ -191,7 +191,7 @@ void CheckGetItems(TTenantTestRuntime &runtime,
                    THashMap<ui64, TConfigItem::TPtr> items,
                    const NKikimrConsole::TGetNodeConfigItemsRequest &request)
 {
-    CheckGetItems<TEvConsole::TEvGetNodeConfigItemsRequest, TEvConsole::TEvGetNodeConfigItemsResponse>
+    CheckGetItems<NEvConsole::TEvGetNodeConfigItemsRequest, NEvConsole::TEvGetNodeConfigItemsResponse>
         (runtime, items, request);
 }
 
@@ -376,7 +376,7 @@ void CheckGetNodeConfig(TTenantTestRuntime &runtime, ui32 nodeId, const TString 
                         const NKikimrConfig::TAppConfig &config,
                         const TVector<ui32> &kinds = TVector<ui32>())
 {
-    auto *event = new TEvConsole::TEvGetNodeConfigRequest;
+    auto *event = new NEvConsole::TEvGetNodeConfigRequest;
     event->Record.MutableNode()->SetNodeId(nodeId);
     event->Record.MutableNode()->SetHost(host);
     event->Record.MutableNode()->SetTenant(tenant);
@@ -386,7 +386,7 @@ void CheckGetNodeConfig(TTenantTestRuntime &runtime, ui32 nodeId, const TString 
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetNodeConfigResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetNodeConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     CheckEqualsIgnoringVersion(reply->Record.GetConfig(), config);
 }
@@ -398,7 +398,7 @@ void CheckGetNodeConfig(TTenantTestRuntime &runtime,
                         const TString &type,
                         Ydb::StatusIds::StatusCode code)
 {
-    auto *event = new TEvConsole::TEvGetNodeConfigRequest;
+    auto *event = new NEvConsole::TEvGetNodeConfigRequest;
     event->Record.MutableNode()->SetNodeId(nodeId);
     event->Record.MutableNode()->SetHost(host);
     event->Record.MutableNode()->SetTenant(tenant);
@@ -406,7 +406,7 @@ void CheckGetNodeConfig(TTenantTestRuntime &runtime,
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetNodeConfigResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetNodeConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 }
 
@@ -427,7 +427,7 @@ ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
                                 const TString &nodeType, ui64 tabletId, TActorId serviceId,
                                 TVector<ui32> kinds, ui64 id = 0)
 {
-    auto *event = new TEvConsole::TEvAddConfigSubscriptionRequest;
+    auto *event = new NEvConsole::TEvAddConfigSubscriptionRequest;
     event->Record.MutableSubscription()->SetId(id);
     if (tabletId)
         event->Record.MutableSubscription()->MutableSubscriber()->SetTabletId(tabletId);
@@ -442,7 +442,7 @@ ui64 CheckAddConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAddConfigSubscriptionResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvAddConfigSubscriptionResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
     ui64 res = reply->Record.GetSubscriptionId();
@@ -455,7 +455,7 @@ ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds
                                      const TString &nodeType, ui64 tabletId, TActorId serviceId,
                                      TVector<ui32> kinds, ui64 id = 0)
 {
-    auto *event = new TEvConsole::TEvReplaceConfigSubscriptionsRequest;
+    auto *event = new NEvConsole::TEvReplaceConfigSubscriptionsRequest;
     event->Record.MutableSubscription()->SetId(id);
     if (tabletId)
         event->Record.MutableSubscription()->MutableSubscriber()->SetTabletId(tabletId);
@@ -470,7 +470,7 @@ ui64 CheckReplaceConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
     ui64 res = reply->Record.GetSubscriptionId();
@@ -483,12 +483,12 @@ void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
                                 const TString &nodeType = "", ui64 tabletId = 0, TActorId serviceId = {},
                                 TVector<ui32> kinds = {})
 {
-    auto *event = new TEvConsole::TEvGetConfigSubscriptionRequest;
+    auto *event = new NEvConsole::TEvGetConfigSubscriptionRequest;
     event->Record.SetSubscriptionId(id);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetConfigSubscriptionResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetConfigSubscriptionResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
     if (code == Ydb::StatusIds::SUCCESS) {
@@ -510,19 +510,19 @@ void CheckGetConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::Sta
 
 void CheckRemoveConfigSubscription(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code, ui64 id)
 {
-    auto *event = new TEvConsole::TEvRemoveConfigSubscriptionRequest;
+    auto *event = new NEvConsole::TEvRemoveConfigSubscriptionRequest;
     event->Record.SetSubscriptionId(id);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveConfigSubscriptionResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvRemoveConfigSubscriptionResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 }
 
 void CheckRemoveConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds::StatusCode code,
                                     ui64 tabletId, TActorId serviceId)
 {
-    auto *event = new TEvConsole::TEvRemoveConfigSubscriptionsRequest;
+    auto *event = new NEvConsole::TEvRemoveConfigSubscriptionsRequest;
     if (tabletId)
         event->Record.MutableSubscriber()->SetTabletId(tabletId);
     else if (serviceId)
@@ -530,7 +530,7 @@ void CheckRemoveConfigSubscriptions(TTenantTestRuntime &runtime, Ydb::StatusIds:
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveConfigSubscriptionsResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvRemoveConfigSubscriptionsResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 }
 
@@ -561,8 +561,8 @@ void CheckConfigId(const NKikimrConsole::TConfigId &configId, Ts ...args)
 
 void AcceptConfig(TTenantTestRuntime &runtime, TAutoPtr<IEventHandle>& handle)
 {
-    auto &rec = handle->Get<TEvConsole::TEvConfigNotificationRequest>()->Record;
-    auto *response = new TEvConsole::TEvConfigNotificationResponse;
+    auto &rec = handle->Get<NEvConsole::TEvConfigNotificationRequest>()->Record;
+    auto *response = new NEvConsole::TEvConfigNotificationResponse;
     response->Record.SetSubscriptionId(rec.GetSubscriptionId());
     response->Record.MutableConfigId()->CopyFrom(rec.GetConfigId());
     runtime.Send(new IEventHandle(handle->Sender, runtime.Sender, response, 0, handle->Cookie));
@@ -570,17 +570,17 @@ void AcceptConfig(TTenantTestRuntime &runtime, TAutoPtr<IEventHandle>& handle)
 
 NKikimrConsole::TConfig GetCurrentConfig(TTenantTestRuntime &runtime)
 {
-    runtime.SendToConsole(new TEvConsole::TEvGetConfigRequest);
+    runtime.SendToConsole(new NEvConsole::TEvGetConfigRequest);
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetConfigResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetConfigResponse>(handle);
     return reply->Record.GetConfig();
 }
 
 void CheckSetConfig(TTenantTestRuntime &runtime, const NKikimrConsole::TConfig &config, Ydb::StatusIds::StatusCode code)
 {
-    runtime.SendToConsole(new TEvConsole::TEvSetConfigRequest(config));
+    runtime.SendToConsole(new NEvConsole::TEvSetConfigRequest(config));
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvSetConfigResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvSetConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 }
 
@@ -590,13 +590,13 @@ void CheckCheckConfigUpdates(TTenantTestRuntime &runtime,
                              THashSet<std::pair<ui64, ui64>> removedItems,
                              THashSet<std::pair<ui64, ui64>> updatedItems)
 {
-    auto *request = new TEvConsole::TEvCheckConfigUpdatesRequest;
+    auto *request = new NEvConsole::TEvCheckConfigUpdatesRequest;
     for (auto &item : baseItems)
         request->Record.AddBaseItemIds()->CopyFrom(item.GetId());
     runtime.SendToConsole(request);
 
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvCheckConfigUpdatesResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvCheckConfigUpdatesResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.AddedItemsSize(), addedItems.size());
     for (auto &item : reply->Record.GetAddedItems()) {
         auto id = std::make_pair(item.GetId(), item.GetGeneration());
@@ -919,11 +919,11 @@ struct TValidatorInfo {
 void CheckListValidators(TTenantTestRuntime &runtime,
                          TVector<TValidatorInfo> validators)
 {
-    auto *request = new TEvConsole::TEvListConfigValidatorsRequest;
+    auto *request = new NEvConsole::TEvListConfigValidatorsRequest;
     runtime.SendToConsole(request);
 
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvListConfigValidatorsResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvListConfigValidatorsResponse>(handle);
     auto &rec = reply->Record;
     UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(rec.ValidatorsSize(), validators.size());
@@ -951,13 +951,13 @@ void CheckToggleValidator(TTenantTestRuntime &runtime,
                           bool disable,
                           Ydb::StatusIds::StatusCode code)
 {
-    auto *request = new TEvConsole::TEvToggleConfigValidatorRequest;
+    auto *request = new NEvConsole::TEvToggleConfigValidatorRequest;
     request->Record.SetName(name);
     request->Record.SetDisable(disable);
     runtime.SendToConsole(request);
 
     TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvToggleConfigValidatorResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvToggleConfigValidatorResponse>(handle);
     auto &rec = reply->Record;
     UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), code);
 }
@@ -984,14 +984,14 @@ TVector<ui64> CheckConfigureLogAffected(TTenantTestRuntime &runtime,
                                         bool fillAffected,
                                         Ts... args)
 {
-    auto *event = new TEvConsole::TEvConfigureRequest;
+    auto *event = new NEvConsole::TEvConfigureRequest;
     event->Record.SetDryRun(dryRun);
     event->Record.SetFillAffectedConfigs(fillAffected);
     CollectActions(event->Record, args...);
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
-    auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigureResponse>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigureResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.AffectedConfigsSize(), affected.size());
@@ -2472,7 +2472,7 @@ class TConfigProxy : public TActor<TConfigProxy>, public TTabletExecutedFlat {
         Die(ctx);
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx)
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx)
     {
         ctx.Send(ev->Forward(Sink));
     }
@@ -2493,7 +2493,7 @@ public:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
         }
     }
 private:
@@ -2512,7 +2512,7 @@ public:
         Become(&TConfigProxyService::StateWork);
     }
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx)
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx)
     {
         ctx.Send(ev->Forward(Sink));
     }
@@ -2520,7 +2520,7 @@ public:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
         }
     }
 
@@ -2842,7 +2842,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(), ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
     }
 
@@ -2874,7 +2874,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
         AcceptConfig(runtime, handle);
 
@@ -2886,14 +2886,14 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                   MakeAddAction(ITEM_TENANT2_LOG_1),
                                   MakeAddAction(ITEM_TYPE2_LOG_1));
         AssignIds(id2, ITEM_DOMAIN_TENANT_POOL_1, ITEM_NODE34_LOG_1, ITEM_HOST23_LOG_1, ITEM_TENANT2_LOG_1, ITEM_TYPE2_LOG_1);
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
         UNIT_ASSERT(!reply2);
 
         // Add item with domain scope -> notification.
         auto id3 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_DOMAIN_LOG_2));
         AssignIds(id3, ITEM_DOMAIN_LOG_2);
-        auto reply3 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply3 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply3->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
         AcceptConfig(runtime, handle);
@@ -2902,7 +2902,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         auto id4 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_NODE12_LOG_1));
         AssignIds(id4, ITEM_NODE12_LOG_1);
-        auto reply4 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply4 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply4->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_NODE12_LOG_1);
         AcceptConfig(runtime, handle);
@@ -2912,7 +2912,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         auto id5 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_HOST12_LOG_1));
         AssignIds(id5, ITEM_HOST12_LOG_1);
-        auto reply5 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply5 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply5->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_HOST12_LOG_1,
                       ITEM_NODE12_LOG_1);
@@ -2922,7 +2922,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         auto id6 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_TENANT1_LOG_1));
         AssignIds(id6, ITEM_TENANT1_LOG_1);
-        auto reply6 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply6 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply6->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TENANT1_LOG_1,
                       ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -2932,7 +2932,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         auto id7 = CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                                   MakeAddAction(ITEM_TYPE1_LOG_1));
         AssignIds(id7, ITEM_TYPE1_LOG_1);
-        auto reply7 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply7 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply7->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -2980,7 +2980,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -2999,7 +2999,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                        MakeModifyAction(ITEM_TENANT2_LOG_1),
                        MakeModifyAction(ITEM_TYPE2_LOG_1));
         IncGeneration(ITEM_DOMAIN_TENANT_POOL_1, ITEM_NODE34_LOG_1, ITEM_HOST34_LOG_1, ITEM_TENANT2_LOG_1, ITEM_TYPE2_LOG_1);
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
         UNIT_ASSERT(!reply2);
 
         // Modify item with domain scope -> notification.
@@ -3007,7 +3007,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_DOMAIN_LOG_2));
         IncGeneration(ITEM_DOMAIN_LOG_2);
-        auto reply3 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply3 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply3->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3018,7 +3018,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_NODE12_LOG_1));
         IncGeneration(ITEM_NODE12_LOG_1);
-        auto reply4 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply4 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply4->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3029,7 +3029,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_HOST12_LOG_1));
         IncGeneration(ITEM_HOST12_LOG_1);
-        auto reply5 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply5 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply5->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3040,7 +3040,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TENANT1_LOG_1));
         IncGeneration(ITEM_TENANT1_LOG_1);
-        auto reply6 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply6 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply6->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3051,7 +3051,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TYPE1_LOG_1));
         IncGeneration(ITEM_TYPE1_LOG_1);
-        auto reply7 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply7 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply7->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3099,7 +3099,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3118,7 +3118,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                        MakeModifyAction(ITEM_TENANT2_LOG_1),
                        MakeModifyAction(ITEM_TYPE2_LOG_1));
         IncGeneration(ITEM_DOMAIN_TENANT_POOL_1, ITEM_NODE34_LOG_1, ITEM_HOST34_LOG_1, ITEM_TENANT2_LOG_1, ITEM_TYPE2_LOG_1);
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
         UNIT_ASSERT(!reply2);
 
         // Modify item's node scope to match subscription -> notification.
@@ -3127,7 +3127,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_NODE34_LOG_1));
         IncGeneration(ITEM_NODE34_LOG_1);
-        auto reply3 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply3 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply3->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1,
@@ -3140,7 +3140,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_NODE12_LOG_1));
         IncGeneration(ITEM_NODE12_LOG_1);
-        auto reply4 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply4 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply4->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE34_LOG_1);
@@ -3152,7 +3152,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_HOST34_LOG_1));
         IncGeneration(ITEM_HOST34_LOG_1);
-        auto reply5 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply5 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply5->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_HOST34_LOG_1,
@@ -3165,7 +3165,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_HOST12_LOG_1));
         IncGeneration(ITEM_HOST12_LOG_1);
-        auto reply6 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply6 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply6->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST34_LOG_1, ITEM_NODE34_LOG_1);
@@ -3177,7 +3177,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TENANT2_LOG_1));
         IncGeneration(ITEM_TENANT2_LOG_1);
-        auto reply7 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply7 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply7->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_TENANT2_LOG_1, ITEM_HOST34_LOG_1,
@@ -3189,7 +3189,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TENANT1_LOG_1));
         IncGeneration(ITEM_TENANT1_LOG_1);
-        auto reply8 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply8 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply8->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT2_LOG_1, ITEM_HOST34_LOG_1, ITEM_NODE34_LOG_1);
@@ -3201,7 +3201,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TYPE2_LOG_1));
         IncGeneration(ITEM_TYPE2_LOG_1);
-        auto reply9 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply9 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply9->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TYPE2_LOG_1, ITEM_TENANT2_LOG_1, ITEM_HOST34_LOG_1,
@@ -3213,7 +3213,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeModifyAction(ITEM_TYPE1_LOG_1));
         IncGeneration(ITEM_TYPE1_LOG_1);
-        auto reply10 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply10 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply10->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE2_LOG_1,
                       ITEM_TENANT2_LOG_1, ITEM_HOST34_LOG_1, ITEM_NODE34_LOG_1);
@@ -3261,7 +3261,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2, ITEM_TYPE1_LOG_1,
                       ITEM_TENANT1_LOG_1, ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3274,13 +3274,13 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                        MakeRemoveAction(ITEM_HOST34_LOG_1),
                        MakeRemoveAction(ITEM_TENANT2_LOG_1),
                        MakeRemoveAction(ITEM_TYPE2_LOG_1));
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(1));
         UNIT_ASSERT(!reply2);
 
         // Remove item with domain scope -> notification.
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_DOMAIN_LOG_2));
-        auto reply3 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply3 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply3->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_TYPE1_LOG_1, ITEM_TENANT1_LOG_1,
                       ITEM_HOST12_LOG_1, ITEM_NODE12_LOG_1);
@@ -3289,7 +3289,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         // Remove item with matching node scope -> notification.
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_NODE12_LOG_1));
-        auto reply4 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply4 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply4->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_TYPE1_LOG_1, ITEM_TENANT1_LOG_1,
                       ITEM_HOST12_LOG_1);
@@ -3298,7 +3298,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         // Remove item with matching host scope -> notification.
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_HOST12_LOG_1));
-        auto reply5 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply5 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply5->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_TYPE1_LOG_1, ITEM_TENANT1_LOG_1);
         AcceptConfig(runtime, handle);
@@ -3306,7 +3306,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         // Remove item with matching tenant scope -> notification.
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_TENANT1_LOG_1));
-        auto reply6 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply6 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply6->Record.GetConfigId(),
                       ITEM_DOMAIN_LOG_1, ITEM_TYPE1_LOG_1);
         AcceptConfig(runtime, handle);
@@ -3314,7 +3314,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         // Remove item with matching node type scope -> notification.
         CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
                        MakeRemoveAction(ITEM_TYPE1_LOG_1));
-        auto reply7 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply7 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply7->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
         AcceptConfig(runtime, handle);
     }
@@ -3347,7 +3347,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
 
         // Replace subscription (restart client) before accepting config update -> new notification.
@@ -3358,7 +3358,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                             TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
         else
             runtime.Register(CreateTabletKiller(CONFIG_PROXY_TABLET_ID));
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply2->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
         AcceptConfig(runtime, handle);
 
@@ -3369,11 +3369,11 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                             1, "host1", "tenant1", "type1",
                                             tabletId, serviceId,
                                             TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-            auto reply3 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+            auto reply3 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
             CheckConfigId(reply3->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
         } else {
             runtime.Register(CreateTabletKiller(CONFIG_PROXY_TABLET_ID));
-            auto reply3 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(2));
+            auto reply3 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(2));
             UNIT_ASSERT(!reply3);
         }
     }
@@ -3406,12 +3406,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
 
         // Don't answer notification for too long and get another one.
         runtime.UpdateCurrentTime(runtime.GetCurrentTime() + TDuration::Minutes(20));
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply2->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
     }
 
@@ -3443,12 +3443,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                    1, "host1", "tenant1", "type1",
                                    tabletId, serviceId,
                                    TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply1->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
 
         // Restart server before notification response -> new notification.
         runtime.Register(CreateTabletKiller(MakeConsoleID()));
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle);
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle);
         CheckConfigId(reply2->Record.GetConfigId(), ITEM_DOMAIN_LOG_1);
         AcceptConfig(runtime, handle);
         // Wait for subscription update.
@@ -3458,7 +3458,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
 
         // Restart server after notification response -> no new notification.
         runtime.Register(CreateTabletKiller(MakeConsoleID()));
-        auto reply3 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(5));
+        auto reply3 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigNotificationRequest>(handle, TDuration::Seconds(5));
         UNIT_ASSERT(!reply3);
     }
 
@@ -3556,7 +3556,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
         // minutes. This regression test checks we don't have
         // excessive retries and don't re-create long timer
         // (loosing TConfigsProvider::TEvPrivate::TEvNotificationTimeout)
-        auto *event = new TEvConsole::TEvConfigureRequest;
+        auto *event = new NEvConsole::TEvConfigureRequest;
         CollectActions(event->Record, MakeAddAction(ITEM_DOMAIN_LOG_1));
         runtime.SendToConsole(event);
 
@@ -3629,7 +3629,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         ui32 generation = 1;
         TActorId edgeId = runtime.Sender;
 
-        auto *event = new TEvConsole::TEvConfigSubscriptionRequest;
+        auto *event = new NEvConsole::TEvConfigSubscriptionRequest;
         event->Record.SetGeneration(generation);
         event->Record.MutableOptions()->SetNodeId(nodeId);
         event->Record.MutableOptions()->SetHost("host1");
@@ -3638,7 +3638,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
@@ -3653,7 +3653,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(1);
         item->SetGeneration(1);
 
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
@@ -3682,7 +3682,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(1);
         item->SetGeneration(1);
 
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -3698,7 +3698,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         runtime.Register(subscriber);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         for (int i = 0; i < 100; i++) {
             ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName(TStringBuilder() << "cluster-" << i);
@@ -3722,7 +3722,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             item->SetId(1);
             item->SetGeneration(i + 1);
 
-            auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+            auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
             UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
             UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -3737,7 +3737,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         runtime.Register(subscriber);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         ui64 id = 0;
         for (int i = 0; i < 100; i++) {
@@ -3770,7 +3770,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
                 item->SetGeneration(1);
             }
 
-            auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+            auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
             UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
             UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -3787,15 +3787,15 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         const auto &clientId = runtime.Register(subscriber);
 
         TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options1.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         runtime.Send(new IEventHandle(clientId, edgeId, new TEvents::TEvPoisonPill()), 0, true);
 
         TDispatchOptions options2;
-        options2.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionCanceled, 3);
+        options2.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionCanceled, 3);
         runtime.DispatchEvents(options2);
     }
 
@@ -3816,7 +3816,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         runtime.Register(subscriber, 1);
 
         TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options1.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
 
         NKikimrConfig::TAppConfig config1;
@@ -3828,7 +3828,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             item->SetGeneration(1);
         }
 
-        auto notification1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification1->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification1->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
@@ -3841,7 +3841,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         runtime.Send(handle.Release(), 0, true);
 
         TDispatchOptions options2;
-        options2.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options2.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options2);
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-2");
@@ -3858,7 +3858,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             item->SetGeneration(2);
         }
 
-        auto notification2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification2->Get()->Record.GetGeneration(), 2);
         UNIT_ASSERT_VALUES_EQUAL(notification2->Get()->Record.GetConfig().ShortDebugString(), config2.ShortDebugString());
@@ -3879,10 +3879,10 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         runtime.Register(subscriber, 1);
 
         TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options1.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
@@ -3897,7 +3897,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(1);
         item->SetGeneration(1);
 
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -3915,7 +3915,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(2);
         item->SetGeneration(1);
 
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.HasYamlConfig(), false);
@@ -3953,7 +3953,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(1);
         item->SetGeneration(1);
 
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
@@ -3980,7 +3980,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         runtime.Register(subscriber, 1);
 
         TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionResponse, 1);
+        options1.FinalEvents.emplace_back(NEvConsole::EvConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options1);
 
         NKikimrConfig::TAppConfig config;
@@ -3991,20 +3991,20 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(1);
         item->SetGeneration(1);
 
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
 
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
 
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -4012,9 +4012,9 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
 
-        runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
+        runtime.SendToConsole(new NEvConsole::TEvGetAllConfigsRequest());
         TAutoPtr<IEventHandle> handle;
-        auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        auto configs = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetAllConfigsResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity().cluster(), "");
         UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity().version(), 1);
         UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().config(), YAML_CONFIG_1_UPDATED);
@@ -4035,7 +4035,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(2);
         item->SetGeneration(1);
 
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -4044,7 +4044,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 1, VOLATILE_YAML_CONFIG_1_2);
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -4054,7 +4054,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
 
         CheckRemoveVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0);
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -4063,7 +4063,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
 
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_2);
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
@@ -4079,7 +4079,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         ui32 generation = 1;
         TActorId edgeId = runtime.Sender;
 
-        auto *event = new TEvConsole::TEvConfigSubscriptionRequest;
+        auto *event = new NEvConsole::TEvConfigSubscriptionRequest;
         event->Record.SetGeneration(generation);
         event->Record.MutableOptions()->SetNodeId(nodeId);
         event->Record.MutableOptions()->SetHost("host1");
@@ -4090,16 +4090,16 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 1, VOLATILE_YAML_CONFIG_1_2);
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-1");
 
@@ -4114,7 +4114,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(1);
         item->SetGeneration(1);
 
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
@@ -4154,7 +4154,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetId(1);
         item->SetGeneration(1);
 
-        auto *event = new TEvConsole::TEvConfigSubscriptionRequest;
+        auto *event = new NEvConsole::TEvConfigSubscriptionRequest;
         event->Record.SetGeneration(generation);
         event->Record.MutableOptions()->SetNodeId(nodeId);
         event->Record.MutableOptions()->SetHost("host1");
@@ -4165,7 +4165,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
@@ -4203,7 +4203,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         item->SetGeneration(1);
 
         auto prepareConfigSubscriptionRequest = [&](){
-            auto *event = new TEvConsole::TEvConfigSubscriptionRequest;
+            auto *event = new NEvConsole::TEvConfigSubscriptionRequest;
             event->Record.SetGeneration(generation);
             event->Record.MutableOptions()->SetNodeId(nodeId);
             event->Record.MutableOptions()->SetHost("host1");
@@ -4226,7 +4226,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
+        runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
         generation = 2;
 
@@ -4236,7 +4236,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_1_HASH);
         runtime.SendToPipe(MakeConsoleID(), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        auto notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
@@ -4254,7 +4254,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_2_HASH);
         runtime.SendToPipe(MakeConsoleID(), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
@@ -4278,7 +4278,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         volatileYamlVersion->SetHash(VOLATILE_YAML_CONFIG_1_2_HASH);
         runtime.SendToPipe(MakeConsoleID(), edgeId, event, 0, GetPipeConfigWithRetries());
 
-        notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
+        notification = runtime.GrabEdgeEventRethrow<NEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().GetVersion().ShortDebugString(), config1.GetVersion().ShortDebugString());
@@ -4313,7 +4313,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         config1.MutableLogConfig()->SetClusterName("cluster1");
         auto *courier1 = CreateNodeConfigCourier(runtime.Sender, 123);
         runtime.Register(courier1, 0);
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetNodeConfigResponse>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetNodeConfigResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 123);
         CheckEqualsIgnoringVersion(reply1->Record.GetConfig(), config1);
 
@@ -4322,7 +4322,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         auto *courier2 = CreateNodeConfigCourier((ui32)NKikimrConsole::TConfigItem::LogConfigItem,
                                                  TENANT1_2_NAME, runtime.Sender, 321);
         runtime.Register(courier2, 0);
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetNodeConfigResponse>(handle);
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvGetNodeConfigResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 321);
         CheckEqualsIgnoringVersion(reply2->Record.GetConfig(), config2);
     }
@@ -4362,7 +4362,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
                                                 123);
         runtime.Register(subscriber, 0);
 
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply1->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 123);
         ui64 id2 = reply1->Record.GetSubscriptionId();
@@ -4389,7 +4389,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
                                                 321);
         runtime.Register(subscriber, 0);
 
-        auto reply2 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvAddConfigSubscriptionResponse>(handle);
+        auto reply2 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvAddConfigSubscriptionResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply2->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 321);
         ui64 id3 = reply2->Record.GetSubscriptionId();
@@ -4431,7 +4431,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         }
         runtime.Register(subscriber, 0);
 
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply1->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         ui64 id1 = reply1->Record.GetSubscriptionId();
 
@@ -4468,7 +4468,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         }
         runtime.Register(subscriber, 0);
 
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply1->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         ui64 id1 = reply1->Record.GetSubscriptionId();
 
@@ -4505,7 +4505,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         }
         runtime.Register(subscriber, 0);
 
-        auto reply1 = runtime.GrabEdgeEventRethrow<TEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
+        auto reply1 = runtime.GrabEdgeEventRethrow<NEvConsole::TEvReplaceConfigSubscriptionsResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply1->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         ui64 id1 = reply1->Record.GetSubscriptionId();
 
@@ -4531,7 +4531,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
 
         auto *eraser = CreateSubscriptionEraser(id1, runtime.Sender, 123);
         runtime.Register(eraser, 0);
-        auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveConfigSubscriptionResponse>(handle);
+        auto reply = runtime.GrabEdgeEventRethrow<NEvConsole::TEvRemoveConfigSubscriptionResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 123);
     }

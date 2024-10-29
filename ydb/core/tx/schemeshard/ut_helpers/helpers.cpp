@@ -31,14 +31,14 @@ namespace NSchemeShardUT_Private {
     void SetConfig(
     TTestActorRuntime &runtime,
     ui64 schemeShard,
-    THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request)
+    THolder<NConsole::NEvConsole::TEvConfigNotificationRequest> request)
     {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SendToPipe(schemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+        runtime.GrabEdgeEventRethrow<NConsole::NEvConsole::TEvConfigNotificationResponse>(handle);
     }
 
     template <typename TEvResponse, typename TEvRequest, typename TStatus>
@@ -58,10 +58,10 @@ namespace NSchemeShardUT_Private {
 
         ui32 result = 0;
 
-        if constexpr (std::is_same_v<TEvSchemeShard::TEvModifySchemeTransactionResult, TEvResponse>) {
+        if constexpr (std::is_same_v<NEvSchemeShard::TEvModifySchemeTransactionResult, TEvResponse>) {
             result = record.GetStatus();
             CheckExpectedStatus(expectedStatuses, record.GetStatus(), record.GetReason());
-        } else if constexpr (std::is_same_v<TEvSchemeShard::TEvCancelTxResult, TEvResponse>) {
+        } else if constexpr (std::is_same_v<NEvSchemeShard::TEvCancelTxResult, TEvResponse>) {
             result = record.GetStatus();
             CheckExpectedStatus(expectedStatuses, record.GetStatus(), record.GetResult());
         } else {
@@ -73,18 +73,18 @@ namespace NSchemeShardUT_Private {
     }
 
     ui32 NSchemeShardUT_Private::TTestEnv::ReliablePropose(
-        NActors::TTestActorRuntime& runtime, TEvSchemeShard::TEvModifySchemeTransaction* evTx,
-        const TVector<TEvSchemeShard::EStatus>& expectedResults)
+        NActors::TTestActorRuntime& runtime, NEvSchemeShard::TEvModifySchemeTransaction* evTx,
+        const TVector<NEvSchemeShard::EStatus>& expectedResults)
     {
-        return ReliableProposeImpl<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+        return ReliableProposeImpl<NEvSchemeShard::TEvModifySchemeTransactionResult>(
             runtime, TxReliablePropose, evTx, expectedResults);
     }
 
     ui32 NSchemeShardUT_Private::TTestEnv::ReliablePropose(
-        NActors::TTestActorRuntime& runtime, TEvSchemeShard::TEvCancelTx* evTx,
-        const TVector<TEvSchemeShard::EStatus>& expectedResults)
+        NActors::TTestActorRuntime& runtime, NEvSchemeShard::TEvCancelTx* evTx,
+        const TVector<NEvSchemeShard::EStatus>& expectedResults)
     {
-        return ReliableProposeImpl<TEvSchemeShard::TEvCancelTxResult>(
+        return ReliableProposeImpl<NEvSchemeShard::TEvCancelTxResult>(
             runtime, TxReliablePropose, evTx, expectedResults);
     }
 
@@ -133,7 +133,7 @@ namespace NSchemeShardUT_Private {
     // Reasons are matched by finding if expected fragment is contained in full actual reason.
     // Empty expected fragment disables reason check.
     //
-    void CheckExpectedResult(const TVector<TExpectedResult>& expected, TEvSchemeShard::EStatus actualStatus, const TString& actualReason)
+    void CheckExpectedResult(const TVector<TExpectedResult>& expected, NEvSchemeShard::EStatus actualStatus, const TString& actualReason)
     {
         for (auto i : expected) {
             if (actualStatus == i.Status) {
@@ -148,7 +148,7 @@ namespace NSchemeShardUT_Private {
 
     // CheckExpectedStatus is a deprecated version of CheckExpectedResult that can't check reasons.
     // Used by non generic test helpers. Should be replaced by CheckExpectedResult.
-    void CheckExpectedStatus(const TVector<NKikimrScheme::EStatus>& expected, TEvSchemeShard::EStatus actualStatus, const TString& actualReason)
+    void CheckExpectedStatus(const TVector<NKikimrScheme::EStatus>& expected, NEvSchemeShard::EStatus actualStatus, const TString& actualReason)
     {
         for (auto expectedStatus : expected) {
             if (actualStatus == expectedStatus) {
@@ -162,19 +162,19 @@ namespace NSchemeShardUT_Private {
     void SkipModificationReply(TTestActorRuntime& runtime, ui32 num) {
         TAutoPtr<IEventHandle> handle;
         for (ui32 i = 0; i < num; ++i)
-            runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+            runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
     }
 
-    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId, TEvSchemeShard::EStatus expectedStatus) {
+    void TestModificationResult(TTestActorRuntime& runtime, ui64 txId, NEvSchemeShard::EStatus expectedStatus) {
         TestModificationResults(runtime, txId, {{expectedStatus, ""}});
     }
 
     ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId, const TVector<TExpectedResult>& expectedResults) {
         TAutoPtr<IEventHandle> handle;
-        TEvSchemeShard::TEvModifySchemeTransactionResult* event;
+        NEvSchemeShard::TEvModifySchemeTransactionResult* event;
         do {
             Cerr << "TestModificationResults wait txId: " <<  txId << "\n";
-            event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+            event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
             UNIT_ASSERT(event);
             Cerr << "TestModificationResult got TxId: " << event->Record.GetTxId() << ", wait until txId: " << txId << "\n";
         } while(event->Record.GetTxId() < txId);
@@ -192,8 +192,8 @@ namespace NSchemeShardUT_Private {
         }
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(ui64 txId, ui64 schemeshard, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeshard);
+    NEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(ui64 txId, ui64 schemeshard, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
+        auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(txId, schemeshard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
@@ -220,14 +220,14 @@ namespace NSchemeShardUT_Private {
 
     void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name,
                        const TString& diffAcl, const TString& newOwner,
-                       TEvSchemeShard::EStatus expectedResult) {
+                       NEvSchemeShard::EStatus expectedResult) {
         AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner);
         TestModificationResult(runtime, txId, expectedResult);
     }
 
     void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name,
                        const TString& diffAcl, const TString& newOwner,
-                       TEvSchemeShard::EStatus expectedResult) {
+                       NEvSchemeShard::EStatus expectedResult) {
         TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult);
     }
 
@@ -236,11 +236,11 @@ namespace NSchemeShardUT_Private {
 
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts) {
         TActorId sender = runtime.AllocateEdgeActor();
-        auto evLs = new TEvSchemeShard::TEvDescribeScheme(path);
+        auto evLs = new NEvSchemeShard::TEvDescribeScheme(path);
         evLs->Record.MutableOptions()->CopyFrom(opts);
         ForwardToTablet(runtime, schemeShard, sender, evLs);
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvDescribeSchemeResult>(handle);
         UNIT_ASSERT(event);
 
         return event->GetRecord();
@@ -248,11 +248,11 @@ namespace NSchemeShardUT_Private {
 
     NKikimrScheme::TEvDescribeSchemeResult DescribePathId(TTestActorRuntime& runtime, ui64 schemeShard, ui64 pathId, const NKikimrSchemeOp::TDescribeOptions& opts = { }) {
         TActorId sender = runtime.AllocateEdgeActor();
-        auto evLs = new TEvSchemeShard::TEvDescribeScheme(schemeShard, pathId);
+        auto evLs = new NEvSchemeShard::TEvDescribeScheme(schemeShard, pathId);
         evLs->Record.MutableOptions()->CopyFrom(opts);
         ForwardToTablet(runtime, schemeShard, sender, evLs);
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvDescribeSchemeResult>(handle);
         UNIT_ASSERT(event);
 
         return event->GetRecord();
@@ -361,8 +361,8 @@ namespace NSchemeShardUT_Private {
         return THolder(response);
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* CopyTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction* CopyTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
+        auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         transaction->SetWorkingDir(dstPath);
@@ -388,14 +388,14 @@ namespace NSchemeShardUT_Private {
 
     void TestCopyTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
                        const TString& dstPath, const TString& dstName, const TString& srcFullName,
-                       TEvSchemeShard::EStatus expectedResult) {
+                       NEvSchemeShard::EStatus expectedResult) {
         AsyncCopyTable(runtime, schemeShardId, txId, dstPath, dstName, srcFullName);
         TestModificationResult(runtime, txId, expectedResult);
     }
 
     void TestCopyTable(TTestActorRuntime& runtime, ui64 txId,
                        const TString& dstPath, const TString& dstName, const TString& srcFullName,
-                       TEvSchemeShard::EStatus expectedResult) {
+                       NEvSchemeShard::EStatus expectedResult) {
         TestCopyTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
     }
 
@@ -403,8 +403,8 @@ namespace NSchemeShardUT_Private {
         return TestLs(runtime, path, true);
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* MoveTableRequest(ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard, const TApplyIf& applyIf) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction* MoveTableRequest(ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard, const TApplyIf& applyIf) {
+        THolder<NEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
         SetApplyIf(*transaction, applyIf);
@@ -431,8 +431,8 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, bool allowOverwrite, ui64 schemeShard, const TApplyIf& applyIf) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, bool allowOverwrite, ui64 schemeShard, const TApplyIf& applyIf) {
+        THolder<NEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
         SetApplyIf(*transaction, applyIf);
@@ -460,8 +460,8 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* LockRequest(ui64 txId, const TString &parentPath, const TString& name) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction* LockRequest(ui64 txId, const TString &parentPath, const TString& name) {
+        THolder<NEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
         transaction->SetWorkingDir(parentPath);
@@ -490,8 +490,8 @@ namespace NSchemeShardUT_Private {
         TestLock(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, expectedResults);
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* UnlockRequest(ui64 txId, ui64 lockId, const TString &parentPath, const TString& name) {
-        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction* UnlockRequest(ui64 txId, ui64 lockId, const TString &parentPath, const TString& name) {
+        THolder<NEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
         transaction->SetWorkingDir(parentPath);
@@ -950,7 +950,7 @@ namespace NSchemeShardUT_Private {
     void AsyncDropBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
             ui64 fillGeneration)
     {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+        auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume);
@@ -972,7 +972,7 @@ namespace NSchemeShardUT_Private {
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
             const TString& mountToken, ui64 tokenVersion)
     {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+        auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAssignBlockStoreVolume);
@@ -991,8 +991,8 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
-    TEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {
-        auto evTx = new TEvSchemeShard::TEvCancelTx();
+    NEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {
+        auto evTx = new NEvSchemeShard::TEvCancelTx();
         evTx->Record.SetTxId(txId);
         evTx->Record.SetTargetTxId(targetTxId);
         return evTx;
@@ -1008,9 +1008,9 @@ namespace NSchemeShardUT_Private {
         AsyncCancelTxTable(runtime, txId, targetTxId);
 
         TAutoPtr<IEventHandle> handle;
-        TEvSchemeShard::TEvCancelTxResult* event;
+        NEvSchemeShard::TEvCancelTxResult* event;
         do {
-            event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvCancelTxResult>(handle);
+            event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvCancelTxResult>(handle);
             UNIT_ASSERT(event);
             Cerr << "TEvCancelTxResult for TargetTxId: " << event->Record.GetTargetTxId() << ", wait until TargetTxId: " << targetTxId << "\n";
         } while(event->Record.GetTargetTxId() < targetTxId);
@@ -1593,8 +1593,8 @@ namespace NSchemeShardUT_Private {
         return tableDescription;
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain);
         transaction->SetWorkingDir(parentPath);
@@ -1614,11 +1614,11 @@ namespace NSchemeShardUT_Private {
 
     void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name) {
         AsyncUpgradeSubDomain(runtime, txId, parentPath, name);
-        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
+        TestModificationResults(runtime, txId, {{NEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision);
         transaction->SetWorkingDir(parentPath);
@@ -1639,7 +1639,7 @@ namespace NSchemeShardUT_Private {
 
     void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
         AsyncUpgradeSubDomainDecision(runtime, txId, parentPath, name, decision);
-        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
+        TestModificationResults(runtime, txId, {{NEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     TRowVersion CreateVolatileSnapshot(
@@ -1928,9 +1928,9 @@ namespace NSchemeShardUT_Private {
             NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected)
     {
         auto sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, schemeShard, sender, new TEvSchemeShard::TEvFindTabletSubDomainPathId(tabletId));
+        ForwardToTablet(runtime, schemeShard, sender, new NEvSchemeShard::TEvFindTabletSubDomainPathId(tabletId));
 
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(sender);
+        auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(sender);
         UNIT_ASSERT(ev);
 
         const auto& record = ev->Get()->Record;
@@ -1944,8 +1944,8 @@ namespace NSchemeShardUT_Private {
         return TPathId(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    NEvSchemeShard::TEvModifySchemeTransaction* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password) {
+        auto evTx = new NEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
         auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
@@ -1956,12 +1956,12 @@ namespace NSchemeShardUT_Private {
 
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
         TActorId sender = runtime.AllocateEdgeActor();
-        auto evLogin = new TEvSchemeShard::TEvLogin();
+        auto evLogin = new NEvSchemeShard::TEvLogin();
         evLogin->Record.SetUser(user);
         evLogin->Record.SetPassword(password);
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        auto event = runtime.GrabEdgeEvent<NEvSchemeShard::TEvLoginResult>(handle);
         UNIT_ASSERT(event);
         return event->Record;
     }
@@ -2029,13 +2029,13 @@ namespace NSchemeShardUT_Private {
 
             TActorId sender = Runtime.AllocateEdgeActor();
             for (;;) {
-                auto proposal = new TEvDataShard::TEvProposeTransaction(kind, sender, TxId, txBody, txFlags);
+                auto proposal = new NEvDataShard::TEvProposeTransaction(kind, sender, TxId, txBody, txFlags);
 
                 activeZone = false;
                 Runtime.SendToPipe(shardData.ShardId, sender, proposal);
                 TAutoPtr<IEventHandle> handle;
-                auto event = Runtime.GrabEdgeEventIf<TEvDataShard::TEvProposeTransactionResult>(handle,
-                                                                                                [this, shardData](const TEvDataShard::TEvProposeTransactionResult& event) {
+                auto event = Runtime.GrabEdgeEventIf<NEvDataShard::TEvProposeTransactionResult>(handle,
+                                                                                                [this, shardData](const NEvDataShard::TEvProposeTransactionResult& event) {
                     return event.GetTxId() == TxId && event.GetOrigin() == shardData.ShardId;
                 });
                 activeZone = true;
@@ -2227,14 +2227,14 @@ namespace NSchemeShardUT_Private {
         return partitions;
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* CombineSchemeTransactions(const TVector<TEvSchemeShard::TEvModifySchemeTransaction*>& transactions) {
+    NEvSchemeShard::TEvModifySchemeTransaction* CombineSchemeTransactions(const TVector<NEvSchemeShard::TEvModifySchemeTransaction*>& transactions) {
         ui64 txId = 0;
         ui64 tabletId = 0;
         if (transactions) {
             txId = transactions.front()->Record.GetTxId();
             tabletId = transactions.front()->Record.GetTabletId();
         }
-        TEvSchemeShard::TEvModifySchemeTransaction* combination = new TEvSchemeShard::TEvModifySchemeTransaction(txId, tabletId);
+        NEvSchemeShard::TEvModifySchemeTransaction* combination = new NEvSchemeShard::TEvModifySchemeTransaction(txId, tabletId);
         for ( auto& modifyTx: transactions) {
             for (const auto& tx: modifyTx->Record.GetTransaction()) {
                 *combination->Record.AddTransaction() = tx;
@@ -2289,19 +2289,19 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
     {
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+        auto request = MakeHolder<NEvDataShard::TEvCompactTable>(tableId.PathId);
         request->Record.SetCompactBorrowed(compactBorrowed);
         runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+        auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvCompactTableResult>(sender);
         return ev->Get()->Record;
     }
 
     NKikimrPQ::TDescribeResponse GetDescribeFromPQBalancer(TTestActorRuntime& runtime, ui64 balancerId) {
         TActorId edge = runtime.AllocateEdgeActor();
        TAutoPtr<IEventHandle> handle;
-       runtime.SendToPipe(balancerId, edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
-       TEvPersQueue::TEvDescribeResponse* result = runtime.GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
+       runtime.SendToPipe(balancerId, edge, new NEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
+       NEvPersQueue::TEvDescribeResponse* result = runtime.GrabEdgeEvent<NEvPersQueue::TEvDescribeResponse>(handle);
        UNIT_ASSERT(result);
        auto& rec = result->Record;
        return rec;
@@ -2310,7 +2310,7 @@ namespace NSchemeShardUT_Private {
     void SendTEvPeriodicTopicStats(TTestActorRuntime& runtime, ui64 topicId, ui64 generation, ui64 round, ui64 dataSize, ui64 usedReserveSize) {
         TActorId sender = runtime.AllocateEdgeActor();
 
-        TEvPersQueue::TEvPeriodicTopicStats* ev = new TEvPersQueue::TEvPeriodicTopicStats();
+        NEvPersQueue::TEvPeriodicTopicStats* ev = new NEvPersQueue::TEvPeriodicTopicStats();
         auto& rec = ev->Record;
         rec.SetPathId(topicId);
         rec.SetGeneration(generation);
@@ -2371,7 +2371,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(partitionIdx < tablePartitions.size());
         const ui64 datashardTabletId = tablePartitions[partitionIdx].GetDatashardId();
 
-        auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
+        auto ev = MakeHolder<NEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(tableDesc.GetPathId());
 
         auto& scheme = *ev->Record.MutableRowScheme();
@@ -2388,7 +2388,7 @@ namespace NSchemeShardUT_Private {
 
         const auto& sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, datashardTabletId, sender, ev.Release());
-        runtime.GrabEdgeEvent<TEvDataShard::TEvUploadRowsResponse>(sender);
+        runtime.GrabEdgeEvent<NEvDataShard::TEvUploadRowsResponse>(sender);
     }
 
     void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {

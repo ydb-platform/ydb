@@ -76,7 +76,7 @@ namespace NKikimr::NColumnShard {
         }
 
         bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
-            auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, GetTxId(), NKikimrTxColumnShard::SUCCESS);
+            auto result = std::make_unique<NEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, GetTxId(), NKikimrTxColumnShard::SUCCESS);
             result->Record.SetStep(TxInfo.PlanStep);
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
             return true;

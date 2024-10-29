@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
-    TEvSchemeShard::TEvInitTenantSchemeShard::TEvInitTenantSchemeShard(
+    NEvSchemeShard::TEvInitTenantSchemeShard::TEvInitTenantSchemeShard(
         ui64 selfTabletId,
         ui64 pathId, TString tenantRootPath,
         TString owner, TString effectiveRootACL, ui64 effectiveRootACLVersion,

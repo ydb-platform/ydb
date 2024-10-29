@@ -8,7 +8,7 @@ using namespace NPersQueue;
 Y_UNIT_TEST_SUITE(TPQRBDescribes) {
 
     Y_UNIT_TEST(PartitionLocations) {
-        
+
         NPersQueue::TTestServer server;
         TString topicName = "rt3.dc1--topic";
         TString topicPath = TString("/Root/PQ/") + topicName;
@@ -20,13 +20,13 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
         ui64 balancerTabletId = pathDescr.GetBalancerTabletID();
         auto* runtime = server.CleverServer->GetRuntime();
         const auto edge = runtime->AllocateEdgeActor();
-        
-        auto checkResponse = [&](TEvPersQueue::TEvGetPartitionsLocation* request, bool ok, ui64 partitionsCount = 0) {
+
+        auto checkResponse = [&](NEvPersQueue::TEvGetPartitionsLocation* request, bool ok, ui64 partitionsCount = 0) {
             runtime->SendToPipe(balancerTabletId, edge, request);
-            auto ev = runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>();
+            auto ev = runtime->GrabEdgeEvent<NEvPersQueue::TEvGetPartitionsLocationResponse>();
             const auto& response = ev->Record;
             Cerr << "response: " << response.DebugString();
-            
+
             UNIT_ASSERT(response.GetStatus() == ok);
             if (!ok) {
                 return ev;
@@ -44,9 +44,9 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
         auto pollBalancer = [&] (ui64 retriesCount) {
             auto waitTime = TDuration::MilliSeconds(500);
             while (retriesCount) {
-                auto* req = new TEvPersQueue::TEvGetPartitionsLocation();
+                auto* req = new NEvPersQueue::TEvGetPartitionsLocation();
                 runtime->SendToPipe(balancerTabletId, edge, req);
-                auto ev = runtime->GrabEdgeEvent<TEvPersQueue::TEvGetPartitionsLocationResponse>();
+                auto ev = runtime->GrabEdgeEvent<NEvPersQueue::TEvGetPartitionsLocationResponse>();
                 if (!ev->Record.GetStatus()) {
                     --retriesCount;
                     Sleep(waitTime);
@@ -55,23 +55,23 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
                     return;
                 }
             }
-            UNIT_FAIL("Could not get positive response from balancer"); 
+            UNIT_FAIL("Could not get positive response from balancer");
 
         };
         pollBalancer(5);
-        checkResponse(new TEvPersQueue::TEvGetPartitionsLocation(), true, totalPartitions);
+        checkResponse(new NEvPersQueue::TEvGetPartitionsLocation(), true, totalPartitions);
         {
-            auto* req = new TEvPersQueue::TEvGetPartitionsLocation();
+            auto* req = new NEvPersQueue::TEvGetPartitionsLocation();
             req->Record.AddPartitions(3);
             auto resp = checkResponse(req, true, 1);
             UNIT_ASSERT_VALUES_EQUAL(resp->Record.GetLocations(0).GetPartitionId(), 3);
         }
         {
-            auto* req = new TEvPersQueue::TEvGetPartitionsLocation();
+            auto* req = new NEvPersQueue::TEvGetPartitionsLocation();
             req->Record.AddPartitions(50);
             checkResponse(req, false);
         }
-    
+
     }
 };
 

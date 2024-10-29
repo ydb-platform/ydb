@@ -1341,7 +1341,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
 
         THolder<IEventHandle> blockedBuildIndexRequest;
-        auto blockBuildIndexRequest = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
+        auto blockBuildIndexRequest = runtime.AddObserver<NEvDataShard::TEvBuildIndexCreateRequest>([&](auto& ev) {
             blockedBuildIndexRequest.Reset(ev.Release());
         });
 
@@ -1532,8 +1532,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         env.TestWaitNotification(runtime, txId);
 
         THolder<IEventHandle> blockedScanRequest;
-        auto blockScanRequest = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>(
-            [&](TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
+        auto blockScanRequest = runtime.AddObserver<NEvDataShard::TEvCdcStreamScanRequest>(
+            [&](NEvDataShard::TEvCdcStreamScanRequest::TPtr& ev) {
                 blockedScanRequest.Reset(ev.Release());
             }
         );
@@ -1563,8 +1563,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         blockScanRequest.Remove();
 
         THolder<IEventHandle> blockedAlterStream;
-        auto blockAlterStream = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>(
-            [&](TEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
+        auto blockAlterStream = runtime.AddObserver<NEvSchemeShard::TEvModifySchemeTransaction>(
+            [&](NEvSchemeShard::TEvModifySchemeTransaction::TPtr& ev) {
                 if (ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
                     blockedAlterStream.Reset(ev.Release());
                 }
@@ -1617,7 +1617,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
 
         const auto lockTxId = txId;
         auto testAlterCdcStream = [&runtime](ui64 txId, const TString& parentPath, const TString& schema,
-                const TMaybe<ui64>& lockTxId, TEvSchemeShard::EStatus expectedStatus = NKikimrScheme::StatusAccepted)
+                const TMaybe<ui64>& lockTxId, NEvSchemeShard::EStatus expectedStatus = NKikimrScheme::StatusAccepted)
         {
             auto request = AlterCdcStreamRequest(txId, parentPath, schema);
             if (lockTxId) {
@@ -1763,7 +1763,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         ui64 txId = 100;
 
         TActorId schemeShardActorId;
-        auto findActorId = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+        auto findActorId = runtime.AddObserver<NEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
             if (!schemeShardActorId) {
                 schemeShardActorId = ev->Sender;
             }
@@ -1777,7 +1777,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blockedAlterStream(runtime, [&](auto& ev) {
+        TBlockEvents<NEvSchemeShard::TEvModifySchemeTransaction> blockedAlterStream(runtime, [&](auto& ev) {
             const auto& record = ev->Get()->Record;
             if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
                 txId = record.GetTxId();
@@ -1802,7 +1802,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
 
         UNIT_ASSERT(schemeShardActorId);
 
-        TBlockEvents<TEvPrivate::TEvProgressOperation> blockedProgress(runtime, [&](auto& ev) {
+        TBlockEvents<NEvPrivate::TEvProgressOperation> blockedProgress(runtime, [&](auto& ev) {
             return schemeShardActorId == ev->Sender;
         });
 
@@ -1920,8 +1920,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         TString meteringRecord;
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::EvCdcStreamScanResponse:
-                if (const auto* msg = ev->Get<TEvDataShard::TEvCdcStreamScanResponse>()) {
+            case NEvDataShard::EvCdcStreamScanResponse:
+                if (const auto* msg = ev->Get<NEvDataShard::TEvCdcStreamScanResponse>()) {
                     if (msg->Record.GetStatus() == NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE) {
                         catchMeteringRecord = true;
                     }

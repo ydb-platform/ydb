@@ -7,39 +7,39 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo,
     ui32 itemIdx
 );
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+THolder<NEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo
 );
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
+THolder<NEvSchemeShard::TEvCancelTx> CancelPropose(
     const TExportInfo::TPtr exportInfo,
     TTxId backupTxId
 );

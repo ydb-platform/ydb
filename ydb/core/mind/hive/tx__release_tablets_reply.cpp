@@ -31,7 +31,7 @@ public:
         ++TabletsDone;
         if (TabletsDone >= TabletsTotal) {
             BLOG_D("THive::TTxReleaseTabletsReply::Complete - continue migration");
-            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
+            Hive->SendToRootHivePipe(new NEvHive::TEvSeizeTablets(Hive->MigrationFilter));
             PassAway();
         }
     }
@@ -40,7 +40,7 @@ public:
         Become(&TThis::StateWork);
         if (TabletsTotal == 0) {
             BLOG_D("THive::TTxReleaseTabletsReply::Complete - continue migration");
-            Hive->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Hive->MigrationFilter));
+            Hive->SendToRootHivePipe(new NEvHive::TEvSeizeTablets(Hive->MigrationFilter));
             PassAway();
         }
     }
@@ -55,10 +55,10 @@ public:
 
 
 class TTxReleaseTabletsReply : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvReleaseTabletsReply::THandle> Request;
+    THolder<NEvHive::TEvReleaseTabletsReply::THandle> Request;
 
 public:
-    TTxReleaseTabletsReply(THolder<TEvHive::TEvReleaseTabletsReply::THandle> event, THive *hive)
+    TTxReleaseTabletsReply(THolder<NEvHive::TEvReleaseTabletsReply::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
     {}
@@ -96,7 +96,7 @@ public:
                 } else if (tablet->IsBootingSuppressed()) {
                     // Tablet will never boot, so notify about creation right now
 //                    for (const TActorId& actor : tablet->ActorsToNotify) {
-//                        ctx.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
+//                        ctx.Send(actor, new NEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
 //                    }
                     tablet->ActorsToNotify.clear();
                 } else {
@@ -114,12 +114,12 @@ public:
             BLOG_D("THive::TTxReleaseTabletsReply::Complete - waiting for tablets to rise");
             return; // waiting for tablets
         } else {
-            Self->SendToRootHivePipe(new TEvHive::TEvSeizeTablets(Self->MigrationFilter));
+            Self->SendToRootHivePipe(new NEvHive::TEvSeizeTablets(Self->MigrationFilter));
         }
     }
 };
 
-ITransaction* THive::CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event) {
+ITransaction* THive::CreateReleaseTabletsReply(NEvHive::TEvReleaseTabletsReply::TPtr event) {
     return new TTxReleaseTabletsReply(THolder(event.Release()), this);
 }
 

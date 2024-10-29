@@ -662,7 +662,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TVector<THolder<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
+                case NEvDataShard::TEvProposeTransaction::EventType: {
                     ++observedPropose;
                     Cerr << "... observed TEvProposeTransaction" << Endl;
                     break;
@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TVector<THolder<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
+                case NEvDataShard::TEvProposeTransaction::EventType: {
                     ++observedPropose;
                     Cerr << "... observed TEvProposeTransaction" << Endl;
                     break;
@@ -901,7 +901,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TVector<THolder<IEventHandle>> capturedReadSets;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvSplit::EventType: {
+                case NEvDataShard::TEvSplit::EventType: {
                     ++observedSplit;
                     Cerr << "... observed TEvSplit" << Endl;
                     break;
@@ -1024,9 +1024,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TVector<THolder<IEventHandle>> readResults;
         auto readSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvReadResult::EventType: {
+                case NEvDataShard::TEvReadResult::EventType: {
                     Cerr << "... observed TEvReadResult:" << Endl;
-                    Cerr << ev->Get<TEvDataShard::TEvReadResult>()->Record.DebugString() << Endl;
+                    Cerr << ev->Get<NEvDataShard::TEvReadResult>()->Record.DebugString() << Endl;
                     readResults.emplace_back(ev.Release());
                     break;
                 }
@@ -1037,7 +1037,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }));
 
         {
-            auto msg = std::make_unique<TEvDataShard::TEvRead>();
+            auto msg = std::make_unique<NEvDataShard::TEvRead>();
             msg->Record.SetReadId(1);
             msg->Record.MutableTableId()->SetOwnerId(tableId1.PathId.OwnerId);
             msg->Record.MutableTableId()->SetTableId(tableId1.PathId.LocalPathId);
@@ -1070,7 +1070,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT_VALUES_EQUAL(readResults.size(), 1u);
 
         {
-            auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
+            auto* msg = readResults[0]->Get<NEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
                 "key:   [\n"
@@ -1153,9 +1153,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TVector<THolder<IEventHandle>> readResults;
         auto readSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvReadResult::EventType: {
+                case NEvDataShard::TEvReadResult::EventType: {
                     Cerr << "... observed TEvReadResult:" << Endl;
-                    Cerr << ev->Get<TEvDataShard::TEvReadResult>()->Record.DebugString() << Endl;
+                    Cerr << ev->Get<NEvDataShard::TEvReadResult>()->Record.DebugString() << Endl;
                     readResults.emplace_back(ev.Release());
                     break;
                 }
@@ -1166,7 +1166,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }));
 
         {
-            auto msg = std::make_unique<TEvDataShard::TEvRead>();
+            auto msg = std::make_unique<NEvDataShard::TEvRead>();
             msg->Record.SetReadId(1);
             msg->Record.MutableTableId()->SetOwnerId(tableId1.PathId.OwnerId);
             msg->Record.MutableTableId()->SetTableId(tableId1.PathId.LocalPathId);
@@ -1194,7 +1194,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Verify we actually receive key=1
         {
-            auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
+            auto* msg = readResults[0]->Get<NEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
                 "key:   [\n"
@@ -1216,7 +1216,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT_GE(readResults.size(), 1u);
 
         {
-            auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
+            auto* msg = readResults[0]->Get<NEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
                 "key:   [\n"
@@ -1230,7 +1230,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         SimulateSleep(runtime, TDuration::MilliSeconds(0));
 
         {
-            auto* msg = readResults.back()->Get<TEvDataShard::TEvReadResult>();
+            auto* msg = readResults.back()->Get<NEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetFinished(), true);
         }
@@ -2224,7 +2224,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
 
         size_t volatileTxs = 0;
-        auto proposeObserver = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](TEvDataShard::TEvProposeTransaction::TPtr& ev) {
+        auto proposeObserver = runtime.AddObserver<NEvDataShard::TEvProposeTransaction>([&](NEvDataShard::TEvProposeTransaction::TPtr& ev) {
             auto* msg = ev->Get();
             if (msg->Record.GetFlags() & TTxFlags::VolatilePrepare) {
                 ++volatileTxs;
@@ -2506,7 +2506,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     public:
         TForceVolatileProposeArbiter(TTestActorRuntime& runtime, ui64 arbiterShard)
             : ArbiterShard(arbiterShard)
-            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>(
+            , Observer(runtime.AddObserver<NEvDataShard::TEvProposeTransaction>(
                 [this](auto& ev) {
                     this->OnEvent(ev);
                 }))
@@ -2517,7 +2517,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
 
     private:
-        void OnEvent(TEvDataShard::TEvProposeTransaction::TPtr& ev) {
+        void OnEvent(NEvDataShard::TEvProposeTransaction::TPtr& ev) {
             auto* msg = ev->Get();
             int kind = msg->Record.GetTxKind();
             if (kind != NKikimrTxDataShard::TX_KIND_DATA) {
@@ -2592,14 +2592,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             : TableId(tableId)
             , Shard(shard)
             , ShardActor(ResolveTablet(runtime, shard))
-            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>(
+            , Observer(runtime.AddObserver<NEvDataShard::TEvProposeTransaction>(
                 [this](auto& ev) {
                     this->OnEvent(ev);
                 }))
         {}
 
     private:
-        void OnEvent(TEvDataShard::TEvProposeTransaction::TPtr& ev) {
+        void OnEvent(NEvDataShard::TEvProposeTransaction::TPtr& ev) {
             if (ev->GetRecipientRewrite() != ShardActor) {
                 return;
             }

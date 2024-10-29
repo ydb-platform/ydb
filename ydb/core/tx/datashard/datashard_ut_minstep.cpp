@@ -196,22 +196,22 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
-                case TEvDataShard::TEvProposeTransaction::EventType:
+                case NEvDataShard::TEvProposeTransaction::EventType:
                     if (captureProposes) {
-                        Cerr << "Captured TEvDataShard::TEvProposeTransaction" << Endl;
+                        Cerr << "Captured NEvDataShard::TEvProposeTransaction" << Endl;
                         proposes.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
-                case TEvDataShard::TEvProposeTransactionResult::EventType:
+                case NEvDataShard::TEvProposeTransactionResult::EventType:
                     if (captureProposeResults) {
-                        Cerr << "Captured TEvDataShard::TEvProposeTransactionResult" << Endl;
+                        Cerr << "Captured NEvDataShard::TEvProposeTransactionResult" << Endl;
                         proposeResults.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                     break;
-                case TEvDataShard::TEvSchemaChangedResult::EventType:
-                    Cerr << "Observed TEvDataShard::TEvSchemaChangedResult" << Endl;
+                case NEvDataShard::TEvSchemaChangedResult::EventType:
+                    Cerr << "Observed NEvDataShard::TEvSchemaChangedResult" << Endl;
                     ++schemaChangedCount;
                     break;
             }
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         UNIT_ASSERT_VALUES_EQUAL(proposeResults.size(), 1u);
         auto alterProposeInitialResults = std::move(proposeResults);
 
-        const auto* initialResult = alterProposeInitialResults[0]->Get<TEvDataShard::TEvProposeTransactionResult>();
+        const auto* initialResult = alterProposeInitialResults[0]->Get<NEvDataShard::TEvProposeTransactionResult>();
         UNIT_ASSERT_VALUES_EQUAL(
             initialResult->Record.GetStatus(),
             NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         captureProposes = false;
 
         // Make a copy of the last propose message, it would be needed later
-        auto proposeRecord = proposes[0]->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+        auto proposeRecord = proposes[0]->Get<NEvDataShard::TEvProposeTransaction>()->Record;
 
         // Resend to destinations
         Cerr << "Resending propose from schemeshard..." << Endl;
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         captureProposeResults = false;
 
         // Check the retried message has expected status and min/max step
-        const auto* retriedResult = alterProposeRetriedResults[0]->Get<TEvDataShard::TEvProposeTransactionResult>();
+        const auto* retriedResult = alterProposeRetriedResults[0]->Get<NEvDataShard::TEvProposeTransactionResult>();
         UNIT_ASSERT_VALUES_EQUAL(
             retriedResult->Record.GetStatus(),
             NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
@@ -358,13 +358,13 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         // Send a copy of the last proposal
         Cerr << "Simulating a propose echo..." << Endl;
         {
-            auto event = new TEvDataShard::TEvProposeTransaction;
+            auto event = new NEvDataShard::TEvProposeTransaction;
             event->Record = proposeRecord;
             runtime.Send(new IEventHandle(shardActorId, sender, event), 0, true);
         }
 
         Cerr << "Waiting for propose echo reply..." << Endl;
-        auto evResult = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvProposeTransactionResult>(sender);
+        auto evResult = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvProposeTransactionResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL(
             evResult->Get()->Record.GetStatus(),
             NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
@@ -417,8 +417,8 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         size_t seenProposeScheme = 0;
         auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
-                    const auto* msg = ev->Get<TEvDataShard::TEvProposeTransaction>();
+                case NEvDataShard::TEvProposeTransaction::EventType: {
+                    const auto* msg = ev->Get<NEvDataShard::TEvProposeTransaction>();
                     if (msg->GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
                         ++seenProposeScheme;
                     }

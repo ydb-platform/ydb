@@ -14,8 +14,8 @@ class TJsonFeatureFlags : public TViewerPipeClient {
     ui32 Timeout = 0;
     THashSet<TString> FilterFeatures;
     bool ChangedOnly = false;
-    TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse> TenantsResponse;
-    TRequestResponse<NConsole::TEvConsole::TEvGetAllConfigsResponse> AllConfigsResponse;
+    TRequestResponse<NConsole::NEvConsole::TEvListTenantsResponse> TenantsResponse;
+    TRequestResponse<NConsole::NEvConsole::TEvGetAllConfigsResponse> AllConfigsResponse;
     std::unordered_map<TString, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNameNavigateKeySetResults;
     std::unordered_map<TPathId, TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathIdNavigateKeySetResults;
 
@@ -46,15 +46,15 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
-            hFunc(NConsole::TEvConsole::TEvGetAllConfigsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvGetAllConfigsResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         TenantsResponse.Set(std::move(ev));
         if (TenantsResponse.IsOk()) {
             Ydb::Cms::ListDatabasesResult listDatabasesResult;
@@ -74,7 +74,7 @@ public:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvGetAllConfigsResponse::TPtr& ev) {
         AllConfigsResponse.Set(std::move(ev));
         RequestDone();
     }

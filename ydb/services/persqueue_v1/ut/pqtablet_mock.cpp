@@ -18,7 +18,7 @@ TMaybe<ui64> TPQTabletMock::GetPartitionRequestCookie() const
 
 void TPQTabletMock::PrepareGetOwnershipResponse()
 {
-    Response = std::make_unique<TEvPersQueue::TEvResponse>();
+    Response = std::make_unique<NEvPersQueue::TEvResponse>();
     Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -35,7 +35,7 @@ void TPQTabletMock::PrepareGetOwnershipResponse()
 
 void TPQTabletMock::PrepareGetMaxSeqNoResponse()
 {
-    Response = std::make_unique<TEvPersQueue::TEvResponse>();
+    Response = std::make_unique<NEvPersQueue::TEvResponse>();
     Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -52,7 +52,7 @@ void TPQTabletMock::PrepareGetMaxSeqNoResponse()
 
 auto TPQTabletMock::MakeReserveBytesResponse(ui64 cookie) -> TEvResponsePtr
 {
-    auto event = std::make_unique<TEvPersQueue::TEvResponse>();
+    auto event = std::make_unique<NEvPersQueue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     event->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -68,7 +68,7 @@ auto TPQTabletMock::MakeReserveBytesResponse(ui64 cookie) -> TEvResponsePtr
 
 auto TPQTabletMock::MakeWriteResponse(ui64 cookie) -> TEvResponsePtr
 {
-    auto event = std::make_unique<TEvPersQueue::TEvResponse>();
+    auto event = std::make_unique<NEvPersQueue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
     event->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -171,7 +171,7 @@ STFUNC(TPQTabletMock::StateWork)
         HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
-        HFunc(TEvPersQueue::TEvRequest, Handle);
+        HFunc(NEvPersQueue::TEvRequest, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
     }
@@ -189,7 +189,7 @@ void TPQTabletMock::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TA
     Y_UNUSED(ctx);
 }
 
-void TPQTabletMock::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
+void TPQTabletMock::Handle(NEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
     Request.reset(ev->Release().Release());
 

@@ -11,14 +11,14 @@ class TTaskForTablet;
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-struct TEvApplyLinksModification: public NActors::TEventPB<TEvApplyLinksModification, NKikimrColumnShardDataSharingProto::TEvApplyLinksModification, TEvColumnShard::EvApplyLinksModification> {
+struct TEvApplyLinksModification: public NActors::TEventPB<TEvApplyLinksModification, NKikimrColumnShardDataSharingProto::TEvApplyLinksModification, NEvColumnShard::EvApplyLinksModification> {
     TEvApplyLinksModification() = default;
 
     TEvApplyLinksModification(const TTabletId initiatorTabletId, const TString& sessionId, const ui64 packIdx, const TTaskForTablet& task);
 };
 
 struct TEvApplyLinksModificationFinished: public NActors::TEventPB<TEvApplyLinksModificationFinished,
-    NKikimrColumnShardDataSharingProto::TEvApplyLinksModificationFinished, TEvColumnShard::EvApplyLinksModificationFinished> {
+    NKikimrColumnShardDataSharingProto::TEvApplyLinksModificationFinished, NEvColumnShard::EvApplyLinksModificationFinished> {
     TEvApplyLinksModificationFinished() = default;
     TEvApplyLinksModificationFinished(const TTabletId modifiedTabletId, const TString& sessionId, const ui64 packIdx) {
         Record.SetSessionId(sessionId);

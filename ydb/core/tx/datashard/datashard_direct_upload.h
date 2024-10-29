@@ -8,11 +8,11 @@ namespace NDataShard {
 
 class TDirectTxUpload : public IDirectTx
                       , public TCommonUploadOps<
-                            TEvDataShard::TEvUploadRowsRequest,
-                            TEvDataShard::TEvUploadRowsResponse>
+                            NEvDataShard::TEvUploadRowsRequest,
+                            NEvDataShard::TEvUploadRowsResponse>
 {
 public:
-    explicit TDirectTxUpload(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+    explicit TDirectTxUpload(NEvDataShard::TEvUploadRowsRequest::TPtr& ev);
 
     bool Execute(TDataShard* self, TTransactionContext& txc,
         const TRowVersion& readVersion, const TRowVersion& writeVersion,

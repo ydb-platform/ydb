@@ -173,7 +173,7 @@ public:
 
         ui32 configKind = (ui32) NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
+            new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
@@ -187,8 +187,8 @@ public:
 
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig)
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig)
+            hFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig)
+            hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, HandleConfig)
             hFunc(TEvStatistics::TEvGetStatistics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvPropagateStatistics, Handle);
@@ -218,11 +218,11 @@ public:
     }
 
 private:
-    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+    void HandleConfig(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         SA_LOG_I("Subscribed for config changes on node " << SelfId().NodeId());
     }
 
-    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void HandleConfig(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const auto& config = record.GetConfig();
         if (config.HasFeatureFlags()) {
@@ -233,7 +233,7 @@ private:
                 ReplyAllFailed();
             }
         }
-        auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
+        auto response = std::make_unique<NConsole::NEvConsole::TEvConfigNotificationResponse>(record);
         Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
 

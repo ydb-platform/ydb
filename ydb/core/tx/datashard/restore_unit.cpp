@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TRestoreUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelRestore> {
+class TRestoreUnit : public TBackupRestoreUnitBase<NEvDataShard::TEvCancelRestore> {
 protected:
     bool IsRelevant(TActiveTransaction* tx) const override {
         return tx->GetSchemeTx().HasRestore();

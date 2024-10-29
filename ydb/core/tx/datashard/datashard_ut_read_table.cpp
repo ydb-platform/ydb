@@ -324,8 +324,8 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         TVector<THolder<IEventHandle>> capturedPropose;
         auto capturePropose = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
-                    const auto* msg = ev->Get<TEvDataShard::TEvProposeTransaction>();
+                case NEvDataShard::TEvProposeTransaction::EventType: {
+                    const auto* msg = ev->Get<NEvDataShard::TEvProposeTransaction>();
                     if (msg->Record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCAN && ev->GetRecipientRewrite() == shard2actor) {
                         Cerr << "... captured scan propose at " << shard2actor << Endl;
                         capturedPropose.emplace_back(ev.Release());
@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             }));
 
         // Write bad DyNumber
-        UploadRows(runtime, "/Root/Table", 
+        UploadRows(runtime, "/Root/Table",
             {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::DYNUMBER}},
             {TCell::Make(ui32(1))}, {TCell::Make(ui32(55555))}
             );
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         UNIT_ASSERT(table1state.IsError);
         UNIT_ASSERT_VALUES_EQUAL(table1state.LastResult, "ERROR: ExecError\n");
-    }    
+    }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)
 

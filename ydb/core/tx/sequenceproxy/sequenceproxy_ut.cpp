@@ -97,10 +97,10 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
             ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+            auto notifyReq = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
             notifyReq->Record.SetTxId(msg->Record.GetTxId());
             runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
-            runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
+            runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
         }
 
         void DropSequence(TTestActorRuntime& runtime, const TString& workingDir, const TString& name) {
@@ -119,10 +119,10 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
             ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+            auto notifyReq = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
             notifyReq->Record.SetTxId(msg->Record.GetTxId());
             runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
-            runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
+            runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
         }
 
         void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
         ui64 allocateEvents = 0;
         auto observerFunc = [&](auto& ev) {
             switch (ev->GetTypeRewrite()) {
-                case TEvSequenceShard::TEvAllocateSequence::EventType:
+                case NEvSequenceShard::TEvAllocateSequence::EventType:
                     ++allocateEvents;
                     break;
 

@@ -79,7 +79,7 @@ void DoTestCase(const TReplTestSettings& settings) {
     for (auto& [nodeId, detainedEv] : detainedMsgs) {
         TActorId edge = env.Runtime->AllocateEdgeActor(nodeId);
 
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto request = MakeHolder<NConsole::NEvConsole::TEvConfigNotificationRequest>();
         auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
         perfConfig.SetPDiskType(PDiskTypeToPDiskType(env.Settings.DiskType));
         perfConfig.SetMinHugeBlobSizeInBytes(settings.MinHugeBlobSizeInRepl);
@@ -87,30 +87,30 @@ void DoTestCase(const TReplTestSettings& settings) {
         vdiskTypes->Add(std::move(perfConfig));
 
         env.Runtime->Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(nodeId), edge, request.Release()), nodeId);
-        Y_ABORT_UNLESS(env.Runtime->WaitForEdgeActorEvent({edge})->CastAsLocal<NConsole::TEvConsole::TEvConfigNotificationResponse>());
+        Y_ABORT_UNLESS(env.Runtime->WaitForEdgeActorEvent({edge})->CastAsLocal<NConsole::NEvConsole::TEvConfigNotificationResponse>());
 
         env.Runtime->Send(detainedEv.release(), nodeId);
     }
 
-    // waiting for replication to complete 
+    // waiting for replication to complete
     env.WaitForSync(env.GetGroupInfo(groupId), id);
-        
+
     UNIT_ASSERT_EQUAL(checkBlob(),  NKikimrProto::OK);
 }
 
 Y_UNIT_TEST_SUITE(MinHugeChangeOnReplication) {
 
     Y_UNIT_TEST(MinHugeDecreased) {
-        DoTestCase(TReplTestSettings{ 
-            .BlobSize = 200u << 10, 
+        DoTestCase(TReplTestSettings{
+            .BlobSize = 200u << 10,
             .MinHugeBlobSize = 64u << 10,
             .MinHugeBlobSizeInRepl = 512u << 10,
         });
     }
 
     Y_UNIT_TEST(MinHugeIncreased) {
-        DoTestCase(TReplTestSettings{ 
-            .BlobSize = 200u << 10, 
+        DoTestCase(TReplTestSettings{
+            .BlobSize = 200u << 10,
             .MinHugeBlobSize = 512u << 10,
             .MinHugeBlobSizeInRepl = 10u << 10,
         });

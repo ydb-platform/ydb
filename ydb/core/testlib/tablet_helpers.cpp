@@ -1145,16 +1145,16 @@ namespace NKikimr {
         void StateWork(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-                HFunc(TEvHive::TEvConfigureHive, Handle);
-                HFunc(TEvHive::TEvCreateTablet, Handle);
-                HFunc(TEvHive::TEvAdoptTablet, Handle);
-                HFunc(TEvHive::TEvDeleteTablet, Handle);
-                HFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
-                HFunc(TEvHive::TEvRequestHiveInfo, Handle);
-                HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
-                HFunc(TEvHive::TEvUpdateTabletsObject, Handle);
+                HFunc(NEvHive::TEvConfigureHive, Handle);
+                HFunc(NEvHive::TEvCreateTablet, Handle);
+                HFunc(NEvHive::TEvAdoptTablet, Handle);
+                HFunc(NEvHive::TEvDeleteTablet, Handle);
+                HFunc(NEvHive::TEvDeleteOwnerTablets, Handle);
+                HFunc(NEvHive::TEvRequestHiveInfo, Handle);
+                HFunc(NEvHive::TEvInitiateTabletExternalBoot, Handle);
+                HFunc(NEvHive::TEvUpdateTabletsObject, Handle);
                 HFunc(TEvFakeHive::TEvSubscribeToTabletDeletion, Handle);
-                HFunc(TEvHive::TEvUpdateDomain, Handle);
+                HFunc(NEvHive::TEvUpdateDomain, Handle);
                 HFunc(TEvFakeHive::TEvRequestDomainInfo, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             }
@@ -1166,17 +1166,17 @@ namespace NKikimr {
             }
         }
 
-        void Handle(TEvHive::TEvConfigureHive::TPtr& ev, const TActorContext& ctx) {
+        void Handle(NEvHive::TEvConfigureHive::TPtr& ev, const TActorContext& ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvConfigureHive, msg: " << ev->Get()->Record.ShortDebugString());
 
             const auto& subdomainKey(ev->Get()->Record.GetDomain());
             PrimarySubDomainKey = TSubDomainKey(subdomainKey);
 
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvConfigureHive, subdomain set to " << subdomainKey);
-            ctx.Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
+            ctx.Send(ev->Sender, new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
         }
 
-        void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
+        void Handle(NEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvCreateTablet, msg: " << ev->Get()->Record.ShortDebugString());
             Cout << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
@@ -1257,7 +1257,7 @@ namespace NKikimr {
                 it->second.ChannelsProfile = ev->Get()->Record.GetChannelsProfile();
             }
 
-            ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first,
+            ctx.Send(ev->Sender, new NEvHive::TEvCreateTabletReply(status, key.first,
                 key.second, it->second.TabletId, TabletID()), 0, ev->Cookie);
         }
 
@@ -1315,7 +1315,7 @@ namespace NKikimr {
             return;
         }
 
-        void Handle(TEvHive::TEvAdoptTablet::TPtr& ev, const TActorContext& ctx) {
+        void Handle(NEvHive::TEvAdoptTablet::TPtr& ev, const TActorContext& ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvAdoptTablet, msg: " << ev->Get()->Record.ShortDebugString());
             const std::pair<ui64, ui64> prevKey(ev->Get()->Record.GetPrevOwner(), ev->Get()->Record.GetPrevOwnerIdx());
             const std::pair<ui64, ui64> newKey(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
@@ -1327,7 +1327,7 @@ namespace NKikimr {
 
             TraceAdoptingCases(prevKey, newKey, type, tabletID, explain, status);
 
-            ctx.Send(ev->Sender, new TEvHive::TEvAdoptTabletReply(status, tabletID, newKey.first,
+            ctx.Send(ev->Sender, new NEvHive::TEvAdoptTabletReply(status, tabletID, newKey.first,
                 newKey.second, explain, TabletID()), 0, ev->Cookie);
         }
 
@@ -1351,7 +1351,7 @@ namespace NKikimr {
             State->Tablets.erase(it);
         }
 
-        void Handle(TEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvDeleteTablet, msg: " << ev->Get()->Record.ShortDebugString());
             NKikimrHive::TEvDeleteTablet& rec = ev->Get()->Record;
             Cout << "FAKEHIVE " << TabletID() << " TEvDeleteTablet " << rec.ShortDebugString() << Endl;
@@ -1361,10 +1361,10 @@ namespace NKikimr {
                 deletedIdx.push_back(rec.GetShardLocalIdx(i));
                 DeleteTablet(id, ctx);
             }
-            ctx.Send(ev->Sender, new TEvHive::TEvDeleteTabletReply(NKikimrProto::OK, TabletID(), rec.GetTxId_Deprecated(), rec.GetShardOwnerId(), deletedIdx));
+            ctx.Send(ev->Sender, new NEvHive::TEvDeleteTabletReply(NKikimrProto::OK, TabletID(), rec.GetTxId_Deprecated(), rec.GetShardOwnerId(), deletedIdx));
         }
 
-        void Handle(TEvHive::TEvDeleteOwnerTablets::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NEvHive::TEvDeleteOwnerTablets::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvDeleteOwnerTablets, msg: " << ev->Get()->Record);
             NKikimrHive::TEvDeleteOwnerTablets& rec = ev->Get()->Record;
             Cout << "FAKEHIVE " << TabletID() << " TEvDeleteOwnerTablets " << rec.ShortDebugString() << Endl;
@@ -1372,7 +1372,7 @@ namespace NKikimr {
             TVector<ui64> toDelete;
 
             if (ownerId == 0) {
-                ctx.Send(ev->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::ERROR, TabletID(), ownerId, rec.GetTxId()));
+                ctx.Send(ev->Sender, new NEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::ERROR, TabletID(), ownerId, rec.GetTxId()));
                 return;
             }
 
@@ -1387,7 +1387,7 @@ namespace NKikimr {
             }
 
             if (toDelete.empty()) {
-                ctx.Send(ev->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::ALREADY, TabletID(), ownerId, rec.GetTxId()));
+                ctx.Send(ev->Sender, new NEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::ALREADY, TabletID(), ownerId, rec.GetTxId()));
                 return;
             }
 
@@ -1396,13 +1396,13 @@ namespace NKikimr {
                 DeleteTablet(id, ctx);
             }
 
-            ctx.Send(ev->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::OK, TabletID(), ownerId, rec.GetTxId()));
+            ctx.Send(ev->Sender, new NEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::OK, TabletID(), ownerId, rec.GetTxId()));
         }
 
-        void Handle(TEvHive::TEvRequestHiveInfo::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NEvHive::TEvRequestHiveInfo::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvRequestHiveInfo, msg: " << ev->Get()->Record.ShortDebugString());
             const auto& record = ev->Get()->Record;
-            TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
+            TAutoPtr<NEvHive::TEvResponseHiveInfo> response = new NEvHive::TEvResponseHiveInfo();
 
             if (record.HasTabletID()) {
                 auto it = State->TabletIdToOwner.find(record.GetTabletID());
@@ -1419,12 +1419,12 @@ namespace NKikimr {
             ctx.Send(ev->Sender, response.Release());
         }
 
-        void Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NEvHive::TEvInitiateTabletExternalBoot::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvInitiateTabletExternalBoot, msg: " << ev->Get()->Record.ShortDebugString());
 
             ui64 tabletId = ev->Get()->Record.GetTabletID();
             if (!State->TabletIdToOwner.contains(tabletId)) {
-                ctx.Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
+                ctx.Send(ev->Sender, new NEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
                 return;
             }
 
@@ -1436,21 +1436,21 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new TEvLocal::TEvBootTablet(*tabletInfo.Get(), 0), 0, ev->Cookie);
         }
 
-        void Handle(TEvHive::TEvUpdateTabletsObject::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NEvHive::TEvUpdateTabletsObject::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvUpdateTabletsObject, msg: " << ev->Get()->Record.ShortDebugString());
 
             // Fake Hive does not care about objects, do nothing
 
 
-            auto response = std::make_unique<TEvHive::TEvUpdateTabletsObjectReply>(NKikimrProto::OK);
+            auto response = std::make_unique<NEvHive::TEvUpdateTabletsObjectReply>(NKikimrProto::OK);
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetTxPartId(ev->Get()->Record.GetTxPartId());
             ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
         }
 
-        void Handle(TEvHive::TEvUpdateDomain::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NEvHive::TEvUpdateDomain::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvUpdateDomain, msg: " << ev->Get()->Record.ShortDebugString());
-            
+
             const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
             NHive::TDomainInfo& domainInfo = State->Domains[subdomainKey];
             if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {
@@ -1458,8 +1458,8 @@ namespace NKikimr {
             } else {
                 domainInfo.ServerlessComputeResourcesMode.Clear();
             }
-            
-            auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
+
+            auto response = std::make_unique<NEvHive::TEvUpdateDomainReply>();
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetOrigin(TabletID());
             ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
@@ -1484,7 +1484,7 @@ namespace NKikimr {
         }
 
         void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx) {
-            TAutoPtr<TEvHive::TEvResponseHiveInfo> response = new TEvHive::TEvResponseHiveInfo();
+            TAutoPtr<NEvHive::TEvResponseHiveInfo> response = new NEvHive::TEvResponseHiveInfo();
             FillTabletInfo(response->Record, tabletId, nullptr);
             ctx.Send(waiter, response.Release());
         }

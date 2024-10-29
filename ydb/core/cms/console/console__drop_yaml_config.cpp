@@ -11,7 +11,7 @@ using namespace NKikimrConsole;
 class TConfigsManager::TTxDropYamlConfig : public TTransactionBase<TConfigsManager> {
 public:
     TTxDropYamlConfig(TConfigsManager *self,
-                       TEvConsole::TEvDropConfigRequest::TPtr &ev)
+                       NEvConsole::TEvDropConfigRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
     {
@@ -41,7 +41,7 @@ public:
         } catch (const yexception& ex) {
             Error = true;
 
-            auto ev = MakeHolder<TEvConsole::TEvGenericError>();
+            auto ev = MakeHolder<NEvConsole::TEvGenericError>();
             ev->Record.SetYdbStatus(Ydb::StatusIds::BAD_REQUEST);
             auto *issue = ev->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
@@ -56,7 +56,7 @@ public:
             db.Table<Schema::YamlConfig>().Key(Version).Delete();
         }
 
-        Response = MakeHolder<NActors::IEventHandle>(Request->Sender, ctx.SelfID, new TEvConsole::TEvDropConfigResponse());
+        Response = MakeHolder<NActors::IEventHandle>(Request->Sender, ctx.SelfID, new NEvConsole::TEvDropConfigResponse());
 
         return true;
     }
@@ -82,14 +82,14 @@ public:
     }
 
 private:
-    TEvConsole::TEvDropConfigRequest::TPtr Request;
+    NEvConsole::TEvDropConfigRequest::TPtr Request;
     THolder<NActors::IEventHandle> Response;
     bool Error = false;
     bool Modify = false;
     ui32 Version;
 };
 
-ITransaction *TConfigsManager::CreateTxDropYamlConfig(TEvConsole::TEvDropConfigRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxDropYamlConfig(NEvConsole::TEvDropConfigRequest::TPtr &ev)
 {
     return new TTxDropYamlConfig(this, ev);
 }

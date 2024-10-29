@@ -229,7 +229,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 
     ui64 Id;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
-    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
+    NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id)
@@ -244,7 +244,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
+    explicit TTxProgress(TSelf* self, NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , ModifyResult(ev)
     {
@@ -381,7 +381,7 @@ private:
     }
 
     void SubscribeTx(TTxId txId) {
-        Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
+        Send(Self->SelfId(), new NEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
     }
 
     void SubscribeTx(TExportInfo::TPtr exportInfo) {
@@ -1012,7 +1012,7 @@ ITransaction* TSchemeShard::CreateTxProgressExport(TEvTxAllocatorClient::TEvAllo
     return new TExport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxProgressExport(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
     return new TExport::TTxProgress(this, ev);
 }
 

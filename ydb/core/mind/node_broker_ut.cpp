@@ -174,7 +174,7 @@ void SetupServices(TTestActorRuntime &runtime,
     dnConfig->MaxDynamicNodeId = 1024 + (maxDynNodes - 1);
     runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
     runtime.GetAppData().FeatureFlags.SetEnableStableNodeNames(true);
-     
+
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvLocalRecoveryDone,
@@ -249,7 +249,7 @@ void Setup(TTestActorRuntime& runtime,
         const auto databaseName = splittedPath.back();
         splittedPath.pop_back();
         do {
-            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto modifyScheme = MakeHolder<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransaction>();
             modifyScheme->Record.SetTxId(++txId);
             auto* transaction = modifyScheme->Record.AddTransaction();
             transaction->SetWorkingDir(CanonizePath(splittedPath));
@@ -258,7 +258,7 @@ void Setup(TTestActorRuntime& runtime,
             subdomain->SetName(databaseName);
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 break;
@@ -1283,7 +1283,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Register node NODE1.
         CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
-        
+
         // Update config and restart NodeBroker
         auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
         dnConfig->MinDynamicNodeId += 2;
@@ -1311,17 +1311,17 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 
         // There should be no dynamic nodes initially.
         auto epoch = GetEpoch(runtime, sender);
-    
+
         // Register node NODE1.
         CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
-        
+
         // Update config and restart NodeBroker
         auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
         dnConfig->MinDynamicNodeId += 2;
         dnConfig->MaxDynamicNodeId += 2;
         RestartNodeBroker(runtime);
-    
+
         // Wait until epoch expiration.
         WaitForEpochUpdate(runtime, sender);
         epoch = GetEpoch(runtime, sender);
@@ -1356,7 +1356,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Create shared subdomain
         TSubDomainKey sharedSubdomainKey;
         do {
-            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto modifyScheme = MakeHolder<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransaction>();
             modifyScheme->Record.SetTxId(++txId);
             auto* transaction = modifyScheme->Record.AddTransaction();
             transaction->SetWorkingDir(DOMAIN_NAME);
@@ -1365,7 +1365,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
             subdomain->SetName("SharedDB");
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 sharedSubdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
                 UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
@@ -1383,7 +1383,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Create serverless subdomain that associated with shared
         TSubDomainKey serverlessSubdomainKey;
         do {
-            auto modifyScheme = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
+            auto modifyScheme = MakeHolder<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransaction>();
             modifyScheme->Record.SetTxId(++txId);
             auto* transaction = modifyScheme->Record.AddTransaction();
             transaction->SetWorkingDir(DOMAIN_NAME);
@@ -1393,14 +1393,14 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
             subdomain->MutableResourcesDomainKey()->CopyFrom(sharedSubdomainKey);
             runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, modifyScheme.Release());
             TAutoPtr<IEventHandle> handle;
-            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
+            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult>(handle, TDuration::MilliSeconds(100));
             if (reply) {
                 serverlessSubdomainKey = TSubDomainKey(reply->Record.GetSchemeshardId(), reply->Record.GetPathId());
                 UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 break;
             }
         } while (true);
-        
+
         // Check that dynamic node in serverless subdomain has shared scope id
         CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net",
                           "1.2.3.5", 1, 2, 3, 5, TStatus::OK, NODE2,
@@ -1442,7 +1442,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host4", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE4, epoch.GetNextEnd(), "slot-3");
 
-        // After this epoch update NODE2 is removed and name is free 
+        // After this epoch update NODE2 is removed and name is free
         epoch = WaitForEpochUpdate(runtime, sender);
 
         // Register node using new host, it reuses name
@@ -1718,7 +1718,7 @@ Y_UNIT_TEST_SUITE(TSlotIndexesPoolTest) {
     Y_UNIT_TEST(Basic)
     {
         TSlotIndexesPool pool;
-        
+
         pool.Acquire(10);
         UNIT_ASSERT(pool.IsAcquired(10));
 

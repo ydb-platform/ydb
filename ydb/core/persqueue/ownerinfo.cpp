@@ -16,7 +16,7 @@ namespace NPQ {
         NeedResetOwner = false;
         PipeClient = pipeClient;
         if (Sender) {
-            THolder<TEvPersQueue::TEvResponse> response = MakeHolder<TEvPersQueue::TEvResponse>();
+            THolder<NEvPersQueue::TEvResponse> response = MakeHolder<NEvPersQueue::TEvResponse>();
             response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             response->Record.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
             response->Record.SetErrorReason(TStringBuilder() << "ownership session is killed by another session with id " << OwnerCookie

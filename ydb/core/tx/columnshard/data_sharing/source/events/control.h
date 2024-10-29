@@ -9,7 +9,7 @@ class TSourceSession;
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-struct TEvStartToSource: public NActors::TEventPB<TEvStartToSource, NKikimrColumnShardDataSharingProto::TEvStartToSource, TEvColumnShard::EvDataSharingStartToSource> {
+struct TEvStartToSource: public NActors::TEventPB<TEvStartToSource, NKikimrColumnShardDataSharingProto::TEvStartToSource, NEvColumnShard::EvDataSharingStartToSource> {
     TEvStartToSource() = default;
 
     TEvStartToSource(const TSourceSession& session);

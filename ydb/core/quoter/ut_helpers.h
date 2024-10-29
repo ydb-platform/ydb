@@ -147,9 +147,9 @@ public:
             void HandlePoisonPill();
             void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
 
-            void HandleSubscribeOnResources(NKesus::TEvKesus::TEvSubscribeOnResources::TPtr& ev);
-            void HandleUpdateConsumptionState(NKesus::TEvKesus::TEvUpdateConsumptionState::TPtr& ev);
-            void HandleResourcesAllocatedAck(NKesus::TEvKesus::TEvResourcesAllocatedAck::TPtr& ev);
+            void HandleSubscribeOnResources(NKesus::NEvKesus::TEvSubscribeOnResources::TPtr& ev);
+            void HandleUpdateConsumptionState(NKesus::NEvKesus::TEvUpdateConsumptionState::TPtr& ev);
+            void HandleResourcesAllocatedAck(NKesus::NEvKesus::TEvResourcesAllocatedAck::TPtr& ev);
 
             STFUNC(StateFunc);
 

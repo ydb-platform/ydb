@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
                     }
                     break;
                 }
-                case TEvHive::TEvReassignTablet::EventType: {
+                case NEvHive::TEvReassignTablet::EventType: {
                     if (captureReassign) {
                         Cerr << "--- Captured TEvReassignTablet event" << Endl;
                         capturedReassign.emplace_back(ev.Release());
@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
 
         // We expect tablet to ask for channel 0 reassignment
         {
-            auto* msg = capturedReassign[0]->Get<TEvHive::TEvReassignTablet>();
+            auto* msg = capturedReassign[0]->Get<NEvHive::TEvReassignTablet>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletID(), shards[0]);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetChannels().size(), 1u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetChannels()[0], 0u);
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
 
         // We expect tablet to ask for reassignment of all matching channels
         {
-            auto* msg = capturedReassign[0]->Get<TEvHive::TEvReassignTablet>();
+            auto* msg = capturedReassign[0]->Get<NEvHive::TEvReassignTablet>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetTabletID(), shards[0]);
             UNIT_ASSERT_C(msg->Record.GetChannels().size() > 1,
                 "Unexpected number of channels: " << msg->Record.GetChannels().size());

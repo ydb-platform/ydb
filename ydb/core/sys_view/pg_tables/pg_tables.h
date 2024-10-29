@@ -36,7 +36,7 @@ public:
 
     static constexpr auto ActorActivityType();
     void ProceedToScan();
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
     void StateWork(TAutoPtr<IEventHandle>& ev);
 protected:
     TString ConvertError_;

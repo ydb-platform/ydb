@@ -9,7 +9,7 @@
 #include <util/stream/str.h>
 
 namespace NKikimr {
-    struct TEvHive {
+    namespace NEvHive {
         enum EEv {
             // requests
             EvBootTablet = EventSpaceBegin(TKikimrEvents::ES_HIVE),
@@ -888,7 +888,7 @@ namespace NKikimr {
                 Record.MutableDomainKey()->CopyFrom(domainKey);
             }
         };
-        
+
         struct TEvResponseScaleRecommendation : TEventPB<TEvResponseScaleRecommendation,
             NKikimrHive::TEvResponseScaleRecommendation, EvResponseScaleRecommendation> {};
     };

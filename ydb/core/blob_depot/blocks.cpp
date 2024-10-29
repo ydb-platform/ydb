@@ -28,7 +28,7 @@ namespace NKikimr::NBlobDepot {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& block = Self->BlocksManager->Blocks[TabletId];
             if (BlockedGeneration <= block.BlockedGeneration) {
-                Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::ALREADY);
+                Response->Get<NEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::ALREADY);
             } else {
                 // update block value in memory
                 auto& block = Self->BlocksManager->Blocks[TabletId];
@@ -48,7 +48,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
+            if (Response->Get<NEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
             } else {
                 Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, IssuerGuid, std::move(Response));
@@ -98,7 +98,7 @@ namespace NKikimr::NBlobDepot {
             if (block.BlockedGeneration == BlockedGeneration && block.IssuerGuid == IssuerGuid) {
                 return false;
             } else {
-                auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+                auto& r = Response->Get<NEvBlobDepot::TEvBlockResult>()->Record;
                 r.SetStatus(NKikimrProto::ALREADY);
                 Finish();
                 return true;
@@ -139,14 +139,14 @@ namespace NKikimr::NBlobDepot {
 
                     // issue message to the connected node, if it is
                     if (const auto& connection = agent.Connection) {
-                        auto ev = std::make_unique<TEvBlobDepot::TEvPushNotify>();
+                        auto ev = std::make_unique<NEvBlobDepot::TEvPushNotify>();
                         auto *item = ev->Record.AddBlockedTablets();
                         item->SetTabletId(TabletId);
                         item->SetBlockedGeneration(BlockedGeneration);
                         item->SetIssuerGuid(IssuerGuid);
 
                         const ui64 id = ++agent.LastRequestId;
-                        agent.PushCallbacks.emplace(id, [selfId = SelfId()](TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+                        agent.PushCallbacks.emplace(id, [selfId = SelfId()](NEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
                             TActivationContext::Send(ev->Forward(selfId));
                         });
                         TActivationContext::Send(new IEventHandle(connection->AgentId, connection->PipeServerId, ev.release(), 0, id));
@@ -172,7 +172,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+        void Handle(NEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
             const ui32 agentId = ev->Sender.NodeId();
             if (NodesWaitingForPushResult.erase(agentId)) {
                 // mark lease as successfully revoked one
@@ -223,7 +223,7 @@ namespace NKikimr::NBlobDepot {
                     break;
 
                 case NKikimrProto::ALREADY: {
-                    auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+                    auto& r = Response->Get<NEvBlobDepot::TEvBlockResult>()->Record;
                     r.SetStatus(NKikimrProto::ALREADY);
                     Finish();
                     break;
@@ -232,7 +232,7 @@ namespace NKikimr::NBlobDepot {
                 case NKikimrProto::ERROR:
                 default:
                     if (!--RetryCount) {
-                        auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+                        auto& r = Response->Get<NEvBlobDepot::TEvBlockResult>()->Record;
                         r.SetStatus(NKikimrProto::ERROR);
                         r.SetErrorReason(ev->Get()->ErrorReason);
                         Finish();
@@ -254,7 +254,7 @@ namespace NKikimr::NBlobDepot {
             }
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBlobStorage::TEvBlockResult, Handle);
-                hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
+                hFunc(NEvBlobDepot::TEvPushNotifyResult, Handle);
                 fFunc(TEvPrivate::EvCheckWaitingNode, HandleCheckWaitingNode);
                 cFunc(TEvents::TSystem::Wakeup, IssueBlocksToStorage);
                 cFunc(TEvents::TSystem::Poison, PassAway);
@@ -288,9 +288,9 @@ namespace NKikimr::NBlobDepot {
             std::move(response)));
     }
 
-    void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
+    void TBlobDepot::TBlocksManager::Handle(NEvBlobDepot::TEvBlock::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev, NKikimrProto::OK,
+        auto [response, responseRecord] = NEvBlobDepot::MakeResponseFor(*ev, NKikimrProto::OK,
             std::nullopt, BlockLeaseTime.MilliSeconds());
 
         if (!record.HasTabletId() || !record.HasBlockedGeneration()) {
@@ -313,14 +313,14 @@ namespace NKikimr::NBlobDepot {
         TActivationContext::Send(response.release()); // not sent if the request got processed and response now is nullptr
     }
 
-    void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
+    void TBlobDepot::TBlocksManager::Handle(NEvBlobDepot::TEvQueryBlocks::TPtr ev) {
         TAgent& agent = Self->GetAgent(ev->Recipient);
         const ui32 agentId = agent.Connection->NodeId;
 
         const TMonotonic now = TActivationContext::Monotonic();
 
         const auto& record = ev->Get()->Record;
-        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev);
+        auto [response, responseRecord] = NEvBlobDepot::MakeResponseFor(*ev);
         responseRecord->SetTimeToLiveMs(BlockLeaseTime.MilliSeconds());
 
         for (const ui64 tabletId : record.GetTabletIds()) {

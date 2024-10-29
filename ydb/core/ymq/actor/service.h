@@ -45,7 +45,7 @@ private:
     void InitSchemeCache();
 
     void HandleWakeup(TEvWakeup::TPtr& ev);
-    void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
+    void HandleDescribeSchemeResult(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
     void HandlePipeClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandlePipeClientDisconnected(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);

@@ -206,14 +206,14 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
@@ -368,14 +368,14 @@ protected:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
-            HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
-            HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
-            HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
-            HFunc(TEvColumnShard::TEvScan, Handle);
-            HFunc(TEvColumnShard::TEvInternalScan, Handle);
+            HFunc(NEvColumnShard::TEvProposeTransaction, Handle);
+            HFunc(NEvColumnShard::TEvCheckPlannedTransaction, Handle);
+            HFunc(NEvColumnShard::TEvCancelTransactionProposal, Handle);
+            HFunc(NEvColumnShard::TEvNotifyTxCompletion, Handle);
+            HFunc(NEvColumnShard::TEvScan, Handle);
+            HFunc(NEvColumnShard::TEvInternalScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
-            HFunc(TEvColumnShard::TEvWrite, Handle);
+            HFunc(NEvColumnShard::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
             HFunc(TEvPrivate::TEvStartCompaction, Handle);
             HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
@@ -488,7 +488,7 @@ private:
     THashMap<TInsertWriteId, TLongTxWriteInfo> LongTxWrites;
     using TPartsForLTXShard = THashMap<ui32, TLongTxWriteInfo*>;
     THashMap<TULID, TPartsForLTXShard> LongTxWritesByUniqueId;
-    TMultiMap<NOlap::TSnapshot, TEvColumnShard::TEvScan::TPtr> WaitingScans;
+    TMultiMap<NOlap::TSnapshot, NEvColumnShard::TEvScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
@@ -554,8 +554,8 @@ private:
     ui64 MemoryUsage() const;
 
     void SendPeriodicStats();
-    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<NEvDataShard::TEvPeriodicTableStats>& ev);
+    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<NEvDataShard::TEvPeriodicTableStats>& ev);
 
 public:
     ui64 TabletTxCounter = 0;

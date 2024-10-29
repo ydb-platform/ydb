@@ -20,8 +20,8 @@ public:
     void AppendWriteReply(ui64 cookie);
 
 private:
-    using TEvRequestPtr = std::unique_ptr<TEvPersQueue::TEvRequest>;
-    using TEvResponsePtr = std::unique_ptr<TEvPersQueue::TEvResponse>;
+    using TEvRequestPtr = std::unique_ptr<NEvPersQueue::TEvRequest>;
+    using TEvResponsePtr = std::unique_ptr<NEvPersQueue::TEvResponse>;
 
     struct TReply {
         TEvResponsePtr Response;
@@ -44,7 +44,7 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
 
     TMaybe<ui64> GetPartitionRequestCookie() const;
 

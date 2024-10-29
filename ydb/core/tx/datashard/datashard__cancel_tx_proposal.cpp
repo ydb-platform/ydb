@@ -67,9 +67,9 @@ void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx
     Self->CheckSplitCanStart(ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::Handle(NEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {
     ui64 txId = ev->Get()->Record.GetTxId();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvDataShard::TEvCancelTransactionProposal " << TabletID()
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got NEvDataShard::TEvCancelTransactionProposal " << TabletID()
                 << " txId " <<  txId);
 
     // Mark any queued proposals as cancelled

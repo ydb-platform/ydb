@@ -443,7 +443,7 @@ STATEFN(TSqsService::StateFunc) {
 
         // Details
         hFunc(TEvWakeup, HandleWakeup);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
+        hFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
         hFunc(TSqsEvents::TEvReloadStateRequest, HandleReloadStateRequest);
         hFunc(TSqsEvents::TEvNodeTrackerSubscriptionStatus, HandleNodeTrackingSubscriptionStatus);
@@ -744,7 +744,7 @@ void TSqsService::ProcessConfigurationRequestForQueue(TSqsEvents::TEvGetConfigur
     }
 }
 
-void TSqsService::HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+void TSqsService::HandleDescribeSchemeResult(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
     RequestingUsersList_ = false;
     LastRequestUsersListTime_ = TActivationContext::Now();
     const auto& record = ev->Get()->GetRecord();

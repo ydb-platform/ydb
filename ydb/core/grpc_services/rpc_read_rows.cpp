@@ -468,7 +468,7 @@ public:
     }
 
     void SendRead(ui64 shardId, const std::vector<TOwnedCellVec>& keys) {
-        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto request = std::make_unique<NEvDataShard::TEvRead>();
         auto& record = request->Record;
 
         // the ReadId field is used as a cookie to distinguish responses from different datashards
@@ -491,7 +491,7 @@ public:
         ++ReadsInFlight;
     }
 
-    void Handle(const TEvDataShard::TEvReadResult::TPtr& ev) {
+    void Handle(const NEvDataShard::TEvReadResult::TPtr& ev) {
         const auto* msg = ev->Get();
 
         --ReadsInFlight;
@@ -570,7 +570,7 @@ public:
             }
             case NScheme::NTypeIds::Decimal: {
                 return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
-                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetPrecision(),
                         typeInfo.GetDecimalType().GetScale()))
                     .Build();
             }
@@ -615,12 +615,12 @@ public:
                     }
                     case NScheme::NTypeIds::Decimal: {
                         using namespace NYql::NDecimal;
-    
+
                         const auto loHi = cell.AsValue<std::pair<ui64, i64>>();
                         Ydb::Value valueProto;
                         valueProto.set_low_128(loHi.first);
                         valueProto.set_high_128(loHi.second);
-                        const NYdb::TDecimalValue decimal(valueProto, 
+                        const NYdb::TDecimalValue decimal(valueProto,
                             {static_cast<ui8>(colMeta.Type.GetDecimalType().GetPrecision()), static_cast<ui8>(colMeta.Type.GetDecimalType().GetScale())});
                         vb.Decimal(decimal);
                         break;
@@ -697,7 +697,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
-            hFunc(TEvDataShard::TEvReadResult, Handle);
+            hFunc(NEvDataShard::TEvReadResult, Handle);
 
             hFunc(TEvents::TEvWakeup, HandleTimeout);
         }
@@ -733,7 +733,7 @@ private:
     TVector<TColumnMeta> RequestedColumnsMeta;
 
     std::map<ui64, std::vector<TOwnedCellVec>> ShardIdToKeys;
-    std::vector<std::unique_ptr<TEvDataShard::TEvReadResult>> EvReadResults;
+    std::vector<std::unique_ptr<NEvDataShard::TEvReadResult>> EvReadResults;
     // TEvRead interface
     ui64 ReadsInFlight = 0;
     ui64 OwnerId = 0;

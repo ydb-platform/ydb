@@ -26,8 +26,8 @@ public:
     STFUNC(StateWork) {
         TRACE_EVENT(NKikimrServices::CONFIGS_CACHE);
         switch (ev->GetTypeRewrite()) {
-            hFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
+            hFuncTraced(NEvConsole::TEvConfigSubscriptionNotification, Handle);
+            HFuncTraced(NEvConsole::TEvConfigSubscriptionError, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             default:
                 Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
@@ -35,9 +35,9 @@ public:
         }
     }
 
-    void Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
+    void Handle(NEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
 
-    void Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx);
+    void Handle(NEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
 

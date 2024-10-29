@@ -23,12 +23,12 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
 
     void ReplyOk(bool released = true) {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvReleaseSemaphoreResult(Record.GetProxyGeneration(), released));
+            new NEvKesus::TEvReleaseSemaphoreResult(Record.GetProxyGeneration(), released));
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvReleaseSemaphoreResult(Record.GetProxyGeneration(), status, reason));
+            new NEvKesus::TEvReleaseSemaphoreResult(Record.GetProxyGeneration(), status, reason));
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -71,7 +71,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
             if (auto* waiter = session->WaitingSemaphores.FindPtr(semaphoreId)) {
                 session->ConsumeSemaphoreWaitCookie(semaphore, [&](ui64 cookie) {
                     Events.emplace_back(proxy->ActorID, cookie,
-                        new TEvKesus::TEvAcquireSemaphoreResult(
+                        new NEvKesus::TEvAcquireSemaphoreResult(
                             proxy->Generation,
                             Ydb::StatusIds::ABORTED,
                             "Operation superseded by another request"));
@@ -99,7 +99,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvReleaseSemaphore::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvReleaseSemaphore::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_SEMAPHORE_RELEASE].Increment(1);

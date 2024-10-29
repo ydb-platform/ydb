@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TDirectTxUpload::TDirectTxUpload(TEvDataShard::TEvUploadRowsRequest::TPtr& ev)
+TDirectTxUpload::TDirectTxUpload(NEvDataShard::TEvUploadRowsRequest::TPtr& ev)
     : TCommonUploadOps(ev, true, true)
 {
 }

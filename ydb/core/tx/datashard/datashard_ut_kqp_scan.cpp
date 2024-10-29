@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     break;
                 }
 
-                case TEvDataShard::EvKqpScan: {
+                case NEvDataShard::EvKqpScan: {
                     Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
                     Cerr.Flush();
                     break;
@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                  * Check that remote scan actually happened.
                  */
                 case NKqp::TKqpComputeEvents::EvScanData:
-                case TEvDataShard::EvRead: {
+                case NEvDataShard::EvRead: {
                     remoteScanDetected = remoteScanDetected || ev->Sender.NodeId() != ev->Recipient.NodeId();
                     break;
                 }
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     break;
                 }
 
-                case TEvDataShard::EvKqpScan: {
+                case NEvDataShard::EvKqpScan: {
                     Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
                     Cerr.Flush();
                     break;
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     break;
                 }
 
-                case TEvDataShard::EvKqpScan: {
+                case NEvDataShard::EvKqpScan: {
                     Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
                     Cerr.Flush();
                     break;
@@ -545,7 +545,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     break;
                 }
 
-                case TEvDataShard::EvKqpScan: {
+                case NEvDataShard::EvKqpScan: {
                     Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
                     Cerr.Flush();
                     break;
@@ -656,19 +656,19 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     break;
                 }
 
-                case TEvDataShard::EvKqpScan: {
+                case NEvDataShard::EvKqpScan: {
                     Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
 
                     if (!incomingRangesSize) {
-                        auto& request = ev->Get<TEvDataShard::TEvKqpScan>()->Record;
+                        auto& request = ev->Get<NEvDataShard::TEvKqpScan>()->Record;
                         incomingRangesSize = request.RangesSize();
                     }
 
                     break;
                 }
-                case TEvDataShard::EvRead: {
+                case NEvDataShard::EvRead: {
                     if (!incomingRangesSize) {
-                        auto& request = ev->Get<TEvDataShard::TEvRead>()->Record;
+                        auto& request = ev->Get<NEvDataShard::TEvRead>()->Record;
                         incomingRangesSize = request.RangesSize();
                     }
                     break;

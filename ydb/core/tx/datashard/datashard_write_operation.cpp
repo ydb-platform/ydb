@@ -211,7 +211,7 @@ ui32 TValidatedWriteTx::ExtractKeys(const NTable::TScheme& scheme, bool allowErr
     } else {
         Y_ABORT_UNLESS(isValid, "Validation errors: %s", ErrStr.data());
     }
-    
+
     return KeysCount();
 }
 
@@ -277,7 +277,7 @@ TWriteOperation* TWriteOperation::TryCastWriteOperation(TOperation::TPtr op)
 {
     if (!op->IsWriteTx())
         return nullptr;
-    
+
     TWriteOperation* writeOp = dynamic_cast<TWriteOperation*>(op.Get());
     Y_ABORT_UNLESS(writeOp);
     return writeOp;
@@ -536,7 +536,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 
     TVector<EExecutionUnitKind> plan;
 
-    if (IsImmediate()) 
+    if (IsImmediate())
     {
         Y_ABORT_UNLESS(!loaded);
         plan.push_back(EExecutionUnitKind::CheckWrite);
@@ -616,7 +616,7 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {
-            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(self.TabletID(), GetTxId());
+            auto notify = MakeHolder<NEvDataShard::TEvProposeTransactionRestart>(self.TabletID(), GetTxId());
             ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
         }
 

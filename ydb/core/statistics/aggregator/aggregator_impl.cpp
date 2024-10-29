@@ -55,14 +55,14 @@ void TStatisticsAggregator::DefaultSignalTabletActive(const TActorContext& ctx) 
 void TStatisticsAggregator::SubscribeForConfigChanges(const TActorContext& ctx) {
     ui32 configKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
     ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
+        new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
 }
 
-void TStatisticsAggregator::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+void TStatisticsAggregator::HandleConfig(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
     SA_LOG_I("[" << TabletID() << "] Subscribed for config changes");
 }
 
-void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+void TStatisticsAggregator::HandleConfig(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto& config = record.GetConfig();
     if (config.HasFeatureFlags()) {
@@ -75,7 +75,7 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
             InitializeStatisticsTable();
         }
     }
-    auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
+    auto response = std::make_unique<NConsole::NEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
@@ -487,7 +487,7 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvResolve::TPtr&) {
 void TStatisticsAggregator::Handle(TEvPrivate::TEvRequestDistribution::TPtr&) {
     ++HiveRequestRound;
 
-    auto reqDistribution = std::make_unique<TEvHive::TEvRequestTabletDistribution>();
+    auto reqDistribution = std::make_unique<NEvHive::TEvRequestTabletDistribution>();
     reqDistribution->Record.MutableTabletIds()->Add(TabletsForReqDistribution.begin(), TabletsForReqDistribution.end());
     Send(MakePipePerNodeCacheID(false),
         new TEvPipeCache::TEvForward(reqDistribution.release(), HiveId, true));
@@ -539,7 +539,7 @@ void TStatisticsAggregator::Resolve() {
     Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
                 || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
-        
+
     ++ResolveRound;
 
     TVector<TCell> plusInf;
@@ -622,7 +622,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
     if (ForceTraversals.empty()) {
         SA_LOG_T("[" << TabletID() << "] ScheduleNextAnalyze. Empty ForceTraversals");
         return;
-    }    
+    }
     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze");
 
     for (TForceTraversalOperation& operation : ForceTraversals) {
@@ -648,7 +648,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
                 }
             }
         }
-        
+
         SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
         continue;
     }
@@ -675,7 +675,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
                         break;
                     }
                 }
-                
+
                 if (!pathId) {
                     SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
                     continue;
@@ -696,17 +696,17 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
         auto* oldestTable = ScheduleTraversalsByTime.Top();
         if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
-            SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. " 
+            SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. "
                 << "The oldest table " << oldestTable->PathId << " update time " << oldestTable->LastUpdateTime << " is too fresh.");
             return;
         }
 
         pathId = oldestTable->PathId;
-    } 
-    
+    }
+
     if (!pathId) {
         SA_LOG_E("[" << TabletID() << "] No traversal from schemeshard.");
-        return;       
+        return;
     }
 
     TraversalPathId = pathId;
@@ -727,7 +727,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
     TraversalIsColumnTable = *isColumnTable;
 
-    SA_LOG_D("[" << TabletID() << "] Start " 
+    SA_LOG_D("[" << TabletID() << "] Start "
         << LastTraversalWasForceString()
         << " traversal navigate for path " << pathId);
 
@@ -765,13 +765,13 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
 
         UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalFinished, forceTraversalOperation->OperationId, *operationTable,  db);
 
-        bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(), 
+        bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(),
         [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
         if (!tablesRemained) {
             DeleteForceTraversalOperation(ForceTraversalOperationId, db);
         }
     }
-    
+
     ResetTraversalState(db);
 }
 
@@ -784,9 +784,9 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::CurrentF
 }
 
 TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTraversalOperation(const TString& operationId) {
-    auto forceTraversalOperation = std::find_if(ForceTraversals.begin(), ForceTraversals.end(), 
+    auto forceTraversalOperation = std::find_if(ForceTraversals.begin(), ForceTraversals.end(),
         [operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
-    
+
     if (forceTraversalOperation == ForceTraversals.end()) {
         return nullptr;
     } else {
@@ -804,12 +804,12 @@ std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) 
     } else {
         SA_LOG_E("[" << TabletID() << "] IsColumnTable. traversal path " << pathId << " is not known to schemeshard");
         return {};
-    }    
+    }
 }
 
 void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {
     db.Table<Schema::ForceTraversalOperations>().Key(ForceTraversalOperationId).Delete();
-    
+
     auto operation = ForceTraversalOperation(operationId);
     for(const TForceTraversalTable& table : operation->Tables) {
         db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
@@ -826,15 +826,15 @@ TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::ForceTravers
                 if (operationTable.PathId == pathId) {
                     return &operationTable;
                 }
-            } 
+            }
         }
     }
-    
+
     return nullptr;
 }
 
 TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::CurrentForceTraversalTable() {
-    return ForceTraversalTable(ForceTraversalOperationId, TraversalPathId); 
+    return ForceTraversalTable(ForceTraversalOperationId, TraversalPathId);
 }
 
 void TStatisticsAggregator::UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db) {
@@ -1012,7 +1012,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
             if (!ForceTraversals.empty()) {
                 auto extr = [](const auto& x) { return x.CreatedAt.ToStringUpToSeconds(); };
                 PrintContainerStart(ForceTraversals, 2, str, extr);
-            }            
+            }
 
             str << Endl;
             str << "NavigateType: " << GetNavigateTypeString() << Endl;

@@ -132,14 +132,14 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
                         << " committing to position " << client_req->offset() /*<< " prev " << CommittedOffset
                         << " end " << EndOffset << " by cookie " << readId*/);
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    TAutoPtr<NEvPersQueue::TEvRequest> req(new NEvPersQueue::TEvRequest);
     req->Record.Swap(&request);
 
     NTabletPipe::SendData(ctx, PipeClient, req.Release());
 }
 
 
-void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+void TCommitOffsetActor::Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         auto errorCode = ConvertOldCode(ev->Get()->Record.GetErrorCode());
         return AnswerError(ev->Get()->Record.GetErrorReason(), errorCode, ctx);

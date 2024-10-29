@@ -58,13 +58,13 @@ void InitJaegerTracingConfigurator(
     runtime.Register(CreateJaegerTracingConfigurator(std::move(configurator), initCfg));
 
     TDispatchOptions options;
-    options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
+    options.FinalEvents.emplace_back(NEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
     runtime.DispatchEvents(std::move(options));
 }
 
 void WaitForUpdate(TTenantTestRuntime& runtime) {
     TDispatchOptions options;
-    options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
+    options.FinalEvents.emplace_back(NEvConsole::EvConfigNotificationResponse, 1);
     runtime.DispatchEvents(std::move(options));
 }
 
@@ -74,7 +74,7 @@ void ConfigureAndWaitUpdate(TTenantTestRuntime& runtime, const NKikimrConfig::TT
                                      NKikimrConsole::TConfigItem::OVERWRITE, "");
     configItem.MutableConfig()->MutableTracingConfig()->CopyFrom(cfg);
 
-    auto* event = new TEvConsole::TEvConfigureRequest;
+    auto* event = new NEvConsole::TEvConfigureRequest;
     event->Record.AddActions()->CopyFrom(MakeAddAction(configItem));
 
     runtime.SendToConsole(event);
@@ -99,7 +99,7 @@ public:
 
     std::pair<ETraceState, ui8> HandleTracing(bool isExternal, TRequestDiscriminator discriminator) {
         auto& control = RandomChoice(Controls);
-        
+
         NWilson::TTraceId traceId;
         if (isExternal) {
             traceId = NWilson::TTraceId::NewTraceId(TComponentTracingLevels::ProductionVerbose, Max<ui32>());

@@ -8,7 +8,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     const ui64 Cookie;
     NKikimrKesus::TEvDeleteQuoterResource Record;
 
-    THolder<TEvKesus::TEvDeleteQuoterResourceResult> Reply;
+    THolder<NEvKesus::TEvDeleteQuoterResourceResult> Reply;
 
     TTxQuoterResourceDelete(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDeleteQuoterResource& record)
         : TTxBase(self)
@@ -23,7 +23,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     void ReplyOk() {
         NKikimrKesus::TEvDeleteQuoterResourceResult result;
         result.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
-        Reply = MakeHolder<TEvKesus::TEvDeleteQuoterResourceResult>(result);
+        Reply = MakeHolder<NEvKesus::TEvDeleteQuoterResourceResult>(result);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -35,7 +35,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
             Self->QuoterResources.FindId(Record.GetResourceId()) :
             Self->QuoterResources.FindPath(Record.GetResourcePath());
         if (!resource) {
-            Reply = MakeHolder<TEvKesus::TEvDeleteQuoterResourceResult>(
+            Reply = MakeHolder<NEvKesus::TEvDeleteQuoterResourceResult>(
                 Ydb::StatusIds::NOT_FOUND,
                 "Resource doesn't exist.");
             return true;
@@ -46,7 +46,7 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
 
         TString errorMessage;
         if (!Self->QuoterResources.DeleteResource(resource, errorMessage)) {
-            Reply = MakeHolder<TEvKesus::TEvDeleteQuoterResourceResult>(
+            Reply = MakeHolder<NEvKesus::TEvDeleteQuoterResourceResult>(
                 Ydb::StatusIds::BAD_REQUEST,
                 errorMessage);
             return true;
@@ -74,13 +74,13 @@ struct TKesusTablet::TTxQuoterResourceDelete : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDeleteQuoterResource::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDeleteQuoterResource::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     TabletCounters->Cumulative()[COUNTER_REQS_QUOTER_RESOURCE_DELETE].Increment(1);
 
     if (record.GetResourcePath().empty() && !record.GetResourceId()) {
         Send(ev->Sender,
-            new TEvKesus::TEvDeleteQuoterResourceResult(
+            new NEvKesus::TEvDeleteQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "You should specify resource path or resource id."),
             0, ev->Cookie);
@@ -89,7 +89,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDeleteQuoterResource::TPtr& ev) {
 
     if (!record.GetResourcePath().empty() && !TQuoterResources::IsResourcePathValid(record.GetResourcePath())) {
         Send(ev->Sender,
-            new TEvKesus::TEvDeleteQuoterResourceResult(
+            new NEvKesus::TEvDeleteQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,
                 "Invalid resource path."),
             0, ev->Cookie);

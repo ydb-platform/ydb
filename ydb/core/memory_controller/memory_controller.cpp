@@ -35,7 +35,7 @@ ui64 SafeDiff(ui64 a, ui64 b) {
 }
 
 TString HumanReadableBytes(std::optional<ui64> bytes) {
-    return bytes.has_value() ? TString(TStringBuilder() << HumanReadableBytes(bytes.value())) : "none"; 
+    return bytes.has_value() ? TString(TStringBuilder() << HumanReadableBytes(bytes.value())) : "none";
 }
 
 }
@@ -123,7 +123,7 @@ public:
         Become(&TThis::StateWork);
 
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+            new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
                     NKikimrConsole::TConfigItem::MemoryControllerConfigItem}));
 
         HandleWakeup(ctx);
@@ -134,7 +134,7 @@ public:
 private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+            HFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, HandleConfig);
             CFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
 
             HFunc(TEvConsumerRegister, Handle);
@@ -147,7 +147,7 @@ private:
         }
     }
 
-    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
+    void HandleConfig(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         Config.Swap(ev->Get()->Record.MutableConfig()->MutableMemoryControllerConfig());
         LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Config updated " << Config.ShortDebugString());
     }

@@ -630,8 +630,8 @@ private:
         auto proto = GetProtoRequest();
 
         // Send request to the first shard
-        std::unique_ptr<TEvDataShard::TEvReadColumnsRequest> ev =
-                std::make_unique<TEvDataShard::TEvReadColumnsRequest>();
+        std::unique_ptr<NEvDataShard::TEvReadColumnsRequest> ev =
+                std::make_unique<NEvDataShard::TEvReadColumnsRequest>();
         ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
         for (const TString& col : proto->columns()) {
             ev->Record.AddColumns(col);
@@ -667,7 +667,7 @@ private:
 
     STFUNC(StateWaitResults) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvDataShard::TEvReadColumnsResponse, Handle);
+            HFunc(NEvDataShard::TEvReadColumnsResponse, Handle);
             HFunc(TEvTablet::TEvLocalReadColumnsResponse, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
@@ -685,7 +685,7 @@ private:
         return DbgPrintTuple(lastKeyTuple, typeRegistry);
     }
 
-    void Handle(TEvDataShard::TEvReadColumnsResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    void Handle(NEvDataShard::TEvReadColumnsResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& shardResponse = ev->Get()->Record;
 
         // Notify the cache that we are done with the pipe

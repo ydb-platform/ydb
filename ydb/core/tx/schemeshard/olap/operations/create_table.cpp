@@ -230,10 +230,10 @@ public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages(DebugHint(), {NEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
@@ -310,7 +310,7 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             if (shard.TabletType == ETabletType::ColumnShard) {
-                auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                auto event = std::make_unique<NEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
@@ -350,11 +350,11 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType});
+            {NEvHive::TEvCreateTabletReply::EventType,
+             NEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -437,12 +437,12 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+            {NEvHive::TEvCreateTabletReply::EventType,
+             NEvColumnShard::TEvProposeTransactionResult::EventType,
+             NEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
@@ -455,7 +455,7 @@ public:
         return txState->ShardsInProgress.empty();
     }
 
-    bool HandleReply(TEvHive::TEvUpdateTabletsObjectReply::TPtr&, TOperationContext&) override {
+    bool HandleReply(NEvHive::TEvUpdateTabletsObjectReply::TPtr&, TOperationContext&) override {
         return false;
     }
 
@@ -476,7 +476,7 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
             switch (shard.TabletType) {
                 case ETabletType::ColumnShard: {
-                    auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                    auto event = std::make_unique<NEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
 
                     context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
                     txState->ShardsInProgress.insert(shard.Idx);
@@ -494,7 +494,7 @@ public:
         }
 
         if (txState->NeedUpdateObject) {
-            auto event = std::make_unique<TEvHive::TEvUpdateTabletsObject>();
+            auto event = std::make_unique<NEvHive::TEvUpdateTabletsObject>();
             for (const auto& shard : txState->Shards) {
                 TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
                 event->Record.AddTabletIds(tabletId.GetValue());
@@ -579,7 +579,7 @@ public:
                         << ", opId: " << OperationId
                         << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
+        NEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
         if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->ColumnTables.empty()) {

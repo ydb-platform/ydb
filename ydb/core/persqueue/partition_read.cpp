@@ -89,8 +89,8 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
     }
 }
 
-TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished) {
-    TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
+TAutoPtr<NEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished) {
+    TAutoPtr<NEvPersQueue::TEvHasDataInfoResponse> res(new NEvPersQueue::TEvHasDataInfoResponse());
 
     res->Record.SetEndOffset(EndOffset);
     res->Record.SetSizeLag(lagSize);
@@ -163,7 +163,7 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     }
 }
 
-void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
+void TPartition::Handle(NEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.HasSender());
 

@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             // Drop BorrowAcks events
             auto prevFilter = runtime.SetEventFilter(nullptr);
             auto borrowAckFilter = [prevFilter](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) -> bool {
-                if (event->Type == TEvDataShard::EvReturnBorrowedPartAck &&
+                if (event->Type == NEvDataShard::EvReturnBorrowedPartAck &&
                     event->Sender != event->Recipient)  // only allow the event from Self that are used for auto-Ack
                 {
                     // Cerr << "     DROPPED BORROW ACK\n";

@@ -9,7 +9,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
     const NKikimrKesus::TEvUpdateSemaphore Record;
 
     TVector<TDelayedEvent> Events;
-    THolder<TEvKesus::TEvUpdateSemaphoreResult> Reply;
+    THolder<NEvKesus::TEvUpdateSemaphoreResult> Reply;
 
     TTxSemaphoreUpdate(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvUpdateSemaphore& record)
         : TTxBase(self)
@@ -33,7 +33,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
             auto* proxy = Self->Proxies.FindPtr(Sender);
             if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
                 Events.emplace_back(Sender, Cookie,
-                    new TEvKesus::TEvUpdateSemaphoreResult(
+                    new NEvKesus::TEvUpdateSemaphoreResult(
                         Record.GetProxyGeneration(),
                         Ydb::StatusIds::BAD_SESSION,
                         proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
@@ -45,7 +45,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
             auto* session = Self->Sessions.FindPtr(Record.GetSessionId());
             if (!session || session->OwnerProxy != proxy) {
                 Events.emplace_back(Sender, Cookie,
-                    new TEvKesus::TEvUpdateSemaphoreResult(
+                    new NEvKesus::TEvUpdateSemaphoreResult(
                         Record.GetProxyGeneration(),
                         session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                         session ? "Session not attached" : "Session does not exist"));
@@ -58,7 +58,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
         auto* semaphore = Self->SemaphoresByName.Value(Record.GetName(), nullptr);
         if (!semaphore) {
             Events.emplace_back(Sender, Cookie,
-                new TEvKesus::TEvUpdateSemaphoreResult(
+                new NEvKesus::TEvUpdateSemaphoreResult(
                     Record.GetProxyGeneration(),
                     Ydb::StatusIds::NOT_FOUND,
                     "Semaphore does not exist"));
@@ -73,7 +73,7 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
             dataChanged = true;
         }
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvUpdateSemaphoreResult(Record.GetProxyGeneration()));
+            new NEvKesus::TEvUpdateSemaphoreResult(Record.GetProxyGeneration()));
         semaphore->NotifyWatchers(Events, dataChanged, false);
         return true;
     }
@@ -90,13 +90,13 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvUpdateSemaphore::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvUpdateSemaphore::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
 
     if (record.GetName().size() > MAX_SEMAPHORE_NAME) {
         Send(ev->Sender,
-            new TEvKesus::TEvUpdateSemaphoreResult(
+            new NEvKesus::TEvUpdateSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Semaphore name is too long"),
@@ -106,7 +106,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateSemaphore::TPtr& ev) {
 
     if (record.GetData().size() > MAX_SEMAPHORE_DATA) {
         Send(ev->Sender,
-            new TEvKesus::TEvUpdateSemaphoreResult(
+            new NEvKesus::TEvUpdateSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Semaphore data is too large"),

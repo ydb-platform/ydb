@@ -103,9 +103,9 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    TEvSchemeShard::TEvCancelTxResult::TPtr CancelResult;
+    NEvSchemeShard::TEvCancelTxResult::TPtr CancelResult;
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf *self, NEvSchemeShard::TEvCancelTxResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , CancelResult(ev)
     {
@@ -190,7 +190,7 @@ ITransaction* TSchemeShard::CreateTxCancelExport(TEvExport::TEvCancelExportReque
     return new TExport::TTxCancel(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxResult::TPtr& ev) {
+ITransaction* TSchemeShard::CreateTxCancelExportAck(NEvSchemeShard::TEvCancelTxResult::TPtr& ev) {
     return new TExport::TTxCancelAck(this, ev);
 }
 

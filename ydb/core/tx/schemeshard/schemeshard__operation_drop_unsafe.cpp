@@ -32,12 +32,12 @@ public:
         : OperationId(id)
     {
         TSet<ui32> toIgnore = AllIncomingEvents();
-        toIgnore.erase(TEvPrivate::TEvOperationPlan::EventType);
+        toIgnore.erase(NEvPrivate::TEvOperationPlan::EventType);
 
         IgnoreMessages(DebugHint(), toIgnore);
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 

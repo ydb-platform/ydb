@@ -25,8 +25,8 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKesus::TEvSubscribeOnResourcesResult, Handle);
-            hFunc(TEvKesus::TEvResourcesAllocated, Handle);
+            hFunc(NEvKesus::TEvSubscribeOnResourcesResult, Handle);
+            hFunc(NEvKesus::TEvResourcesAllocated, Handle);
             cFunc(TEvents::TEvWakeup::EventType, EndSessionAndDie);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -34,7 +34,7 @@ public:
     }
 
     void Subscribe() {
-        auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
+        auto req = MakeHolder<NEvKesus::TEvSubscribeOnResources>();
         ActorIdToProto(SelfId(), req->Record.MutableActorID());
         req->Record.MutableResources()->Reserve(State->Options.ResourcesCount);
 
@@ -49,7 +49,7 @@ public:
         NTabletPipe::SendData(SelfId(), TabletPipe, req.Release());
     }
 
-    void Handle(TEvKesus::TEvSubscribeOnResourcesResult::TPtr& ev) {
+    void Handle(NEvKesus::TEvSubscribeOnResourcesResult::TPtr& ev) {
         Y_ENSURE(ev->Get()->Record.ResultsSize() == State->Options.ResourcesCount);
         ScheduleStop();
     }
@@ -58,7 +58,7 @@ public:
         Schedule(State->Options.TestTime, new TEvents::TEvWakeup());
     }
 
-    void Handle(TEvKesus::TEvResourcesAllocated::TPtr& ev) {
+    void Handle(NEvKesus::TEvResourcesAllocated::TPtr& ev) {
         for (const auto& res : ev->Get()->Record.GetResourcesInfo()) {
             Y_ENSURE(res.GetStateNotification().GetStatus() == Ydb::StatusIds::SUCCESS);
 

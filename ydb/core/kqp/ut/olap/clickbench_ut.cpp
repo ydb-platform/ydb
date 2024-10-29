@@ -112,9 +112,9 @@ Y_UNIT_TEST_SUITE(KqpOlapClickbench) {
                     Y_ABORT_UNLESS(currentTest.MutableRecordChecker().CheckExpectedOnScanData(msg->ArrowBatch ? msg->ArrowBatch->num_columns() : 0));
                     break;
                 }
-                case TEvDataShard::EvKqpScan:
+                case NEvDataShard::EvKqpScan:
                 {
-                    auto* msg = ev->Get<TEvDataShard::TEvKqpScan>();
+                    auto* msg = ev->Get<NEvDataShard::TEvKqpScan>();
                     Y_ABORT_UNLESS(currentTest.MutableLimitChecker().CheckExpectedLimitOnScanTask(msg->Record.GetItemsLimit()));
                     break;
                 }

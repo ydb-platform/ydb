@@ -22,12 +22,12 @@ public:
         : OperationId(id)
     {}
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvOperationPlan"
+                   DebugHint() << " HandleReply NEvPrivate::TEvOperationPlan"
                        << ", step: " << step
                        << ", at schemeshard: " << ssId);
 

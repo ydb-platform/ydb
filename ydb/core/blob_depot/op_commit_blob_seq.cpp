@@ -6,11 +6,11 @@
 
 namespace NKikimr::NBlobDepot {
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
+    void TBlobDepot::Handle(NEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
         class TTxCommitBlobSeq : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             const ui32 NodeId;
             const ui64 AgentInstanceId;
-            std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> Request;
+            std::unique_ptr<NEvBlobDepot::TEvCommitBlobSeq::THandle> Request;
             std::unique_ptr<IEventHandle> Response;
             std::vector<TBlobSeqId> BlobSeqIds;
             std::set<TBlobSeqId> FailedBlobSeqIds;
@@ -20,7 +20,7 @@ namespace NKikimr::NBlobDepot {
         public:
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_BLOB_SEQ; }
 
-            TTxCommitBlobSeq(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
+            TTxCommitBlobSeq(TBlobDepot *self, TAgent& agent, std::unique_ptr<NEvBlobDepot::TEvCommitBlobSeq::THandle> request)
                 : TTransactionBase(self)
                 , NodeId(agent.Connection->NodeId)
                 , AgentInstanceId(*agent.AgentInstanceId)
@@ -61,7 +61,7 @@ namespace NKikimr::NBlobDepot {
                 NIceDb::TNiceDb db(txc.DB);
 
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
-                std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request);
+                std::tie(Response, responseRecord) = NEvBlobDepot::MakeResponseFor(*Request);
 
                 const ui32 generation = Self->Executor()->Generation();
 
@@ -141,7 +141,7 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                for (const auto& item : Response->Get<TEvBlobDepot::TEvCommitBlobSeqResult>()->Record.GetItems()) {
+                for (const auto& item : Response->Get<NEvBlobDepot::TEvCommitBlobSeqResult>()->Record.GetItems()) {
                     Self->TabletCounters->Cumulative()[
                         item.GetStatus() == NKikimrProto::OK
                             ? NKikimrBlobDepot::COUNTER_PUTS_OK
@@ -198,10 +198,10 @@ namespace NKikimr::NBlobDepot {
         };
 
         Execute(std::make_unique<TTxCommitBlobSeq>(this, GetAgent(ev->Recipient),
-            std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle>(ev.Release())));
+            std::unique_ptr<NEvBlobDepot::TEvCommitBlobSeq::THandle>(ev.Release())));
     }
 
-    void TBlobDepot::Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev) {
+    void TBlobDepot::Handle(NEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev) {
         TAgent& agent = GetAgent(ev->Recipient);
         const ui32 generation = Executor()->Generation();
 

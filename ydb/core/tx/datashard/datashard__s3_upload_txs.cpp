@@ -8,7 +8,7 @@ using namespace NTabletFlatExecutor;
 /// Get
 TDataShard::TTxGetS3Upload::TTxGetS3Upload(
     TDataShard* ds,
-    TEvDataShard::TEvGetS3Upload::TPtr ev)
+    NEvDataShard::TEvGetS3Upload::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
@@ -17,9 +17,9 @@ bool TDataShard::TTxGetS3Upload::Execute(TTransactionContext& txc, const TActorC
     txc.DB.NoMoreReadsForTx();
 
     if (const auto* upload = Self->S3Uploads.Find(Ev->Get()->TxId)) {
-        Reply.Reset(new TEvDataShard::TEvS3Upload(*upload));
+        Reply.Reset(new NEvDataShard::TEvS3Upload(*upload));
     } else {
-        Reply.Reset(new TEvDataShard::TEvS3Upload);
+        Reply.Reset(new NEvDataShard::TEvS3Upload);
     }
 
     return true;
@@ -33,7 +33,7 @@ void TDataShard::TTxGetS3Upload::Complete(const TActorContext& ctx) {
 /// Store id
 TDataShard::TTxStoreS3UploadId::TTxStoreS3UploadId(
     TDataShard* ds,
-    TEvDataShard::TEvStoreS3UploadId::TPtr ev)
+    NEvDataShard::TEvStoreS3UploadId::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
@@ -43,7 +43,7 @@ bool TDataShard::TTxStoreS3UploadId::Execute(TTransactionContext& txc, const TAc
 
     const auto& msg = *Ev->Get();
     const auto& upload = Self->S3Uploads.Add(txc.DB, msg.TxId, msg.UploadId);
-    Reply.Reset(new TEvDataShard::TEvS3Upload(upload));
+    Reply.Reset(new NEvDataShard::TEvS3Upload(upload));
 
     return true;
 }
@@ -56,7 +56,7 @@ void TDataShard::TTxStoreS3UploadId::Complete(const TActorContext& ctx) {
 /// Change status
 TDataShard::TTxChangeS3UploadStatus::TTxChangeS3UploadStatus(
     TDataShard* ds,
-    TEvDataShard::TEvChangeS3UploadStatus::TPtr ev)
+    NEvDataShard::TEvChangeS3UploadStatus::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
@@ -66,7 +66,7 @@ bool TDataShard::TTxChangeS3UploadStatus::Execute(TTransactionContext& txc, cons
 
     auto& msg = *Ev->Get();
     const auto& upload = Self->S3Uploads.ChangeStatus(txc.DB, msg.TxId, msg.Status, std::move(msg.Error), std::move(msg.Parts));
-    Reply.Reset(new TEvDataShard::TEvS3Upload(upload));
+    Reply.Reset(new NEvDataShard::TEvS3Upload(upload));
 
     return true;
 }

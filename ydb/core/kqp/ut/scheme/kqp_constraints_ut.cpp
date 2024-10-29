@@ -866,7 +866,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         bool enabledCapture = true;
         TVector<TAutoPtr<IEventHandle>> delayedUpsertRows;
         auto grab = [&delayedUpsertRows, &enabledCapture](TAutoPtr<IEventHandle>& ev) -> auto {
-            if (enabledCapture && ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvUploadRowsRequest::EventType) {
+            if (enabledCapture && ev->GetTypeRewrite() == NKikimr::NEvDataShard::TEvUploadRowsRequest::EventType) {
                 delayedUpsertRows.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }

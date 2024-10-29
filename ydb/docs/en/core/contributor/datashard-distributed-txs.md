@@ -50,7 +50,7 @@ Distributed transactions in {{ydb-short-name}} are similar to two-phase commit p
 
 Distributed transactions in the DataShard tablet begin with the `Prepare` phase, which can be proposed by one of the following events:
 
-* [TEvDataShard::TEvProposeTransaction](https://github.com/ydb-platform/ydb/blob/c97ef92f814152462ae0374eafa093bca584d7b5/ydb/core/tx/datashard/datashard.h#L435) provides an entry point for different types of transactions
+* [NEvDataShard::TEvProposeTransaction](https://github.com/ydb-platform/ydb/blob/c97ef92f814152462ae0374eafa093bca584d7b5/ydb/core/tx/datashard/datashard.h#L435) provides an entry point for different types of transactions
 * [TDataEvents::TEvWrite](https://github.com/ydb-platform/ydb/blob/c97ef92f814152462ae0374eafa093bca584d7b5/ydb/core/tx/data_events/events.h#L38) provides a special entry point for transactions that write data and commit YQL transactions
 
 Events that don't have an `Immediate` execution mode specified will begin the `Prepare` phase for the distributed transaction. The transaction body will be validated to determine whether it's even possible to execute it (for example, by using the [CheckDataTxUnit](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tx/datashard/check_data_tx_unit.cpp) unit for generic data transactions). A range of timestamps will then be selected:

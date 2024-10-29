@@ -7,7 +7,7 @@ using namespace NKikimrConsole;
 class TConfigsManager::TTxGetLogTail : public TTransactionBase<TConfigsManager> {
 public:
     TTxGetLogTail(TConfigsManager *self,
-                  TEvConsole::TEvGetLogTailRequest::TPtr &ev)
+                  NEvConsole::TEvGetLogTailRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
     {
@@ -28,7 +28,7 @@ public:
                     "TTxGetLogTail found " << records.size()
                     << " matching log records");
 
-        Response = MakeHolder<TEvConsole::TEvGetLogTailResponse>();
+        Response = MakeHolder<NEvConsole::TEvGetLogTailResponse>();
         auto &rec = Response->Record;
         rec.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
         for (auto it = records.rbegin(); it != records.rend(); ++it) {
@@ -49,11 +49,11 @@ public:
     }
 
 private:
-    TEvConsole::TEvGetLogTailRequest::TPtr Request;
-    THolder<TEvConsole::TEvGetLogTailResponse> Response;
+    NEvConsole::TEvGetLogTailRequest::TPtr Request;
+    THolder<NEvConsole::TEvGetLogTailResponse> Response;
 };
 
-ITransaction *TConfigsManager::CreateTxGetLogTail(TEvConsole::TEvGetLogTailRequest::TPtr &ev)
+ITransaction *TConfigsManager::CreateTxGetLogTail(NEvConsole::TEvGetLogTailRequest::TPtr &ev)
 {
     return new TTxGetLogTail(this, ev);
 }

@@ -26,7 +26,7 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::NEvSequenceShard::TEvDropSequenceResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -103,7 +103,7 @@ public:
 
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::SequenceShard);
 
-            auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvDropSequence>(pathId);
+            auto event = MakeHolder<NSequenceShard::NEvSequenceShard::TEvDropSequence>(pathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
 
@@ -140,11 +140,11 @@ public:
         : OperationId(id)
     {
         IgnoreMessages(DebugHint(), {
-            NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::EventType,
+            NSequenceShard::NEvSequenceShard::TEvDropSequenceResult::EventType,
         });
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 

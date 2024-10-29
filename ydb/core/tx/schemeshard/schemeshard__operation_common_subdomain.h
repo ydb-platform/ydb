@@ -62,8 +62,8 @@ public:
     TConfigureParts(TOperationId id);
 
     bool ProgressState(TOperationContext& context) override;
-    bool HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) override;
-    bool HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(NEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(NEvSubDomain::TEvConfigureStatus::TPtr& ev, TOperationContext& context) override;
 };
 
 class TPropose: public TSubOperationState {
@@ -80,7 +80,7 @@ public:
     TPropose(TOperationId id);
 
     bool ProgressState(TOperationContext& context) override;
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override;
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override;
 };
 
 } // namespace NSubDomainState

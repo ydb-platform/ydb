@@ -115,7 +115,7 @@ protected:
         KickNextTablet();
     }
 
-    void Handle(TEvHive::TEvDrainNodeResult::TPtr& ev) {
+    void Handle(NEvHive::TEvDrainNodeResult::TPtr& ev) {
         BLOG_D("Drain " << SelfId() << " received status from domain hive " << ev->Get()->Record.ShortDebugString());
         BLOG_I("Drain " << SelfId() << " continued for node " << NodeId << " with " << Tablets.size() << " tablets");
         DomainDrainCompleted(ev->Get()->Record.GetMovements());
@@ -146,7 +146,7 @@ protected:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
         DomainHivePipeClient = Register(NTabletPipe::CreateClient(SelfId(), DomainHiveId, pipeConfig));
-        THolder<TEvHive::TEvDrainNode> event = MakeHolder<TEvHive::TEvDrainNode>(NodeId);
+        THolder<NEvHive::TEvDrainNode> event = MakeHolder<NEvHive::TEvDrainNode>(NodeId);
         event->Record.SetDownPolicy(Settings.DownPolicy);
         event->Record.SetPersist(Settings.Persist);
         event->Record.SetDrainInFlight(Settings.DrainInFlight);
@@ -212,7 +212,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
             hFunc(TEvPrivate::TEvRestartComplete, Handle);
-            hFunc(TEvHive::TEvDrainNodeResult, Handle);
+            hFunc(NEvHive::TEvDrainNodeResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             cFunc(TEvents::TSystem::Wakeup, Timeout);

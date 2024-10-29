@@ -22,7 +22,7 @@ class TParentDomainLink {
 public:
     TParentDomainLink(TSchemeShard* self);
     void Shutdown(const TActorContext& ctx);
-    THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> MakeSyncMsg() const;
+    THolder<NEvSchemeShard::TEvSyncTenantSchemeShard> MakeSyncMsg() const;
     void SendSync(const TActorContext& ctx);
     void AtPipeError(const TActorContext& ctx);
     bool HasPipeTo(TTabletId tabletId, TActorId clientId);
@@ -68,7 +68,7 @@ public:
         return ActiveLink.at(pathId);
     }
 
-    bool Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
+    bool Sync(NEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
 };
 
 }}

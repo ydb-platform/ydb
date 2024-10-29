@@ -22,13 +22,13 @@ public:
 
     void Bootstrap(const TActorContext &ctx);
 
-    void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+    void Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
-            IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            HFunc(NEvConsole::TEvConfigNotificationRequest, Handle);
+            IgnoreFunc(NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
             Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
@@ -78,10 +78,10 @@ void TImmediateControlsConfigurator::Bootstrap(const TActorContext &ctx)
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
+             new NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
 }
 
-void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+void TImmediateControlsConfigurator::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                                             const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
@@ -92,7 +92,7 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
 
     ApplyConfig(rec.GetConfig().GetImmediateControlsConfig(), AppData(ctx)->Icb);
 
-    auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
+    auto resp = MakeHolder<NEvConsole::TEvConfigNotificationResponse>(rec);
 
     LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "TImmediateControlsConfigurator: Send TEvConfigNotificationResponse: "

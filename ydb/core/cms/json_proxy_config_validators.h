@@ -6,13 +6,13 @@
 
 namespace NKikimr::NCms {
 
-class TJsonProxyConfigValidators : public TJsonProxyConsole<NConsole::TEvConsole::TEvListConfigValidatorsRequest,
-                                                             NConsole::TEvConsole::TEvListConfigValidatorsResponse>
+class TJsonProxyConfigValidators : public TJsonProxyConsole<NConsole::NEvConsole::TEvListConfigValidatorsRequest,
+                                                             NConsole::NEvConsole::TEvListConfigValidatorsResponse>
 {
 public:
     TJsonProxyConfigValidators(NMon::TEvHttpInfo::TPtr &event)
-        : TJsonProxyConsole<NConsole::TEvConsole::TEvListConfigValidatorsRequest,
-                            NConsole::TEvConsole::TEvListConfigValidatorsResponse>(event)
+        : TJsonProxyConsole<NConsole::NEvConsole::TEvListConfigValidatorsRequest,
+                            NConsole::NEvConsole::TEvListConfigValidatorsResponse>(event)
     {
     }
 

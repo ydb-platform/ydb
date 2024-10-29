@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->Register(new TDyingActor());
-        ctx.SendFromProxy(proxy, 1, new TEvKesus::TEvRegisterProxy("", 1));
+        ctx.SendFromProxy(proxy, 1, new NEvKesus::TEvRegisterProxy("", 1));
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back((ui32)TEvents::TEvUndelivered::EventType);
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyHasSessions(proxy1, 1, {});
         ctx.VerifyProxyHasSessions(proxy2, 1, {});
         // proxy2 must receive notification
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionExpired>(proxy2);
+        auto event = ctx.ExpectEdgeEvent<NEvKesus::TEvSessionExpired>(proxy2);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 2);
     }
 
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.Sleep(60001); // must timeout after 60001ms
         ctx.VerifySessionNotFound(1);
         // even unregistered proxy must receive notification
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionExpired>(proxy);
+        auto event = ctx.ExpectEdgeEvent<NEvKesus::TEvSessionExpired>(proxy);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
     }
 
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectAttachSessionResult(23456, proxy2, 222);
         ctx.VerifyProxyHasSessions(proxy1, 111, {});
         ctx.VerifyProxyHasSessions(proxy2, 222, {1});
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345);
+        auto event = ctx.ExpectEdgeEvent<NEvKesus::TEvSessionStolen>(proxy1, 12345);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
     }
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectAttachSessionResult(23456, proxy2, 222);
         ctx.VerifyProxyHasSessions(proxy1, 111, {});
         ctx.VerifyProxyHasSessions(proxy2, 222, {1});
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345);
+        auto event = ctx.ExpectEdgeEvent<NEvKesus::TEvSessionStolen>(proxy1, 12345);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
     }
@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectAttachSessionResult(23456, proxy2, 222);
         ctx.VerifyProxyHasSessions(proxy1, 111, {});
         ctx.VerifyProxyHasSessions(proxy2, 222, {1});
-        auto event = ctx.ExpectEdgeEvent<TEvKesus::TEvSessionStolen>(proxy1, 12345);
+        auto event = ctx.ExpectEdgeEvent<NEvKesus::TEvSessionStolen>(proxy1, 12345);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetProxyGeneration(), 111);
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
     }
@@ -1199,7 +1199,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectAcquireSemaphoreResult(acquire3, proxy, 1, Ydb::StatusIds::ABORTED);
         ctx.ExpectAcquireSemaphorePending(reqId, proxy, 1);
         acquire3 = reqId;
-        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
+        ctx.ExpectNoEdgeEvent<NEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
 
         // However changing session 2 data should trigger it (since it is an owner)
         ctx.SendAcquireSemaphore(++reqId, proxy, 1, 2, "Sem1", 2, 0, "owner2");
@@ -1223,7 +1223,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectDescribeSemaphoreChanged(watch5, proxy, 1);
 
         // However session 2 is destroyed and should not
-        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
+        ctx.ExpectNoEdgeEvent<NEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
         Y_UNUSED(watch4);
 
         // Add owners watch in session 5
@@ -1251,7 +1251,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         // No changes should result in no notification
         ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 3);
         ctx.ExpectAcquireSemaphoreResult(reqId, proxy, 1);
-        ctx.ExpectNoEdgeEvent<TEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
+        ctx.ExpectNoEdgeEvent<NEvKesus::TEvDescribeSemaphoreChanged>(proxy, TDuration::Seconds(1));
 
         // Changing count should produce notification
         ctx.SendAcquireSemaphore(++reqId, proxy, 1, 1, "Sem2", 2);
@@ -1702,7 +1702,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         double allocated = 0.0;
         do {
-            auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+            auto result = ctx.ExpectEdgeEvent<NEvKesus::TEvResourcesAllocated>(edge);
             UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
             const auto& info = result->Record.GetResourcesInfo(0);
             UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
@@ -2139,7 +2139,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         ctx.UpdateConsumptionState(client, edge, subscribeResult.GetResults(0).GetResourceId(), true, 50.0);
 
-        auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+        auto result = ctx.ExpectEdgeEvent<NEvKesus::TEvResourcesAllocated>(edge);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
         const auto& info = result->Record.GetResourcesInfo(0);
         UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
@@ -2168,7 +2168,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto WaitAllocated = [&ctx](const TActorId edge, double amount) -> double {
             double allocated = 0.0;
             do {
-                auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+                auto result = ctx.ExpectEdgeEvent<NEvKesus::TEvResourcesAllocated>(edge);
                 UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
                 const auto& info = result->Record.GetResourcesInfo(0);
                 UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
@@ -2228,7 +2228,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto CreateSession = [&]() -> std::pair<TActorId, TActorId> {
             TActorId edge = ctx.Runtime->AllocateEdgeActor();
             const TActorId sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
-            auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
+            auto req = MakeHolder<NEvKesus::TEvSubscribeOnResources>();
             ActorIdToProto(edge, req->Record.MutableActorID());
             auto* reqRes = req->Record.AddResources();
             reqRes->SetResourcePath("Root");
@@ -2251,7 +2251,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         auto WaitAllocation = [&](TActorId edge, double expectedAmount) {
             size_t attempts = 30;
             do {
-                auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+                auto result = ctx.ExpectEdgeEvent<NEvKesus::TEvResourcesAllocated>(edge);
                 UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
                 const auto& info = result->Record.GetResourcesInfo(0);
                 UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);

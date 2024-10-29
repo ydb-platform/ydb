@@ -443,7 +443,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     if (schedule && response.GetStatus().GetCode() != TStatus::ALLOW_PARTIAL) {
         if (response.GetStatus().GetCode() == TStatus::DISALLOW_TEMP
             || response.GetStatus().GetCode() == TStatus::ERROR_TEMP)
-        {   
+        {
             if (!allowPartial) {
                 // Only the first problem action was scheduled during
                 // the actions check loop. Merge it with rest actions.
@@ -2345,7 +2345,7 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
     }
 }
 
-void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
+void TCms::Handle(NEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
 {
     const auto& appConfig = ev->Get()->Record.GetConfig();
@@ -2363,13 +2363,13 @@ void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
         Execute(CreateTxUpdateConfig(ev), ctx);
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
-        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        auto response = MakeHolder<NEvConsole::TEvConfigNotificationResponse>();
         response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 }
 
-void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
+void TCms::Handle(NEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                   const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;

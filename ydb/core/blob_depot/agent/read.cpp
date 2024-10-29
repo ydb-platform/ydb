@@ -201,7 +201,7 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepotAgent::TQuery::HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg) {
+    void TBlobDepotAgent::TQuery::HandleResolveResult(const TRequestContext::TPtr& context, NEvBlobDepot::TEvResolveResult& msg) {
         auto& readContext = context->Obtain<TReadContext>();
         if (readContext.Terminated) {
             return;

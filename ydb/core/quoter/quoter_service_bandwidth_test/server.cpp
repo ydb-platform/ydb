@@ -112,7 +112,7 @@ ui64 TTestServer::GetKesusTabletId(const TString& path) {
 void TTestServer::CreateKesusResource(ui64 kesusTabletId, const TString& resourcePath, TMaybe<double> maxUnitsPerSecond) {
     TTestActorRuntime* const runtime = Server->GetRuntime();
 
-    TAutoPtr<NKesus::TEvKesus::TEvAddQuoterResource> request(new NKesus::TEvKesus::TEvAddQuoterResource());
+    TAutoPtr<NKesus::NEvKesus::TEvAddQuoterResource> request(new NKesus::NEvKesus::TEvAddQuoterResource());
     request->Record.MutableResource()->SetResourcePath(resourcePath);
     auto* hdrrConfig = request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig(); // Create HDRR config
     if (maxUnitsPerSecond) {
@@ -123,8 +123,8 @@ void TTestServer::CreateKesusResource(ui64 kesusTabletId, const TString& resourc
     ForwardToTablet(*runtime, kesusTabletId, sender, request.Release(), 0);
 
     TAutoPtr<IEventHandle> handle;
-    runtime->GrabEdgeEvent<NKesus::TEvKesus::TEvAddQuoterResourceResult>(handle);
-    const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::TEvKesus::TEvAddQuoterResourceResult>()->Record;
+    runtime->GrabEdgeEvent<NKesus::NEvKesus::TEvAddQuoterResourceResult>(handle);
+    const NKikimrKesus::TEvAddQuoterResourceResult& record = handle->Get<NKesus::NEvKesus::TEvAddQuoterResourceResult>()->Record;
     Y_ABORT_UNLESS(record.GetError().GetStatus() == Ydb::StatusIds::SUCCESS);
 }
 

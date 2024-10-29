@@ -340,7 +340,7 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
     metrics->TryUpdate(ctx);
 }
 
-void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<NEvDataShard::TEvPeriodicTableStats>& ev) {
     ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
     ev->Record.SetGeneration(Executor()->Generation());
     ev->Record.SetRound(StatsReportRound++);
@@ -356,7 +356,7 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     }
 }
 
-void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
+void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<NEvDataShard::TEvPeriodicTableStats>& ev) {
     auto tables = TablesManager.GetTables();
     std::optional<TTableStatsBuilder> tableStatsBuilder =
         TablesManager.HasPrimaryIndex() ? std::make_optional<TTableStatsBuilder>(Counters, Executor(), TablesManager.MutablePrimaryIndex())
@@ -409,7 +409,7 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
-    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
+    auto ev = std::make_unique<NEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);

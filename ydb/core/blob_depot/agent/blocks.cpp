@@ -34,7 +34,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TBlocksManager::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {
-        if (auto *p = std::get_if<TEvBlobDepot::TEvQueryBlocksResult*>(&response)) {
+        if (auto *p = std::get_if<NEvBlobDepot::TEvQueryBlocksResult*>(&response)) {
             Handle(std::move(context), (*p)->Record);
         } else if (std::holds_alternative<TTabletDisconnected>(response)) {
             auto& queryBlockContext = context->Obtain<TQueryBlockContext>();

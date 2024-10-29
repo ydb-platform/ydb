@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             vectorIndexSettings = std::make_unique<T>(T::FromProto(proto));
         }
 
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
+        TBlockEvents<NEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
             const auto& modifyScheme = ev->Get()->Record.GetTransaction(0);
             return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
         });

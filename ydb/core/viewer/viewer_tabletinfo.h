@@ -190,8 +190,8 @@ public:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev) {
-        THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
+    void Handle(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev) {
+        THolder<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult> describeResult = ev->Release();
         if (describeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             const auto& pathDescription = describeResult->GetRecord().GetPathDescription();
             for (auto shard : pathDescription.GetColumnTableDescription().GetSharding().GetColumnShards()) {
@@ -383,7 +383,7 @@ public:
 
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }

@@ -35,7 +35,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     }
 
     void DropDst() {
-        auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+        auto ev = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
 
@@ -53,15 +53,15 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
 
     STATEFN(StateDropDst) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
-            hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            hFunc(NEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             sFunc(TEvents::TEvWakeup, AllocateTxId);
         default:
             return StateBase(ev);
         }
     }
 
-    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         const auto& record = ev->Get()->Record;
 
@@ -86,10 +86,10 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     void SubscribeTx(ui64 txId) {
         LOG_D("Subscribe tx"
             << ": txId# " << txId);
-        Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
+        Send(PipeCache, new TEvPipeCache::TEvForward(new NEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
         Success();
     }

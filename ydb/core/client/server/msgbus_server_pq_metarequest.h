@@ -40,7 +40,7 @@ private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
 };
 
-class TPersQueueGetPartitionOffsetsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
+class TPersQueueGetPartitionOffsetsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, NEvPersQueue::TEvOffsetsResponse>> {
 public:
     TPersQueueGetPartitionOffsetsTopicWorker(const TActorId& parent,
                                              const TSchemeEntry& topicEntry, const TString& name,
@@ -72,7 +72,7 @@ private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
 };
 
-class TPersQueueGetPartitionStatusTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvStatusResponse>> {
+class TPersQueueGetPartitionStatusTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, NEvPersQueue::TEvStatusResponse>> {
 public:
     TPersQueueGetPartitionStatusTopicWorker(const TActorId& parent,
                                             const TTopicInfoBasedActor::TSchemeEntry& topicEntry,
@@ -148,7 +148,7 @@ public:
         return false;
     }
 
-    void Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext&) {
+    void Handle(NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext&) {
         for (auto & s : ev->Get()->Record.GetReadSessions()) {
             if (!s.GetSession().empty()) {
                 TActorId actor = ActorIdFromProto(s.GetSessionActor());
@@ -160,7 +160,7 @@ public:
 
     STFUNC(StateFunc) override {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
+            HFunc(NEvPersQueue::TEvReadSessionsInfoResponse, Handle);
             default:
                 TPersQueueBaseRequestProcessor::StateFunc(ev);
         }
@@ -176,7 +176,7 @@ private:
 };
 
 
-class TPersQueueGetReadSessionsInfoTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
+class TPersQueueGetReadSessionsInfoTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, NEvPersQueue::TEvOffsetsResponse>> {
 public:
     TPersQueueGetReadSessionsInfoTopicWorker(const TActorId& parent,
                                              const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name,
@@ -196,7 +196,7 @@ public:
     [[nodiscard]] bool WaitAllPipeEvents(const TActorContext& ctx);
     STFUNC(WaitAllPipeEventsStateFunc);
 
-    void Handle(TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx);
     TString GetHostName(ui32 hostId) const;
     bool OnClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) override;
     bool HandleConnect(TEvTabletPipe::TEvClientConnected* ev, const TActorContext& ctx);
@@ -205,7 +205,7 @@ public:
 private:
     std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
     TActorId BalancerPipe;
-    TEvPersQueue::TEvReadSessionsInfoResponse::TPtr BalancerResponse;
+    NEvPersQueue::TEvReadSessionsInfoResponse::TPtr BalancerResponse;
     bool BalancerReplied = false;
     bool PipeEventsAreReady = false;
     THashMap<ui32, ui64> PartitionToTablet;

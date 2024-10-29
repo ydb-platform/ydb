@@ -54,7 +54,7 @@ struct TKesusTablet::TTxSemaphoreTimeout : public TTxBase {
         if (auto* proxy = session->OwnerProxy) {
             session->ConsumeSemaphoreWaitCookie(semaphore, [&](ui64 cookie) {
                 Events.emplace_back(proxy->ActorID, cookie,
-                    new TEvKesus::TEvAcquireSemaphoreResult(proxy->Generation, false));
+                    new NEvKesus::TEvAcquireSemaphoreResult(proxy->Generation, false));
             });
         }
 

@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override {
-                if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
+                if (auto *p = std::get_if<NEvBlobDepot::TEvResolveResult*>(&response)) {
                     if (context) {
                         TQuery::HandleResolveResult(std::move(context), **p);
                     } else {

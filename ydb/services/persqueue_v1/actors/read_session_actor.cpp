@@ -1133,7 +1133,7 @@ void TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 parti
     if (partitionIt == topic.Partitions.end()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "no partition " << partitionId << " in topic " << topicName, ctx);
     }
-    THolder<TEvPersQueue::TEvLockPartition> res{new TEvPersQueue::TEvLockPartition};
+    THolder<NEvPersQueue::TEvLockPartition> res{new NEvPersQueue::TEvLockPartition};
     res->Record.SetSession(Session);
     res->Record.SetPartition(partitionId);
     res->Record.SetTopic(topicName);
@@ -1150,7 +1150,7 @@ void TReadSessionActor<UseMigrationProtocol>::RegisterSession(const TString& top
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " register session"
         << ": topic# " << topic);
 
-    auto request = MakeHolder<TEvPersQueue::TEvRegisterReadSession>();
+    auto request = MakeHolder<NEvPersQueue::TEvRegisterReadSession>();
 
     auto& req = request->Record;
     req.SetSession(Session);
@@ -1166,7 +1166,7 @@ void TReadSessionActor<UseMigrationProtocol>::RegisterSession(const TString& top
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor<UseMigrationProtocol>::Handle(NEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetSession() == Session);
     Y_ABORT_UNLESS(record.GetClientId() == ClientId);
@@ -1393,7 +1393,7 @@ bool TReadSessionActor<UseMigrationProtocol>::SendControlMessage(TPartitionId id
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor<UseMigrationProtocol>::Handle(NEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx) {
     CloseSession(ConvertOldCode(ev->Get()->Record.GetCode()), ev->Get()->Record.GetDescription(), ctx);
 }
 
@@ -1430,7 +1430,7 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorI
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
+void TReadSessionActor<UseMigrationProtocol>::Handle(NEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     Y_ABORT_UNLESS(record.GetSession() == Session);
     Y_ABORT_UNLESS(record.GetClientId() == ClientId);
@@ -1526,7 +1526,7 @@ void TReadSessionActor<UseMigrationProtocol>::InformBalancerAboutRelease(typenam
     Y_ABORT_UNLESS(jt != Topics.end());
     const auto& topicInfo = jt->second;
 
-    auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
+    auto request = MakeHolder<NEvPersQueue::TEvPartitionReleased>();
 
     auto& req = request->Record;
     req.SetSession(Session);
@@ -2307,7 +2307,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingStart
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(ClientId, msg->PartitionId));
+    NTabletPipe::SendData(ctx, topic.PipeClient, new NEvPersQueue::TEvReadingPartitionStartedRequest(ClientId, msg->PartitionId));
 }
 
 template <bool UseMigrationProtocol>
@@ -2320,7 +2320,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic.PipeClient, new NEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
     if constexpr (!UseMigrationProtocol) {
         if (AutoPartitioningSupport) {

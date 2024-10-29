@@ -69,7 +69,7 @@ struct TTransaction {
         Y_ABORT_UNLESS(ProposeConfig);
     }
 
-    explicit TTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> proposeTx)
+    explicit TTransaction(TSimpleSharedPtr<NEvPersQueue::TEvProposeTransaction> proposeTx)
         : ProposeTransaction(proposeTx)
         , State(ECommitState::Committed)
     {
@@ -97,7 +97,7 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendReply;
     TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
-    TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> ProposeTransaction;
+    TSimpleSharedPtr<NEvPersQueue::TEvProposeTransaction> ProposeTransaction;
 
     //Data Tx
     THolder<TEvPQ::TEvGetWriteInfoResponse> WriteInfo;
@@ -200,15 +200,15 @@ private:
     void Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
@@ -297,7 +297,7 @@ private:
                                                    const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
                                                    ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
 
-    TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
+    TAutoPtr<NEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
     void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
@@ -315,7 +315,7 @@ private:
     void ProcessDistrTxs(const TActorContext& ctx);
     void ProcessDistrTx(const TActorContext& ctx);
 
-    void AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> event);
+    void AddImmediateTx(TSimpleSharedPtr<NEvPersQueue::TEvProposeTransaction> event);
     void ProcessImmediateTxs(const TActorContext& ctx);
 
     void AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act);
@@ -372,7 +372,7 @@ private:
     THolder<TEvPQ::TEvError> MakeReplyError(const ui64 dst,
                                             NPersQueue::NErrorCode::EErrorCode errorCode,
                                             const TString& error);
-    THolder<TEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
+    THolder<NEvPersQueue::TEvProposeTransactionResult> MakeReplyPropose(const NKikimrPQ::TEvProposeTransaction& event,
                                                                         NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                                                                         NKikimrPQ::TError::EKind kind,
                                                                         const TString& reason);
@@ -511,8 +511,8 @@ private:
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, HandleOnInit);
             HFuncTraced(TEvPQ::TEvPartitionStatus, HandleOnInit);
-            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
-            HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
+            HFuncTraced(NEvPersQueue::TEvReportPartitionError, Handle);
+            HFuncTraced(NEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, HandleOnInit);
@@ -562,9 +562,9 @@ private:
             HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
             HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
-            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
+            HFuncTraced(NEvPersQueue::TEvReportPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
-            HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
+            HFuncTraced(NEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
@@ -577,7 +577,7 @@ private:
             HFuncTraced(TEvPQ::TEvRegisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
-            HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
+            HFuncTraced(NEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, Handle);
@@ -702,13 +702,13 @@ private:
     //TSimpleSharedPtr<TTransaction>& GetCurrentTransaction();
 
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event);
-    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event);
+    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<NEvPersQueue::TEvProposeTransaction>& event);
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx);
     EProcessResult PreProcessUserActionOrTransaction(TMessage& msg);
 
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event, TEvKeyValue::TEvRequest* request);
 
-    bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event,
+    bool ExecUserActionOrTransaction(TSimpleSharedPtr<NEvPersQueue::TEvProposeTransaction>& event,
                                      TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx, TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequest* request);
@@ -934,7 +934,7 @@ private:
     void AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request);
 
     void ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo& event);
-    void ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction& event);
+    void ScheduleNegativeReply(const NEvPersQueue::TEvProposeTransaction& event);
     void ScheduleNegativeReply(const TTransaction& tx);
     void ScheduleNegativeReply(const TMessage& msg);
 

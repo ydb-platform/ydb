@@ -60,7 +60,7 @@ public:
 
     void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
 
-    void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
+    void OnDescribeSchemeResult(NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 
     void SendDescribeTable();
     void HandleTableDescription(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
@@ -82,7 +82,7 @@ public:
 
     void AddRPSQuota();
 
-    void HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev);
+    void HandleAddQuoterResource(NKesus::NEvKesus::TEvAddQuoterResourceResult::TPtr& ev);
 
     void PassAway() override;
 
@@ -180,13 +180,13 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-            hFunc(NKesus::TEvKesus::TEvDeleteQuoterResourceResult, HandleDeleteQuoterResource);
+            hFunc(NKesus::NEvKesus::TEvDeleteQuoterResourceResult, HandleDeleteQuoterResource);
             cFunc(TEvPoisonPill::EventType, PassAway);
         }
     }
 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
-    void HandleDeleteQuoterResource(NKesus::TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev);
+    void HandleDeleteQuoterResource(NKesus::NEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev);
     void PassAway() override;
 
 public:

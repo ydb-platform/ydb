@@ -171,7 +171,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             << ", success# " << success
             << ", error# " << error);
 
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, error));
+        Send(ReplyTo, new NEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, error));
         PassAway();
     }
 

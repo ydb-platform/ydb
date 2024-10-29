@@ -72,8 +72,8 @@ public:
     }
 
 private:
-    THolder<TEvPersQueue::TEvRequest> MakeRequest(ui32 partitionId, TActorId pipe) {
-        auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
+    THolder<NEvPersQueue::TEvRequest> MakeRequest(ui32 partitionId, TActorId pipe) {
+        auto ev = MakeHolder<NEvPersQueue::TEvRequest>();
 
         ev->Record.MutablePartitionRequest()->SetPartition(partitionId);
         ActorIdToProto(pipe, ev->Record.MutablePartitionRequest()->MutablePipeClient());

@@ -26,9 +26,9 @@ public:
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvWakeup, Handle);
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle)
-            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
-            hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-            IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
+            hFunc(NEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(NEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            IgnoreFunc(NEvSchemeShard::TEvNotifyTxCompletionRegistered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -48,7 +48,7 @@ private:
     }
 
     void SendModifyScheme(ui64 txId) {
-        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+        auto request = MakeHolder<NEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
         record.SetTxId(txId);
 
@@ -80,7 +80,7 @@ private:
     }
 
     void SubscribeToCompletion(ui64 txId) {
-        auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
+        auto request = MakeHolder<NEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -122,7 +122,7 @@ private:
         SendModifyScheme(txId);
     }
 
-    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
         auto& record = ev->Get()->Record;
         auto status = record.GetStatus();
         auto txId = record.GetTxId();
@@ -153,7 +153,7 @@ private:
         }
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+    void Handle(NEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TabletMigrator - handle TEvNotifyTxCompletionResult"
             << ", txId: " << ev->Get()->Record.GetTxId()

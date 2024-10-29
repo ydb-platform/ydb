@@ -37,14 +37,14 @@ namespace NKikimr::NBlobDepot {
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
                 if (std::holds_alternative<TTabletDisconnected>(response)) {
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
-                } else if (auto *p = std::get_if<TEvBlobDepot::TEvBlockResult*>(&response)) {
+                } else if (auto *p = std::get_if<NEvBlobDepot::TEvBlockResult*>(&response)) {
                     return HandleBlockResult(std::move(context), **p);
                 } else {
                     Y_ABORT();
                 }
             }
 
-            void HandleBlockResult(TRequestContext::TPtr context, TEvBlobDepot::TEvBlockResult& msg) {
+            void HandleBlockResult(TRequestContext::TPtr context, NEvBlobDepot::TEvBlockResult& msg) {
                 if (!msg.Record.HasStatus()) {
                     EndWithError(NKikimrProto::ERROR, "incorrect TEvBlockResult response");
                 } else if (const auto status = msg.Record.GetStatus(); status != NKikimrProto::OK) {

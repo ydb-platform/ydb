@@ -8,10 +8,10 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
-    TEvSchemeShard::TEvNotifyTxCompletion::TPtr Ev;
+    NEvSchemeShard::TEvNotifyTxCompletion::TPtr Ev;
     TAutoPtr<IEventBase> Result;
 
-    TTxNotifyCompletion(TSelf *self, TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev)
+    TTxNotifyCompletion(TSelf *self, NEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev)
         : TRwTxBase(self)
         , Ev(ev)
     {}
@@ -36,12 +36,12 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                                << ", operation is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
-                Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
+                Result = new NEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
                 return;
             }
 
             operation->AddNotifySubscriber(Ev->Sender);
-            Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
+            Result = new NEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (Self->Publications.contains(TTxId(rawTxId))) {
             auto txId = TTxId(rawTxId);
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -52,7 +52,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                             << ", at schemeshard: " << Self->TabletID());
 
             Self->Publications.at(txId).Subscribers.insert(Ev->Sender);
-            Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
+            Result = new NEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (Self->Exports.contains(rawTxId)) {
             auto txId = rawTxId;
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -68,12 +68,12 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                                << ", export is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
-                Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
+                Result = new NEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
 
             exportInfo->AddNotifySubscriber(Ev->Sender);
-            Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
+            Result = new NEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (Self->Imports.contains(rawTxId)) {
             auto txId = rawTxId;
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -89,12 +89,12 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                                << ", import is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
-                Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
+                Result = new NEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
 
             importInfo->AddNotifySubscriber(Ev->Sender);
-            Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
+            Result = new NEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else if (const auto txId = TIndexBuildId(rawTxId); const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(txId)) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "NotifyTxCompletion"
@@ -108,19 +108,19 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                                << ", index build is ready to notify"
                                << ", txId: " << txId
                                << ", at schemeshard: " << Self->TabletID());
-                Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
+                Result = new NEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
                 return;
             }
 
             indexInfo.AddNotifySubscriber(Ev->Sender);
-            Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
+            Result = new NEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "NotifyTxCompletion"
                            << ", unknown transaction"
                            << ", txId: " << rawTxId
                            << ", at schemeshard: " << Self->TabletID());
-            Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(rawTxId);
+            Result = new NEvSchemeShard::TEvNotifyTxCompletionResult(rawTxId);
             return;
         }
 
@@ -138,7 +138,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxNotifyTxCompletion(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxNotifyTxCompletion(NEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev) {
     return new TTxNotifyCompletion(this, ev);
 }
 

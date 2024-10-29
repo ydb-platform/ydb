@@ -5,10 +5,10 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxTabletOwnersReply : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvTabletOwnersReply::THandle> Request;
+    THolder<NEvHive::TEvTabletOwnersReply::THandle> Request;
 
 public:
-    TTxTabletOwnersReply(THolder<TEvHive::TEvTabletOwnersReply::THandle> event, THive *hive)
+    TTxTabletOwnersReply(THolder<NEvHive::TEvTabletOwnersReply::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
     {}
@@ -38,7 +38,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event) {
+ITransaction* THive::CreateTabletOwnersReply(NEvHive::TEvTabletOwnersReply::TPtr event) {
     return new TTxTabletOwnersReply(THolder(std::move(event.Release())), this);
 }
 

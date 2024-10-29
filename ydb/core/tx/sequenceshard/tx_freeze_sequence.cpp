@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NSequenceShard {
 
     struct TSequenceShard::TTxFreezeSequence : public TTxBase {
-        explicit TTxFreezeSequence(TSelf* self, TEvSequenceShard::TEvFreezeSequence::TPtr&& ev)
+        explicit TTxFreezeSequence(TSelf* self, NEvSequenceShard::TEvFreezeSequence::TPtr&& ev)
             : TTxBase(self)
             , Ev(std::move(ev))
         { }
@@ -78,17 +78,17 @@ namespace NSequenceShard {
         }
 
         void SetResult(NKikimrTxSequenceShard::TEvFreezeSequenceResult::EStatus status) {
-            Result.Reset(new TEvSequenceShard::TEvFreezeSequenceResult(status, Self->TabletID()));
+            Result.Reset(new NEvSequenceShard::TEvFreezeSequenceResult(status, Self->TabletID()));
             Result->Record.SetTxId(Ev->Get()->Record.GetTxId());
             Result->Record.SetTxPartId(Ev->Get()->Record.GetTxPartId());
         }
 
-        TEvSequenceShard::TEvFreezeSequence::TPtr Ev;
-        THolder<TEvSequenceShard::TEvFreezeSequenceResult> Result;
+        NEvSequenceShard::TEvFreezeSequence::TPtr Ev;
+        THolder<NEvSequenceShard::TEvFreezeSequenceResult> Result;
     };
 
 
-    void TSequenceShard::Handle(TEvSequenceShard::TEvFreezeSequence::TPtr& ev, const TActorContext& ctx) {
+    void TSequenceShard::Handle(NEvSequenceShard::TEvFreezeSequence::TPtr& ev, const TActorContext& ctx) {
         Execute(new TTxFreezeSequence(this, std::move(ev)), ctx);
     }
 

@@ -35,7 +35,7 @@ struct TStatisticsAggregator::TTxConfigure : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxConfigure::Complete");
 
-        ctx.Send(Sender, new TEvSubDomain::TEvConfigureStatus(
+        ctx.Send(Sender, new NEvSubDomain::TEvConfigureStatus(
             NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()));
     }
 };

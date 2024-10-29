@@ -61,7 +61,7 @@ private:
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
-            HFuncTraced(TEvPersQueue::TEvResponse, Handle);
+            HFuncTraced(NEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
@@ -79,7 +79,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
-            HFuncTraced(TEvPersQueue::TEvResponse, Handle);
+            HFuncTraced(NEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvReaderEventArrived, ProcessNextReaderEvent);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
@@ -132,7 +132,7 @@ public:
     );
     void Bootstrap(const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);

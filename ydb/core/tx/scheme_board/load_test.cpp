@@ -37,7 +37,7 @@ namespace {
 class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     using TDescription = NKikimrScheme::TEvDescribeSchemeResult;
     using TDescriptions = TMap<TPathId, TTwoPartDescription>;
-    using TDescribeSchemeResult = NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder;
+    using TDescribeSchemeResult = NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResultBuilder;
 
     enum EWakeupTag {
         TAG_MODIFY,

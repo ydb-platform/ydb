@@ -23,22 +23,22 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
 
     void ReplyOk() {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvAcquireSemaphoreResult(Record.GetProxyGeneration()));
+            new NEvKesus::TEvAcquireSemaphoreResult(Record.GetProxyGeneration()));
     }
 
     void ReplyTimeout() {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvAcquireSemaphoreResult(Record.GetProxyGeneration(), false));
+            new NEvKesus::TEvAcquireSemaphoreResult(Record.GetProxyGeneration(), false));
     }
 
     void ReplyPending() {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvAcquireSemaphorePending(Record.GetProxyGeneration()));
+            new NEvKesus::TEvAcquireSemaphorePending(Record.GetProxyGeneration()));
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& reason) {
         Events.emplace_back(Sender, Cookie,
-            new TEvKesus::TEvAcquireSemaphoreResult(Record.GetProxyGeneration(), status, reason));
+            new NEvKesus::TEvAcquireSemaphoreResult(Record.GetProxyGeneration(), status, reason));
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -185,7 +185,7 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
             Y_ABORT_UNLESS(Record.GetCount() <= waiter->Count);
             session->ConsumeSemaphoreWaitCookie(semaphore, [&](ui64 cookie) {
                 Events.emplace_back(proxy->ActorID, cookie,
-                    new TEvKesus::TEvAcquireSemaphoreResult(
+                    new NEvKesus::TEvAcquireSemaphoreResult(
                         proxy->Generation,
                         Ydb::StatusIds::ABORTED,
                         "Operation superseded by another request"));
@@ -269,14 +269,14 @@ struct TKesusTablet::TTxSemaphoreAcquire : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvAcquireSemaphore::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvAcquireSemaphore::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_SEMAPHORE_ACQUIRE].Increment(1);
 
     if (record.GetCount() <= 0) {
         Send(ev->Sender,
-            new TEvKesus::TEvAcquireSemaphoreResult(
+            new NEvKesus::TEvAcquireSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Acquire must have count > 0"),
@@ -286,7 +286,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAcquireSemaphore::TPtr& ev) {
 
     if (record.GetTimeoutMillis() != Max<ui64>() && record.GetTimeoutMillis() > MAX_ACQUIRE_TIMEOUT.MilliSeconds()) {
         Send(ev->Sender,
-            new TEvKesus::TEvAcquireSemaphoreResult(
+            new NEvKesus::TEvAcquireSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Acquire timeout is out of range"),
@@ -296,7 +296,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAcquireSemaphore::TPtr& ev) {
 
     if (record.GetData().size() > MAX_SEMAPHORE_DATA) {
         Send(ev->Sender,
-            new TEvKesus::TEvAcquireSemaphoreResult(
+            new NEvKesus::TEvAcquireSemaphoreResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_REQUEST,
                 "Acquire data is too large"),

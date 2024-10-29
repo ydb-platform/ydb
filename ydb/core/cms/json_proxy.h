@@ -84,9 +84,9 @@ protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TResponseEvent, Handle);
-            HFunc(NConsole::TEvConsole::TEvUnauthorized, HandleError);
-            HFunc(NConsole::TEvConsole::TEvDisabled, HandleError);
-            HFunc(NConsole::TEvConsole::TEvGenericError, HandleError);
+            HFunc(NConsole::NEvConsole::TEvUnauthorized, HandleError);
+            HFunc(NConsole::NEvConsole::TEvDisabled, HandleError);
+            HFunc(NConsole::NEvConsole::TEvGenericError, HandleError);
             CFunc(TEvents::TSystem::Wakeup, Timeout);
             CFunc(TEvTabletPipe::TEvClientDestroyed::EventType, Disconnect);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -129,15 +129,15 @@ protected:
         ReplyAndDie(ev->Get()->Record, ctx);
     }
 
-    void HandleError(NConsole::TEvConsole::TEvUnauthorized::TPtr &, const TActorContext &ctx) {
+    void HandleError(NConsole::NEvConsole::TEvUnauthorized::TPtr &, const TActorContext &ctx) {
         ReplyAndDieImpl(TString(NMonitoring::HTTPUNAUTHORIZED), ctx);
     }
 
-    void HandleError(NConsole::TEvConsole::TEvDisabled::TPtr &, const TActorContext &ctx) {
+    void HandleError(NConsole::NEvConsole::TEvDisabled::TPtr &, const TActorContext &ctx) {
         ReplyAndDieImpl(TString("HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n{\"code\":400, \"message\":\"Feature is disabled\"}\r\n"), ctx);
     }
 
-    void HandleError(NConsole::TEvConsole::TEvGenericError::TPtr &ev, const TActorContext &ctx) {
+    void HandleError(NConsole::NEvConsole::TEvGenericError::TPtr &ev, const TActorContext &ctx) {
         TStringStream issues;
         for (auto& issue : ev->Get()->Record.GetIssues()) {
             issues << issue.ShortDebugString() + ", ";

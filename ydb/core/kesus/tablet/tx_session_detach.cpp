@@ -8,7 +8,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
     const ui64 Cookie;
     const NKikimrKesus::TEvDetachSession Record;
 
-    THolder<TEvKesus::TEvDetachSessionResult> Reply;
+    THolder<NEvKesus::TEvDetachSessionResult> Reply;
 
     explicit TTxSessionDetach(TSelf* self, const TActorId& sender, ui64 cookie, const NKikimrKesus::TEvDetachSession& record)
         : TTxBase(self)
@@ -30,7 +30,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
         auto* proxy = Self->Proxies.FindPtr(Sender);
         if (!proxy || proxy->Generation != Record.GetProxyGeneration()) {
             // World has changed by the time we executed
-            Reply.Reset(new TEvKesus::TEvDetachSessionResult(
+            Reply.Reset(new NEvKesus::TEvDetachSessionResult(
                 Record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_SESSION,
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"));
@@ -41,7 +41,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
         auto* session = Self->Sessions.FindPtr(sessionId);
         if (!session || session->OwnerProxy != proxy) {
             // Session destroyed or stolen by the time we executed
-            Reply.Reset(new TEvKesus::TEvDetachSessionResult(
+            Reply.Reset(new NEvKesus::TEvDetachSessionResult(
                 Record.GetProxyGeneration(),
                 session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                 session ? "Session not attached" : "Session does not exist"));
@@ -49,7 +49,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
         }
 
         Y_ABORT_UNLESS(Self->ScheduleSessionTimeout(session, ctx));
-        Reply.Reset(new TEvKesus::TEvDetachSessionResult(Record.GetProxyGeneration()));
+        Reply.Reset(new NEvKesus::TEvDetachSessionResult(Record.GetProxyGeneration()));
         return true;
     }
 
@@ -65,7 +65,7 @@ struct TKesusTablet::TTxSessionDetach : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDetachSession::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
     TabletCounters->Cumulative()[COUNTER_REQS_SESSION_DETACH].Increment(1);
@@ -73,7 +73,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
     auto* proxy = Proxies.FindPtr(ev->Sender);
     if (!proxy || proxy->Generation != record.GetProxyGeneration()) {
         Send(ev->Sender,
-            new TEvKesus::TEvDetachSessionResult(
+            new NEvKesus::TEvDetachSessionResult(
                 record.GetProxyGeneration(),
                 Ydb::StatusIds::BAD_SESSION,
                 proxy ? "ProxyGeneration mismatch" : "Proxy is not registered"),
@@ -86,7 +86,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
         auto* session = Sessions.FindPtr(sessionId);
         if (!session || session->OwnerProxy != proxy) {
             Send(ev->Sender,
-                new TEvKesus::TEvDetachSessionResult(
+                new NEvKesus::TEvDetachSessionResult(
                     record.GetProxyGeneration(),
                     session ? Ydb::StatusIds::BAD_SESSION : Ydb::StatusIds::SESSION_EXPIRED,
                     session ? "Session not attached" : "Session does not exist"),
@@ -101,7 +101,7 @@ void TKesusTablet::Handle(TEvKesus::TEvDetachSession::TPtr& ev) {
 
         Y_ABORT_UNLESS(ScheduleSessionTimeout(session, TActivationContext::AsActorContext()));
         Send(ev->Sender,
-            new TEvKesus::TEvDetachSessionResult(record.GetProxyGeneration()),
+            new NEvKesus::TEvDetachSessionResult(record.GetProxyGeneration()),
             0, ev->Cookie);
         return;
     }

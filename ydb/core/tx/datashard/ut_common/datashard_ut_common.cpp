@@ -36,7 +36,7 @@ const bool DUMP_RESULT = false;
 
 namespace {
 
-    TEvDataShard::TEvGetInfoResponse* GetEvGetInfo(
+    NEvDataShard::TEvGetInfoResponse* GetEvGetInfo(
         Tests::TServer::TPtr server,
         ui64 tabletId,
         TAutoPtr<IEventHandle>& handle)
@@ -44,12 +44,12 @@ namespace {
         auto &runtime = *server->GetRuntime();
 
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvDataShard::TEvGetInfoRequest>();
+        auto request = MakeHolder<NEvDataShard::TEvGetInfoRequest>();
         runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         TTableInfoMap result;
 
-        return runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+        return runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetInfoResponse>(handle);
     }
 
     void SendReadTablePart(
@@ -70,7 +70,7 @@ namespace {
         SendReadAsync(server, tabletId, request.release(), sender);
     }
 
-    void PrintTableFromResult(TStringBuilder& out, const TEvDataShard::TEvReadResult& event, const NKikimrSchemeOp::TTableDescription& description) {
+    void PrintTableFromResult(TStringBuilder& out, const NEvDataShard::TEvReadResult& event, const NKikimrSchemeOp::TTableDescription& description) {
         auto nrows = event.GetRowsCount();
         for (size_t i = 0; i < nrows; ++i) {
             const auto& cellArray = event.GetCells(i);
@@ -428,7 +428,7 @@ ui32 TFakeProxyTx::GetShardProgram(ui32 idx, TString& outTxBody) {
     return shardData.ShardId;
 }
 
-void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event) {
+void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const NEvDataShard::TEvProposeTransactionResult * event) {
     if (event->IsExecError() || event->IsError()) {
         for (auto err : event->Record.GetError()) {
             Cerr << "DataShard error: " << shardId << ", kind: " <<
@@ -449,7 +449,7 @@ void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvPr
     }
 }
 
-void TFakeProxyTx::AddPlanStepShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event,
+void TFakeProxyTx::AddPlanStepShardResult(ui32 shardId, const NEvDataShard::TEvProposeTransactionResult * event,
                                                            bool complete) {
     Engine->AddShardReply(event->GetOrigin(), event->Record.GetTxResult());
     if (complete)
@@ -520,7 +520,7 @@ ui32 TFakeScanTx::GetShardProgram(ui32 idx, TString& outTxBody) {
 }
 
 void TFakeScanTx::AddPlanStepShardResult(ui32 /*shardId*/,
-                                         const TEvDataShard::TEvProposeTransactionResult * event,
+                                         const NEvDataShard::TEvProposeTransactionResult * event,
                                          bool /*complete*/) {
     if (event->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::RESPONSE_DATA) {
         auto &res = event->Record.GetTxResult();
@@ -621,7 +621,7 @@ IEngineFlat::EStatus TFakeMiniKQLProxy::ExecSchemeCreateTable(const TString& tab
 #if 0
 void TFakeMiniKQLProxy::Cancel(ui64 txId) {
     for (auto shard : proxyTx.Shards) {
-        auto cancel = new TEvDataShard::TEvCancelTransactionProposal(txId);
+        auto cancel = new NEvDataShard::TEvCancelTransactionProposal(txId);
         Tester.Runtime.SendToPipe(shard, Tester.Sender, cancel);
     }
 
@@ -659,12 +659,12 @@ void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& sha
         ui32 txFlags = NDataShard::TTxFlags::Default;
 
         for (;;) {
-            auto proposal = new TEvDataShard::TEvProposeTransaction(kind, FAKE_SCHEMESHARD_TABLET_ID,
+            auto proposal = new NEvDataShard::TEvProposeTransaction(kind, FAKE_SCHEMESHARD_TABLET_ID,
                 Tester.Sender, txId, txBody, NKikimrSubDomains::TProcessingParams(), txFlags);
             Tester.Runtime.SendToPipe(shardId, Tester.Sender, proposal);
             TAutoPtr<IEventHandle> handle;
-            auto event = Tester.Runtime.GrabEdgeEventIf<TEvDataShard::TEvProposeTransactionResult>(handle,
-                [=](const TEvDataShard::TEvProposeTransactionResult& event) {
+            auto event = Tester.Runtime.GrabEdgeEventIf<NEvDataShard::TEvProposeTransactionResult>(handle,
+                [=](const NEvDataShard::TEvProposeTransactionResult& event) {
                 return event.GetTxId() == txId && event.GetOrigin() == shardId;
             });
 
@@ -711,7 +711,7 @@ void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) {
         ui32 shard = tx.GetShardProgram(i, txBody);
         shards.insert(shard);
 
-        auto proposal = new TEvDataShard::TEvProposeTransaction(
+        auto proposal = new NEvDataShard::TEvProposeTransaction(
             tx.TxKind(), Tester.Sender, txId, txBody, tx.TxFlags());
         Tester.Runtime.SendToPipe(shard, Tester.Sender, proposal);
     }
@@ -720,7 +720,7 @@ void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) {
 
     while (shards) {
         TAutoPtr<IEventHandle> handle;
-        auto event = Tester.Runtime.GrabEdgeEvent<TEvDataShard::TEvProposeTransactionResult>(handle);
+        auto event = Tester.Runtime.GrabEdgeEvent<NEvDataShard::TEvProposeTransactionResult>(handle);
         UNIT_ASSERT(event);
         if (event->GetTxId() != txId)
             continue;
@@ -737,7 +737,7 @@ void TFakeMiniKQLProxy::Propose(TFakeProxyTx& tx, bool holdImmediate) {
 
 void TFakeMiniKQLProxy::ResolveShards(const TSet<ui64>& shards) {
     for (ui64 shard : shards) {
-        auto event = new TEvDataShard::TEvGetShardState(Tester.Sender);
+        auto event = new NEvDataShard::TEvGetShardState(Tester.Sender);
         ForwardToTablet(Tester.Runtime, shard, Tester.Sender, event);
     }
 
@@ -755,7 +755,7 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     using TEvPlanStepAccepted = TEvTxProcessing::TEvPlanStepAccepted;
     using TEvReadSet = TEvTxProcessing::TEvReadSet;
     //using TEvReadSetAck = TEvTxProcessing::TEvReadSetAck;
-    using TEvProposeTransactionResult = TEvDataShard::TEvProposeTransactionResult;
+    using TEvProposeTransactionResult = NEvDataShard::TEvProposeTransactionResult;
     using TEvStreamClearanceRequest = TEvTxProcessing::TEvStreamClearanceRequest;
     using TEvStreamClearancePending = TEvTxProcessing::TEvStreamClearancePending;
     using TEvStreamClearanceResponse = TEvTxProcessing::TEvStreamClearanceResponse;
@@ -805,13 +805,13 @@ ui64 TFakeMiniKQLProxy::Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& 
     }
 
     // prepare immediate
-    TDeque<std::pair<ui64, THolder<TEvDataShard::TEvProposeTransaction>>> immEvents;
+    TDeque<std::pair<ui64, THolder<NEvDataShard::TEvProposeTransaction>>> immEvents;
     for (ui64 txId : immediateTxs) {
         TFakeProxyTx::TPtr tx = txs.find(txId)->second;
         UNIT_ASSERT_VALUES_EQUAL(tx->ShardsCount(), 1);
         TString txBody;
         ui32 shard = tx->GetShardProgram(0, txBody);
-        THolder<TEvDataShard::TEvProposeTransaction> event = MakeHolder<TEvDataShard::TEvProposeTransaction>(
+        THolder<NEvDataShard::TEvProposeTransaction> event = MakeHolder<NEvDataShard::TEvProposeTransaction>(
             NKikimrTxDataShard::TX_KIND_DATA, Tester.Sender, txId, txBody, tx->TxFlags());
         immEvents.emplace_back(std::make_pair(shard, std::move(event)));
         results.insert(std::make_pair(shard, txId));
@@ -1331,20 +1331,20 @@ NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
 {
     auto sender = runtime.AllocateEdgeActor();
-    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    auto request = MakeHolder<NEvDataShard::TEvCompactTable>(tableId.PathId);
     request->Record.SetCompactBorrowed(compactBorrowed);
     runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+    auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvCompactTableResult>(sender);
     return ev->Get()->Record;
 }
 
 NKikimrTxDataShard::TEvCompactBorrowedResult CompactBorrowed(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
-    auto request = MakeHolder<TEvDataShard::TEvCompactBorrowed>(tableId.PathId);
+    auto request = MakeHolder<NEvDataShard::TEvCompactBorrowed>(tableId.PathId);
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactBorrowedResult>(sender);
+    auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvCompactBorrowedResult>(sender);
     return ev->Get()->Record;
 }
 
@@ -1395,11 +1395,11 @@ NTable::TRowVersionRanges GetRemovedRowVersions(
     TActorId sender = runtime.AllocateEdgeActor();
 
     {
-        auto request = MakeHolder<TEvDataShard::TEvGetRemovedRowVersions>(TPathId{});
+        auto request = MakeHolder<NEvDataShard::TEvGetRemovedRowVersions>(TPathId{});
         ForwardToTablet(runtime, shardId, sender, request.Release());
     }
 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetRemovedRowVersionsResult>(sender);
+    auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvGetRemovedRowVersionsResult>(sender);
     return ev->Get()->RemovedRowVersions;
 }
 
@@ -1512,7 +1512,7 @@ void ApplyChanges(
 {
     auto &runtime = *server->GetRuntime();
 
-    auto evReq = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+    auto evReq = MakeHolder<NEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
     evReq->Record.SetSource(sourceId);
     for (const auto& change : changes) {
         auto* p = evReq->Record.AddChanges();
@@ -1529,7 +1529,7 @@ void ApplyChanges(
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(shardId, sender, evReq.Release(), 0, GetPipeConfigWithRetries());
 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(sender);
+    auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvApplyReplicationChangesResult>(sender);
     auto status = ev->Get()->Record.GetStatus();
     UNIT_ASSERT_C(status == expected,
         "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
@@ -1872,11 +1872,11 @@ void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId)
     auto &runtime = *server->GetRuntime();
     auto &settings = server->GetSettings();
 
-    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+    auto request = MakeHolder<NSchemeShard::NEvSchemeShard::TEvNotifyTxCompletion>();
     request->Record.SetTxId(txId);
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
-    runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
+    runtime.GrabEdgeEventRethrow<NEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
 void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
@@ -1885,11 +1885,11 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
     WaitTxNotification(server, sender, txId);
 }
 
-void WaitTableStatsImpl(TTestActorRuntime& runtime, 
-    std::function<void(typename TEvDataShard::TEvPeriodicTableStats::TPtr&)> observerFunc,
+void WaitTableStatsImpl(TTestActorRuntime& runtime,
+    std::function<void(typename NEvDataShard::TEvPeriodicTableStats::TPtr&)> observerFunc,
     bool& captured) {
 
-    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>(observerFunc);
+    auto observer = runtime.AddObserver<NEvDataShard::TEvPeriodicTableStats>(observerFunc);
 
     for (int i = 0; i < 5 && !captured; ++i) {
         TDispatchOptions options;
@@ -1908,14 +1908,14 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRunti
 
     auto observerFunc = [&](auto& ev) {
         const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
-        Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
+        Cerr << "Captured NEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
 
         if (!record.GetFollowerId())
             return;
 
         if (record.GetDatashardId() != tabletId)
             return;
-        
+
         if (record.GetTableStats().GetRowReads() < minRowReads || record.GetTableStats().GetRangeReadRows() < minRangeReadRows)
             return;
 
@@ -1934,14 +1934,14 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
 
     auto observerFunc = [&](auto& ev) {
         const NKikimrTxDataShard::TEvPeriodicTableStats& record = ev->Get()->Record;
-        Cerr << "Captured TEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
+        Cerr << "Captured NEvDataShard::TEvPeriodicTableStats " << record.ShortDebugString() << Endl;
 
         if (record.GetFollowerId())
             return;
 
         if (record.GetDatashardId() != tabletId)
             return;
-        
+
         if (record.GetTableStats().GetPartCount() < minPartCount || record.GetTableStats().GetRowCount() < minRows)
             return;
 
@@ -2183,10 +2183,10 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         return {};
 
     auto requestObserver = runtime.AddObserver([&rows](TAutoPtr<IEventHandle>& event) {
-        if (event->GetTypeRewrite() != TEvDataShard::EvProposeTransaction)
+        if (event->GetTypeRewrite() != NEvDataShard::EvProposeTransaction)
             return;
 
-        const auto& record = event->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+        const auto& record = event->Get<NEvDataShard::TEvProposeTransaction>()->Record;
 
         if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_DATA)
             return;
@@ -2270,7 +2270,7 @@ TTestActorRuntimeBase::TEventObserverHolderPair ReplaceEvProposeTransactionWithE
         ui64 origin = record.GetOrigin();
         auto status = NKikimr::NDataShard::NEvWrite::TConvertor::GetStatus(record.GetStatus());
 
-        auto evResult = std::make_unique<TEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, status);
+        auto evResult = std::make_unique<NEvDataShard::TEvProposeTransactionResult>(NKikimrTxDataShard::TX_KIND_DATA, origin, txId, status);
 
         if (status == NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED) {
             evResult->SetPrepared(record.GetMinStep(), record.GetMaxStep(), {});
@@ -2354,8 +2354,8 @@ void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
 
         bool operator()(IEventHandle& ev)
         {
-            if (ev.GetTypeRewrite() == TEvDataShard::EvStateChanged) {
-                auto &rec = ev.Get<TEvDataShard::TEvStateChanged>()->Record;
+            if (ev.GetTypeRewrite() == NEvDataShard::EvStateChanged) {
+                auto &rec = ev.Get<NEvDataShard::TEvStateChanged>()->Record;
                 if (rec.GetTabletId() == TabletId
                         && rec.GetState() == NDataShard::TShardState::Offline)
                     return true;
@@ -2650,7 +2650,7 @@ void SendViaPipeCache(
 }
 
 void AddKeyQuery(
-    TEvDataShard::TEvRead& request,
+    NEvDataShard::TEvRead& request,
     const std::vector<ui32>& keys)
 {
     // convertion is ugly, but for tests is OK
@@ -2658,20 +2658,20 @@ void AddKeyQuery(
     request.Keys.emplace_back(cells);
 }
 
-void AddFullRangeQuery(TEvDataShard::TEvRead& request) {
+void AddFullRangeQuery(NEvDataShard::TEvRead& request) {
     auto fromBuf = TSerializedCellVec::Serialize(TVector<TCell>());
     auto toBuf = TSerializedCellVec::Serialize(TVector<TCell>());
     request.Ranges.emplace_back(fromBuf, toBuf, true, true);
 }
 
-std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
+std::unique_ptr<NEvDataShard::TEvRead> GetBaseReadRequest(
     const TTableId& tableId,
     const NKikimrSchemeOp::TTableDescription& description,
     ui64 readId,
     NKikimrDataEvents::EDataFormat format,
     const TRowVersion& readVersion)
 {
-    auto request = std::make_unique<TEvDataShard::TEvRead>();
+    auto request = std::make_unique<NEvDataShard::TEvRead>();
     auto& record = request->Record;
 
     record.SetReadId(readId);
@@ -2694,21 +2694,21 @@ std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
     return request;
 }
 
-std::unique_ptr<TEvDataShard::TEvReadResult> WaitReadResult(Tests::TServer::TPtr server, TDuration timeout) {
+std::unique_ptr<NEvDataShard::TEvReadResult> WaitReadResult(Tests::TServer::TPtr server, TDuration timeout) {
     auto& runtime = *server->GetRuntime();
     TAutoPtr<IEventHandle> handle;
-    runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(handle, timeout);
+    runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(handle, timeout);
     if (!handle) {
         return nullptr;
     }
-    std::unique_ptr<TEvDataShard::TEvReadResult> event(handle->Release<TEvDataShard::TEvReadResult>().Release());
+    std::unique_ptr<NEvDataShard::TEvReadResult> event(handle->Release<NEvDataShard::TEvReadResult>().Release());
     return event;
 }
 
 void SendReadAsync(
     Tests::TServer::TPtr server,
     ui64 tabletId,
-    TEvDataShard::TEvRead* request,
+    NEvDataShard::TEvRead* request,
     TActorId sender,
     ui32 node,
     const NTabletPipe::TClientConfig& clientConfig,
@@ -2724,10 +2724,10 @@ void SendReadAsync(
         clientId);
 }
 
-std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
+std::unique_ptr<NEvDataShard::TEvReadResult> SendRead(
     Tests::TServer::TPtr server,
     ui64 tabletId,
-    TEvDataShard::TEvRead* request,
+    NEvDataShard::TEvRead* request,
     TActorId sender,
     ui32 node,
     const NTabletPipe::TClientConfig& clientConfig,
@@ -2755,7 +2755,7 @@ TString ReadTable(
 
         SendReadTablePart(server, tabletId, tableId, description, readId++, NKikimrDataEvents::FORMAT_CELLVEC);
 
-        std::unique_ptr<TEvDataShard::TEvReadResult> readResult;
+        std::unique_ptr<NEvDataShard::TEvReadResult> readResult;
         do {
             readResult = WaitReadResult(server);
             UNIT_ASSERT(readResult);

@@ -47,7 +47,7 @@ private:
         KAFKA_LOG_T("Received event: " << (*ev.Get()).GetTypeName());
         switch (ev->GetTypeRewrite()) {
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk, Handle);
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NEvPersQueue::TEvResponse, Handle);
             HFunc(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -55,7 +55,7 @@ private:
     }
 
     void Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);

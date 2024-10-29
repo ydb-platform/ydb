@@ -20,8 +20,8 @@ class TJsonCompute : public TViewerPipeClient {
     THashMap<TPathId, TTabletId> HiveBySubDomainKey;
     THashMap<TString, TPathId> SubDomainKeyByPath;
     THashMap<TString, THolder<NSchemeCache::TSchemeCacheNavigate>> NavigateResult;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
-    THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
+    THashMap<TTabletId, THolder<NEvHive::TEvResponseHiveDomainStats>> HiveDomainStats;
+    THashMap<TTabletId, THolder<NEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
     THashMap<TNodeId, TVector<const NKikimrWhiteboard::TTabletStateInfo*>> TabletInfoIndex;
     THashMap<TNodeId, const NKikimrHive::THiveNodeStats*> HiveNodeStatsIndex;
     THashMap<TNodeId, TString> TenantPathByNodeId;
@@ -177,10 +177,10 @@ public:
     STATEFN(StateRequested) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NConsole::NEvConsole::TEvListTenantsResponse, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvHive::TEvResponseHiveDomainStats, Handle);
-            hFunc(TEvHive::TEvResponseHiveNodeStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveDomainStats, Handle);
+            hFunc(NEvHive::TEvResponseHiveNodeStats, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
@@ -195,7 +195,7 @@ public:
         RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvListTenantsResponse::TPtr& ev) {
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         for (const TString& path : listTenantsResult.paths()) {
@@ -208,7 +208,7 @@ public:
         RequestDone();
     }
 
-    void Handle(TEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveDomainStats::TPtr& ev) {
         for (const NKikimrHive::THiveDomainStats& hiveStat : ev->Get()->Record.GetDomainStats()) {
             TPathId subDomainKey({hiveStat.GetShardId(), hiveStat.GetPathId()});
             if (FilterSubDomain && FilterSubDomain != subDomainKey) {
@@ -258,7 +258,7 @@ public:
         return ProblemNodesFilter || UptimeSecondsFilter > 0 && TextFilter;
     }
 
-    void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
+    void Handle(NEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
         BLOG_TRACE("ProcessNodeIds()");
 
         auto nodeStats = ev->Get()->Record.GetNodeStats();

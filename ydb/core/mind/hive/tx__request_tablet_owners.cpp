@@ -5,14 +5,14 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxRequestTabletOwners : public TTransactionBase<THive> {
-    THolder<TEvHive::TEvRequestTabletOwners::THandle> Request;
-    THolder<TEvHive::TEvTabletOwnersReply> Response;
+    THolder<NEvHive::TEvRequestTabletOwners::THandle> Request;
+    THolder<NEvHive::TEvTabletOwnersReply> Response;
 
 public:
-    TTxRequestTabletOwners(THolder<TEvHive::TEvRequestTabletOwners::THandle> event, THive *hive)
+    TTxRequestTabletOwners(THolder<NEvHive::TEvRequestTabletOwners::THandle> event, THive *hive)
         : TBase(hive)
         , Request(std::move(event))
-        , Response(new TEvHive::TEvTabletOwnersReply())
+        , Response(new NEvHive::TEvTabletOwnersReply())
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_REQUEST_TABLET_OWNERS; }
@@ -38,7 +38,7 @@ public:
     }
 };
 
-ITransaction* THive::CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event) {
+ITransaction* THive::CreateRequestTabletOwners(NEvHive::TEvRequestTabletOwners::TPtr event) {
     return new TTxRequestTabletOwners(THolder(std::move(event.Release())), this);
 }
 

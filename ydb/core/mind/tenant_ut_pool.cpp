@@ -96,7 +96,7 @@ void ChangeMonitoringConfig(TTenantTestRuntime &runtime,
                             const NKikimrConfig::TMonitoringConfig &monCfg,
                             bool waitForPoolStatus = false)
 {
-    auto *event = new NConsole::TEvConsole::TEvConfigureRequest;
+    auto *event = new NConsole::NEvConsole::TEvConfigureRequest;
     event->Record.AddActions()->MutableRemoveConfigItems()
         ->MutableCookieFilter()->AddCookies("mon-tmp");
     auto &item = *event->Record.AddActions()
@@ -116,9 +116,9 @@ void ChangeMonitoringConfig(TTenantTestRuntime &runtime,
 
         bool operator()(IEventHandle& ev)
         {
-            if (ev.GetTypeRewrite() == NConsole::TEvConsole::EvConfigNotificationResponse
+            if (ev.GetTypeRewrite() == NConsole::NEvConsole::EvConfigNotificationResponse
                 && WaitForConfigNotification) {
-                auto &rec = ev.Get<NConsole::TEvConsole::TEvConfigNotificationResponse>()->Record;
+                auto &rec = ev.Get<NConsole::NEvConsole::TEvConfigNotificationResponse>()->Record;
                 if (rec.GetConfigId().ItemIdsSize() != 1 || rec.GetConfigId().GetItemIds(0).GetId())
                     --WaitForConfigNotification;
             } else if (ev.GetTypeRewrite() == TEvTenantPool::EvTenantPoolStatus

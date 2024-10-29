@@ -261,7 +261,7 @@ public:
     }
 
     // Operation builders
-    TOperation::TPtr BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
+    TOperation::TPtr BuildOperation(NEvDataShard::TEvProposeTransaction::TPtr &ev,
                                     TInstant receivedAt, ui64 tieBreakerIndex,
                                     NTabletFlatExecutor::TTransactionContext &txc,
                                     const TActorContext &ctx, NWilson::TSpan &&operationSpan);
@@ -356,7 +356,7 @@ public:
 
     ui64 WaitingTxs() const { return WaitingDataTxOps.size(); } // note that without iterators
     bool CheckInflightLimit() const;
-    bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    bool AddWaitingTxOp(NEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     bool AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx);
     void ActivateWaitingTxOps(const TActorContext& ctx);
@@ -364,12 +364,12 @@ public:
     ui64 WaitingReadIterators() const { return WaitingDataReadIterators.size(); }
     void AddWaitingReadIterator(
         const TRowVersion& version,
-        TEvDataShard::TEvRead::TPtr ev,
+        NEvDataShard::TEvRead::TPtr ev,
         const TActorContext& ctx);
     bool HasWaitingReadIterator(const TReadIteratorId& readId);
     bool CancelWaitingReadIterator(const TReadIteratorId& readId);
-    void RegisterWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
-    bool HandleWaitingReadIterator(const TReadIteratorId& readId, TEvDataShard::TEvRead* event);
+    void RegisterWaitingReadIterator(const TReadIteratorId& readId, NEvDataShard::TEvRead* event);
+    bool HandleWaitingReadIterator(const TReadIteratorId& readId, NEvDataShard::TEvRead* event);
 
     TRowVersion GetReadEdge() const;
     TRowVersion GetUnreadableEdge() const;
@@ -549,14 +549,14 @@ private:
     THashMap<ui64, TOperation::TPtr> CompletingOps;
 
     struct TWaitingReadIterator {
-        TEvDataShard::TEvRead::TPtr Event;
+        NEvDataShard::TEvRead::TPtr Event;
         NWilson::TSpan Span;
 
-        TWaitingReadIterator(TEvDataShard::TEvRead::TPtr&& ev);
+        TWaitingReadIterator(NEvDataShard::TEvRead::TPtr&& ev);
     };
 
     TMultiMap<TRowVersion, TWaitingReadIterator> WaitingDataReadIterators;
-    THashMap<TReadIteratorId, TEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
+    THashMap<TReadIteratorId, NEvDataShard::TEvRead*, TReadIteratorId::THash> WaitingReadIteratorsById;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);
     void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId);

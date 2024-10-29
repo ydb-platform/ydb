@@ -195,7 +195,7 @@ NKikimrScheme::TEvDescribeSchemeResult DescribeTable(TTestActorRuntime& runtime,
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
-    auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+    auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::NEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
     return *reply->MutableRecord();
 }

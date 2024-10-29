@@ -7,7 +7,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
     const TActorId Sender;
     const ui64 Cookie;
 
-    THolder<TEvKesus::TEvDescribeSessionsResult> Reply;
+    THolder<NEvKesus::TEvDescribeSessionsResult> Reply;
 
     TTxSessionsDescribe(TSelf* self, const TActorId& sender, ui64 cookie)
         : TTxBase(self)
@@ -27,7 +27,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
             Self->PersistStrictMarker(db);
         }
 
-        Reply.Reset(new TEvKesus::TEvDescribeSessionsResult());
+        Reply.Reset(new NEvKesus::TEvDescribeSessionsResult());
         for (const auto& kv : Self->Sessions) {
             const auto* session = &kv.second;
             auto* sessionInfo = Reply->Record.AddSessions();
@@ -52,7 +52,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
     }
 };
 
-void TKesusTablet::Handle(TEvKesus::TEvDescribeSessions::TPtr& ev) {
+void TKesusTablet::Handle(NEvKesus::TEvDescribeSessions::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
 

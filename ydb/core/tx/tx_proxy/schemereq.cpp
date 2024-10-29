@@ -22,7 +22,7 @@ template<typename TDerived>
 struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     using TBase = TActorBootstrapped<TDerived>;
 
-    using TEvSchemeShardPropose = NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;
+    using TEvSchemeShardPropose = NSchemeShard::NEvSchemeShard::TEvModifySchemeTransaction;
 
     const TTxProxyServices Services;
     const ui64 TxId;
@@ -1071,7 +1071,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return Die(ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrScheme::TEvModifySchemeTransactionResult &record = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " Status " << record.GetStatus() << " HANDLE "<< ev->Get()->ToString());
@@ -1192,7 +1192,7 @@ struct TFlatSchemeReq : public TBaseSchemeReq<TFlatSchemeReq> {
 
     STFUNC(StateWaitPrepare) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         }
@@ -1327,7 +1327,7 @@ struct TSchemeTransactionalReq : public TBaseSchemeReq<TSchemeTransactionalReq> 
 
     STFUNC(StateWaitPrepare) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            HFunc(NSchemeShard::NEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         }

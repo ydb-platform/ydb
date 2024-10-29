@@ -67,7 +67,7 @@ public:
         Become(&TKqpWorkloadService::MainState);
 
         // Subscribe for FeatureFlags
-        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
             (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem
         }), IEventHandle::FlagTrackDelivery);
 
@@ -98,7 +98,7 @@ public:
         LOG_D("Subscribed for config changes");
     }
 
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    void Handle(NConsole::NEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         const auto& event = ev->Get()->Record;
 
         EnabledResourcePools = event.GetConfig().GetFeatureFlags().GetEnableResourcePools();
@@ -111,7 +111,7 @@ public:
             LOG_I("Resource pools was disabled");
         }
 
-        auto responseEvent = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        auto responseEvent = std::make_unique<NConsole::NEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEvent.release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
@@ -124,11 +124,11 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) const {
         switch (ev->Get()->SourceType) {
-            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            case NConsole::NEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 LOG_C("Failed to deliver subscription request to config dispatcher");
                 break;
 
-            case NConsole::TEvConsole::EvConfigNotificationResponse:
+            case NConsole::NEvConsole::EvConfigNotificationResponse:
                 LOG_E("Failed to deliver config notification response");
                 break;
 
@@ -205,8 +205,8 @@ public:
 
     STRICT_STFUNC(MainState,
         sFunc(TEvents::TEvPoison, HandlePoison);
-        sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
-        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+        sFunc(NConsole::NEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
+        hFunc(NConsole::NEvConsole::TEvConfigNotificationRequest, Handle);
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 

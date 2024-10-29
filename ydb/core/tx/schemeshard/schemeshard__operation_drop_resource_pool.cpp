@@ -13,7 +13,7 @@ public:
         : OperationId(std::move(id))
     {}
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
         LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
 
@@ -24,7 +24,7 @@ public:
         const TPathId& pathId = txState->TargetPathId;
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
         const TPathElement::TPtr parentDirPtr = context.SS->PathsById.at(pathPtr->ParentPathId);
-    
+
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_ABORT_UNLESS(!pathPtr->Dropped());

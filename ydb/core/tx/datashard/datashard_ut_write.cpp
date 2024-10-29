@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Send immediate write =========\n";
         {
             const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-            
+
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), 0);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(matrix.ReleaseBuffer());
                 evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
             }
-            
+
             const auto writeResult = Write(runtime, sender, shard, std::move(evWrite));
 
             const auto& tableAccessStats = writeResult.GetTxStats().GetTableAccessStats(0);
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
-    }    
+    }
 
     Y_UNIT_TEST(DeleteImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "key = 2, value = 3\nkey = 4, value = 5\n");
         }
-    }   
+    }
 
     Y_UNIT_TEST(ReplaceImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Send immediate replace =========\n";
         {
             const auto writeResult = Replace(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-            
+
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), 0);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
-    }    
+    }
 
     Y_UNIT_TEST(ReplaceImmediate_DefaultValue) {
         auto [runtime, server, sender] = TestCreateServer();
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Send immediate insert, keys 0, 2, 4 =========\n";
         {
             const auto writeResult = Insert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-            
+
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shard);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStep(), 0);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrderId(), txId);
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
         }
-    }    
+    }
 
     Y_UNIT_TEST(UpdateImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
@@ -415,13 +415,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cout << "========= Send immediate update to empty table, it should be no op =========\n";
         {
             Update(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        }     
-        
+        }
+
         Cout << "========= Read table =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, "");
-        }         
+        }
 
         Cout << "========= Send immediate insert =========\n";
         {
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Send prepare =========\n";
         {
-            const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, 
+            const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId,
                 Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             UNIT_ASSERT_GT(writeResult.GetMinStep(), 0);
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Send cancel to tablet =========\n";
         {
-            auto request = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId);
+            auto request = std::make_unique<NEvDataShard::TEvCancelTransactionProposal>(txId);
             runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
         }
 
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 tabletId1 = shards1[0];
         const ui64 tabletId2 = shards2[0];
         const ui64 rowCount = 3;
-        
+
         ui64 txId = 100;
         ui64 minStep1, maxStep1;
         ui64 minStep2, maxStep2;
@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cerr << "===== Write prepared to table 1" << Endl;
         {
-            const auto writeResult = Upsert(runtime, sender, tabletId1, tableId1, opts.Columns_, rowCount, txId, 
+            const auto writeResult = Upsert(runtime, sender, tabletId1, tableId1, opts.Columns_, rowCount, txId,
                 Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             minStep1 = writeResult.GetMinStep();
@@ -637,7 +637,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    
+
     Y_UNIT_TEST_TWIN(UpsertPreparedNoTxCache, Volatile) {
         auto [runtime, server, sender] = TestCreateServer();
 
@@ -653,7 +653,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Send prepare =========\n";
         {
-            const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, 
+            const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId,
                 Volatile ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
 
             minStep = writeResult.GetMinStep();
@@ -799,7 +799,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
             auto request = MakeWriteRequest(++txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, rowCount);
             request->Record.SetOverloadSubscribe(secNo);
-           
+
             auto writeResult = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
             UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOverloadSubscribed(), secNo);
         }
@@ -1295,7 +1295,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         auto read1sender = runtime.AllocateEdgeActor();
         {
             Cerr << "... making a read from " << shard1 << Endl;
-            auto req = std::make_unique<TEvDataShard::TEvRead>();
+            auto req = std::make_unique<NEvDataShard::TEvRead>();
             {
                 auto& record = req->Record;
                 record.SetReadId(1);
@@ -1312,7 +1312,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 req->Keys.push_back(TSerializedCellVec(TSerializedCellVec::Serialize(keys)));
             }
             ForwardToTablet(runtime, shard1, read1sender, req.release());
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(read1sender);
+            auto ev = runtime.GrabEdgeEventRethrow<NEvDataShard::TEvReadResult>(read1sender);
             auto* res = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);

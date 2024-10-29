@@ -8,11 +8,11 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-class TTxStoreTopicStats: public TTxStoreStats<TEvPersQueue::TEvPeriodicTopicStats> {
+class TTxStoreTopicStats: public TTxStoreStats<NEvPersQueue::TEvPeriodicTopicStats> {
     TSideEffects MergeOpSideEffects;
 
 public:
-    TTxStoreTopicStats(TSchemeShard* ss, TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>& queue, bool& persistStatsPending)
+    TTxStoreTopicStats(TSchemeShard* ss, TStatsQueue<NEvPersQueue::TEvPeriodicTopicStats>& queue, bool& persistStatsPending)
         : TTxStoreStats(ss, queue, persistStatsPending)
     {
     }
@@ -22,12 +22,12 @@ public:
     void Complete(const TActorContext& ) override;
 
     // returns true to continue batching
-    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
+    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<NEvPersQueue::TEvPeriodicTopicStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
     void ScheduleNextBatch(const TActorContext& ctx) override;
 };
 
 
-bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQueueItem<TEvPersQueue::TEvPeriodicTopicStats>& item, TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQueueItem<NEvPersQueue::TEvPeriodicTopicStats>& item, TTransactionContext& txc, const TActorContext& ctx) {
     const auto& rec = item.Ev->Get()->Record;
 
     TTopicStats newStats;
@@ -89,7 +89,7 @@ void TTxStoreTopicStats::ScheduleNextBatch(const TActorContext& ctx) {
 }
 
 
-void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
 
     const TPathId pathId = TPathId(TabletID(), rec.GetPathId());
@@ -114,7 +114,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
     }
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvPersistTopicStats::TPtr&, const TActorContext& ctx) {
+void TSchemeShard::Handle(NEvPrivate::TEvPersistTopicStats::TPtr&, const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
            "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << TopicStatsQueue.Size());
 
@@ -140,7 +140,7 @@ void TSchemeShard::ScheduleTopicStatsBatch(const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Will delay TTxStoreTopicStats on# " << delay << ", queue# " << TopicStatsQueue.Size());
 
-        ctx.Schedule(delay, new TEvPrivate::TEvPersistTopicStats());
+        ctx.Schedule(delay, new NEvPrivate::TEvPersistTopicStats());
         TopicStatsBatchScheduled = true;
     }
 }

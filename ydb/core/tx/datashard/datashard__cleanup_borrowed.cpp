@@ -100,7 +100,7 @@ public:
             if (!DryRun) {
                 // We use FlagTrackDelivery to catch cases where tablet dies before us
                 // We use tablet id as cookie to distinguish different ack replies
-                auto request = MakeHolder<TEvDataShard::TEvReturnBorrowedPart>(kv.first, kv.second);
+                auto request = MakeHolder<NEvDataShard::TEvReturnBorrowedPart>(kv.first, kv.second);
                 ctx.Send(Owner, request.Release(), IEventHandle::FlagTrackDelivery, kv.first);
                 WaitingAcks.insert(kv.first);
             }
@@ -114,7 +114,7 @@ public:
     STFUNC(StateWaitAcks) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvUndelivered, Handle);
-            HFunc(TEvDataShard::TEvReturnBorrowedPartAck, Handle);
+            HFunc(NEvDataShard::TEvReturnBorrowedPartAck, Handle);
             IgnoreFunc(TEvTabletPipe::TEvClientDestroyed);
             CFunc(TEvents::TEvPoison::EventType, HandlePoison);
         }
@@ -122,7 +122,7 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
         switch (ev->Get()->SourceType) {
-            case TEvDataShard::TEvReturnBorrowedPart::EventType: {
+            case NEvDataShard::TEvReturnBorrowedPart::EventType: {
                 if (WaitingAcks.erase(ev->Cookie)) {
                     DeadParts[ev->Cookie].clear();
                 }
@@ -132,7 +132,7 @@ public:
         }
     }
 
-    void Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx) {
         WaitingAcks.erase(ev->Cookie);
         CheckWaitComplete(ctx);
     }

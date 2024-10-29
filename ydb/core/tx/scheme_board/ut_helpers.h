@@ -209,13 +209,13 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
-        auto init = new TEvSchemeShard::TEvInitRootShard(edge, 32, "Root");
+        auto init = new NEvSchemeShard::TEvInitRootShard(edge, 32, "Root");
         runtime.SendToPipe(tabletId, edge, init, 0, GetPipeConfigWithRetries());
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvInitRootShardResult>(edge);
+        auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvInitRootShardResult>(edge);
 
         UNIT_ASSERT(ev->Get());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetOrigin(), tabletId);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), (ui32)NEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
     }
 
     static void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId) {

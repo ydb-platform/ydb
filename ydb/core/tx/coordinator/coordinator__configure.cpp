@@ -10,7 +10,7 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
     ui64 Resolution;
     TVector<TTabletId> Mediators;
     NKikimrSubDomains::TProcessingParams Config;
-    TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
+    TAutoPtr<NEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
 
     TTxConfigure(TSelf *coordinator, TActorId ackTo,
@@ -92,24 +92,24 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
 
         if (curMissing) {
             // First config version
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
+            Respond = new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
             persistConfig();
             ConfigurationApplied = true;
         } else if (curVersion == Version && curMediators == Mediators && curResolution == Resolution) {
             // Same config version without mediator/resolution changes
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID());
+            Respond = new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID());
             if (!curHaveConfig) {
                 persistConfig();
                 updateCurrentConfig();
             }
         } else if (curVersion < Version && curMediators == Mediators && curResolution == Resolution) {
             // New config version without mediator/resolution changes
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
+            Respond = new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
             persistConfig();
             updateCurrentConfig();
         } else {
             // Outdated config version, or attempt to change mediators/resolution
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
+            Respond = new NEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
         }
 
         return true;

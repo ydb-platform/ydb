@@ -37,7 +37,7 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -92,9 +92,9 @@ public:
         , OperationId(id)
     {
         IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
-            , TEvDataShard::TEvProposeTransactionResult::EventType
-            , TEvPrivate::TEvOperationPlan::EventType }
+            { NEvHive::TEvCreateTabletReply::EventType
+            , NEvDataShard::TEvProposeTransactionResult::EventType
+            , NEvPrivate::TEvOperationPlan::EventType }
         );
     }
 
@@ -161,7 +161,7 @@ public:
             new NMetering::TEvMetering::TEvWriteMeteringJson(std::move(billRecord)));
     }
 
-    static void CollectStats(TOperationId operationId, const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
+    static void CollectStats(TOperationId operationId, const NEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
         const auto& evRecord = ev->Get()->Record;
 
         if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) {
@@ -222,7 +222,7 @@ public:
         }
     }
 
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
@@ -309,9 +309,9 @@ public:
         : TProposedWaitParts<TKind>(type, id)
     {
         this->IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
-            , TEvDataShard::TEvProposeTransactionResult::EventType
-            , TEvPrivate::TEvOperationPlan::EventType }
+            { NEvHive::TEvCreateTabletReply::EventType
+            , NEvDataShard::TEvProposeTransactionResult::EventType
+            , NEvPrivate::TEvOperationPlan::EventType }
         );
     }
 
@@ -385,10 +385,10 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages(DebugHint(), {NEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -401,7 +401,7 @@ public:
         return false;
     }
 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         auto step = TStepId(ev->Get()->StepId);
         auto ssId = context.SS->SelfTabletId();
 

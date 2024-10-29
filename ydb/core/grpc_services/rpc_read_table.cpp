@@ -188,7 +188,7 @@ private:
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvSubscribe, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
-            HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
+            HFunc(NEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
             default:
                 Y_ABORT("TRequestHandler: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -457,9 +457,9 @@ private:
         InactiveServerTimerPending_ = true;
     }
 
-    void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx)
+    void Handle(NEvDataShard::TEvGetReadTableStreamStateRequest::TPtr &ev, const TActorContext &ctx)
     {
-        auto *response = new TEvDataShard::TEvGetReadTableStreamStateResponse;
+        auto *response = new NEvDataShard::TEvGetReadTableStreamStateResponse;
         response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
 
         //response->Record.SetReady(IsStreamReady);

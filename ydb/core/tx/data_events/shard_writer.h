@@ -196,7 +196,7 @@ public:
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvColumnShard::TEvWriteResult, Handle);
+            hFunc(NEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
@@ -206,7 +206,7 @@ public:
     void Bootstrap();
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
-    void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev);
+    void Handle(NEvColumnShard::TEvWriteResult::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
 

@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         AsyncDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
         TestModificationResult(runtime, txId - 1);
 
-        auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
+        auto ev = runtime.GrabEdgeEvent<NEvSchemeShard::TEvModifySchemeTransactionResult>();
         UNIT_ASSERT(ev);
 
         const auto& record = ev->Record;

@@ -76,9 +76,9 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
         for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
             try {
                 TString cookie = CmdSetOwner(0, tc).first;
-                THolder<TEvPersQueue::TEvRequest> request;
+                THolder<NEvPersQueue::TEvRequest> request;
                 tc.Runtime->ResetScheduledCount();
-                request.Reset(new TEvPersQueue::TEvRequest);
+                request.Reset(new NEvPersQueue::TEvRequest);
                 auto req = request->Record.MutablePartitionRequest();
                 req->SetPartition(0);
                 req->SetOwnerCookie(cookie);
@@ -92,8 +92,8 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
                 }
                 tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
                 TAutoPtr<IEventHandle> handle;
-                TEvPersQueue::TEvResponse *result;
-                result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){
+                NEvPersQueue::TEvResponse *result;
+                result = tc.Runtime->GrabEdgeEventIf<NEvPersQueue::TEvResponse>(handle, [](const NEvPersQueue::TEvResponse& ev){
                     if (!ev.Record.HasPartitionResponse() ||
                         !ev.Record.GetPartitionResponse().HasCmdReadResult()) {
                         return true;

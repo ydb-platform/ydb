@@ -2691,7 +2691,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
             auto res = SqlToYql(req);
             UNIT_ASSERT(res.Root);
-            
+
             TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
                 if (word == "Write") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
@@ -6592,6 +6592,28 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewIfNotExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                USE plato;
+                CREATE VIEW IF NOT EXISTS {} WITH (security_invoker = TRUE) AS SELECT 1;
+            )", name
+        ));
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(
@@ -6671,6 +6693,28 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
+    Y_UNIT_TEST(DropViewIfExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                USE plato;
+                DROP VIEW IF EXISTS {};
+            )", name
+        ));
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
     Y_UNIT_TEST(CreateViewWithTablePrefix) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
@@ -6714,7 +6758,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
-    
+
     Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
         NYql::TAstParseResult res = SqlToYql(R"(
             SELECT * FROM plato.Input WITH schema(y Int32, x String not null);
@@ -6783,7 +6827,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma ValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;
@@ -6806,7 +6850,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma DisableValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;

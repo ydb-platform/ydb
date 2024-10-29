@@ -20,7 +20,6 @@ target_link_libraries(cpp-containers-bitseq PUBLIC
   contrib-libs-cxxsupp
   yutil
   util-draft
-  library-cpp-pop_count
 )
 
 target_sources(cpp-containers-bitseq PRIVATE

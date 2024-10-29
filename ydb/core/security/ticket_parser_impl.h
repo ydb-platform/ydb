@@ -1721,6 +1721,8 @@ protected:
                 record.RefreshRetryableErrorImmediately = false;
                 GetDerived()->CanRefreshTicket(key, record);
                 Respond(record);
+                CounterTicketsErrors->Inc();
+                return;
             }
         } else {
             record.UnsetToken();

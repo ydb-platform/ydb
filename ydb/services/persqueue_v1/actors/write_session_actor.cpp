@@ -201,6 +201,13 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
     , LastSourceIdUpdate(TInstant::Zero())
 {
     Y_ASSERT(Request);
+
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
+        UserAgent = values[0];
+    }
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
+        SdkBuildInfo = values[0];
+    }
 }
 
 template<bool UseMigrationProtocol>
@@ -485,7 +492,18 @@ void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
     SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false);
     SLIErrors = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsError"}, true, "sensor", false);
     SLITotal.Inc();
+}
 
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::SetupBytesWrittenByUserAgentCounter(const TString& topicPath) {
+    static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", protocol)
+        ->GetSubgroup("topic", topicPath)
+        ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
+        ->GetSubgroup("user_agent", CleanupCounterValueString(UserAgent))
+        ->GetExpiringNamedCounter("sensor", "BytesWrittenByUserAgent", true);
 }
 
 template<bool UseMigrationProtocol>
@@ -517,10 +535,12 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
     }
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter(FullConverter->GetFederationPath());
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
+void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TActorContext& ctx, const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     if (SessionsCreated) {
         return;
@@ -536,6 +556,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& clou
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
+
+    SetupBytesWrittenByUserAgentCounter(NPersQueue::GetFullTopicPath(ctx, dbPath, FullConverter->GetPrimaryPath()));
 }
 
 template<bool UseMigrationProtocol>
@@ -585,7 +607,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = Config.GetPQTabletConfig();
-        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+        SetupCounters(ctx, tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
                         tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
     } else {
@@ -1238,6 +1260,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
                                                                      std::move(request->PartitionWriteRequest));
 
     ctx.Send(PartitionWriterCache, std::move(event));
+
+    BytesWrittenByUserAgent->Add(request->ByteSize);
 
     SentRequests.push_back(std::move(request));
 }

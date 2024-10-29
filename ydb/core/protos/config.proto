@@ -380,6 +380,7 @@ message TLogConfig {
     optional TUAClientConfig UAClientConfig = 13;
     optional uint64 TimeThresholdMs = 14 [default = 1000];
     optional bool IgnoreUnknownComponents = 15 [default = true];
+    optional string TenantName = 16;
 }
 
 message TInterconnectConfig {

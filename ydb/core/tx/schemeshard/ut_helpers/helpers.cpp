@@ -1679,12 +1679,18 @@ namespace NSchemeShardUT_Private {
         *index.mutable_data_columns() = {cfg.DataColumns.begin(), cfg.DataColumns.end()};
 
         switch (cfg.IndexType) {
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-            *index.mutable_global_index() = Ydb::Table::GlobalIndex();
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-            *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-            break;
+        case NKikimrSchemeOp::EIndexTypeGlobal: {
+            auto& settings = *index.mutable_global_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
+            auto& settings = *index.mutable_global_async_index()->mutable_settings();
+            if (cfg.GlobalIndexSettings) {
+                cfg.GlobalIndexSettings[0].SerializeTo(settings);
+            }
+        } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }
@@ -1994,7 +2000,7 @@ namespace NSchemeShardUT_Private {
                 Runtime.SendToPipe(shardData.ShardId, sender, proposal);
                 TAutoPtr<IEventHandle> handle;
                 auto event = Runtime.GrabEdgeEventIf<TEvDataShard::TEvProposeTransactionResult>(handle,
-                                                                                                [=](const TEvDataShard::TEvProposeTransactionResult& event) {
+                                                                                                [this, shardData](const TEvDataShard::TEvProposeTransactionResult& event) {
                     return event.GetTxId() == TxId && event.GetOrigin() == shardData.ShardId;
                 });
                 activeZone = true;

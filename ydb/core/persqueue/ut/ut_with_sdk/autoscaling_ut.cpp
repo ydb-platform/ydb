@@ -894,6 +894,60 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    void ExecuteQuery(NYdb::NTable::TSession& session, const TString& query ) {
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(WithDir_PartitionSplit_AutosplitByLoad) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto client = setup.MakeClient();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        setup.GetServer().AnnoyingClient->MkDir("/Root", "dir");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/dir/origin`
+                WITH (
+                    AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
+                    MAX_ACTIVE_PARTITIONS = 50
+                );
+        )");
+
+        {
+            auto describe = client.DescribeTopic("/Root/dir/origin").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        ui64 balancerTabletId;
+        {
+            auto pathDescr = setup.GetServer().AnnoyingClient->Ls("/Root/dir/origin")->Record.GetPathDescription().GetSelf();
+            balancerTabletId = pathDescr.GetBalancerTabletID();
+            Cerr << ">>>>> BalancerTabletID=" << balancerTabletId << Endl << Flush;
+            UNIT_ASSERT(balancerTabletId);
+        }
+
+        {
+            const auto edge = setup.GetRuntime().AllocateEdgeActor();
+            setup.GetRuntime().SendToPipe(balancerTabletId, edge, new TEvPQ::TEvPartitionScaleStatusChanged(0, NKikimrPQ::EScaleStatus::NEED_SPLIT));
+        }
+
+        {
+            size_t partitionCount = 0;
+            for (size_t i = 0; i < 10; ++i) {
+                Sleep(TDuration::Seconds(1));
+                auto describe = client.DescribeTopic("/Root/dir/origin").GetValueSync();
+                partitionCount = describe.GetTopicDescription().GetPartitions().size();
+                if (partitionCount == 3) {
+                    break;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(partitionCount, 3);
+        }
+    }
+
     Y_UNIT_TEST(MidOfRange) {
         auto AsString = [](std::vector<ui16> vs) {
             TStringBuilder a;

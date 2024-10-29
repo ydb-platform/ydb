@@ -172,6 +172,7 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/view
     ydb/services/ydb
 )
 

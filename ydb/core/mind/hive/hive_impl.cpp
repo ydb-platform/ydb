@@ -236,6 +236,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
         if (tablet == nullptr) {
             continue;
         }
+        tablet->InWaitQueue = false;
         if (tablet->IsAlive()) {
             BLOG_D("tablet " << record.TabletId << " already alive, skipping");
             continue;
@@ -256,9 +257,10 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffec
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
+                    tablet->InWaitQueue = true;
                     if (tablet->IsFollower()) {
                         TLeaderTabletInfo& leader = tablet->GetLeader();
-                        UpdateTabletFollowersNumber(leader, db, sideEffects);
+                        UpdateTabletFollowersNumber(leader, db, sideEffects); // this may delete tablet
                     }
                     BootQueue.AddToWaitQueue(record); // waiting for new node
                     continue;
@@ -1853,6 +1855,9 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         tabletInfo.SetRestartsPerPeriod(info->GetRestartsPerPeriod(restartsBarrierTime));
         if (req.GetReturnMetrics()) {
             tabletInfo.MutableMetrics()->CopyFrom(info->GetResourceValues());
+        }
+        if (info->InWaitQueue) {
+            tabletInfo.SetInWaitQueue(true);
         }
         if (req.GetReturnChannelHistory()) {
             for (const auto& channel : info->TabletStorageInfo->Channels) {

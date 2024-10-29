@@ -250,48 +250,24 @@ void TestTableSplitBoundariesArePreserved(
 }
 
 void TestIndexTableSplitBoundariesArePreserved(
-    const char* table, const char* index, ui64 indexPartitions, TSession& session,
+    const char* table, const char* index, ui64 indexPartitions, TSession& session, TTableBuilder& tableBuilder,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
-    const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
-
     {
-        TExplicitPartitions indexPartitionBoundaries;
-        for (ui32 boundary : {1, 2, 4, 8, 16, 32, 64, 128, 256}) {
-            indexPartitionBoundaries.AppendSplitPoints(
-                // split boundary is technically always a tuple
-                TValueBuilder().BeginTuple().AddElement().OptionalUint32(boundary).EndTuple().Build()
-            );
-        }
-        // By default indexImplTable has auto partitioning by size enabled,
-        // so you must set min partition count for partitions to not merge immediately after indexImplTable is built.
-        TPartitioningSettingsBuilder partitioningSettingsBuilder;
-        partitioningSettingsBuilder
-            .SetMinPartitionsCount(indexPartitions)
-            .SetMaxPartitionsCount(indexPartitions);
-
-        const auto indexSettings = TGlobalIndexSettings{
-            .PartitioningSettings = partitioningSettingsBuilder.Build(),
-            .Partitions = std::move(indexPartitionBoundaries)
-        };
-
-        auto tableBuilder = TTableBuilder()
-            .AddNullableColumn("Key", EPrimitiveType::Uint32)
-            .AddNullableColumn("Value", EPrimitiveType::Uint32)
-            .SetPrimaryKeyColumn("Key")
-            .AddSecondaryIndex(TIndexDescription("byValue", EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
-
         const auto result = session.CreateTable(table, tableBuilder.Build()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
+
+    const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
     const auto describeSettings = TDescribeTableSettings()
             .WithTableStatistics(true)
             .WithKeyShardBoundary(true);
-    const auto originalIndexTableDescription = GetTableDescription(
+
+    const auto originalDescription = GetTableDescription(
         session, indexTablePath, describeSettings
     );
-    UNIT_ASSERT_VALUES_EQUAL(originalIndexTableDescription.GetPartitionsCount(), indexPartitions);
-    const auto& originalKeyRanges = originalIndexTableDescription.GetKeyRanges();
+    UNIT_ASSERT_VALUES_EQUAL(originalDescription.GetPartitionsCount(), indexPartitions);
+    const auto& originalKeyRanges = originalDescription.GetKeyRanges();
     UNIT_ASSERT_VALUES_EQUAL(originalKeyRanges.size(), indexPartitions);
 
     backup(table);
@@ -302,11 +278,11 @@ void TestIndexTableSplitBoundariesArePreserved(
     ));
 
     restore(table);
-    const auto restoredIndexTableDescription = GetTableDescription(
+    const auto restoredDescription = GetTableDescription(
         session, indexTablePath, describeSettings
     );
-    UNIT_ASSERT_VALUES_EQUAL(restoredIndexTableDescription.GetPartitionsCount(), indexPartitions);
-    const auto& restoredKeyRanges = restoredIndexTableDescription.GetKeyRanges();
+    UNIT_ASSERT_VALUES_EQUAL(restoredDescription.GetPartitionsCount(), indexPartitions);
+    const auto& restoredKeyRanges = restoredDescription.GetKeyRanges();
     UNIT_ASSERT_VALUES_EQUAL(restoredKeyRanges.size(), indexPartitions);
     UNIT_ASSERT_EQUAL(restoredKeyRanges, originalKeyRanges);
 }
@@ -613,11 +589,88 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         constexpr const char* index = "byValue";
         constexpr ui64 indexPartitions = 10;
 
+        TExplicitPartitions indexPartitionBoundaries;
+        for (ui32 i = 1; i < indexPartitions; ++i) {
+            indexPartitionBoundaries.AppendSplitPoints(
+                // split boundary is technically always a tuple
+                TValueBuilder().BeginTuple().AddElement().OptionalUint32(i * 10).EndTuple().Build()
+            );
+        }
+        // By default indexImplTables have auto partitioning by size enabled.
+        // If you don't want the partitions to merge immediately after the indexImplTable is built,
+        // you must set the min partition count for the table.
+        TPartitioningSettingsBuilder partitioningSettingsBuilder;
+        partitioningSettingsBuilder
+            .SetMinPartitionsCount(indexPartitions)
+            .SetMaxPartitionsCount(indexPartitions);
+
+        const auto indexSettings = TGlobalIndexSettings{
+            .PartitioningSettings = partitioningSettingsBuilder.Build(),
+            .Partitions = std::move(indexPartitionBoundaries)
+        };
+
+        auto tableBuilder = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", EPrimitiveType::Uint32)
+            .SetPrimaryKeyColumn("Key")
+            .AddSecondaryIndex(TIndexDescription(index, EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
+
         TestIndexTableSplitBoundariesArePreserved(
             table,
             index,
             indexPartitions,
             testEnv.GetSession(),
+            tableBuilder,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
+        );
+    }
+
+    Y_UNIT_TEST(RestoreIndexTableDecimalSplitBoundaries) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        constexpr ui64 indexPartitions = 10;
+
+        constexpr ui8 decimalPrecision = 22;
+        constexpr ui8 decimalScale = 9;
+
+        TExplicitPartitions indexPartitionBoundaries;
+        for (ui32 i = 1; i < indexPartitions; ++i) {
+            TDecimalValue boundary(ToString(i * 10), decimalPrecision, decimalScale);
+            indexPartitionBoundaries.AppendSplitPoints(
+                // split boundary is technically always a tuple
+                TValueBuilder()
+                    .BeginTuple().AddElement()
+                        .BeginOptional().Decimal(boundary).EndOptional()
+                    .EndTuple().Build()
+            );
+        }
+        // By default indexImplTables have auto partitioning by size enabled.
+        // If you don't want the partitions to merge immediately after the indexImplTable is built,
+        // you must set the min partition count for the table.
+        TPartitioningSettingsBuilder partitioningSettingsBuilder;
+        partitioningSettingsBuilder
+            .SetMinPartitionsCount(indexPartitions)
+            .SetMaxPartitionsCount(indexPartitions);
+
+        const auto indexSettings = TGlobalIndexSettings{
+            .PartitioningSettings = partitioningSettingsBuilder.Build(),
+            .Partitions = std::move(indexPartitionBoundaries)
+        };
+
+        auto tableBuilder = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", TDecimalType(decimalPrecision, decimalScale))
+            .SetPrimaryKeyColumn("Key")
+            .AddSecondaryIndex(TIndexDescription(index, EIndexType::GlobalSync, { "Value" }, {}, { indexSettings }));
+
+        TestIndexTableSplitBoundariesArePreserved(
+            table,
+            index,
+            indexPartitions,
+            testEnv.GetSession(),
+            tableBuilder,
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port())
         );

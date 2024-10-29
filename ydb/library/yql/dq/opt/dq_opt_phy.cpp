@@ -2775,6 +2775,17 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
         return node;
     }
 
+    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+
+    YQL_ENSURE(typeAnn);
+    typeAnn = GetSeqItemType(typeAnn);
+    if (typeAnn->GetKind() != ETypeAnnotationKind::List &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Flow &&
+        typeAnn->GetKind() != ETypeAnnotationKind::Stream)
+    {
+        return node;
+    }
+
     auto takeLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"list_stream"})
         .Body<TCoMap>()

@@ -18,14 +18,14 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
     ui32 chunksCount = 0;
     bool selectMore = true;
     for (; itCurrentPath != PortionsForSend.end() && selectMore; ++itCurrentPath) {
-        std::vector<TPortionInfo> portions;
+        std::vector<TPortionInfo::TPtr> portions;
         for (; itPortion != itCurrentPath->second.end(); ++itPortion) {
             selectMore = (count < 10000 && chunksCount < 1000000);
             if (!selectMore) {
                 NextPathId = itCurrentPath->first;
                 NextPortionId = itPortion->first;
             } else {
-                portions.emplace_back(*itPortion->second);
+                portions.emplace_back(itPortion->second);
                 chunksCount += TPortionDataAccessor(portions.back()).GetRecords().size();
                 chunksCount += TPortionDataAccessor(portions.back()).GetIndexes().size();
                 ++count;

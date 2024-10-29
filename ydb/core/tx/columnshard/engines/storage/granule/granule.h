@@ -1,16 +1,14 @@
 #pragma once
 #include "portions_index.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
-#include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
-
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/formats/arrow/reader/position.h>
 
 namespace NKikimr::NOlap {
 
@@ -50,6 +48,7 @@ private:
     TDataClassSummary Inserted;
     TDataClassSummary Compacted;
     friend class TGranuleMeta;
+
 public:
     const TDataClassSummary& GetInserted() const {
         return Inserted;
@@ -71,12 +70,11 @@ public:
     private:
         const NColumnShard::TGranuleDataCounters& Counters;
         TGranuleAdditiveSummary& Owner;
+
     public:
         TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
             : Counters(counters)
-            , Owner(owner)
-        {
-
+            , Owner(owner) {
         }
 
         ~TEditGuard() {
@@ -131,9 +129,11 @@ private:
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
-    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
+    void OnAfterChangePortion(
+        const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
+
 public:
     void RefreshTiering(const std::optional<TTiering>& tiering) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
@@ -149,18 +149,20 @@ public:
             return TConclusionStatus::Fail("portion id is incorrect: " + ::ToString(portion->GetPortionId()));
         }
         if (portion->GetPathId() != GetPathId()) {
-            return TConclusionStatus::Fail("portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId()));
+            return TConclusionStatus::Fail(
+                "portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId()));
         }
         return it->second;
     }
 
     template <class TModifier>
-    void ModifyPortionOnExecute(IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
+    void ModifyPortionOnExecute(
+        IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         auto copy = *innerPortion;
         modifier(copy);
-        TPortionDataAccessor(copy).SaveToDatabase(wrapper, firstPKColumnId, false);
+        TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, firstPKColumnId, false);
     }
 
     template <class TModifier>
@@ -172,8 +174,7 @@ public:
         OnAfterChangePortion(innerPortion, nullptr);
     }
 
-    void InsertPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
+    void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
         AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
         portion.SaveToDatabase(wrapper, 0, false);
@@ -189,25 +190,24 @@ public:
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
         TDbWrapper wrapper(txc.DB, nullptr);
-        TPortionDataAccessor(*it->second).SaveToDatabase(wrapper, 0, true);
+        TPortionDataAccessor(it->second).SaveToDatabase(wrapper, 0, true);
     }
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
 
-    void AbortPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
+    void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         TDbWrapper wrapper(txc.DB, nullptr);
-        TPortionDataAccessor(*it->second).RemoveFromDatabase(wrapper);
+        TPortionDataAccessor(it->second).RemoveFromDatabase(wrapper);
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId) {
         AFL_VERIFY(InsertedPortions.erase(insertWriteId));
     }
 
-    void CommitImmediateOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot,
-        const std::shared_ptr<TPortionInfo>& portion) const;
+    void CommitImmediateOnExecute(
+        NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const std::shared_ptr<TPortionInfo>& portion) const;
 
     void CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine);
 
@@ -215,7 +215,8 @@ public:
         return OptimizerPlanner->GetTasksDescription();
     }
 
-    void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor, std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
+    void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
+        std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
@@ -250,7 +251,8 @@ public:
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+        std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         return OptimizerPlanner->GetOptimizationTask(self, locksManager);
     }
 
@@ -300,11 +302,10 @@ public:
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"
-            << "path_id:" << GetPathId() << ";"
-            << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
-            << "portions_count:" << Portions.size() << ";"
-            << ")"
-            ;
+                                << "path_id:" << GetPathId() << ";"
+                                << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
+                                << "portions_count:" << Portions.size() << ";"
+                                << ")";
     }
 
     std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion);
@@ -345,9 +346,12 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
+    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
+        const TVersionedIndex& versionedIndex);
 
-    bool Empty() const noexcept { return Portions.empty(); }
+    bool Empty() const noexcept {
+        return Portions.empty();
+    }
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

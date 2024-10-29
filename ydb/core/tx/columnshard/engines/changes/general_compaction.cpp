@@ -111,12 +111,12 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
                 dataColumnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
             }
             for (auto&& i : SwitchedPortions) {
-                stats->Merge(TPortionDataAccessor(*i).GetSerializationStat(*resultSchema));
+                stats->Merge(TPortionDataAccessor(i).GetSerializationStat(*resultSchema));
                 if (i->GetMeta().GetDeletionsCount()) {
                     dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
                 }
                 if (dataColumnIds.size() != resultSchema->GetColumnsCount()) {
-                    for (auto id : TPortionDataAccessor(*i).GetColumnIds()) {
+                    for (auto id : TPortionDataAccessor(i).GetColumnIds()) {
                         if (resultSchema->HasColumnId(id)) {
                             dataColumnIds.emplace(id);
                         }
@@ -236,8 +236,8 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
     return std::make_shared<TMemoryPredictorChunkedPolicy>();
 }
 
-ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo& portionInfo) {
-    SumMemoryFix += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16)) + portionInfo.GetTotalBlobBytes();
+ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo::TConstPtr& portionInfo) {
+    SumMemoryFix += portionInfo->GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16)) + portionInfo->GetTotalBlobBytes();
     ++PortionsCount;
     SumMemoryDelta = 0;
 
@@ -269,7 +269,7 @@ ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPorti
     advanceIterator(columnId, maxChunkSize);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_prediction_after", SumMemoryFix + SumMemoryDelta)(
-        "portion_info", portionInfo.DebugString());
+        "portion_info", portionInfo->DebugString());
     return SumMemoryFix + SumMemoryDelta;
 }
 

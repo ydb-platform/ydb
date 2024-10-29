@@ -34,7 +34,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo());
             } else {
-                granule.InsertPortionOnExecute(txc, NOlap::TPortionDataAccessor(*portion.GetPortionInfo()));
+                granule.InsertPortionOnExecute(txc, NOlap::TPortionDataAccessor(portion.GetPortionInfo()));
             }
         }
     }

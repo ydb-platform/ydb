@@ -22,8 +22,7 @@ protected:
         return Buckets.IsLocked(dataLocksManager);
     }
 
-    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add,
-        const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
         for (auto&& [_, i] : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;

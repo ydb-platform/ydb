@@ -12,7 +12,7 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
     if (ui32 dropped = PortionsToDrop.size()) {
         out << "drop " << dropped << " portions";
         for (auto& portionInfo : PortionsToDrop) {
-            out << portionInfo.DebugString();
+            out << portionInfo->DebugString();
         }
     }
 }
@@ -26,7 +26,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     for (auto&& p : PortionsToDrop) {
         TPortionDataAccessor(p).RemoveFromDatabase(context.DBWrapper);
         TPortionDataAccessor(p).FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
-        pathIds.emplace(p.GetPathId());
+        pathIds.emplace(p->GetPathId());
     }
     for (auto&& i : blobIdsByStorage) {
         auto action = BlobsAction.GetRemoving(i.first);
@@ -38,14 +38,14 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     for (auto& portionInfo : PortionsToDrop) {
-        if (!context.EngineLogs.ErasePortion(portionInfo)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
+        if (!context.EngineLogs.ErasePortion(*portionInfo)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());
         }
     }
     if (self) {
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
-            self->Counters.GetTabletCounters()->OnDropPortionEvent(p.GetTotalRawBytes(), p.GetTotalBlobBytes(), p.GetRecordsCount());
+            self->Counters.GetTabletCounters()->OnDropPortionEvent(p->GetTotalRawBytes(), p->GetTotalBlobBytes(), p->GetRecordsCount());
         }
     }
 }

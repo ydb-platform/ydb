@@ -20,7 +20,7 @@ std::vector<TPortionInfo::TConstPtr> TTimeSliceLogic::GetPortionsForMerge(
                 if (p.GetTotalBlobBytes() > compactedDetector) {
                     continue;
                 }
-                memUsage = predictor->AddPortion(*p.GetPortionInfo());
+                memUsage = predictor->AddPortion(p.GetPortionInfo());
                 txSizeLimit += p->GetTxVolume();
                 result.emplace_back(p.GetPortionInfo());
             }

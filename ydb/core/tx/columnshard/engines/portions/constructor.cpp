@@ -80,6 +80,15 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
         }
         AFL_VERIFY(itRecord == Records.end());
         AFL_VERIFY(itBlobIdx == BlobIdxs.end());
+    } else {
+        for (auto&& i : Records) {
+            AFL_VERIFY(i.BlobRange.IsValid());
+        }
+        for (auto&& i : Indexes) {
+            if (auto* blobId = i.GetBlobRangeOptional()) {
+                AFL_VERIFY(blobId->IsValid());
+            }
+        }
     }
 
     result.Indexes = std::move(Indexes);

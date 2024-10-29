@@ -2543,10 +2543,9 @@ public:
             TAlterBackupCollectionSettings settings;
             settings.Name = TString(alterBackupCollection.BackupCollection());
 
-            // FIXME
-            // if (!ParseAsyncBackupCollectionSettings(settings.Settings, alterBackupCollection.BackupCollectionSettings(), ctx, alterBackupCollection.Pos())) {
-            //     return SyncError();
-            // }
+            if (!ParseBackupCollectionSettings(settings.Settings, alterBackupCollection.BackupCollectionSettings(), ctx, alterBackupCollection.Pos())) {
+                return SyncError();
+            }
 
             auto cluster = TString(alterBackupCollection.DataSink().Cluster());
             auto future = Gateway->AlterBackupCollection(cluster, settings);

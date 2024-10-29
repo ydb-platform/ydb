@@ -1256,12 +1256,27 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 auto columns = root.WriteKey("Columns").BeginList();
 
                 for (const auto& [_, column] : Columns) {
-                    columns.BeginObject()
-                        .WriteKey("Id").WriteULongLong(column.Id)
-                        .WriteKey("Name").WriteString(column.Name)
-                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId()) // TODO: support pg types
-                        .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
-                    .EndObject();
+                    auto col = columns.BeginObject();
+                    col.WriteKey("Id").WriteULongLong(column.Id);
+                    col.WriteKey("Name").WriteString(column.Name);
+                    col.WriteKey("Type").WriteULongLong(column.PType.GetTypeId());
+                    col.WriteKey("KeyOrder").WriteInt(column.KeyOrder);
+                    col.WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType, column.PTypeMod));
+
+                    switch (column.PType.GetTypeId()) {
+                        case NScheme::NTypeIds::Decimal:
+                            col.WriteKey("Precision").WriteInt(column.PType.GetDecimalType().GetPrecision());
+                            col.WriteKey("Scale").WriteInt(column.PType.GetDecimalType().GetScale());
+                            break;
+                        case NScheme::NTypeIds::Pg:
+                            col.WriteKey("PgType").WriteULongLong(NPg::PgTypeIdFromTypeDesc(column.PType.GetPgTypeDesc()));
+                            col.WriteKey("TypeMod").WriteString(column.PTypeMod);
+                            break;
+                        default:
+                            break;
+                    }
+
+                    col.EndObject();
                 }
 
                 columns.EndList();

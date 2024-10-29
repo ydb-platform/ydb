@@ -494,10 +494,10 @@ void TCloudAuthRequestProxy::ChangeCounters(std::function<void()> func) {
 }
 
 void THttpProxyAuthRequestProxy::DoReply() {
-    auto response = Error_.Empty() 
+    auto response = Error_.Empty()
         ? MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(CloudId_, FolderId_, UserSID_)
         : MakeHolder<NHttpProxy::TEvYmqCloudAuthResponse>(Error_.GetRef());
-    
+
     Send(Requester_, response.Release());
 }
 
@@ -583,10 +583,21 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     }
 
     const ui32 poolID = data.ExecutorPoolID;
-    system.Register(                                                        //token needed only for ResourceManager
-        new TCloudAuthRequestProxy(std::move(data), UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : ""),
-        NActors::TMailboxType::HTSwap,
-        poolID);
+
+    // token needed only for ResourceManager
+    const auto token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
+
+    if (data.RequestFormat == NSQS::TAuthActorData::Json) {
+        system.Register(
+            new THttpProxyAuthRequestProxy(std::move(data), token, data.Requester),
+            NActors::TMailboxType::HTSwap,
+            poolID);
+    } else {
+        system.Register(
+            new TCloudAuthRequestProxy(std::move(data), token),
+            NActors::TMailboxType::HTSwap,
+            poolID);
+    }
 }
 
 TMultiAuthFactory::TCredentialsFactoryPtr

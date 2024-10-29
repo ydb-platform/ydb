@@ -13,6 +13,11 @@ namespace NKikimr::NSQS {
 struct TAuthActorData {
     // Used by both private and public API
 
+    enum ESqsRequestFormat {
+        Xml = 0,
+        Json
+    };
+
     THolder<NKikimrClient::TSqsRequest> SQSRequest;
     THolder<IReplyCallback> HTTPCallback;
     std::function<void(TString)> UserSidCallback;
@@ -35,6 +40,9 @@ struct TAuthActorData {
 
     TStringBuf IAMToken;
     TStringBuf FolderID;
+
+    ESqsRequestFormat RequestFormat = Xml;
+    TActorId Requester;
 };
 
 /**

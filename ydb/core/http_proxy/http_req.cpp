@@ -553,15 +553,14 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = HttpContext.FolderId
+                        .FolderID = HttpContext.FolderId,
+                        .RequestFormat = NSQS::TAuthActorData::Json,
+                        .Requester = ctx.SelfID
                     };
 
-                    auto authRequestProxy = MakeHolder<NSQS::THttpProxyAuthRequestProxy>(
-                        std::move(data),
-                        "",
-                        ctx.SelfID);
-
-                    ctx.RegisterWithSameMailbox(authRequestProxy.Release());
+                    AppData(ctx.ActorSystem())->SqsAuthFactory->RegisterAuthActor(
+                        *ctx.ActorSystem(),
+                        std::move(data));
                 }
 
                 ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());

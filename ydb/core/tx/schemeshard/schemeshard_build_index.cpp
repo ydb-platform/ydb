@@ -34,7 +34,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
 
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo::TPtr info) {
     Y_ABORT_UNLESS(info->BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
-    db.Table<Schema::IndexBuild>().Key(info->Id).Update(
+    auto persistedBuildIndex = db.Table<Schema::IndexBuild>().Key(info->Id);
+    persistedBuildIndex.Update(
         NIceDb::TUpdate<Schema::IndexBuild::Uid>(info->Uid),
         NIceDb::TUpdate<Schema::IndexBuild::DomainOwnerId>(info->DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::IndexBuild::DomainLocalId>(info->DomainPathId.LocalPathId),
@@ -48,6 +49,17 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info->Limits.MaxRetries),
         NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info->BuildKind))
     );
+    // Persist details of the index build operation: ImplTableDescription.
+    // We have chosen TIndexCreationConfig's string representation as the serialization format.
+    {
+        NKikimrSchemeOp::TIndexCreationConfig serializableRepresentation;
+
+        *serializableRepresentation.MutableIndexImplTableDescription() = info->ImplTableDescription;
+
+        persistedBuildIndex.Update(
+            NIceDb::TUpdate<Schema::IndexBuild::CreationConfig>(serializableRepresentation.SerializeAsString())
+        );
+    }
 
     ui32 columnNo = 0;
     for (ui32 i = 0; i < info->IndexColumns.size(); ++i, ++columnNo) {

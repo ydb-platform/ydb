@@ -1252,10 +1252,62 @@ TCheckFunc PartitionKeys(TVector<TString> lastShardKeys) {
         const auto& pathDescr = record.GetPathDescription();
         UNIT_ASSERT_VALUES_EQUAL(lastShardKeys.size(), pathDescr.TablePartitionsSize());
         for (size_t i = 0; i < lastShardKeys.size(); ++i) {
-            UNIT_ASSERT_STRING_CONTAINS(pathDescr.GetTablePartitions(i).GetEndOfRangeKeyPrefix(), lastShardKeys[i]);
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                partition.GetEndOfRangeKeyPrefix(), lastShardKeys[i],
+                "partition index: " << i << '\n'
+                    << "actual key prefix: " << partition.GetEndOfRangeKeyPrefix().Quote() << '\n'
+                    << "expected key prefix: " << lastShardKeys[i].Quote() << '\n'
+            );
         }
     };
 }
+
+namespace {
+
+// Serializes / deserializes a value of type T to a cell vector string representation.
+template <typename T>
+struct TSplitBoundarySerializer {
+    static TString Serialize(T splitBoundary) {
+        const auto cell = TCell::Make(splitBoundary);
+        TSerializedCellVec cellVec(TArrayRef<const TCell>(&cell, 1));
+        return cellVec.ReleaseBuffer();
+    }
+
+    static TVector<T> Deserialize(const TString& serializedCells) {
+        TSerializedCellVec cells(serializedCells);
+        TVector<T> values;
+        for (const auto& cell : cells.GetCells()) {
+            if (cell.IsNull()) {
+                // the last cell
+                break;
+            }
+            values.emplace_back(cell.AsValue<T>());
+        }
+        return values;
+    }
+};
+
+}
+
+template <typename T>
+TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries) {
+    return [expectedBoundaries = std::move(expectedBoundaries)] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.TablePartitionsSize(), expectedBoundaries.size() + 1);
+        for (size_t i = 0; i < expectedBoundaries.size(); ++i) {
+            const auto& partition = pathDescr.GetTablePartitions(i);
+            const auto actualBoundary = TSplitBoundarySerializer<T>::Deserialize(partition.GetEndOfRangeKeyPrefix()).at(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                actualBoundary, expectedBoundaries[i],
+                "partition index: " << i << '\n'
+                    << "actual key prefix: " << partition.GetEndOfRangeKeyPrefix().Quote() << '\n'
+            );
+        }
+    };
+}
+
+template TCheckFunc SplitBoundaries<ui32>(TVector<ui32>&&);
 
 TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {

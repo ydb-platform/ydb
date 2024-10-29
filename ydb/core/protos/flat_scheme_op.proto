@@ -220,11 +220,17 @@ message TTTLSettings {
         optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
     }
 
+    message TTier {
+        optional uint32 EvictAfterSeconds = 1;
+        optional string TierName = 2;
+    }
+
     message TEnabled {
         optional string ColumnName = 1;
         optional uint32 ExpireAfterSeconds = 2;
         optional EUnit ColumnUnit = 3;
         optional TSysSettings SysSettings = 4;
+        repeated TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -235,7 +241,7 @@ message TTTLSettings {
         TDisabled Disabled = 2;
     }
 
-    optional string UseTiering = 3;
+    reserved 3;
 }
 
 message TTableReplicationConfig {
@@ -547,6 +553,12 @@ message TRemoveColumnTableSchemaPreset {
 
 // TTL and external storage eviction policies
 message TColumnDataLifeCycle {
+    message TTier {
+        optional uint32 EvictAfterSeconds = 1;
+        optional string TierName = 2;
+        optional TCompressionOptions Compression = 3;
+    }
+
     message TTtl {
         optional string ColumnName = 1;
         oneof Expire {
@@ -554,6 +566,7 @@ message TColumnDataLifeCycle {
             uint64 ExpireAfterBytes = 4;
         }
         optional TTTLSettings.EUnit ColumnUnit = 3;
+        repeated TTier Tiers = 5;
     }
 
     message TDisabled {
@@ -567,7 +580,7 @@ message TColumnDataLifeCycle {
     // Incremented on each settings change
     optional uint64 Version = 3 [default = 1];
 
-    optional string UseTiering = 5;
+    reserved 5;
 }
 
 message TColumnTableTtlSettingsPreset {

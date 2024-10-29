@@ -403,20 +403,18 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     }
 
     {
-        bool needTieringActivation = false;
+        THashSet<TString> usedTiers;
         TTableInfo table(pathId);
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
-            if (ttlSettings.HasUseTiering()) {
-                table.SetTieringUsage(ttlSettings.GetUseTiering());
-                needTieringActivation = true;
+            for (const auto& tier : ttlSettings.GetEnabled().GetTiers()) {
+                usedTiers.emplace(tier.GetTierName());
             }
         }
-        const TString tieringName = table.GetTieringUsage();
         TablesManager.RegisterTable(std::move(table), db);
-        if (needTieringActivation) {
-            ActivateTiering(pathId, tieringName);
+        if (!usedTiers.empty()) {
+            ActivateTiering(pathId, usedTiers);
         }
     }
 
@@ -427,7 +425,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
-    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().PathsCount());
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
 }
 
 void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterProto, const NOlap::TSnapshot& version,
@@ -451,14 +449,18 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         schema = alterProto.GetSchema();
     }
 
-    const auto& ttlSettings = alterProto.GetTtlSettings(); // Note: Not valid behaviour for full alter implementation
-    const TString& tieringUsage = ttlSettings.GetUseTiering();
+    THashSet<TString> usedTiers;
     if (alterProto.HasTtlSettings()) {
         const auto& ttlSettings = alterProto.GetTtlSettings();
         *tableVerProto.MutableTtlSettings() = ttlSettings;
+
+        if (ttlSettings.HasEnabled()) {
+            for (const auto& tier : ttlSettings.GetEnabled().GetTiers()) {
+                usedTiers.emplace(tier.GetTierName());
+            }
+        }
     }
-    ActivateTiering(pathId, tieringUsage);
-    Schema::SaveTableInfo(db, pathId, tieringUsage);
+    ActivateTiering(pathId, usedTiers);
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
     TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db, Tiers);
@@ -1183,13 +1185,13 @@ void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& 
     Tiers->TakeConfigs(ev->Get()->GetSnapshot(), nullptr);
 }
 
-void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering) {
+void TColumnShard::ActivateTiering(const ui64 pathId, const THashSet<TString>& usedTiers) {
     AFL_VERIFY(Tiers);
-    if (useTiering) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tiering", useTiering);
+    if (!usedTiers.empty()) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "activate_tiering")("path_id", pathId)("tiers", JoinStrings(usedTiers.begin(), usedTiers.end(), ","));
     }
-    if (useTiering) {
-        Tiers->EnablePathId(pathId, useTiering);
+    if (!usedTiers.empty()) {
+        Tiers->EnablePathId(pathId, usedTiers);
     } else {
         Tiers->DisablePathId(pathId);
     }
@@ -1208,10 +1210,21 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
 
 void TColumnShard::OnTieringModified(const std::optional<ui64> pathId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
-    if (Tiers->IsReady()) {
-        StoragesManager->OnTieringModified(Tiers);
-        if (TablesManager.HasPrimaryIndex()) {
-            TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl(), pathId);
+    // TODO: Don't need this condition? -> remove
+    if (!Tiers->IsReady()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ignore_tiering_modified")("reason", "manager_not_ready");
+        return;
+    }
+    StoragesManager->OnTieringModified(Tiers);
+    if (TablesManager.HasPrimaryIndex()) {
+        if (pathId) {
+            std::optional<NOlap::TTiering> tableTtl;
+            if (auto findTtl = TablesManager.GetTtl().FindPtr(*pathId)) {
+                tableTtl = *findTtl;
+            }
+            TablesManager.MutablePrimaryIndex().OnTieringModified(tableTtl, *pathId);
+        } else {
+            TablesManager.MutablePrimaryIndex().OnTieringModified(TablesManager.GetTtl());
         }
     }
 }

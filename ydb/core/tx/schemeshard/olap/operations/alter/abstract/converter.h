@@ -25,11 +25,15 @@ private:
                 if (enabled.HasColumnUnit()) {
                     alterEnabled->SetColumnUnit(enabled.GetColumnUnit());
                 }
+                if (enabled.HasTiers()) {
+                    for (const auto& dsTier : enabled.GetTiers()) {
+                        auto* tier = alterEnabled->AddTiers();
+                        tier->SetTierName(dsTier.GetTierName());
+                        tier->SetEvictAfterSeconds(dsTier.GetEvictAfterSeconds());
+                    }
+                }
             } else if (tableTtl.HasDisabled()) {
                 alterTtl->MutableDisabled();
-            }
-            if (tableTtl.HasUseTiering()) {
-                alterTtl->SetUseTiering(tableTtl.GetUseTiering());
             }
         }
 

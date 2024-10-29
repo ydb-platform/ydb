@@ -53,6 +53,21 @@ public:
         return std::make_shared<TTierInfo>(NTiering::NCommon::DeleteTierName, evictDuration, ttlColumn, unitsInSecond);
     }
 
+    static ui32 GetUnitsInSecond(const NKikimrSchemeOp::TTTLSettings::EUnit timeUnit) {
+        switch (timeUnit) {
+            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+                return 1;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+                return 1000;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+                return 1000 * 1000;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+                return 1000 * 1000 * 1000;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
+                return 0;
+        }
+    }
+
     TString GetDebugString() const {
         TStringBuilder sb;
         sb << "name=" << Name << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";serializer=";
@@ -106,6 +121,7 @@ private:
 };
 
 class TTiering {
+    using TProto = NKikimrSchemeOp::TColumnDataLifeCycle::TTtl;
     using TTiersMap = THashMap<TString, std::shared_ptr<TTierInfo>>;
     TTiersMap TierByName;
     TSet<TTierRef> OrderedTiers;
@@ -197,6 +213,37 @@ public:
             return it->second->GetSerializer();
         }
         return {};
+    }
+
+    TConclusionStatus DeserializeFromProto(const TProto& serialized) {
+        if (serialized.HasExpireAfterBytes()) {
+            return TConclusionStatus::Fail("TTL by size is not supported.");
+        }
+        if (!serialized.HasColumnName()) {
+            return TConclusionStatus::Fail("Missing column name in TTL settings");
+        }
+
+        const TString ttlColumnName = serialized.GetColumnName();
+        const ui32 unitsInSecond = TTierInfo::GetUnitsInSecond(serialized.GetColumnUnit());
+
+        if (serialized.HasExpireAfterSeconds()) {
+            if (!Add(TTierInfo::MakeTtl(TDuration::Seconds(serialized.GetExpireAfterSeconds()), ttlColumnName, unitsInSecond))) {
+                return TConclusionStatus::Fail("Invalid ttl settings");
+            }
+        }
+        for (const auto& tier : serialized.GetTiers()) {
+            if (!tier.HasTierName()) {
+                return TConclusionStatus::Fail("Missing tier name in tier description");
+            }
+            if (!tier.HasEvictAfterSeconds()) {
+                return TConclusionStatus::Fail("Missing eviction delay in tier description");
+            }
+            if (!Add(std::make_shared<TTierInfo>(
+                    tier.GetTierName(), TDuration::Seconds(tier.GetEvictAfterSeconds()), ttlColumnName, unitsInSecond))) {
+                return TConclusionStatus::Fail("Invalid tier settings");
+            }
+        }
+        return TConclusionStatus::Success();
     }
 
     const TString& GetEvictColumnName() const {

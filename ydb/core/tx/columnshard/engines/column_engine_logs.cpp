@@ -12,7 +12,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/tiering/manager.h>
@@ -135,6 +134,14 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     }
 }
 
+void TColumnEngineForLogs::StartActualization() {
+    AFL_VERIFY(!ActualizationStarted);
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->StartActualizationIndex();
+    }
+    ActualizationStarted = true;
+}
+
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
     bool switchOptimizer = false;
     if (!VersionedIndex.IsEmpty()) {
@@ -146,10 +153,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme) {
         if (!ActualizationStarted) {
-            ActualizationStarted = true;
-            for (auto&& i : GranulesStorage->GetTables()) {
-                i.second->StartActualizationIndex();
-            }
+            StartActualization();
         }
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
@@ -566,40 +570,28 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     return out;
 }
 
-void TColumnEngineForLogs::OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) {
+void TColumnEngineForLogs::OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const ui64 pathId) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
     if (!ActualizationStarted) {
-        for (auto&& i : GranulesStorage->GetTables()) {
-            i.second->StartActualizationIndex();
-        }
+        StartActualization();
     }
 
-    ActualizationStarted = true;
-    AFL_VERIFY(manager);
-    THashMap<ui64, TTiering> tierings = manager->GetTiering();
-    ttl.AddTtls(tierings);
+    auto g = GetGranulePtrVerified(pathId);
+    g->RefreshTiering(ttl);
+}
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")
-        ("new_count_tierings", tierings.size())
-        ("new_count_ttls", ttl.PathsCount());
-    // some string
+void TColumnEngineForLogs::OnTieringModified(const THashMap<ui64, NOlap::TTiering>& ttl) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("new_count_tierings", ttl.size());
+    if (!ActualizationStarted) {
+        StartActualization();
+    }
 
-
-    if (pathId) {
-        auto g = GetGranulePtrVerified(*pathId);
-        auto it = tierings.find(*pathId);
-        if (it == tierings.end()) {
+    for (auto&& [gPathId, g] : GranulesStorage->GetTables()) {
+        auto it = ttl.find(gPathId);
+        if (it == ttl.end()) {
             g->RefreshTiering({});
         } else {
             g->RefreshTiering(it->second);
-        }
-    } else {
-        for (auto&& [gPathId, g] : GranulesStorage->GetTables()) {
-            auto it = tierings.find(gPathId);
-            if (it == tierings.end()) {
-                g->RefreshTiering({});
-            } else {
-                g->RefreshTiering(it->second);
-            }
         }
     }
 }

@@ -1,5 +1,4 @@
 #include "columnshard_impl.h"
-#include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
 #include "blobs_action/storages_manager/manager.h"
@@ -127,7 +126,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
+        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().size());
         ACFL_DEBUG("step", "TTablesManager::Load_Finish");
     }
 

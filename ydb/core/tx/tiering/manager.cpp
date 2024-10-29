@@ -192,32 +192,6 @@ NMetadata::NFetcher::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManip
     return ExternalDataManipulation;
 }
 
-THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
-    THashMap<ui64, NKikimr::NOlap::TTiering> result;
-    AFL_VERIFY(IsReady());
-    auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(Snapshot);
-    Y_ABORT_UNLESS(snapshotPtr);
-    auto& tierConfigs = snapshotPtr->GetTierConfigs();
-    for (auto&& i : PathIdTiering) {
-        auto* tieringRule = snapshotPtr->GetTieringById(i.second);
-        if (tieringRule) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "activation");
-            NOlap::TTiering tiering = tieringRule->BuildOlapTiers();
-            for (auto& [name, tier] : tiering.GetTierByName()) {
-                AFL_VERIFY(name != NOlap::NTiering::NCommon::DeleteTierName);
-                auto it = tierConfigs.find(name);
-                if (it != tierConfigs.end()) {
-                    tier->SetSerializer(NTiers::ConvertCompression(it->second.GetCompression()));
-                }
-            }
-            result.emplace(i.first, std::move(tiering));
-        } else {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "not_found");
-        }
-    }
-    return result;
-}
-
 TActorId TTiersManager::GetActorId() const {
     if (Actor) {
         return Actor->SelfId();

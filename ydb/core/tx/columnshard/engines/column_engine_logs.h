@@ -8,7 +8,6 @@
 #include "storage/granule/granule.h"
 #include "storage/granule/storage.h"
 
-#include <ydb/core/tx/columnshard/columnshard_ttl.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
@@ -87,8 +86,8 @@ public:
     TColumnEngineForLogs(
         ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
 
-    virtual void OnTieringModified(
-        const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
+    void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const ui64 pathId) override;
+    void OnTieringModified(const THashMap<ui64, NOlap::TTiering>& ttl) override;
 
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const override {
         return std::make_shared<TVersionedIndex>(VersionedIndex);
@@ -211,6 +210,7 @@ private:
         const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType,
         const TPortionInfo* exPortionInfo = nullptr) const;
+    void StartActualization();
 };
 
 }   // namespace NKikimr::NOlap

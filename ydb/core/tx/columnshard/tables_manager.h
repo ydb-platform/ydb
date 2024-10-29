@@ -1,7 +1,6 @@
 #pragma once
 
 #include "columnshard_schema.h"
-#include "columnshard_ttl.h"
 
 #include "blobs_action/abstract/storages_manager.h"
 #include "engines/column_engine.h"
@@ -9,6 +8,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/engines/tier_info.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -92,20 +92,10 @@ public:
 class TTableInfo {
 public:
     ui64 PathId;
-    TString TieringUsage;
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
 public:
-    const TString& GetTieringUsage() const {
-        return TieringUsage;
-    }
-
-    TTableInfo& SetTieringUsage(const TString& data) {
-        TieringUsage = data;
-        return *this;
-    }
-
     bool IsEmpty() const {
         return Versions.empty();
     }
@@ -135,7 +125,6 @@ public:
     template <class TRow>
     bool InitFromDB(const TRow& rowset) {
         PathId = rowset.template GetValue<Schema::TableInfo::PathId>();
-        TieringUsage = rowset.template GetValue<Schema::TableInfo::TieringUsage>();
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
@@ -150,7 +139,7 @@ private:
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     THashSet<ui64> PathsToDrop;
-    TTtl Ttl;
+    THashMap<ui64, NOlap::TTiering> Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
@@ -162,12 +151,8 @@ public:
     bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
     bool TryFinalizeDropPathOnComplete(const ui64 pathId);
 
-    const TTtl& GetTtl() const {
+    const THashMap<ui64, NOlap::TTiering>& GetTtl() const {
         return Ttl;
-    }
-
-    bool AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) {
-        return Ttl.AddTtls(eviction);
     }
 
     const THashSet<ui64>& GetPathsToDrop() const {

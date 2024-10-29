@@ -99,8 +99,13 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
 }
 
 bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
-    if (!Precharge(txc)) {
-        return false;
+    TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+    {
+        TLoadTimeSignals::TLoadTimer timer = tManagerLocal.GetLoadTimeCounters()->PrechargeTimeCounters.StartGuard();
+        if (!Precharge(txc)) {
+            timer.AddLoadingFail();
+            return false;
+        }
     }
 
     NIceDb::TNiceDb db(txc.DB);
@@ -108,7 +113,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
         ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
         {
             TMemoryProfileGuard g("TTxInit/TTablesManager");
             if (!tManagerLocal.InitFromDB(db)) {

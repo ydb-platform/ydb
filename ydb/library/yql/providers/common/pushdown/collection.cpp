@@ -523,7 +523,7 @@ void CollectExpressionPredicate(TPredicateNode& predicateTree, const TCoMember& 
 
 } // anonymous namespace end
 
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {    
     if (predicate.Maybe<TCoCoalesce>()) {
         if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators))
             CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
@@ -559,8 +559,20 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::ExpressionAsPredicate) && predicate.Maybe<TCoMember>()) {
         CollectExpressionPredicate(predicateTree, predicate.Cast<TCoMember>(), lambdaArg);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators) && (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>())) {
-        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
-    } else {
+         CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
+     } else if (predicate.Maybe<TCoSqlIn>()) {
+        auto sqlIn = predicate.Cast<TCoSqlIn>();
+
+        [[maybe_unused]] const TExprBase& collection = sqlIn.Collection();
+        [[maybe_unused]] const TExprBase& lookup = sqlIn.Lookup();
+
+        //[[maybe_unused]] const TExprBase& opt = sqlIn.Options();
+
+        bool check = CheckExpressionNodeForPushdown(lookup, lambdaArg, settings);
+        YQL_LOG(TRACE) << "CollectPredicates TCoSqlIn check " << check;
+      //  predicateTree.Op = EBoolOp::In;
+        predicateTree.CanBePushed = true;
+     } else {
         predicateTree.CanBePushed = false;
     }
 }

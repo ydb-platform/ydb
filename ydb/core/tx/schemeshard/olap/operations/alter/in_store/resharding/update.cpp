@@ -6,7 +6,7 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusionStatus TInStoreShardingUpdate::DoStart(const TUpdateStartContext& context) {
+TConclusionStatus TInStoreShardingUpdate::DoStart(const NOperations::TUpdateStartContext& context) {
     NKikimr::NOlap::NBackground::TTask task("SPLIT_SHARDS::" + context.GetObjectPath()->PathString(), std::make_shared<NKikimr::NOlap::NBackground::TFakeStatusChannel>(),
         std::make_shared<NOlap::NBackground::TTxChainTask>(TxChainData));
     auto tx = context.GetSSOperationContext()->SS->BackgroundSessionsManager->TxAddTask(task);
@@ -17,7 +17,7 @@ TConclusionStatus TInStoreShardingUpdate::DoStart(const TUpdateStartContext& con
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializationContext& context) {
+TConclusionStatus TInStoreShardingUpdate::DoInitialize(const NOperations::TUpdateInitializationContext& context) {
     auto& inStoreTable = context.GetOriginalEntityAsVerified<TInStoreTable>();
     AFL_VERIFY(context.GetModification()->GetAlterColumnTable().HasReshardColumnTable());
     std::shared_ptr<NSharding::IShardingBase> sharding = inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());

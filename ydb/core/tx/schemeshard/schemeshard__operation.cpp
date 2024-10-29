@@ -818,6 +818,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         targetName = tx.GetCreateResourcePool().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+        targetName = tx.GetCreateMetadataObject().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;
@@ -910,6 +913,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
             create.MutableCreateResourcePool()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+            create.MutableCreateMetadataObject()->SetName(name);
             break;
         default:
             Y_ABORT("Invariant violation");
@@ -1201,6 +1207,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropBackupCollection:
         return CreateDropBackupCollection(NextPartId(), txState);
 
+    // MetadataObject
+    case TTxState::ETxType::TxCreateMetadataObject:
+        return CreateNewMetadataObject(NextPartId(), txState);
+    case TTxState::ETxType::TxDropMetadataObject:
+        return CreateDropMetadataObject(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterMetadataObject:
+        return CreateAlterMetadataObject(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1450,6 +1464,14 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return {CreateDropResourcePool(NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return {CreateAlterResourcePool(NextPartId(), tx)};
+
+    // MetadataObject
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+        return {CreateNewMetadataObject(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject:
+        return {CreateDropMetadataObject(NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterMetadataObject:
+        return {CreateAlterMetadataObject(NextPartId(), tx)};
 
     // IncrementalBackup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:

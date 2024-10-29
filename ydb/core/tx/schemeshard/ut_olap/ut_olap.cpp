@@ -427,6 +427,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(CreateTableTtl) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().TenantName = "/MyRoot";
         ui64 txId = 100;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
@@ -474,6 +475,20 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
+        TestCreateMetadataObject(runtime, ++txId, "/MyRoot", R"(
+            Name: ".metadata/tiering/rules/Tiering1"
+            Properties: {
+                TieringRule: {
+                    DefaultColumn: "timestamp"
+                    Tiers: {
+                        Intervals: {
+                            TierName: "Tier1"
+                            EvictionDelayMs: 3600000000
+                        }
+                    }
+                }
+            }
+        )");
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema3);
         env.TestWaitNotification(runtime, txId);
 
@@ -565,6 +580,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestEnvOptions options;
         options.EnableTieringInColumnShard(true);
         TTestEnv env(runtime, options);
+        runtime.GetAppData().TenantName = "/MyRoot";
         ui64 txId = 100;
 
         TString olapSchema = R"(
@@ -627,6 +643,21 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        TestCreateMetadataObject(runtime, ++txId, "/MyRoot", R"(
+            Name: ".metadata/tiering/rules/Tiering1"
+            Properties: {
+                TieringRule: {
+                    DefaultColumn: "timestamp"
+                    Tiers: {
+                        Intervals: {
+                            TierName: "Tier1"
+                            EvictionDelayMs: 3600000000
+                        }
+                    }
+                }
+            }
+        )");
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"

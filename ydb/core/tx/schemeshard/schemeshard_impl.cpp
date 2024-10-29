@@ -409,6 +409,7 @@ void TSchemeShard::Clear() {
     ExternalTables.clear();
     ExternalDataSources.clear();
     Views.clear();
+    MetadataObjects.clear();
 
     ColumnTables = { };
     BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
@@ -1521,6 +1522,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateContinuousBackup:
     case TTxState::TxCreateResourcePool:
     case TTxState::TxCreateBackupCollection:
+    case TTxState::TxCreateMetadataObject:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1557,6 +1559,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterContinuousBackup:
     case TTxState::TxAlterResourcePool:
     case TTxState::TxAlterBackupCollection:
+    case TTxState::TxAlterMetadataObject:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1582,6 +1585,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropContinuousBackup:
     case TTxState::TxDropResourcePool:
     case TTxState::TxDropBackupCollection:
+    case TTxState::TxDropMetadataObject:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3027,6 +3031,24 @@ void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pa
     db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistMetadataObject(NIceDb::TNiceDb& db, TPathId pathId, const TMetadataObjectInfo::TPtr object) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    db.Table<Schema::MetadataObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::MetadataObjects::AlterVersion>(object->GetAlterVersion()),
+        NIceDb::TUpdate<Schema::MetadataObjects::Properties>(object->GetProperties()->SerializeToProto().SerializeAsString())
+    );
+}
+
+void TSchemeShard::PersistRemoveMetadataObject(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (const auto object = MetadataObjects.find(pathId); object != MetadataObjects.end()) {
+        MetadataObjects.erase(object);
+    }
+
+    db.Table<Schema::MetadataObjects>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4282,6 +4304,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetBackupCollectionVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeTieringRule: {
+                auto it = MetadataObjects.find(pathId);
+                Y_ABORT_UNLESS(it != MetadataObjects.end());
+                result.SetMetadataObjectVersion(it->second->GetAlterVersion());
+                generalVersion += result.GetMetadataObjectVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
@@ -5101,6 +5130,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeBackupCollection:
         TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeTieringRule:
+        TabletCounters->Simple()[COUNTER_TIERING_RULE_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");

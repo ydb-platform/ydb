@@ -223,7 +223,8 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                               TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
                               NOlap::TSnapshot(++planStep, ++txId));
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+        auto [tiers, tieringRules] = TTestSchema::BuildSnapshot(spec);
+        csControllerGuard->SetTiersSnapshot(runtime, sender, std::move(tiers), std::move(tieringRules));
     }
     //
 
@@ -277,7 +278,8 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                          TTestSchema::AlterTableTxBody(tableId, 2, spec),
                          NOlap::TSnapshot(++planStep, ++txId));
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+        auto [tiers, tieringRules] = TTestSchema::BuildSnapshot(spec);
+        csControllerGuard->SetTiersSnapshot(runtime, sender, std::move(tiers), std::move(tieringRules));
     }
 
     if (internal) {
@@ -304,7 +306,8 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
                          NOlap::TSnapshot(++planStep, ++txId));
     UNIT_ASSERT(ok);
     if (spec.HasTiers()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
+        auto [tiers, tieringRules] = TTestSchema::BuildSnapshot(spec);
+        csControllerGuard->SetTiersSnapshot(runtime, sender, std::move(tiers), std::move(tieringRules));
     }
     PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
 
@@ -567,7 +570,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, specs[0], "/Root/olapStore"),
             NOlap::TSnapshot(++planStep, ++txId));
     if (specs[0].Tiers.size()) {
-        csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[0]));
+        auto [tiers, tieringRules] = TTestSchema::BuildSnapshot(specs[0]);
+        csControllerGuard->SetTiersSnapshot(runtime, sender, std::move(tiers), std::move(tieringRules));
     }
 
     for (auto& data : blobs) {
@@ -620,7 +624,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 NOlap::TSnapshot(++planStep, ++txId));
         }
         if (specs[i].HasTiers() || reboots) {
-            csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            auto [tiers, tieringRules] = TTestSchema::BuildSnapshot(specs[i]);
+            csControllerGuard->SetTiersSnapshot(runtime, sender, std::move(tiers), std::move(tieringRules));
         }
 
         if (eventLoss) {
@@ -663,13 +668,15 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         if (tIdxCorrect) {
             specs[i].Tiers[*tIdxCorrect].S3.SetEndpoint(originalEndpoint);
-            csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            auto [tiers, tieringRules] = TTestSchema::BuildSnapshot(specs[i]);
+            csControllerGuard->SetTiersSnapshot(runtime, sender, std::move(tiers), std::move(tieringRules));
         }
 
 
         if (reboots) {
             Cerr << "INTERMEDIATE REBOOT(" << i << ")" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            NTxUT::RefreshTiering(runtime, sender);
         }
 
         // Read data after eviction
@@ -1049,7 +1056,7 @@ void TestDropWriteRace() {
 void TestCompaction(std::optional<ui32> numWrites = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
-    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
@@ -1085,7 +1092,10 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
 
     SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
                             NOlap::TSnapshot(++planStep, ++txId));
-    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+    if (spec.HasTiers()) {
+        auto [tiers, tieringRules] = TTestSchema::BuildSnapshot(spec);
+        csControllerGuard->SetTiersSnapshot(runtime, sender, std::move(tiers), std::move(tieringRules));
+    }
 
     // Writes
 

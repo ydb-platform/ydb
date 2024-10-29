@@ -5,7 +5,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
-namespace NKikimr::NSchemeShard::NOlap::NAlter {
+namespace NKikimr::NSchemeShard::NOperations {
 
 class ISSEntity;
 
@@ -26,13 +26,22 @@ class TUpdateRestoreContext {
 private:
     const ISSEntity* OriginalEntity;
     const TOperationContext* SSOperationContext = nullptr;
-    const ui64 TxId;
+    const TOperationId OperationId;
 public:
     ui64 GetTxId() const {
-        return TxId;
+        return OperationId.GetTxId().GetValue();
+    }
+
+    TOperationId GetOperationId() const {
+        return OperationId;
+    }
+
+    bool OriginalEntityExists() const {
+        return !!OriginalEntity;
     }
 
     const ISSEntity& GetOriginalEntity() const {
+        AFL_VERIFY(OriginalEntity);
         return *OriginalEntity;
     }
 
@@ -46,13 +55,12 @@ public:
     const TOperationContext* GetSSOperationContext() const {
         return SSOperationContext;
     }
-    TUpdateRestoreContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const ui64 txId)
+    TUpdateRestoreContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const TOperationId& operationId)
         : OriginalEntity(originalEntity)
         , SSOperationContext(ssOperationContext)
-        , TxId(txId) {
-        AFL_VERIFY(OriginalEntity);
+        , OperationId(operationId) {
         AFL_VERIFY(SSOperationContext);
-        AFL_VERIFY(TxId);
+        AFL_VERIFY(operationId);
     }
 };
 
@@ -64,8 +72,8 @@ public:
     const NKikimrSchemeOp::TModifyScheme* GetModification() const {
         return Modification;
     }
-    TUpdateInitializationContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const ui64 txId)
-        : TBase(originalEntity, ssOperationContext, txId)
+    TUpdateInitializationContext(const ISSEntity* originalEntity, const TOperationContext* ssOperationContext, const NKikimrSchemeOp::TModifyScheme* modification, const TOperationId& operationId)
+        : TBase(originalEntity, ssOperationContext, operationId)
         , Modification(modification) {
         AFL_VERIFY(Modification);
     }
@@ -97,6 +105,9 @@ public:
         return DB;
     }
     const TOperationContext* GetSSOperationContext() const {
+        return SSOperationContext;
+    }
+    TOperationContext* MutableSSOperationContext() {
         return SSOperationContext;
     }
 

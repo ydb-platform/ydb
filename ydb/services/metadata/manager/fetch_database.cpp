@@ -1,11 +1,10 @@
 #include "fetch_database.h"
 
-#include <library/cpp/retry/retry_policy.h>
-
 #include <ydb/core/base/appdata_fwd.h>
 
 #include <ydb/library/table_creator/table_creator.h>
 
+#include <library/cpp/retry/retry_policy.h>
 
 namespace NKikimr::NMetadata::NModifications {
 

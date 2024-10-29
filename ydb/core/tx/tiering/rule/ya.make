@@ -4,14 +4,14 @@ SRCS(
     manager.cpp
     object.cpp
     GLOBAL behaviour.cpp
-    initializer.cpp
-    checker.cpp
     ss_checker.cpp
+    checker.cpp
     GLOBAL ss_fetcher.cpp
+    GLOBAL update.cpp
 )
 
 PEERDIR(
-    ydb/services/metadata/abstract
+    ydb/services/metadata
     ydb/services/metadata/common
     ydb/services/metadata/initializer
     ydb/services/metadata/manager

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "operations/metadata/info.h"
 #include "schemeshard_identificators.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
@@ -58,6 +59,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
     TStack<TBackupCollectionState> BackupCollections;
 
+    using TMetadataObjectState = std::pair<TPathId, TMetadataObjectInfo::TPtr>;
+    TStack<TMetadataObjectState> MetadataObjects;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -95,6 +99,8 @@ public:
     void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabMetadataObject(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

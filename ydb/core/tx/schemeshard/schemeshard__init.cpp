@@ -3,6 +3,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/operations/metadata/info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/core/util/pb.h>
 
@@ -4888,6 +4889,39 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         blobDepot->BlobDepotTabletId = jt->second.TabletID;
                     }
                 }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Metadata objects
+        {
+            auto rowset = db.Table<Schema::MetadataObjects>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TOwnerId ownerPathId = rowset.GetValue<Schema::MetadataObjects::OwnerPathId>();
+                const TLocalPathId localPathId = rowset.GetValue<Schema::MetadataObjects::LocalPathId>();
+                TPathId pathId(ownerPathId, localPathId);
+
+                const ui64 alterVersion = rowset.GetValue<Schema::MetadataObjects::AlterVersion>();
+                const TString propertiesSerialized = rowset.GetValue<Schema::MetadataObjects::Properties>();
+                NKikimrSchemeOp::TMetadataObjectProperties propertiesProto;
+                Y_ABORT_UNLESS(propertiesProto.ParseFromString(propertiesSerialized));
+
+                auto findPathElement = Self->PathsById.FindPtr(pathId);
+                Y_ABORT_UNLESS(findPathElement);
+                NKikimrSchemeOp::EPathType pathType = (*findPathElement)->PathType;
+                auto properties = IMetadataObjectProperties::Create(pathType);
+                Y_ABORT_UNLESS(properties->DeserializeFromProto(propertiesProto));
+                auto objectInfo = MakeIntrusive<TMetadataObjectInfo>(alterVersion, properties);
+
+                Self->MetadataObjects.emplace(pathId, objectInfo);
+                Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {
                     return false;

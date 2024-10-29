@@ -1,10 +1,15 @@
 #pragma once
 #include "request_features.h"
+
+#include <ydb/core/protos/kqp_physical.pb.h>
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
+
 #include <map>
 #include <optional>
 
@@ -31,6 +36,12 @@ private:
     TFeatures Features;
     TResetFeatures ResetFeatures;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
+
+private:
+    void ResetFeaturesExtractor() {
+        FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
+    }
+
 public:
     TObjectSettingsImpl() = default;
 
@@ -38,9 +49,9 @@ public:
         : TypeId(typeId)
         , ObjectId(objectId)
         , Features(features)
-        , ResetFeatures(resetFeatures)
-        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features, ResetFeatures))
-        {}
+        , ResetFeatures(resetFeatures) {
+        ResetFeaturesExtractor();
+    }
 
     TFeaturesExtractor& GetFeaturesExtractor() const {
         Y_ABORT_UNLESS(!!FeaturesExtractor);
@@ -82,6 +93,42 @@ public:
             }
         }
         FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
+        return true;
+    }
+
+    NKqpProto::TKqpPhyMetadataObjectSettings SerializeToProto() const {
+        NKqpProto::TKqpPhyMetadataObjectSettings serialized;
+        serialized.SetObjectId(ObjectId);
+        serialized.SetExistingOk(ExistingOk);
+        serialized.SetMissingOk(MissingOk);
+        serialized.SetReplaceIfExists(ReplaceIfExists);
+        auto* serializedFeatures = serialized.MutableFeatures();
+        for (const auto& [key, value] : Features) {
+            NKqpProto::TKqpPhyMetadataObjectSettings::TFeatureValue serializedValue;
+            serializedValue.SetStringValue(value);
+            AFL_VERIFY(serializedFeatures->emplace(key, std::move(serializedValue)).second);
+        }
+        for (const TString& feature : ResetFeatures) {
+            serialized.AddResetFeatures(feature);
+        }
+        return serialized;
+    }
+
+    bool ParseFromProto(const NKqpProto::TKqpPhyMetadataObjectSettings& serialized) {
+        ObjectId = serialized.GetObjectId();
+        ExistingOk = serialized.GetExistingOk();
+        MissingOk = serialized.GetMissingOk();
+        ReplaceIfExists = serialized.GetReplaceIfExists();
+        const auto& serializedFeatures = serialized.GetFeatures();
+        for (const auto& [key, value] : serializedFeatures) {
+            AFL_VERIFY(Features.emplace(key, value.GetStringValue()).second);
+        }
+        for (const TString& feature : ResetFeatures) {
+            if (!ResetFeatures.emplace(feature).second) {
+                return false;
+            }
+        }
+        ResetFeaturesExtractor();
         return true;
     }
 };

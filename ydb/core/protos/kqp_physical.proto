@@ -418,6 +418,22 @@ message TKqpPhyMetadataOperation {
     optional bool SuccessOnAlreadyExists = 3;
 }
 
+message TKqpPhyMetadataObjectSettings {
+    string ObjectId = 1;
+
+    message TFeatureValue {
+        oneof Value {
+            string StringValue = 1;
+        }
+    }
+    map<string, TFeatureValue> Features = 2;
+    repeated string ResetFeatures = 3;
+
+    optional bool ExistingOk = 4;
+    optional bool MissingOk = 5;
+    optional bool ReplaceIfExists = 6;
+}
+
 message TKqpSchemeOperation {
     enum EFlags {
         FLAG_UNSPECIFIED = 0;
@@ -475,6 +491,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTopic = 42;
         NKikimrSchemeOp.TModifyScheme AlterTopic = 43;
         NKikimrSchemeOp.TModifyScheme DropTopic = 44;
+        TKqpPhyMetadataObjectSettings CreateSchemeObject = 45;
+        TKqpPhyMetadataObjectSettings AlterSchemeObject = 46;
+        TKqpPhyMetadataObjectSettings DropSchemeObject = 47;
     }
 }
 

@@ -226,6 +226,12 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateBackupCollection = 179       [(CounterOpts) = {Name: "InFlightOps/CreateBackupCollection"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterBackupCollection = 180        [(CounterOpts) = {Name: "InFlightOps/AlterBackupCollection"}];
     COUNTER_IN_FLIGHT_OPS_TxDropBackupCollection = 181         [(CounterOpts) = {Name: "InFlightOps/DropBackupCollection"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateMetadataObject = 182    [(CounterOpts) = {Name: "InFlightOps/CreateMetadataObject"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropMetadataObject = 183      [(CounterOpts) = {Name: "InFlightOps/DropMetadataObject"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterMetadataObject = 184     [(CounterOpts) = {Name: "InFlightOps/AlterMetadataObject"}];
+
+    COUNTER_TIERING_RULE_COUNT = 185                      [(CounterOpts) = {Name: "TieringRuleCount"}];
 }
 
 enum ECumulativeCounters {
@@ -363,6 +369,10 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateBackupCollection = 107         [(CounterOpts) = {Name: "FinishedOps/CreateBackupCollection"}];
     COUNTER_FINISHED_OPS_TxAlterBackupCollection = 108          [(CounterOpts) = {Name: "FinishedOps/AlterBackupCollection"}];
     COUNTER_FINISHED_OPS_TxDropBackupCollection = 109           [(CounterOpts) = {Name: "FinishedOps/DropBackupCollection"}];
+
+    COUNTER_FINISHED_OPS_TxCreateMetadataObject = 110     [(CounterOpts) = {Name: "FinishedOps/CreateMetadataObject"}];
+    COUNTER_FINISHED_OPS_TxDropMetadataObject = 111       [(CounterOpts) = {Name: "FinishedOps/DropMetadataObject"}];
+    COUNTER_FINISHED_OPS_TxAlterMetadataObject = 112      [(CounterOpts) = {Name: "FinishedOps/AlterMetadataObject"}];
 }
 
 enum EPercentileCounters {

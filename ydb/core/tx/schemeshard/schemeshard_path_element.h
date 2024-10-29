@@ -137,6 +137,7 @@ public:
     bool IsTemporary() const;
     bool IsResourcePool() const;
     bool IsBackupCollection() const;
+    bool IsTieringRule() const;
     TVirtualTimestamp GetCreateTS() const;
     TVirtualTimestamp GetDropTS() const;
     void SetDropped(TStepId step, TTxId txId);

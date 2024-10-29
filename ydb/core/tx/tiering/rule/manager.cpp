@@ -1,43 +1,89 @@
 #include "manager.h"
-#include "initializer.h"
-#include "checker.h"
+
+#include <ydb/core/tx/tiering/rule/behaviour.h>
+#include <ydb/core/tx/tiering/rule/checker.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
-void TTieringRulesManager::DoPrepareObjectsBeforeModification(std::vector<TTieringRule>&& objects,
-    NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
-    const TInternalModificationContext& context, const NMetadata::NModifications::TAlterOperationContext& /*alterContext*/) const {
-    TActivationContext::Register(new TRulePreparationActor(std::move(objects), controller, context));
+TConclusion<NKikimrSchemeOp::TTieringIntervals> TTieringRulesManager::ConvertIntervalsToProto(const NJson::TJsonValue& jsonInfo) {
+    NKikimrSchemeOp::TTieringIntervals intervals;
+
+    const NJson::TJsonValue::TArray* rules;
+    if (!jsonInfo["rules"].GetArrayPointer(&rules)) {
+        return TConclusionStatus::Fail("Missing rules");
+    }
+    if (rules->empty()) {
+        return TConclusionStatus::Fail("Empty rules");
+    }
+
+    for (auto&& rule : *rules) {
+        auto* interval = intervals.AddIntervals();
+        if (!rule["tierName"].GetString(interval->MutableTierName())) {
+            return TConclusionStatus::Fail("Not a string: tierName");
+        }
+        const TString dStr = rule["durationForEvict"].GetStringRobust();
+        TDuration evictionDelay;
+        if (!TDuration::TryParse(dStr, evictionDelay)) {
+            return TConclusionStatus::Fail("Can't parse durationForEvict");
+        }
+        interval->SetEvictionDelayMs(evictionDelay.MilliSeconds());
+    }
+
+    std::sort(intervals.MutableIntervals()->begin(), intervals.MutableIntervals()->end(),
+        [](const NKikimrSchemeOp::TTieringIntervals::TTieringInterval& lhs, const NKikimrSchemeOp::TTieringIntervals::TTieringInterval& rhs) {
+            return lhs.GetEvictionDelayMs() < rhs.GetEvictionDelayMs();
+        });
+
+    return intervals;
 }
 
-NMetadata::NModifications::TOperationParsingResult TTieringRulesManager::DoBuildPatchFromSettings(
-    const NYql::TObjectSettingsImpl& settings,
-    TInternalModificationContext& /*context*/) const {
+void TTieringRulesManager::DoBuildRequestFromSettings(
+    const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context, IBuildRequestController::TPtr controller) const {
     if (HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
-        return TConclusionStatus::Fail("Tiering functionality is disabled for OLAP tables.");
+        controller->OnBuildProblem("Tiering functionality is disabled for OLAP tables.");
+        return;
     }
 
-    NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TTieringRule::TDecoder::TieringRuleId, NMetadata::NInternal::TYDBValue::Utf8(settings.GetObjectId()));
+    NKikimrSchemeOp::TTieringRuleProperties properties;
+
     if (settings.GetObjectId().StartsWith("$") || settings.GetObjectId().StartsWith("_")) {
-        return TConclusionStatus::Fail("tiering rule cannot start with '$', '_' characters");
+        controller->OnBuildProblem("tiering rule cannot start with '$', '_' characters");
+        return;
     }
-    {
-        auto fValue = settings.GetFeaturesExtractor().Extract(TTieringRule::TDecoder::DefaultColumn);
-        if (fValue) {
-            if (fValue->empty()) {
-                return TConclusionStatus::Fail("defaultColumn cannot be empty");
-            }
-            result.SetColumn(TTieringRule::TDecoder::DefaultColumn, NMetadata::NInternal::TYDBValue::Utf8(*fValue));
+
+    if (auto fValue = settings.GetFeaturesExtractor().Extract(KeyDefaultColumn)) {
+        if (fValue->empty()) {
+            controller->OnBuildProblem("defaultColumn cannot be empty");
+            return;
         }
+        properties.SetDefaultColumn(*fValue);
     }
-    {
-        auto fValue = settings.GetFeaturesExtractor().Extract(TTieringRule::TDecoder::Description);
-        if (fValue) {
-            result.SetColumn(TTieringRule::TDecoder::Description, NMetadata::NInternal::TYDBValue::Utf8(*fValue));
+    if (auto fValue = settings.GetFeaturesExtractor().Extract(KeyDescription)) {
+        NJson::TJsonValue jsonDescription;
+        if (!NJson::ReadJsonFastTree(*fValue, &jsonDescription)) {
+            controller->OnBuildProblem("Failed to deserialize decription");
+            return;
         }
+        auto intervals = ConvertIntervalsToProto(jsonDescription);
+        if (intervals.IsFail()) {
+            controller->OnBuildProblem("Failed to parse description: " + intervals.GetErrorMessage());
+            return;
+        }
+        *properties.MutableTiers() = intervals.DetachResult();
     }
-    return result;
+
+    if (!settings.GetFeaturesExtractor().IsFinished()) {
+        controller->OnBuildProblem("undefined params: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
+        return;
+    }
+
+    auto* actorSystem = context.GetExternalData().GetActorSystem();
+    AFL_VERIFY(actorSystem);
+    actorSystem->Register(new TTieringRulePreparationActor(std::move(properties), controller, context));
 }
 
+TString TTieringRulesManager::GetStorageDirectory() const {
+    return TTieringRule::GetBehaviour()->GetStorageTablePath();
+}
 }

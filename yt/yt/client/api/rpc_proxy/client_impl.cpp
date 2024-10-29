@@ -10,47 +10,34 @@
 #include "timestamp_provider.h"
 #include "transaction.h"
 
-#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/helpers.h>
-#include <yt/yt/client/api/rowset.h>
-#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
-
-#include <yt/yt/client/transaction_client/remote_timestamp_provider.h>
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/row_base.h>
-#include <yt/yt/client/table_client/row_buffer.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
 
-#include <yt/yt/client/tablet_client/table_mount_cache.h>
+#include <yt/yt/client/api/distributed_table_session.h>
 
 #include <yt/yt/client/ypath/rich.h>
 
 #include <yt/yt/library/auth/credentials_injecting_channel.h>
 
-#include <yt/yt/core/net/address.h>
-
-#include <yt/yt/core/rpc/dynamic_channel_pool.h>
 #include <yt/yt/core/rpc/retrying_channel.h>
 #include <yt/yt/core/rpc/stream.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
-#include <util/generic/cast.h>
-
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using NYT::ToProto;
 using NYT::FromProto;
+using NYT::ToProto;
 
 using namespace NAuth;
 using namespace NChaosClient;

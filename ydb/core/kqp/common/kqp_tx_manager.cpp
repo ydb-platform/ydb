@@ -286,6 +286,7 @@ public:
 
     TPrepareInfo GetPrepareTransactionInfo() override {
         AFL_ENSURE(State == ETransactionState::PREPARING);
+        AFL_ENSURE(!ReceivingShards.empty());
 
         TPrepareInfo result {
             .SendingShards = SendingShards,
@@ -332,7 +333,7 @@ public:
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard());
+        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard() || HasOlapTable());
     }
 
     TCommitInfo GetCommitInfo() override {

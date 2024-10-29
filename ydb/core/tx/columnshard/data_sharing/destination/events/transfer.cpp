@@ -12,7 +12,7 @@ THashMap<NKikimr::NOlap::TTabletId, NKikimr::NOlap::NDataSharing::TTaskForTablet
     const TVersionedIndex& index) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
-        auto schema = i.GetSchema(index);
+        auto schema = i->GetSchema(index);
         TPortionDataAccessor(i).FillBlobIdsByStorage(blobIds, schema->GetIndexInfo());
     }
 

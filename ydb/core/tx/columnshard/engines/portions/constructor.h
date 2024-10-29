@@ -138,6 +138,28 @@ public:
         return !!RemoveSnapshot;
     }
 
+    void Validate(const TColumnRecord& rec) const {
+        AFL_VERIFY(rec.GetColumnId());
+        AFL_VERIFY(rec.BlobRange.IsValid());
+    }
+
+    ui32 GetRecordsCount(const TColumnRecord& rec) const {
+        return rec.GetMeta().GetRecordsCount();
+    }
+
+    void Validate(const TIndexChunk& rec) const {
+        AFL_VERIFY(rec.GetIndexId());
+        if (const auto* blobData = rec.GetBlobRangeOptional()) {
+            AFL_VERIFY(blobData->IsValid());
+        } else {
+            AFL_VERIFY(rec.GetBlobDataVerified().size());
+        }
+    }
+
+    ui32 GetRecordsCount(const TIndexChunk& rec) const {
+        return rec.GetRecordsCount();
+    }
+
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
         ui32 entityId = 0;
@@ -151,17 +173,30 @@ public:
             return sb;
         };
 
+        std::optional<ui32> recordsCount;
+        ui32 recordsCountCurrent = 0;
         for (auto&& i : chunks) {
+            Validate(i);
             if (entityId != i.GetEntityId()) {
+                if (recordsCount) {
+                    AFL_VERIFY(recordsCountCurrent == *recordsCount);
+                } else {
+                    recordsCount = recordsCountCurrent;
+                }
                 AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
                 AFL_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
+                recordsCountCurrent = 0;
             } else {
                 AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)("details", debugString());
                 chunkIdx = i.GetChunkIdx();
             }
+            recordsCountCurrent += GetRecordsCount(i);
             AFL_VERIFY(i.GetEntityId());
+        }
+        if (recordsCount) {
+            AFL_VERIFY(recordsCountCurrent == *recordsCount);
         }
     }
 

@@ -47,7 +47,7 @@ TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std
                 ++p;
             } else {
                 i.second.MutablePortions()[p] = std::move(i.second.MutablePortions().back());
-                i.second.MutablePortions()[p].ResetShardingVersion();
+                i.second.MutablePortions()[p]->ResetShardingVersion();
                 i.second.MutablePortions().pop_back();
             }
         }

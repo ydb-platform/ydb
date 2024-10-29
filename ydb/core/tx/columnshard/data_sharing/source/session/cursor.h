@@ -18,7 +18,7 @@ class TSharedBlobsManager;
 
 class TSourceCursor {
 private:
-    std::map<ui64, std::map<ui32, std::shared_ptr<TPortionInfo>>> PortionsForSend;
+    std::map<ui64, std::map<ui32, TPortionInfo::TPtr>> PortionsForSend;
     THashMap<ui64, NEvents::TPathIdData> PreviousSelected;
     THashMap<ui64, NEvents::TPathIdData> Selected;
     THashMap<TTabletId, TTaskForTablet> Links;

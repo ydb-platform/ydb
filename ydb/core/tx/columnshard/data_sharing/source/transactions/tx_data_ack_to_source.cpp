@@ -1,5 +1,7 @@
 #include "tx_data_ack_to_source.h"
+
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -11,7 +13,7 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
         auto& index = Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
         for (auto&& [_, i] : Session->GetCursorVerified()->GetPreviousSelected()) {
             for (auto&& portion : i.GetPortions()) {
-                portion.FillBlobIdsByStorage(sharedBlobIds, index);
+                TPortionDataAccessor(portion).FillBlobIdsByStorage(sharedBlobIds, index);
             }
         }
         for (auto&& i : sharedBlobIds) {
@@ -31,4 +33,4 @@ void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
     Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

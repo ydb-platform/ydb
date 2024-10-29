@@ -7,18 +7,20 @@
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_ack_from_initiator.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/transactions/tx_finish_from_source.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusionStatus TDestinationSession::DataReceived(THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
+NKikimr::TConclusionStatus TDestinationSession::DataReceived(
+    THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
     auto guard = index.GranulesStorage->GetStats()->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
             portion.SetPathId(it->second);
-            index.UpsertPortion(std::move(portion));
+            index.AppendPortion(std::move(portion));
         }
     }
     return TConclusionStatus::Success();
@@ -66,8 +68,8 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
     AFL_VERIFY(found);
 }
 
-NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(
-    NColumnShard::TColumnShard* self, const THashMap<ui64, NEvents::TPathIdData>& data, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
+NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
+    const THashMap<ui64, NEvents::TPathIdData>& data, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
     const std::shared_ptr<TDestinationSession>& selfPtr) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
@@ -76,18 +78,21 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, data, sourceTabletId));
 }
 
-NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
+NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(
+    NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
     if (GetCursorVerified(sourceTabletId).GetDataFinished()) {
         return TConclusionStatus::Fail("session finished already");
     }
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishFromSource(self, sourceTabletId, selfPtr));
 }
 
-NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::AckInitiatorFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& selfPtr) {
+NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::AckInitiatorFinished(
+    NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& selfPtr) {
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishAckFromInitiator(self, selfPtr));
 }
 
-NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const TColumnEngineForLogs& index) {
+NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
+    const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const TColumnEngineForLogs& index) {
     if (!InitiatorController.DeserializeFromProto(proto.GetInitiatorController())) {
         return TConclusionStatus::Fail("cannot parse initiator controller: " + proto.GetInitiatorController().DebugString());
     }
@@ -139,7 +144,8 @@ NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor TDestinatio
     return result;
 }
 
-NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor& proto) {
+NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
+    const NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor& proto) {
     ConfirmedFlag = proto.GetConfirmedFlag();
     for (auto&& i : proto.GetSourceCursors()) {
         TSourceCursorForDestination cursor;
@@ -154,13 +160,14 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(const
     return TConclusionStatus::Success();
 }
 
-bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+bool TDestinationSession::DoStart(
+    const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {
         for (auto&& p : i.second) {
-            p->FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
+            TPortionDataAccessor(*p).FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
         }
     }
     std::swap(CurrentBlobIds, local);
@@ -170,7 +177,7 @@ bool TDestinationSession::DoStart(const NColumnShard::TColumnShard& shard, const
 
 bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo& portion) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
-    portion.FillBlobIdsByStorage(blobIds, vIndex);
+    TPortionDataAccessor(portion).FillBlobIdsByStorage(blobIds, vIndex);
     ui32 containsCounter = 0;
     ui32 newCounter = 0;
     for (auto&& i : blobIds) {

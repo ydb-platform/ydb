@@ -47,8 +47,8 @@ protected:
     }
 
     virtual void DoModifyPortions(
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) override {
-        std::vector<std::vector<std::shared_ptr<TPortionInfo>>> removePortionsByLevel;
+        const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+        std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         for (auto&& [_, i] : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {

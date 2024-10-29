@@ -1,11 +1,14 @@
 #include "controller.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -31,7 +34,7 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;
     for (auto&& i : granules) {
         for (auto&& p : i->GetPortions()) {
-            p.second->FillBlobIdsByStorage(ids, index.GetVersionedIndex());
+            NOlap::TPortionDataAccessor(*p.second).FillBlobIdsByStorage(ids, index.GetVersionedIndex());
         }
     }
     for (auto&& i : ids) {
@@ -118,7 +121,8 @@ bool TController::IsTrivialLinks() const {
     return true;
 }
 
-::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
+::NKikimr::NColumnShard::TBlobPutResult::TPtr TController::OverrideBlobPutResultOnCompaction(
+    const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const {
     if (IndexWriteControllerEnabled) {
         return original;
     }
@@ -138,4 +142,4 @@ bool TController::IsTrivialLinks() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NYDBTest::NColumnShard

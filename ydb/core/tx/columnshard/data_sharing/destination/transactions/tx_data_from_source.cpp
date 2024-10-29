@@ -21,7 +21,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> sharedBlobIds;
     for (auto&& i : PortionsByPathId) {
         for (auto&& p : i.second.GetPortions()) {
-            p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+            TPortionDataAccessor(p).SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         }
     }
     NIceDb::TNiceDb db(txc.DB);

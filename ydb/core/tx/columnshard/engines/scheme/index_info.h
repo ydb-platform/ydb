@@ -50,6 +50,7 @@ struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
     friend class TPortionInfo;
+    friend class TPortionDataAccessor;
 
     class TNameInfo {
     private:

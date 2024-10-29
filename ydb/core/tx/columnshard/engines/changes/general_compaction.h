@@ -36,7 +36,7 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : SwitchedPortions) {
-            result = predictor->AddPortion(p);
+            result = predictor->AddPortion(*p);
         }
         return result;
     }
@@ -46,20 +46,6 @@ public:
         PrioritiesAllocationGuard = g;
     }
     using TBase::TBase;
-
-    class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
-    private:
-        ui64 SumMemory = 0;
-
-    public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            for (auto&& i : portionInfo.GetRecords()) {
-                SumMemory += i.BlobRange.Size;
-                SumMemory += 2 * i.GetMeta().GetRawBytes();
-            }
-            return SumMemory;
-        }
-    };
 
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:

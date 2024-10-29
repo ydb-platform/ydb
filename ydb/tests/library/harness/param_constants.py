@@ -7,7 +7,7 @@ def _get_param(name, default):
     # TODO: remove yatest dependency from harness
     try:
         return yatest.common.get_param(name, default)
-    except yatest.common.NoRuntimeFormed:
+    except (AttributeError, yatest.common.NoRuntimeFormed):
         return default
 
 

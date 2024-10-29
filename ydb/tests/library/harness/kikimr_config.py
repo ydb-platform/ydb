@@ -108,6 +108,16 @@ def _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks):
     return use_in_memory_pdisks
 
 
+def _get_build_path(path):
+    # TODO: remove yatest dependency from harness
+    try:
+        result = yatest.common.build_path(path)
+    except (AttributeError, yatest.common.NoRuntimeFormed):
+        result = path
+
+    return result
+
+
 class KikimrConfigGenerator(object):
     def __init__(
             self,
@@ -565,7 +575,7 @@ class KikimrConfigGenerator(object):
     def get_yql_udfs_to_load(self):
         if not self.__load_udfs:
             return []
-        udfs_path = self.__udfs_path or yatest.common.build_path("yql/udfs")
+        udfs_path = self.__udfs_path or _get_build_path("yql/udfs")
         result = []
         for dirpath, dnames, fnames in os.walk(udfs_path):
             is_loaded = False

@@ -218,24 +218,18 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-msan)
             params+=(
               --build "release" --sanitize="memory"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
-            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           *)
@@ -247,7 +241,6 @@ runs:
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ $TEST_RETRY_COUNT -z ]; then
-          # default is 3 for ordinary build and 1 for sanitizer builds
           TEST_RETRY_COUNT=3
         fi
     

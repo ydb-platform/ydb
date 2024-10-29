@@ -125,6 +125,7 @@ bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFa
         errors.AddError(newColumnFamily.GetErrorMessage());
         return false;
     }
+    newColumnFamily->SetName(GetName());
     auto codec = diffColumnFamily.GetCodec();
     if (codec.has_value()) {
         newColumnFamily->SetColumnCodec(codec.value());

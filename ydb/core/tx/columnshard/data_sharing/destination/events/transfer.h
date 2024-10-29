@@ -21,7 +21,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 class TPathIdData {
 private:
     YDB_READONLY(ui64, PathId, 0);
-    YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TPtr>, Portions);
+    YDB_ACCESSOR_DEF(std::vector<TPortionDataAccessor>, Portions);
 
     TPathIdData() = default;
 
@@ -31,7 +31,7 @@ private:
         }
         PathId = proto.GetPathId();
         for (auto&& portionProto : proto.GetPortions()) {
-            TConclusion<TPortionInfo::TPtr> portion = TPortionInfo::BuildFromProto(portionProto, indexInfo);
+            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, indexInfo);
             if (!portion) {
                 return portion.GetError();
             }
@@ -41,12 +41,12 @@ private:
     }
 
 public:
-    TPathIdData(const ui64 pathId, const std::vector<TPortionInfo::TPtr>& portions)
+    TPathIdData(const ui64 pathId, const std::vector<TPortionDataAccessor>& portions)
         : PathId(pathId)
         , Portions(portions) {
     }
 
-    std::vector<TPortionInfo::TPtr> DetachPortions() {
+    std::vector<TPortionDataAccessor> DetachPortions() {
         return std::move(Portions);
     }
     THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,
@@ -55,9 +55,9 @@ public:
     void InitPortionIds(ui64* lastPortionId, const std::optional<ui64> pathId = {}) {
         AFL_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
-            i->SetPortionId(++*lastPortionId);
+            i.MutablePortionInfo().SetPortionId(++*lastPortionId);
             if (pathId) {
-                i->SetPathId(*pathId);
+                i.MutablePortionInfo().SetPathId(*pathId);
             }
         }
     }
@@ -65,7 +65,7 @@ public:
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
         proto.SetPathId(PathId);
         for (auto&& i : Portions) {
-            TPortionDataAccessor(i).SerializeToProto(*proto.AddPortions());
+            i.SerializeToProto(*proto.AddPortions());
         }
     };
 

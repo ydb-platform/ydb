@@ -2536,11 +2536,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     sb << "Compaction old portions:";
                     ui64 srcPathId{ 0 };
                     for (const auto& portionInfo : compact->SwitchedPortions) {
-                        const ui64 pathId = portionInfo->GetPathId();
+                        const ui64 pathId = portionInfo.GetPortionInfo().GetPathId();
                         UNIT_ASSERT(!srcPathId || srcPathId == pathId);
                         srcPathId = pathId;
-                        oldPortions.insert(portionInfo->GetPortionId());
-                        sb << portionInfo->GetPortionId() << ",";
+                        oldPortions.insert(portionInfo.GetPortionInfo().GetPortionId());
+                        sb << portionInfo.GetPortionInfo().GetPortionId() << ",";
                     }
                     sb << Endl;
                     Cerr << sb;
@@ -2551,8 +2551,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     TStringBuilder sb;
                     sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        sb << " " << portion->GetPortionId();
-                        deletedPortions.insert(portion->GetPortionId());
+                        sb << " " << portion.GetPortionInfo().GetPortionId();
+                        deletedPortions.insert(portion.GetPortionInfo().GetPortionId());
                     }
                     sb << Endl;
                     Cerr << sb;

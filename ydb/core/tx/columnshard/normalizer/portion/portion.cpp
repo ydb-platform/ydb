@@ -9,11 +9,11 @@
 namespace NKikimr::NOlap {
 
 class TPortionsNormalizer::TNormalizerResult: public INormalizerChanges {
-    std::vector<std::shared_ptr<TPortionInfo>> Portions;
+    std::vector<TPortionDataAccessor> Portions;
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
 
 public:
-    TNormalizerResult(std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Portions(std::move(portions))
         , Schemas(schemas) {
     }
@@ -23,9 +23,9 @@ public:
         TDbWrapper db(txc.DB, nullptr);
 
         for (auto&& portionInfo : Portions) {
-            auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
-            AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
-            TPortionDataAccessor(portionInfo).SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
+            auto schema = Schemas->FindPtr(portionInfo.GetPortionInfo().GetPortionId());
+            AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
+            portionInfo.SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }
         return true;
     }
@@ -35,12 +35,12 @@ public:
     }
 };
 
-bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, const TPortionInfo& portionInfo) const {
-    return KnownPortions.contains(portionInfo.GetAddress());
+bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, const TPortionDataAccessor& portionInfo) const {
+    return KnownPortions.contains(portionInfo.GetPortionInfo().GetAddress());
 }
 
 INormalizerTask::TPtr TPortionsNormalizer::BuildTask(
-    std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
     return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 

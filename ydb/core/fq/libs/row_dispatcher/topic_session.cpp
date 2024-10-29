@@ -56,7 +56,6 @@ struct TEvPrivate {
         EvDataFiltered,
         EvSendStatistic,
         EvStartParsing,
-        EvPrintState,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
@@ -65,7 +64,6 @@ struct TEvPrivate {
     struct TEvPqEventsReady : public NActors::TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
     struct TEvSendStatistic : public NActors::TEventLocal<TEvSendStatistic, EvSendStatistic> {};
-    struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvStartParsing : public NActors::TEventLocal<TEvStartParsing, EvStartParsing> {};
 
@@ -131,6 +129,11 @@ private:
 
         TTopicSession& Self;
         const TString& LogPrefix;    
+    };
+
+    struct TParserSchema {
+        TVector<ui64> FieldsMap;    // index - FieldId (from FieldsIndexes), value - parsing schema offset
+        TParserInputType InputType;
     };
 
     const TString TopicPath;
@@ -382,6 +385,19 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
+}
+
+TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> TTopicSession::RebuildJson(const ClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
+    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> result;
+    const auto& offsets = ParserSchema.FieldsMap;
+    result.reserve(info.FieldsIds.size());
+    for (auto fieldId : info.FieldsIds) {
+        Y_ENSURE(fieldId < offsets.size(), "fieldId " << fieldId << ", offsets.size() " << offsets.size());
+        auto offset = offsets[fieldId];
+        Y_ENSURE(offset < parsedValues.size(), "offset " << offset << ", jsonBatch.size() " << parsedValues.size());
+        result.push_back(&parsedValues[offset]); 
+    }
+    return result;
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr& ev) {

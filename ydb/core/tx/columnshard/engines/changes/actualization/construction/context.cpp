@@ -51,7 +51,7 @@ bool TTieringProcessContext::AddPortion(
             }
             features.OnSkipPortionWithTxLimit(Counters, *dWait);
         }
-        it->second.back().MutableMemoryUsage() = it->second.back().GetMemoryPredictor()->AddPortion(*info);
+        it->second.back().MutableMemoryUsage() = it->second.back().GetMemoryPredictor()->AddPortion(info);
     }
     it->second.back().MutableTxWriteVolume() += info->GetTxVolume();
     if (features.GetTargetTierName() == NTiering::NCommon::DeleteTierName) {

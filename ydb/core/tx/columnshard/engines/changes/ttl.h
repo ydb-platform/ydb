@@ -50,7 +50,7 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : PortionsToEvict) {
-            result = predictor->AddPortion(*p.GetPortionInfo());
+            result = predictor->AddPortion(p.GetPortionInfo());
         }
         return result;
     }
@@ -66,11 +66,11 @@ public:
         ui64 SumBlobsMemory = 0;
         ui64 MaxRawMemory = 0;
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            if (MaxRawMemory < portionInfo.GetTotalRawBytes()) {
-                MaxRawMemory = portionInfo.GetTotalRawBytes();
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override {
+            if (MaxRawMemory < portionInfo->GetTotalRawBytes()) {
+                MaxRawMemory = portionInfo->GetTotalRawBytes();
             }
-            SumBlobsMemory += portionInfo.GetTotalBlobBytes();
+            SumBlobsMemory += portionInfo->GetTotalBlobBytes();
             return SumBlobsMemory + MaxRawMemory;
         }
     };

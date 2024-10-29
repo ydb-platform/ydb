@@ -11,14 +11,14 @@ namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionInfoStat {
 private:
-    std::shared_ptr<TPortionInfo> PortionInfo;
+    TPortionInfo::TConstPtr PortionInfo;
     YDB_READONLY(ui64, MinRawBytes, 0);
     YDB_READONLY(ui64, BlobBytes, 0);
 
 public:
-    TPortionInfoStat(const std::shared_ptr<TPortionInfo>& portionInfo)
+    TPortionInfoStat(const TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo)
-        , MinRawBytes(TPortionDataAccessor(*PortionInfo).GetMinMemoryForReadColumns({}))
+        , MinRawBytes(TPortionDataAccessor(PortionInfo).GetMinMemoryForReadColumns({}))
         , BlobBytes(PortionInfo->GetTotalBlobBytes())
     {
 

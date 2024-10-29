@@ -312,7 +312,6 @@ private:
         try {
             Allocate(newCapacity, newData, newDataEnd);
         } catch (...) {
-            YQL_LOG(INFO) << "TRobinHoodHashBase failed to grow from " << Capacity << " to " << newCapacity << "\n";
             Y_ENSURE(newData == nullptr && newDataEnd == nullptr);
             return false;
         }

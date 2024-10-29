@@ -283,6 +283,7 @@ public:
     void GrowStates() {
         if (IsOutOfMemory < AllowOutOfMemory) {
             if (!States.TryCheckGrow()) {
+                YQL_LOG(INFO) << "State failed to grow\n";
                 IsOutOfMemory = true;
             }
         } else {

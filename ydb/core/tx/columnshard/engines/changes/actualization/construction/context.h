@@ -52,7 +52,7 @@ public:
         return Tasks;
     }
 
-    bool AddPortion(const TPortionInfo& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
+    bool AddPortion(const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
 
     bool IsRWAddressAvailable(const TRWAddress& address) const {
         auto it = Tasks.find(address);

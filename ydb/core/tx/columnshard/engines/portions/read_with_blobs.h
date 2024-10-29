@@ -20,22 +20,24 @@ private:
     YDB_READONLY_DEF(TBlobChunks, Chunks);
     void RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk);
 
-    TPortionInfo PortionInfo;
+    TPortionDataAccessor PortionInfo;
 
-    explicit TReadPortionInfoWithBlobs(TPortionInfo&& portionInfo)
+    explicit TReadPortionInfoWithBlobs(TPortionDataAccessor&& portionInfo)
         : PortionInfo(std::move(portionInfo)) {
     }
 
-    explicit TReadPortionInfoWithBlobs(const TPortionInfo& portionInfo)
+    explicit TReadPortionInfoWithBlobs(const TPortionDataAccessor& portionInfo)
         : PortionInfo(portionInfo) {
     }
 
     const TString& GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const;
 
 public:
-    static std::vector<TReadPortionInfoWithBlobs> RestorePortions(const std::vector<TPortionInfo>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    static std::vector<TReadPortionInfoWithBlobs> RestorePortions(
+        const std::vector<TPortionInfo::TConstPtr>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TVersionedIndex& tables);
-    static TReadPortionInfoWithBlobs RestorePortion(const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    static TReadPortionInfoWithBlobs RestorePortion(
+        const TPortionInfo::TConstPtr& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TIndexInfo& indexInfo);
 
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const;
@@ -52,11 +54,7 @@ public:
     }
 
     const TPortionInfo& GetPortionInfo() const {
-        return PortionInfo;
-    }
-
-    TPortionInfo& GetPortionInfo() {
-        return PortionInfo;
+        return PortionInfo.GetPortionInfo();
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TReadPortionInfoWithBlobs& info) {

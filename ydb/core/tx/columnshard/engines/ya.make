@@ -11,7 +11,6 @@ SRCS(
     db_wrapper.cpp
     index_info.cpp
     filter.cpp
-    portion_info.cpp
     tier_info.cpp
     defs.cpp
 )

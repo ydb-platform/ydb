@@ -105,18 +105,18 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             {
                 THashMap<ui64, ISnapshotSchema::TPtr> schemas;
                 for (auto& portion : SwitchedPortions) {
-                    auto dataSchema = portion.GetSchema(context.SchemaVersions);
+                    auto dataSchema = portion->GetSchema(context.SchemaVersions);
                     schemas.emplace(dataSchema->GetVersion(), dataSchema);
                 }
                 dataColumnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
             }
             for (auto&& i : SwitchedPortions) {
-                stats->Merge(i.GetSerializationStat(*resultSchema));
-                if (i.GetMeta().GetDeletionsCount()) {
+                stats->Merge(TPortionDataAccessor(*i).GetSerializationStat(*resultSchema));
+                if (i->GetMeta().GetDeletionsCount()) {
                     dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG);
                 }
                 if (dataColumnIds.size() != resultSchema->GetColumnsCount()) {
-                    for (auto id : i.GetColumnIds()) {
+                    for (auto id : TPortionDataAccessor(*i).GetColumnIds()) {
                         if (resultSchema->HasColumnId(id)) {
                             dataColumnIds.emplace(id);
                         }
@@ -166,11 +166,11 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     TSimplePortionsGroupInfo compactedPortions;
     THashMap<ui32, TSimplePortionsGroupInfo> portionGroups;
     for (auto&& i : SwitchedPortions) {
-        portionGroups[i.GetMeta().GetCompactionLevel()].AddPortion(i);
-        if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
-            insertedPortions.AddPortion(i);
-        } else if (i.GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
-            compactedPortions.AddPortion(i);
+        portionGroups[i->GetMeta().GetCompactionLevel()].AddPortion(i);
+        if (i->GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
+            insertedPortions.AddPortion(*i);
+        } else if (i->GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
+            compactedPortions.AddPortion(*i);
         } else {
             AFL_VERIFY(false);
         }
@@ -192,7 +192,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         TStringBuilder sbSwitched;
         sbSwitched << "";
         for (auto&& p : SwitchedPortions) {
-            sbSwitched << p.DebugString() << ";";
+            sbSwitched << p->DebugString() << ";";
         }
         sbSwitched << "";
 
@@ -239,8 +239,9 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
 ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo& portionInfo) {
     SumMemoryFix += portionInfo.GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16)) + portionInfo.GetTotalBlobBytes();
     ++PortionsCount;
-    auto it = MaxMemoryByColumnChunk.begin();
     SumMemoryDelta = 0;
+
+    auto it = MaxMemoryByColumnChunk.begin();
     const auto advanceIterator = [&](const ui32 columnId, const ui64 maxColumnChunkRawBytes) {
         while (it != MaxMemoryByColumnChunk.end() && it->ColumnId < columnId) {
             ++it;
@@ -253,7 +254,7 @@ ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPorti
     };
     ui32 columnId = 0;
     ui64 maxChunkSize = 0;
-    for (auto&& i : portionInfo.GetRecords()) {
+    for (auto&& i : TPortionDataAccessor(portionInfo).GetRecords()) {
         if (columnId != i.GetColumnId()) {
             if (columnId) {
                 advanceIterator(columnId, maxChunkSize);

@@ -3,15 +3,15 @@
 
 namespace NKikimr::NColumnShard {
 
-void TPortionCategoryCounters::AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& p) {
-    RecordsCount->Add(p->NumRows());
+void TPortionCategoryCounters::AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+    RecordsCount->Add(p->GetRecordsCount());
     Count->Add(1);
     BlobBytes->Add(p->GetTotalBlobBytes());
     RawBytes->Add(p->GetTotalRawBytes());
 }
 
-void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& p) {
-    RecordsCount->Remove(p->NumRows());
+void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+    RecordsCount->Remove(p->GetRecordsCount());
     Count->Remove(1);
     BlobBytes->Remove(p->GetTotalBlobBytes());
     RawBytes->Remove(p->GetTotalRawBytes());
@@ -21,7 +21,7 @@ void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<NOlap::TPorti
 
 namespace NKikimr::NOlap {
 
-void TSimplePortionsGroupInfo::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
+void TSimplePortionsGroupInfo::AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
     AFL_VERIFY(p);
     AddPortion(*p);
 }
@@ -29,11 +29,11 @@ void TSimplePortionsGroupInfo::AddPortion(const TPortionInfo& p) {
     BlobBytes += p.GetTotalBlobBytes();
     RawBytes += p.GetTotalRawBytes();
     Count += 1;
-    RecordsCount += p.NumRows();
+    RecordsCount += p.GetRecordsCount();
     ChunksCount += p.GetChunksCount();
 }
 
-void TSimplePortionsGroupInfo::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
+void TSimplePortionsGroupInfo::RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
     AFL_VERIFY(p);
     RemovePortion(*p);
 }
@@ -41,7 +41,7 @@ void TSimplePortionsGroupInfo::RemovePortion(const TPortionInfo& p) {
     BlobBytes -= p.GetTotalBlobBytes();
     RawBytes -= p.GetTotalRawBytes();
     Count -= 1;
-    RecordsCount -= p.NumRows();
+    RecordsCount -= p.GetRecordsCount();
     ChunksCount -= p.GetChunksCount();
     AFL_VERIFY(RawBytes >= 0);
     AFL_VERIFY(BlobBytes >= 0);

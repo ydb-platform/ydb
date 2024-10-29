@@ -134,7 +134,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
                 TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
                 features.SetTargetTierName(info->GetTargetTierName());
 
-                if (!tasksContext.AddPortion(*portion, std::move(features), info->GetLateness())) {
+                if (!tasksContext.AddPortion(portion, std::move(features), info->GetLateness())) {
                     limitEnriched = true;
                     break;
                 } else {

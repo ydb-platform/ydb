@@ -10,7 +10,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     const std::string prod = ::ToString(portion.GetMeta().Produced);
     NArrow::Append<arrow::StringType>(*builders[1], prod);
     NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
-    NArrow::Append<arrow::UInt64Type>(*builders[3], portion.NumRows());
+    NArrow::Append<arrow::UInt64Type>(*builders[3], portion.GetRecordsCount());
     NArrow::Append<arrow::UInt64Type>(*builders[4], portion.GetColumnRawBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetIndexRawBytes());
     NArrow::Append<arrow::UInt64Type>(*builders[6], portion.GetColumnBlobBytes());
@@ -20,16 +20,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
 
     auto tierName = portion.GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId);
     NArrow::Append<arrow::StringType>(*builders[10], arrow::util::string_view(tierName.data(), tierName.size()));
-    NJson::TJsonValue statReport = NJson::JSON_ARRAY;
-    for (auto&& i : portion.GetIndexes()) {
-        if (!i.HasBlobData()) {
-            continue;
-        }
-        auto schema = portion.GetSchema(ReadMetadata->GetIndexVersions());
-        auto indexMeta = schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
-        statReport.AppendValue(indexMeta->SerializeDataToJson(i, schema->GetIndexInfo()));
-    }
-    auto statInfo = statReport.GetStringRobust();
+    const TString statInfo = Default<TString>();
     NArrow::Append<arrow::StringType>(*builders[11], arrow::util::string_view(statInfo.data(), statInfo.size()));
 
     NArrow::Append<arrow::UInt8Type>(*builders[12], portion.HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized));

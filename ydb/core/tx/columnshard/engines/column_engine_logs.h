@@ -183,12 +183,23 @@ public:
     }
 
     void AddCleanupPortion(const TPortionInfo& info) {
+        AFL_VERIFY(info.HasRemoveSnapshot());
         CleanupPortions[info.GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         VersionedIndex.AddShardingInfo(shardingInfo);
     }
-    void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
+
+    template <class TModifier>
+    void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
+        auto exPortion = *portion;
+        AFL_VERIFY(portion);
+        auto granule = GetGranulePtrVerified(portion->GetPathId());
+        granule->ModifyPortionOnComplete(portion, modifier);
+        UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
+    }
+
+    void AppendPortion(const TPortionInfo& portionInfo);
 
 private:
     TVersionedIndex VersionedIndex;

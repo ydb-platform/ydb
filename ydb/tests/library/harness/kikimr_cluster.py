@@ -4,7 +4,6 @@ import itertools
 import logging
 import subprocess
 import time
-import pprint
 from concurrent import futures
 
 import ydb
@@ -13,8 +12,6 @@ from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
 import yaml
-
-import yatest
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +22,6 @@ DEFAULT_GRPC_PORT = 2135
 
 
 def kikimr_cluster_factory(configurator=None, config_path=None):
-    logger.info("All test params = {}".format(pprint.pformat(yatest.common.get_param_dict_copy())))
     logger.info("Starting standalone YDB cluster")
     if config_path is not None:
         return ExternalKiKiMRCluster(config_path)

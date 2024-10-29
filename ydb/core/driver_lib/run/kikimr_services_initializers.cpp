@@ -742,15 +742,23 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     actorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint("ic", Sprintf(":%d", port)));
                 };
                 icCommon->UpdateWhiteboard = [whiteboardId](const TWhiteboardSessionStatus& data) {
-                    data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate(
-                        data.Peer, data.Connected,
-                        data.Green ? NKikimrWhiteboard::EFlag::Green :
-                        data.Yellow ? NKikimrWhiteboard::EFlag::Yellow :
-                        data.Orange ? NKikimrWhiteboard::EFlag::Orange :
-                        data.Red ? NKikimrWhiteboard::EFlag::Red : NKikimrWhiteboard::EFlag()));
+                    auto update = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvNodeStateUpdate>();
+                    auto& record = update->Record;
+                    record.SetPeerNodeId(data.PeerNodeId);
+                    record.SetPeerName(data.PeerName);
+                    record.SetConnected(data.Connected);
+                    record.SetConnectTime(data.ConnectTime);
+                    record.SetConnectStatus(static_cast<NKikimrWhiteboard::EFlag>(static_cast<int>(data.ConnectStatus) + 1/*GREY = 0, GREEN = 1 ....*/));
+                    record.SetClockSkewUs(data.ClockSkewUs);
+                    record.SetPingTimeUs(data.PingTimeUs);
+                    record.SetUtilization(data.Utilization);
+                    record.MutableScopeId()->SetX1(data.ScopeId.first);
+                    record.MutableScopeId()->SetX2(data.ScopeId.second);
+                    record.SetBytesWritten(data.BytesWrittenToSocket);
+                    data.ActorSystem->Send(whiteboardId, update.release());
                     if (data.ReportClockSkew) {
                         data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                            data.PeerId, data.ClockSkew));
+                            data.PeerNodeId, data.ClockSkewUs));
                     }
                 };
             }

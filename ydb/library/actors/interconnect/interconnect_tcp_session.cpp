@@ -997,15 +997,10 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected) {
+        using EFlag = TWhiteboardSessionStatus::EFlag;
         const ui32 utilization = Socket ? CalculateQueueUtilization() : 0;
 
         if (const auto& callback = Proxy->Common->UpdateWhiteboard) {
-            enum class EFlag {
-                GREEN,
-                YELLOW,
-                ORANGE,
-                RED,
-            };
             EFlag flagState = EFlag::RED;
 
             if (Socket) {
@@ -1034,16 +1029,20 @@ namespace NActors {
             // they have one scope in this case
             bool reportClockSkew = Proxy->Common->LocalScopeId.first != 0 && Proxy->Common->LocalScopeId == Params.PeerScopeId;
 
-            callback({TlsActivationContext->ExecutorThread.ActorSystem,
-                     Proxy->PeerNodeId,
-                     Proxy->Metrics->GetHumanFriendlyPeerHostName(),
-                     connected,
-                     flagState == EFlag::GREEN,
-                     flagState == EFlag::YELLOW,
-                     flagState == EFlag::ORANGE,
-                     flagState == EFlag::RED,
-                     ReceiveContext->ClockSkew_us.load(),
-                     reportClockSkew});
+            callback({
+                .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
+                .PeerNodeId = Proxy->PeerNodeId,
+                .PeerName = Proxy->Metrics->GetHumanFriendlyPeerHostName(),
+                .Connected = connected,
+                .ConnectStatus = flagState,
+                .ClockSkewUs = ReceiveContext->ClockSkew_us,
+                .ReportClockSkew = reportClockSkew,
+                .PingTimeUs = ReceiveContext->PingRTT_us,
+                .ScopeId = Params.PeerScopeId,
+                .Utilization = Utilized,
+                .ConnectTime = LastHandshakeDone.MilliSeconds(),
+                .BytesWrittenToSocket = BytesWrittenToSocket,
+            });
         }
 
         if (connected) {

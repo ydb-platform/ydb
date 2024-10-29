@@ -116,10 +116,11 @@ namespace NActors {
 
         Metrics->SetClockSkewMicrosec(0);
 
-        Context->UpdateState = EUpdateState::NONE;
+        Context->UpdateInFlight = false;
+        Context->NextUpdatePending = false;
 
         // ensure that we do not spawn new session while the previous one is still alive
-        TAtomicBase sessions = AtomicIncrement(Context->NumInputSessions);
+        auto sessions = ++Context->NumInputSessions;
         Y_ABORT_UNLESS(sessions == 1, "sessions# %" PRIu64, ui64(sessions));
 
         // calculate number of bytes to catch
@@ -162,7 +163,7 @@ namespace NActors {
         }
 
         if (termEv) {
-            AtomicDecrement(Context->NumInputSessions);
+            --Context->NumInputSessions;
             Send(SessionId, termEv.release());
             PassAway();
             Socket.Reset();
@@ -285,41 +286,12 @@ namespace NActors {
             UpdateFromInputSession->Ping = Min(UpdateFromInputSession->Ping, ping);
         }
 
-        for (;;) {
-            EUpdateState state = Context->UpdateState;
-            EUpdateState next;
-
-            // calculate next state
-            switch (state) {
-                case EUpdateState::NONE:
-                case EUpdateState::CONFIRMING:
-                    // we have no inflight messages to session actor, we will issue one a bit later
-                    next = EUpdateState::INFLIGHT;
-                    break;
-
-                case EUpdateState::INFLIGHT:
-                case EUpdateState::INFLIGHT_AND_PENDING:
-                    // we already have inflight message, so we will keep pending message and session actor will issue
-                    // TEvConfirmUpdate to kick processing
-                    next = EUpdateState::INFLIGHT_AND_PENDING;
-                    break;
-            }
-
-            if (Context->UpdateState.compare_exchange_weak(state, next)) {
-                switch (next) {
-                    case EUpdateState::INFLIGHT:
-                        Send(SessionId, UpdateFromInputSession.Release());
-                        break;
-
-                    case EUpdateState::INFLIGHT_AND_PENDING:
-                        Y_ABORT_UNLESS(UpdateFromInputSession);
-                        break;
-
-                    default:
-                        Y_ABORT("unexpected state");
-                }
-                break;
-            }
+        if (Context->UpdateInFlight || Context->NextUpdatePending) {
+            Context->NextUpdatePending = true;
+            Y_ABORT_UNLESS(UpdateFromInputSession);
+        } else {
+            Context->UpdateInFlight = true;
+            Send(SessionId, UpdateFromInputSession.Release());
         }
 
         for (size_t channel = 0; channel < InputTrafficArray.size(); ++channel) {
@@ -703,22 +675,12 @@ namespace NActors {
     }
 
     void TInputSessionTCP::HandleConfirmUpdate() {
-        for (;;) {
-            switch (EUpdateState state = Context->UpdateState) {
-                case EUpdateState::NONE:
-                case EUpdateState::INFLIGHT:
-                case EUpdateState::INFLIGHT_AND_PENDING:
-                    // here we may have a race
-                    return;
-
-                case EUpdateState::CONFIRMING:
-                    Y_ABORT_UNLESS(UpdateFromInputSession);
-                    if (Context->UpdateState.compare_exchange_weak(state, EUpdateState::INFLIGHT)) {
-                        Send(SessionId, UpdateFromInputSession.Release());
-                        return;
-                    }
-            }
-        }
+        Y_ABORT_UNLESS(UpdateFromInputSession);
+        Y_ABORT_UNLESS(!Context->UpdateInFlight);
+        Y_ABORT_UNLESS(Context->NextUpdatePending);
+        Context->UpdateInFlight = true;
+        Context->NextUpdatePending = false;
+        Send(SessionId, UpdateFromInputSession.Release());
     }
 
     ssize_t TInputSessionTCP::Read(NInterconnect::TStreamSocket& socket, const TPollerToken::TPtr& token,

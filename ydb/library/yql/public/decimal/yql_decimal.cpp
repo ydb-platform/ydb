@@ -242,6 +242,15 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
                 return Err();
             }
 
+            if (IsInf(r)) {
+                auto p = str.data();
+                if (*p == '+' || *p == '-')
+                    ++p;
+
+                if (!std::isdigit(*p))
+                    return Err();
+            }
+
             if (const auto e = exp > 0 ? std::max(0, s - p) : std::min(0, s)) {
                 if (r && IsNormal(r)) {
                     if (exp > 0)

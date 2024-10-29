@@ -2415,7 +2415,8 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         {
             //Cerr << "Got read response: " << readResult->Record << Endl;
             UNIT_ASSERT(readResult->Record.HasStatus());
-            UNIT_ASSERT_EQUAL(readResult->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+            UNIT_ASSERT_EQUAL(readResult->Record.GetErrorCode(), NPersQueue::NErrorCode::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS_C(readResult->Record.GetErrorReason(), "Consumer user1 is gone from partition", readResult->Record.Utf8DebugString());
         }
     });
 }

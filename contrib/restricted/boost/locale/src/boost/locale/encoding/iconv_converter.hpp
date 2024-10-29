@@ -10,6 +10,7 @@
 #include <boost/locale/encoding.hpp>
 #include "boost/locale/util/encoding.hpp"
 #include "boost/locale/util/iconv.hpp"
+#include <boost/assert.hpp>
 #include <cerrno>
 #include <string>
 
@@ -47,6 +48,7 @@ namespace boost { namespace locale { namespace conv { namespace impl {
                 if(in_left == 0)
                     is_unshifting = true;
 
+                const auto old_in_left = in_left;
                 const size_t res = (!is_unshifting) ? conv(&begin, &in_left, &out_ptr, &out_left) :
                                                       conv(nullptr, nullptr, &out_ptr, &out_left);
 
@@ -60,6 +62,7 @@ namespace boost { namespace locale { namespace conv { namespace impl {
 
                 if(res == (size_t)(-1)) {
                     const int err = errno;
+                    BOOST_ASSERT_MSG(err == EILSEQ || err == EINVAL || err == E2BIG, "Invalid error code from IConv");
                     if(err == EILSEQ || err == EINVAL) {
                         if(how_ == stop)
                             throw conversion_error();
@@ -70,9 +73,11 @@ namespace boost { namespace locale { namespace conv { namespace impl {
                                 break;
                         } else
                             break;
-                    } else if(err == E2BIG)
-                        continue;
-                    else                          // Invalid error code, shouldn't ever happen or iconv has a bug
+                    } else if(err == E2BIG) {
+                        if(in_left != old_in_left || out_ptr != out_start) // Check to avoid infinite loop
+                            continue;
+                        throw std::runtime_error("No progress, IConv is faulty!"); // LCOV_EXCL_LINE
+                    } else                        // Invalid error code, shouldn't ever happen or iconv has a bug
                         throw conversion_error(); // LCOV_EXCL_LINE
                 }
                 if(is_unshifting)

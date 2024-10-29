@@ -120,7 +120,7 @@ protected:
     {
         // COPMAT(danilalexeev): legacy RPC codecs
         if (Header_.has_request_codec()) {
-            YT_VERIFY(Header_.request_codec() == NYT::ToProto<int>(NCompression::ECodec::None));
+            YT_VERIFY(Header_.request_codec() == NYT::ToProto(NCompression::ECodec::None));
             return SerializeProtoToRefWithCompression(*this);
         } else {
             return SerializeProtoToRefWithEnvelope(*this);

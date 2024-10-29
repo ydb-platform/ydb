@@ -494,7 +494,7 @@ private:
                 ToProto(header.mutable_realm_id(), requestControl->GetRealmId());
             }
             header.set_sequence_number(payload.SequenceNumber);
-            header.set_codec(static_cast<int>(payload.Codec));
+            header.set_codec(ToProto(payload.Codec));
 
             auto message = CreateStreamingPayloadMessage(header, payload.Attachments);
             NBus::TSendOptions options;
@@ -708,9 +708,9 @@ private:
             const TSendOptions& options)
         {
             auto& header = request->Header();
-            header.set_start_time(ToProto<i64>(TInstant::Now()));
+            header.set_start_time(ToProto(TInstant::Now()));
             if (options.Timeout) {
-                header.set_timeout(ToProto<i64>(*options.Timeout));
+                header.set_timeout(ToProto(*options.Timeout));
             } else {
                 header.clear_timeout();
             }

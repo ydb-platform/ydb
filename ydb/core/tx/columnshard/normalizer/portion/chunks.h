@@ -57,7 +57,7 @@ namespace NKikimr::NOlap {
         };
 
         class TUpdate {
-            YDB_ACCESSOR(ui64, NumRows, 0);
+            YDB_ACCESSOR(ui64, RecordsCount, 0);
             YDB_ACCESSOR(ui64, RawBytes, 0);
         };
 

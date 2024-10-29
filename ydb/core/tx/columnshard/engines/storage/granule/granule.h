@@ -21,28 +21,14 @@ class TColumnChunkLoadContext;
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
     friend class TGranuleMeta;
-    THashMap<ui32, NArrow::NSplitter::TSimpleSerializationStat> ColumnStats;
 
 public:
-    const THashMap<ui32, NArrow::NSplitter::TSimpleSerializationStat>& GetColumnStats() const {
-        return ColumnStats;
-    }
-
     void AddPortion(const TPortionInfo& info) {
         ColumnPortionsSize += info.GetColumnBlobBytes();
         TotalPortionsSize += info.GetTotalBlobBytes();
         MetadataMemoryPortionsSize += info.GetMetadataMemorySize();
-        RecordsCount += info.NumRows();
+        RecordsCount += info.GetRecordsCount();
         ++PortionsCount;
-
-        for (auto&& c : info.Records) {
-            auto it = ColumnStats.find(c.ColumnId);
-            if (it == ColumnStats.end()) {
-                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
-            } else {
-                it->second.AddStat(c.GetSerializationStat());
-            }
-        }
     }
 
     void RemovePortion(const TPortionInfo& info) {
@@ -52,19 +38,10 @@ public:
         Y_ABORT_UNLESS(ColumnPortionsSize >= 0);
         TotalPortionsSize -= info.GetTotalBlobBytes();
         Y_ABORT_UNLESS(TotalPortionsSize >= 0);
-        RecordsCount -= info.NumRows();
+        RecordsCount -= info.GetRecordsCount();
         Y_ABORT_UNLESS(RecordsCount >= 0);
         --PortionsCount;
         Y_ABORT_UNLESS(PortionsCount >= 0);
-
-        for (auto&& c : info.Records) {
-            auto it = ColumnStats.find(c.ColumnId);
-            if (it == ColumnStats.end()) {
-                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
-            } else {
-                it->second.RemoveStat(c.GetSerializationStat());
-            }
-        }
     }
 };
 
@@ -163,9 +140,9 @@ public:
         ActualizationIndex->RefreshTiering(tiering, context);
     }
 
-    TConclusionStatus IsInnerPortion(const std::shared_ptr<TPortionInfo>& portion) const {
+    TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
-            return TConclusionStatus::Fail("empty portion pointer");
+            return TConclusionStatus::Fail("empty input portion pointer");
         }
         auto it = Portions.find(portion->GetPortionId());
         if (it == Portions.end()) {
@@ -174,31 +151,32 @@ public:
         if (portion->GetPathId() != GetPathId()) {
             return TConclusionStatus::Fail("portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId()));
         }
-        return TConclusionStatus::Success();
+        return it->second;
     }
 
     template <class TModifier>
-    void ModifyPortionOnExecute(NTable::TDatabase& db, const std::shared_ptr<TPortionInfo>& portion, const TModifier& modifier) const {
-        IsInnerPortion(portion).Validate("modify portion on execute");
-        auto copy = *portion;
+    void ModifyPortionOnExecute(IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
+        const auto innerPortion = GetInnerPortion(portion).DetachResult();
+        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        auto copy = *innerPortion;
         modifier(copy);
-        TDbWrapper wrapper(db, nullptr);
-        copy.SaveToDatabase(wrapper, 0, true);
+        TPortionDataAccessor(copy).SaveToDatabase(wrapper, firstPKColumnId, false);
     }
 
     template <class TModifier>
-    void ModifyPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion, const TModifier& modifier) {
-        IsInnerPortion(portion).Validate("modify portion on complete");
-        OnBeforeChangePortion(portion);
-        modifier(portion);
-        OnAfterChangePortion(portion, nullptr);
+    void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
+        const auto innerPortion = GetInnerPortion(portion).DetachResult();
+        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        OnBeforeChangePortion(innerPortion);
+        modifier(innerPortion);
+        OnAfterChangePortion(innerPortion, nullptr);
     }
 
     void InsertPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TPortionInfo>& portion) const {
-        AFL_VERIFY(!InsertedPortions.contains(portion->GetInsertWriteIdVerified()));
+        NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
+        AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
-        portion->SaveToDatabase(wrapper, 0, false);
+        portion.SaveToDatabase(wrapper, 0, false);
     }
 
     void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {
@@ -211,7 +189,7 @@ public:
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
         TDbWrapper wrapper(txc.DB, nullptr);
-        it->second->SaveToDatabase(wrapper, 0, true);
+        TPortionDataAccessor(*it->second).SaveToDatabase(wrapper, 0, true);
     }
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
@@ -221,7 +199,7 @@ public:
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         TDbWrapper wrapper(txc.DB, nullptr);
-        it->second->RemoveFromDatabase(wrapper);
+        TPortionDataAccessor(*it->second).RemoveFromDatabase(wrapper);
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId) {
@@ -295,17 +273,6 @@ public:
         for (auto&& i : Portions) {
             OnAfterChangePortion(i.second, &g);
         }
-    }
-
-    std::shared_ptr<NArrow::NSplitter::TSerializationStats> BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
-        auto result = std::make_shared<NArrow::NSplitter::TSerializationStats>();
-        for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
-            auto field = schema->GetFieldByColumnIdVerified(i.first);
-            NArrow::NSplitter::TColumnSerializationStat columnInfo(i.first, field->name());
-            columnInfo.Merge(i.second);
-            result->AddStat(columnInfo);
-        }
-        return result;
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

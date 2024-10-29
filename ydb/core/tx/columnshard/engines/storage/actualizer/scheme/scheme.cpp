@@ -75,7 +75,7 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
 
-            if (!tasksContext.AddPortion(*portion, std::move(features), {})) {
+            if (!tasksContext.AddPortion(portion, std::move(features), {})) {
                 break;
             } else {
                 portionsToRemove.emplace(portion->GetPortionId());

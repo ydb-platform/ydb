@@ -4,12 +4,14 @@
 #include "plain_read_data.h"
 #include "source.h"
 
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -52,32 +54,32 @@ void IDataSource::SetIsReady() {
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
-    THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& defaultBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+    THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& defaultBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
     const NArrow::TColumnFilter& cFilter = filter ? *filter : NArrow::TColumnFilter::BuildAllowFilter();
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
     for (auto&& i : columnIds) {
-        auto columnChunks = Portion->GetColumnChunksPointers(i);
+        auto columnChunks = TPortionDataAccessor(Portion).GetColumnChunksPointers(i);
         if (columnChunks.empty()) {
             continue;
         }
-        auto itFilter = cFilter.GetIterator(false, Portion->NumRows(i));
+        auto itFilter = cFilter.GetIterator(false, Portion->GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
-            if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRows())) {
+            if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
-                defaultBlocks.emplace(c->GetAddress(),
-                    TPortionInfo::TAssembleBlobInfo(c->GetMeta().GetNumRows(), Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
+                defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
+                                                           Schema->GetExternalDefaultValueVerified(c->GetColumnId())));
                 ++nullChunks;
             }
-            itFinished = !itFilter.Next(c->GetMeta().GetNumRows());
+            itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows(i));
+        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
         "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
@@ -93,7 +95,7 @@ bool TPortionDataSource::DoStartFetchingColumns(
 
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
-        THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo> nullBlocks;
+        THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo> nullBlocks;
         NeedFetchColumns(columnIds, action, nullBlocks, StageData->GetAppliedFilter());
         StageData->AddDefaults(std::move(nullBlocks));
     }
@@ -117,7 +119,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
         std::set<ui32> indexIds;
-        for (auto&& i : Portion->GetIndexes()) {
+        for (auto&& i : TPortionDataAccessor(*Portion).GetIndexes()) {
             if (!indexes->GetIndexIdsSet().contains(i.GetIndexId())) {
                 continue;
             }
@@ -150,7 +152,7 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
     THashMap<ui32, std::vector<TString>> indexBlobs;
     std::set<ui32> indexIds = indexChecker->GetIndexIds();
     //    NActors::TLogContextGuard gLog = NActors::TLogContextBuilder::Build()("records_count", GetRecordsCount())("portion_id", Portion->GetAddress().DebugString());
-    std::vector<TPortionInfo::TPage> pages = Portion->BuildPages();
+    std::vector<TPortionDataAccessor::TPage> pages = TPortionDataAccessor(*Portion).BuildPages();
     NArrow::TColumnFilter constructor = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& p : pages) {
         for (auto&& i : p.GetIndexes()) {
@@ -198,8 +200,10 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
         }
     }
 
-    auto batch = Portion->PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(SequentialEntityIds).DetachResult();
+    auto batch = TPortionDataAccessor(*Portion)
+                     .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
+                     .AssembleToGeneralContainer(SequentialEntityIds)
+                     .DetachResult();
 
     MutableStageData().AddBatch(batch);
 }
@@ -226,7 +230,8 @@ bool TCommittedDataSource::DoStartFetchingColumns(
 
 void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    const ISnapshotSchema::TPtr batchSchema = GetContext()->GetReadMetadata()->GetIndexVersions().GetSchemaVerified(GetCommitted().GetSchemaVersion());
+    const ISnapshotSchema::TPtr batchSchema =
+        GetContext()->GetReadMetadata()->GetIndexVersions().GetSchemaVerified(GetCommitted().GetSchemaVersion());
     const ISnapshotSchema::TPtr resultSchema = GetContext()->GetReadMetadata()->GetResultSchema();
     if (!GetStageData().GetTable()) {
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);

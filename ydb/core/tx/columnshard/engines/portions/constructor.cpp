@@ -15,7 +15,7 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
     TPortionInfo result(MetaConstructor.Build());
     AFL_VERIFY(PathId);
     result.PathId = PathId;
-    result.Portion = GetPortionIdVerified();
+    result.PortionId = GetPortionIdVerified();
 
     AFL_VERIFY(MinSnapshotDeprecated);
     AFL_VERIFY(MinSnapshotDeprecated->Valid());

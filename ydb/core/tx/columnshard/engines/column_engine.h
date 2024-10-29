@@ -30,14 +30,12 @@ class TManager;
 struct TSelectInfo {
     struct TStats {
         size_t Portions{};
-        size_t Records{};
         size_t Blobs{};
         size_t Rows{};
         size_t Bytes{};
 
         const TStats& operator+=(const TStats& stats) {
             Portions += stats.Portions;
-            Records += stats.Records;
             Blobs += stats.Blobs;
             Rows += stats.Rows;
             Bytes += stats.Bytes;
@@ -46,8 +44,6 @@ struct TSelectInfo {
     };
 
     std::vector<std::shared_ptr<TPortionInfo>> PortionsOrderedPK;
-
-    size_t NumChunks() const;
 
     TStats Stats() const;
 
@@ -75,8 +71,6 @@ public:
         i64 Rows = 0;
         i64 Bytes = 0;
         i64 RawBytes = 0;
-        THashMap<ui32, size_t> BytesByColumn;
-        THashMap<ui32, size_t> RawBytesByColumn;
 
         TString DebugString() const {
             return TStringBuilder() << "portions=" << Portions << ";blobs=" << Blobs << ";rows=" << Rows << ";bytes=" << Bytes << ";raw_bytes=" << RawBytes << ";";
@@ -94,14 +88,6 @@ public:
             result.Rows = kff * Rows;
             result.Bytes = kff * Bytes;
             result.RawBytes = kff * RawBytes;
-
-            for (auto&& i : BytesByColumn) {
-                result.BytesByColumn[i.first] = kff * i.second;
-            }
-
-            for (auto&& i : RawBytesByColumn) {
-                result.RawBytesByColumn[i.first] = kff * i.second;
-            }
             return result;
         }
 
@@ -115,21 +101,11 @@ public:
             Rows = SumVerifiedPositive(Rows, item.Rows);
             Bytes = SumVerifiedPositive(Bytes, item.Bytes);
             RawBytes = SumVerifiedPositive(RawBytes, item.RawBytes);
-            for (auto&& i : item.BytesByColumn) {
-                auto& v = BytesByColumn[i.first];
-                v = SumVerifiedPositive(v, i.second);
-            }
-
-            for (auto&& i : item.RawBytesByColumn) {
-                auto& v = RawBytesByColumn[i.first];
-                v = SumVerifiedPositive(v, i.second);
-            }
             return *this;
         }
     };
 
     i64 Tables{};
-    i64 ColumnRecords{};
     THashMap<TPortionMeta::EProduced, TPortionsStats> StatsByType;
 
     std::vector<ui32> GetKinds() const {

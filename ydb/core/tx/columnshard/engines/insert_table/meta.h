@@ -12,7 +12,7 @@ namespace NKikimr::NOlap {
 class TInsertedDataMeta {
 private:
     YDB_READONLY_DEF(TInstant, DirtyWriteTime);
-    YDB_READONLY(ui32, NumRows, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui64, RawBytes, 0);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
@@ -34,7 +34,7 @@ public:
     {
         AFL_VERIFY(proto.HasDirtyWriteTimeSeconds())("data", proto.DebugString());
         DirtyWriteTime = TInstant::Seconds(proto.GetDirtyWriteTimeSeconds());
-        NumRows = proto.GetNumRows();
+        RecordsCount = proto.GetNumRows();
         RawBytes = proto.GetRawBytes();
         if (proto.HasModificationType()) {
             ModificationType = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetModificationType());

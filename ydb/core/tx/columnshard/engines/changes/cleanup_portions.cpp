@@ -1,8 +1,10 @@
 #include "cleanup_portions.h"
-#include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap {
 
@@ -22,8 +24,8 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     }
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
     for (auto&& p : PortionsToDrop) {
-        p.RemoveFromDatabase(context.DBWrapper);
-        p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
+        TPortionDataAccessor(p).RemoveFromDatabase(context.DBWrapper);
+        TPortionDataAccessor(p).FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
         pathIds.emplace(p.GetPathId());
     }
     for (auto&& i : blobIdsByStorage) {
@@ -43,7 +45,7 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
     if (self) {
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
-            self->Counters.GetTabletCounters()->OnDropPortionEvent(p.GetTotalRawBytes(), p.GetTotalBlobBytes(), p.NumRows());
+            self->Counters.GetTabletCounters()->OnDropPortionEvent(p.GetTotalRawBytes(), p.GetTotalBlobBytes(), p.GetRecordsCount());
         }
     }
 }
@@ -60,4 +62,4 @@ NColumnShard::ECumulativeCounters TCleanupPortionsColumnEngineChanges::GetCounte
     return isSuccess ? NColumnShard::COUNTER_CLEANUP_SUCCESS : NColumnShard::COUNTER_CLEANUP_FAIL;
 }
 
-}
+}   // namespace NKikimr::NOlap

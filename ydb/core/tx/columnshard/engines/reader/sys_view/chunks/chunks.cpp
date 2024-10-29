@@ -21,7 +21,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     auto& entityStorages = EntityStorageNames[portion.GetMeta().GetTierName()];
     {
         std::vector<const TColumnRecord*> records;
-        for (auto&& r : portion.Records) {
+        for (auto&& r : TPortionDataAccessor(portion).GetRecords()) {
             records.emplace_back(&r);
         }
         if (Reverse) {
@@ -35,7 +35,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
             NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
-            NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetNumRows());
+            NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetRecordsCount());
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetMeta().GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
             NArrow::Append<arrow::UInt64Type>(*builders[6], r->GetChunkIdx());
@@ -80,7 +80,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     }
     {
         std::vector<const TIndexChunk*> indexes;
-        for (auto&& r : portion.GetIndexes()) {
+        for (auto&& r : TPortionDataAccessor(portion).GetIndexes()) {
             indexes.emplace_back(&r);
         }
         if (Reverse) {
@@ -133,7 +133,7 @@ std::shared_ptr<NKikimr::NOlap::NReader::NSysView::NAbstract::TReadStatsMetadata
 bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
     ui64 recordsCount = 0;
     while (auto portion = granule.PopFrontPortion()) {
-        recordsCount += portion->GetRecords().size() + portion->GetIndexes().size();
+        recordsCount += TPortionDataAccessor(*portion).GetRecords().size() + TPortionDataAccessor(*portion).GetIndexes().size();
         AppendStats(builders, *portion);
         if (recordsCount > 10000) {
             break;
@@ -145,7 +145,7 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
 ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {
     ui32 recordsCount = 0;
     for (auto&& portion : granule.GetPortions()) {
-        recordsCount += portion->GetRecords().size() + portion->GetIndexes().size();
+        recordsCount += TPortionDataAccessor(*portion).GetRecords().size() + TPortionDataAccessor(*portion).GetIndexes().size();
         if (recordsCount > 10000) {
             break;
         }

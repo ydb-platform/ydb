@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
@@ -30,7 +31,7 @@ public:
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
                 "portion_id", portionInfo->GetAddress().DebugString());
             portionInfo->SetRemoveSnapshot(TSnapshot(1, 1));
-            portionInfo->SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
+            TPortionDataAccessor(*portionInfo).SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
         }
         if (BrokenPortions.size()) {
             TStringBuilder sb;
@@ -88,7 +89,7 @@ protected:
                 if (readyPortions.emplace(p->GetPortionId()).second) {
                     auto it = Schemas->find(p->GetPortionId());
                     AFL_VERIFY(it != Schemas->end());
-                    auto restored = TReadPortionInfoWithBlobs::RestorePortion(*p, blobs, it->second->GetIndexInfo());
+                    auto restored = TReadPortionInfoWithBlobs::RestorePortion(p, blobs, it->second->GetIndexInfo());
                     auto restoredBatch = restored.RestoreBatch(*it->second, *it->second, {});
                     if (restoredBatch.IsFail()) {
                         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("portion", p->DebugString())("fail", restoredBatch.GetErrorMessage());
@@ -163,7 +164,7 @@ INormalizerTask::TPtr TNormalizer::BuildTask(
     for (auto&& portion : portions) {
         auto schemaPtr = schemas->FindPtr(portion->GetPortionId());
         THashMap<TString, THashSet<TBlobRange>> blobsByStorage;
-        portion->FillBlobRangesByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
+        TPortionDataAccessor(*portion).FillBlobRangesByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
         if (blobsByStorage.size() > 1 || !blobsByStorage.contains(NBlobOperations::TGlobal::DefaultStorageId)) {
             continue;
         }

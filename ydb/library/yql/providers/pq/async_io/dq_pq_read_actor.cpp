@@ -234,6 +234,7 @@ private:
         if (ReadSession) {
             ReadSession->Close(TDuration::Zero());
             ReadSession.reset();
+            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
         }
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());

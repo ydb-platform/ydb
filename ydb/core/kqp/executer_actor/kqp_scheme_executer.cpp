@@ -354,6 +354,24 @@ public:
 
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateBackupCollection: {
+                const auto& modifyScheme = schemeOp.GetCreateBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterBackupCollection: {
+                const auto& modifyScheme = schemeOp.GetAlterBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropBackupCollection: {
+                const auto& modifyScheme = schemeOp.GetDropBackupCollection();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

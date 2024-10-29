@@ -18,8 +18,7 @@ extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data) {
 }
 
 extern "C" uint64_t GetBitmapPopCountCount(const NYql::NUdf::TUnboxedValuePod data) {
-    const NYql::NUdf::TUnboxedValue v(data);
-    const auto& arr = NKikimr::NMiniKQL::TArrowBlock::From(v).GetDatum().array();
+    const auto& arr = NKikimr::NMiniKQL::TArrowBlock::From(data).GetDatum().array();
     const size_t len = (size_t)arr->length;
     MKQL_ENSURE(arr->GetNullCount() == 0, "Bitmap block should not have nulls");
     const ui8* src = arr->GetValues<ui8>(1);

@@ -214,9 +214,8 @@ public:
 #endif
 private:
     static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        NUdf::TUnboxedValue b(block);
-        auto& datum = TArrowBlock::From(b).GetDatum();
-        return datum.is_scalar() ? b.Release() : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
+        auto& datum = TArrowBlock::From(block).GetDatum();
+        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
     }
 
     void RegisterDependencies() const final {
@@ -408,9 +407,8 @@ public:
 #endif
 private:
     static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        NUdf::TUnboxedValue b(block);
-        auto& datum = TArrowBlock::From(b).GetDatum();
-        return datum.is_scalar() ? b.Release() : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
+        auto& datum = TArrowBlock::From(block).GetDatum();
+        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
     }
 
     void RegisterDependencies() const final {

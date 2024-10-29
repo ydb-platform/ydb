@@ -544,9 +544,8 @@ private:
         EStep Check(const NUdf::TUnboxedValuePod bitmapValue) {
             Y_ABORT_UNLESS(!IsFinished_);
             Y_ABORT_UNLESS(!InputSize_);
-            const NUdf::TUnboxedValue b(std::move(bitmapValue));
             auto& bitmap = Arrays_.back();
-            bitmap = TArrowBlock::From(b).GetDatum().array();
+            bitmap = TArrowBlock::From(bitmapValue).GetDatum().array();
 
             if (!bitmap->length)
                 return EStep::Skip;

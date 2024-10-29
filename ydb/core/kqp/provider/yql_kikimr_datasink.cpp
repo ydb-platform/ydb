@@ -1477,11 +1477,26 @@ public:
                         .Done()
                         .Ptr();
                 } else if (mode == "alter") {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unimplemented"));
-                    return nullptr;
+                    return Build<TKiAlterBackupCollection>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .BackupCollection().Build(key.GetBackupCollectionPath().Name)
+                        .Prefix().Build(key.GetBackupCollectionPath().Prefix)
+                        .BackupCollectionSettings(settings.BackupCollectionSettings.Cast())
+                        .Settings(settings.Other)
+                        .Done()
+                        .Ptr();
                 } else if (mode == "drop") {
-                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unimplemented"));
-                    return nullptr;
+                    return Build<TKiDropBackupCollection>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .BackupCollection().Build(key.GetBackupCollectionPath().Name)
+                        .Prefix().Build(key.GetBackupCollectionPath().Prefix)
+                        .Cascade<TCoAtom>()
+                            .Value(false) // TODO(innokentii): handle cascade drop
+                            .Build()
+                        .Done()
+                        .Ptr();
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unknown operation type for backup collection: " << TString(mode)));
                     return nullptr;

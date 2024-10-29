@@ -120,7 +120,8 @@ public:
             case LEGACY_SIMPLE_BLOCK: {
                 ui64 result = 0;
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(value.GetElement(LegacyBlockLengthIndex)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLengthValue = value.GetElement(LegacyBlockLengthIndex);
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLengthValue).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }
@@ -128,7 +129,8 @@ public:
                 ui64 result = 0;
                 batch.ForEachRow([&](NUdf::TUnboxedValue& value) {
                     const auto& value0 = value.GetElement(0);
-                    result += NKikimr::NMiniKQL::TArrowBlock::From(value0.GetElement(LegacyBlockLengthIndex)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                    const auto& blockLengthValue = value0.GetElement(LegacyBlockLengthIndex);
+                    result += NKikimr::NMiniKQL::TArrowBlock::From(blockLengthValue).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
                 });
                 return result;
             }

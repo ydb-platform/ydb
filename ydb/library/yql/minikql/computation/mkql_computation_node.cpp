@@ -39,7 +39,8 @@ TDatumProvider MakeDatumProvider(const arrow::Datum& datum) {
 
 TDatumProvider MakeDatumProvider(const IComputationNode* node, TComputationContext& ctx) {
     return [node, &ctx]() {
-        return TArrowBlock::From(node->GetValue(ctx)).GetDatum();
+        const auto& value = node->GetValue(ctx);
+        return TArrowBlock::From(value).GetDatum();
     };
 }
 

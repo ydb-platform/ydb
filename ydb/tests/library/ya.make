@@ -20,8 +20,6 @@ PY_SRCS(
     common/wait_for.py
     kv/__init__.py
     kv/helpers.py
-    serializability/__init__.py
-    serializability/checker.py
     harness/__init__.py
     harness/daemon.py
     harness/kikimr_client.py
@@ -51,14 +49,6 @@ PY_SRCS(
     predicates/tx.py
     predicates/hive.py
     predicates/executor.py
-    wardens/__init__.py
-    wardens/base.py
-    wardens/datashard.py
-    wardens/disk.py
-    wardens/factories.py
-    wardens/hive.py
-    wardens/logs.py
-    wardens/schemeshard.py
     nemesis/__init__.py
     nemesis/nemesis_core.py
     nemesis/nemesis_network.py
@@ -117,5 +107,10 @@ PEERDIR(
 
 END()
 
-RECURSE(compatibility)
+RECURSE(
+    compatibility
+    serializability
+    wardens
+    sqs
+)
 RECURSE_FOR_TESTS(ut)

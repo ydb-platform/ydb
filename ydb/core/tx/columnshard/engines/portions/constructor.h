@@ -138,6 +138,25 @@ public:
         return !!RemoveSnapshot;
     }
 
+    static void Validate(const TColumnRecord& rec) {
+        AFL_VERIFY(rec.GetColumnId());
+    }
+
+    static ui32 GetRecordsCount(const TColumnRecord& rec) {
+        return rec.GetMeta().GetRecordsCount();
+    }
+
+    static void Validate(const TIndexChunk& rec) {
+        AFL_VERIFY(rec.GetIndexId());
+        if (const auto* blobData = rec.GetBlobDataOptional()) {
+            AFL_VERIFY(blobData->size());
+        }
+    }
+
+    static ui32 GetRecordsCount(const TIndexChunk& rec) {
+        return rec.GetRecordsCount();
+    }
+
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
         ui32 entityId = 0;
@@ -151,17 +170,32 @@ public:
             return sb;
         };
 
+        std::optional<ui32> recordsCount;
+        ui32 recordsCountCurrent = 0;
         for (auto&& i : chunks) {
+            Validate(i);
             if (entityId != i.GetEntityId()) {
+                if (entityId) {
+                    if (recordsCount) {
+                        AFL_VERIFY(recordsCountCurrent == *recordsCount);
+                    } else {
+                        recordsCount = recordsCountCurrent;
+                    }
+                }
                 AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
                 AFL_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
+                recordsCountCurrent = 0;
             } else {
                 AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)("details", debugString());
                 chunkIdx = i.GetChunkIdx();
             }
+            recordsCountCurrent += GetRecordsCount(i);
             AFL_VERIFY(i.GetEntityId());
+        }
+        if (recordsCount) {
+            AFL_VERIFY(recordsCountCurrent == *recordsCount);
         }
     }
 

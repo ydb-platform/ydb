@@ -19,8 +19,8 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
-            portion.SetPathId(it->second);
-            index.AppendPortion(std::move(portion));
+            portion->SetPathId(it->second);
+            index.AppendPortion(*portion);
         }
     }
     return TConclusionStatus::Success();
@@ -167,7 +167,7 @@ bool TDestinationSession::DoStart(
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {
         for (auto&& p : i.second) {
-            TPortionDataAccessor(*p).FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
+            TPortionDataAccessor(p).FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
         }
     }
     std::swap(CurrentBlobIds, local);
@@ -175,7 +175,7 @@ bool TDestinationSession::DoStart(
     return true;
 }
 
-bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo& portion) {
+bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo::TConstPtr& portion) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     TPortionDataAccessor(portion).FillBlobIdsByStorage(blobIds, vIndex);
     ui32 containsCounter = 0;

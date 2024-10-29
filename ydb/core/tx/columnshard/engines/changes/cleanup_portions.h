@@ -37,7 +37,7 @@ public:
 
     }
 
-    std::vector<TPortionInfo> PortionsToDrop;
+    std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;

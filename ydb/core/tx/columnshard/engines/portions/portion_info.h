@@ -236,7 +236,7 @@ public:
     ui64 GetTxVolume() const;   // fake-correct method for determ volume on rewrite this portion in transaction progress
     ui64 GetMetadataMemorySize() const;
 
-    static TConclusion<TPortionInfo> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
+    static TConclusion<TPortionInfo::TPtr> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     ui64 GetPathId() const {

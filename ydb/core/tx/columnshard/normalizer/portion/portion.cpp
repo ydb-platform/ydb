@@ -25,7 +25,7 @@ public:
         for (auto&& portionInfo : Portions) {
             auto schema = Schemas->FindPtr(portionInfo->GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo->GetPortionId());
-            TPortionDataAccessor(*portionInfo).SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
+            TPortionDataAccessor(portionInfo).SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }
         return true;
     }

@@ -36,8 +36,8 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     };
     AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
     for (auto& portionInfoWithBlobs : AppendedPortions) {
-        auto& portionInfo = portionInfoWithBlobs.GetPortionResult();
-        AFL_VERIFY(usedPortionIds.emplace(portionInfo.GetPortionId()).second)("portion_info", portionInfo.DebugString(true));
+        const auto& portionInfo = portionInfoWithBlobs.GetPortionResultPtr();
+        AFL_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second)("portion_info", portionInfo->DebugString(true));
         TPortionDataAccessor(portionInfo).SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
     }
     for (auto&& [_, i] : PortionsToMove) {
@@ -108,7 +108,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                 portion->SetRemoveSnapshot(context.Snapshot);
             };
             context.EngineLogs.ModifyPortionOnComplete(i, pred);
-            context.EngineLogs.AddCleanupPortion(*i);
+            context.EngineLogs.AddCleanupPortion(i);
         }
         for (auto& portionBuilder : AppendedPortions) {
             context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());

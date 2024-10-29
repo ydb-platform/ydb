@@ -657,11 +657,12 @@ protected:
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
-    struct TErrorCodeCounter
+    class TErrorCodeCounters
     {
-        explicit TErrorCodeCounter(NProfiling::TProfiler profiler);
+    public:
+        explicit TErrorCodeCounters(NProfiling::TProfiler profiler);
 
-        void Increment(TErrorCode code);
+        NProfiling::TCounter* GetCounter(TErrorCode code);
 
     private:
         const NProfiling::TProfiler Profiler_;
@@ -717,7 +718,7 @@ protected:
         NProfiling::TCounter ResponseMessageAttachmentSizeCounter;
 
         //! Counts the number of errors, per error code.
-        TErrorCodeCounter ErrorCodeCounter;
+        TErrorCodeCounters ErrorCodeCounters;
     };
 
     using TMethodPerformanceCountersPtr = TIntrusivePtr<TMethodPerformanceCounters>;
@@ -763,13 +764,24 @@ protected:
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
         using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
-        struct TPerformanceCountersKeyEquals;
+
+        struct TPerformanceCountersKeyEquals
+        {
+            bool operator()(
+                const TNonowningPerformanceCountersKey& lhs,
+                const TNonowningPerformanceCountersKey& rhs) const;
+            bool operator()(
+                const TOwningPerformanceCountersKey& lhs,
+                const TNonowningPerformanceCountersKey& rhs) const;
+        };
+
         using TPerformanceCountersMap = NConcurrency::TSyncMap<
             TOwningPerformanceCountersKey,
             TMethodPerformanceCountersPtr,
             TPerformanceCountersKeyHash,
             TPerformanceCountersKeyEquals
         >;
+
         TPerformanceCountersMap PerformanceCountersMap;
         TMethodPerformanceCountersPtr BasePerformanceCounters;
         TMethodPerformanceCountersPtr RootPerformanceCounters;
@@ -789,16 +801,9 @@ protected:
         : public TRefCounted
     {
     public:
-        explicit TPerformanceCounters(const NProfiling::TProfiler& profiler)
-            : Profiler_(profiler.WithHot().WithSparse())
-        { }
+        explicit TPerformanceCounters(const NProfiling::TProfiler& profiler);
 
-        void IncrementRequestsPerUserAgent(TStringBuf userAgent)
-        {
-            RequestsPerUserAgent_.FindOrInsert(userAgent, [&] {
-                return Profiler_.WithRequiredTag("user_agent", TString(userAgent)).Counter("/user_agent");
-            }).first->Increment();
-        }
+        NProfiling::TCounter* GetRequestsPerUserAgentCounter(TStringBuf userAgent);
 
     private:
         const NProfiling::TProfiler Profiler_;
@@ -846,10 +851,10 @@ protected:
 
     //! Returns a (non-owning!) pointer to TRuntimeMethodInfo for a given method's name
     //! or |nullptr| if no such method is registered.
-    TRuntimeMethodInfo* FindMethodInfo(const TString& method);
+    TRuntimeMethodInfo* FindMethodInfo(const std::string& method);
 
     //! Similar to #FindMethodInfo but throws if no method is found.
-    TRuntimeMethodInfo* GetMethodInfoOrThrow(const TString& method);
+    TRuntimeMethodInfo* GetMethodInfoOrThrow(const std::string& method);
 
     //! Returns the default invoker passed during construction.
     const IInvokerPtr& GetDefaultInvoker() const;
@@ -991,6 +996,7 @@ private:
 
     struct TAcceptedRequest
     {
+        TInstant ArriveInstant;
         TRequestId RequestId;
         NYT::NBus::IBusPtr ReplyBus;
         TRuntimeMethodInfo* RuntimeInfo;
@@ -998,6 +1004,7 @@ private:
         std::unique_ptr<NRpc::NProto::TRequestHeader> Header;
         TSharedRefArray Message;
         TRequestQueue* RequestQueue;
+        TMethodPerformanceCounters* MethodPerformanceCounters;
         std::optional<TError> ThrottledError;
         TMemoryUsageTrackerGuard MemoryGuard;
         IMemoryUsageTrackerPtr MemoryUsageTracker;
@@ -1022,9 +1029,6 @@ private:
     TRequestQueue* GetRequestQueue(
         TRuntimeMethodInfo* runtimeInfo,
         const NRpc::NProto::TRequestHeader& requestHeader);
-    void RegisterRequestQueue(
-        TRuntimeMethodInfo* runtimeInfo,
-        TRequestQueue* requestQueue);
     void ConfigureRequestQueue(
         TRuntimeMethodInfo* runtimeInfo,
         TRequestQueue* requestQueue,
@@ -1071,6 +1075,7 @@ private:
     static TString GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
 
     void OnServiceLivenessCheck();
+
 };
 
 DEFINE_REFCOUNTED_TYPE(TServiceBase)
@@ -1081,7 +1086,9 @@ class TRequestQueue
     : public TRefCounted
 {
 public:
-    TRequestQueue(const std::string& name, NProfiling::TProfiler profiler);
+    TRequestQueue(
+        const std::string& name,
+        const NProfiling::TProfiler& profiler);
 
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);

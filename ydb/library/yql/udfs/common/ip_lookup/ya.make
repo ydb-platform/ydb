@@ -27,6 +27,9 @@ ELSE ()
 ENDIF ()
 
 
+RECURSE(
+    ip-dict-compiler
+)
 RECURSE_FOR_TESTS(
     tests
 )

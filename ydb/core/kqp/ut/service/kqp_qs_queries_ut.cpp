@@ -3084,7 +3084,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 REPLACE INTO `/Root/DataShard` SELECT * FROM `/Root/ColumnShard`;
                 SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;
                 SELECT * FROM `/Root/DataShard` ORDER BY Col1;
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(R"([[1u;"test1";10];[2u;"test2";11];[3u;"test3";12];[4u;"test";13];[10u;"test1";10];[20u;"test2";11];[30u;"test3";12];[40u;"test";13]])", FormatResultSetYson(result.GetResultSet(0)));
             CompareYson(R"([[1u;"test1";10];[2u;"test2";11];[3u;"test3";12];[4u;"test";13];[10u;"test1";10];[20u;"test2";11];[30u;"test3";12];[40u;"test";13]])", FormatResultSetYson(result.GetResultSet(1)));

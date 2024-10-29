@@ -949,7 +949,9 @@ protected:
                 settings.SetLockTxId(*lockTxId);
                 settings.SetLockNodeId(SelfId().NodeId());
             }
-            ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
+            if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
+                ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
+            }
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {

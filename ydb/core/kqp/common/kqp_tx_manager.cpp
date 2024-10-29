@@ -38,6 +38,7 @@ public:
         ShardsIds.insert(shardId);
         auto& shardInfo = ShardsInfo[shardId];
         shardInfo.IsOlap = isOlap;
+        HasOlapTableShard |= isOlap;
 
         const auto [stringsIter, _] = TablePathes.insert(path);
         const TStringBuf pathBuf = *stringsIter;
@@ -168,9 +169,7 @@ public:
     }
 
     bool HasOlapTable() const override {
-        return std::any_of(std::begin(ShardsInfo), std::end(ShardsInfo), [](const auto& element) {
-            return element.second.IsOlap;
-        });
+        return HasOlapTableShard;
     }
 
     bool IsEmpty() const override {
@@ -187,7 +186,7 @@ public:
     }
 
     bool IsVolatile() const override {
-        return true;
+        return !HasOlapTable();
     }
 
     bool HasSnapshot() const override {
@@ -219,15 +218,24 @@ public:
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(!IsReadOnly());
 
+        THashSet<ui64> sendingColumnShardsSet;
+        THashSet<ui64> receivingColumnShardsSet;
+
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
                 if (IsVolatile()) {
                     SendingShards.insert(shardId);
                 }
+                if (shardInfo.IsOlap) {
+                    sendingColumnShardsSet.insert(shardId);
+                }
             }
             if (!shardInfo.Locks.empty()) {
                 SendingShards.insert(shardId);
+                if (shardInfo.IsOlap) {
+                    receivingColumnShardsSet.insert(shardId);
+                }
             }
 
             AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
@@ -255,6 +263,18 @@ public:
             }
         }
 
+        if (!receivingColumnShardsSet.empty() || !sendingColumnShardsSet.empty()) {
+            AFL_ENSURE(!IsVolatile());
+            const auto& shards = receivingColumnShardsSet.empty()
+                ? sendingColumnShardsSet
+                : receivingColumnShardsSet;
+
+            const ui32 index = RandomNumber<ui32>(shards.size());
+            auto arbiterIterator = std::begin(shards);
+            std::advance(arbiterIterator, index);
+            ArbiterColumnShard = *arbiterIterator;
+        }
+
         ShardsToWaitPrepare = ShardsIds;
 
         MinStep = std::numeric_limits<ui64>::min();
@@ -271,6 +291,7 @@ public:
             .SendingShards = SendingShards,
             .ReceivingShards = ReceivingShards,
             .Arbiter = Arbiter,
+            .ArbiterColumnShard = ArbiterColumnShard,
         };
 
         return result;
@@ -311,7 +332,7 @@ public:
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard() || HasOlapTable());
+        AFL_ENSURE(ReceivingShards.empty() || !IsSingleShard());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -384,11 +405,13 @@ private:
 
     bool ReadOnly = true;
     bool ValidSnapshot = false;
+    bool HasOlapTableShard = false;
     std::optional<NYql::TIssue> LocksIssue;
 
     THashSet<ui64> SendingShards;
     THashSet<ui64> ReceivingShards;
     std::optional<ui64> Arbiter;
+    std::optional<ui64> ArbiterColumnShard;
 
     THashSet<ui64> ShardsToWaitPrepare;
 

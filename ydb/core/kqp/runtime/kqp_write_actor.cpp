@@ -893,6 +893,7 @@ public:
     }
 
     void PassAway() override {;
+        CA_LOG_D("PassAway");
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpTableWriteActor>::PassAway();
     }
@@ -1019,6 +1020,9 @@ private:
         for (const auto& lock : WriteTableActor->GetLocks()) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        resultInfo.SetHasRead(
+            GetOperation(Settings.GetType()) == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
+            GetOperation(Settings.GetType()) == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
         google::protobuf::Any result;
         result.PackFrom(resultInfo);
         return result;
@@ -1505,7 +1509,9 @@ public:
         transaction.SetTxId(*TxId);
         transaction.SetMinStep(commitInfo.MinStep);
         transaction.SetMaxStep(commitInfo.MaxStep);
-        transaction.SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
+        if (TxManager->IsVolatile()) {
+            transaction.SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
+        }
 
         for (const auto& shardInfo : commitInfo.ShardsInfo) {
             auto& item = *affectedSet.Add();
@@ -1654,7 +1660,7 @@ public:
             return issues;
         };
 
-        CA_LOG_D("Recv EvWriteResult from ShardID=" << ev->Get()->Record.GetOrigin()
+        CA_LOG_D("Recv EvWriteResult (external) from ShardID=" << ev->Get()->Record.GetOrigin()
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
             << ", Locks= " << [&]() {
@@ -1856,7 +1862,7 @@ public:
         if (State != EState::COMMITTING) {
             return;
         }
-        Y_UNUSED(shardId, dataSize);
+        Y_UNUSED(dataSize);
         if (TxManager->ConsumeCommitResult(shardId)) {
             CA_LOG_D("Committed");
             State = EState::FINISHED;

@@ -1140,6 +1140,7 @@ private:
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
+            settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
 
             if (settings.Mode().Cast().StringValue() == "replace") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);

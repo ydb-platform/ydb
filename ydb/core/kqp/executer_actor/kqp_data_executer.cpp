@@ -257,7 +257,10 @@ public:
                     if (TxManager) {
                         YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::WRITE);
+                        if (info.GetHasRead()) {
+                            TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                        }
                         TxManager->AddLock(lock.GetDataShard(), lock);
                     }
                 }

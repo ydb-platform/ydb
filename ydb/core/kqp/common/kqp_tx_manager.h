@@ -75,8 +75,8 @@ public:
     struct TPrepareInfo {
         const THashSet<ui64>& SendingShards;
         const THashSet<ui64>& ReceivingShards;
-        std::optional<ui64> Arbiter; // TODO: support non-volatile
-        std::optional<ui64> ArbiterColumnShard; // TODO: support columnshard&topic
+        std::optional<ui64> Arbiter;
+        std::optional<ui64> ArbiterColumnShard;
     };
 
     virtual TPrepareInfo GetPrepareTransactionInfo() = 0;

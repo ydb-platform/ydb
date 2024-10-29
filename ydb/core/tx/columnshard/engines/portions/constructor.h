@@ -175,10 +175,12 @@ public:
         for (auto&& i : chunks) {
             Validate(i);
             if (entityId != i.GetEntityId()) {
-                if (recordsCount) {
-                    AFL_VERIFY(recordsCountCurrent == *recordsCount);
-                } else {
-                    recordsCount = recordsCountCurrent;
+                if (entityId) {
+                    if (recordsCount) {
+                        AFL_VERIFY(recordsCountCurrent == *recordsCount);
+                    } else {
+                        recordsCount = recordsCountCurrent;
+                    }
                 }
                 AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
                 AFL_VERIFY(i.GetChunkIdx() == 0);

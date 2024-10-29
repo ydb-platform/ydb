@@ -158,7 +158,8 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
-    if (schema.GetDiff() && !VersionedIndex.IsEmpty()) {
+    if (schema.GetDiff()) {
+        AFL_VERIFY(!VersionedIndex.IsEmpty());
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
             *schema.GetDiff(), VersionedIndex.GetLastSchema()->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {

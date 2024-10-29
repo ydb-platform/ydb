@@ -46,6 +46,7 @@ target_sources(columnshard-engines-portions PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/meta.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/index_chunk.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/data_accessor.cpp
 )
 
 

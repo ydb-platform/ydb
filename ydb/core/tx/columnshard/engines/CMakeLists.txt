@@ -68,7 +68,6 @@ target_sources(tx-columnshard-engines PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/db_wrapper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/filter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/tier_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/defs.cpp
 )

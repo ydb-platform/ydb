@@ -23,7 +23,9 @@ namespace NYdb {
             ~TTopicWorkloadWriterProducer();
 
             void Close();
-
+            
+            void SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession);
+            
             bool WaitForInitSeqNo();
 
             void WaitForContinuationToken(const TDuration& timeout);
@@ -39,12 +41,11 @@ namespace NYdb {
 
             size_t InflightMessagesCnt();
 
-        private:
-            TString GetGeneratedMessage() const;
-
             void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
 
             void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event);
+        private:
+            TString GetGeneratedMessage() const;
 
             std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession_;
             ui64 MessageId_ = 0;

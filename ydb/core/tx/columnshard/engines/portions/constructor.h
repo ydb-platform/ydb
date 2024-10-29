@@ -138,7 +138,7 @@ public:
         return !!RemoveSnapshot;
     }
 
-    static void Validate(const TColumnRecord& rec) const {
+    static void Validate(const TColumnRecord& rec) {
         AFL_VERIFY(rec.GetColumnId());
         AFL_VERIFY(rec.BlobRange.IsValid());
     }

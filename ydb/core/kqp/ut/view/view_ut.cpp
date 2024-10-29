@@ -344,7 +344,38 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto creationResult = session.ExecuteSchemeQuery(creationQuery).GetValueSync();
             UNIT_ASSERT(!creationResult.IsSuccess());
-            UNIT_ASSERT(creationResult.GetIssues().ToString().Contains("error: path exist, request accepts it"));
+            UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "error: path exist, request accepts it");
+        }
+    }
+
+    Y_UNIT_TEST(CreateViewOccupiedName) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "table";
+
+        const TString createTable = std::format(R"(
+                CREATE TABLE {} (key Int32, value Utf8, PRIMARY KEY (key));
+            )", path
+        );
+        ExecuteQuery(session, createTable);
+
+        auto checkError = [&session](const TString& query, const TString& expectedError) {
+            const auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        };
+
+        const TString queryTemplate = std::format(R"(
+                CREATE VIEW {{}}{} WITH (security_invoker = true) AS SELECT 1;
+            )", path
+        );
+        const TString expectedError = std::format("path: '/Root/{}', error: unexpected path type", path);
+
+        for (std::string existenceCheck : {"", "IF NOT EXISTS "}) {
+            const TString createView = std::vformat(queryTemplate, std::make_format_args(existenceCheck));
+            checkError(createView, expectedError);
         }
     }
 
@@ -418,6 +449,42 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Views are disabled");
     }
 
+    Y_UNIT_TEST(DropNonexistingView) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        const auto dropResult = session.ExecuteQuery(
+            "DROP VIEW NonexistingView;", NQuery::TTxControl::NoTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT(!dropResult.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+    }
+
+    Y_UNIT_TEST(CallDropViewOnTable) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        EnableViewsFeatureFlag(kikimr);
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        constexpr const char* path = "table";
+
+        const TString createTable = std::format(R"(
+                CREATE TABLE {} (key Int32, value Utf8, PRIMARY KEY (key));
+            )", path
+        );
+        ExecuteQuery(session, createTable);
+
+        auto checkError = [&session](const TString& query, const TString& expectedError) {
+            const auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        };
+        const TString expectedError = std::format("path: '/Root/{}', error: path is not a view", path);
+        checkError(std::format("DROP VIEW {};", path), expectedError);
+        checkError(std::format("DROP VIEW IF EXISTS {};", path), expectedError);
+    }
+
     Y_UNIT_TEST(DropSameViewTwice) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         EnableViewsFeatureFlag(kikimr);
@@ -443,7 +510,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto dropResult = session.ExecuteSchemeQuery(dropQuery).GetValueSync();
             UNIT_ASSERT(!dropResult.IsSuccess());
-            UNIT_ASSERT(dropResult.GetIssues().ToString().Contains("Error: Path does not exist"));
+            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
         }
     }
 

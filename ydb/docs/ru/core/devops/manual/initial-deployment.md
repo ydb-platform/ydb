@@ -213,6 +213,69 @@ sudo usermod -aG disk ydb
         - "DATABASE-ADMINS"
     ```
 
+1. Регистрация динамического узла (опционально).
+
+    Если на этапе включения аутентификации пользователя был установлен флаг `security_config.enforce_user_token_requirement: true`, в конфигурацию необходимо добавить информацию для возможности регистрации динамического узла.
+    Поскольку динамический узел в процессе регистрации отправляет запрос к статическому узлу кластера, он должен предоставить аутентификационную информацию, которую статический узел сможет проверить.
+
+    Так как динамический узел действует в роли виртуального пользователя, в качестве аутентификационной информации он должен предоставить SSL-сертификат. После проверки этого сертификата статический узел разрешает динамическому узлу зарегистрироваться.
+
+    Настройки gRPC соединения:
+
+    ```yaml
+    grpc_config:
+      services:
+      - legacy
+      - discovery
+      ca: "/opt/ydb/certs/ca.crt"
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+    ```
+
+    Добавление проверочной аутентификационной информации статического узла. Статический узел должен проверить соответствие значений в конфигурации значениям поля `Subject` предоставленного сертификата.
+
+    ```yaml
+    client_certificate_authorization:
+      request_client_certificate: true
+      client_certificate_definitions:
+        - member_groups:
+          - "registration-node@cert"
+          subject_terms:
+          - short_name: "C"
+            values:
+            - "RU"
+          - short_name: "ST"
+            values:
+            - "Moscow"
+          - short_name: "L"
+            values:
+            - "Moscow"
+          - short_name: "O"
+            values:
+            - "My Organization"
+          - short_name: "OU"
+            values:
+            - "My organization unit"
+          - short_name: "CN"
+            values:
+            - "node2.ydb.tech"
+            suffixes:
+            - ".ydb.tech"
+    ```
+
+    Так как динамический узел может предоставить в качестве аутентификационной информации только сертификат, в системе такой узел будет известен под именем, соответствующим полю `Subject` предоставленного сертификата.
+`member_groups` — это имена групп пользователей. В эти группы включаются те пользователи (динамические узлы), которые предоставили сертификаты с полем `Subject`, совпадающим со значениями из секции `subject_terms`.
+
+    Далее требуется добавить в группу `register_dynamic_node_allowed_sids` имена пользователей и групп, которым разрешено выполнять операцию регистрации динамического узла.
+
+    ```yaml
+    domains_config:
+      security_config:
+        register_dynamic_node_allowed_sids:
+        - registration-node@cert
+        - root@builtin
+    ```
+
 При использовании режима шифрования трафика убедитесь в наличии в конфигурационном файле {{ ydb-short-name }} установленных путей к файлам ключей и сертификатов в секциях `interconnect_config` и `grpc_config`:
 
 ```yaml
@@ -418,7 +481,9 @@ sudo chmod 700 /opt/ydb/certs
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb3>:2135 \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key
   ```
 
   В примере команды выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
@@ -453,7 +518,9 @@ sudo chmod 700 /opt/ydb/certs
       --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb \
       --node-broker grpcs://<ydb1>:2135 \
       --node-broker grpcs://<ydb2>:2135 \
-      --node-broker grpcs://<ydb3>:2135
+      --node-broker grpcs://<ydb3>:2135 \
+      --grpc-cert /opt/ydb/certs/node.crt \
+      --grpc-key /opt/ydb/certs/node.key
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720

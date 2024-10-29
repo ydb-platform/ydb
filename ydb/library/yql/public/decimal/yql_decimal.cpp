@@ -249,10 +249,12 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
 
                 if (!std::isdigit(*p))
                     return Err();
+
+                return r;
             }
 
             if (const auto e = exp > 0 ? std::max(0, s - p) : std::min(0, s)) {
-                if (r && IsNormal(r)) {
+                if (r) {
                     if (exp > 0)
                         return Mul(r, GetDivider(+e));
                     if (exp < 0)

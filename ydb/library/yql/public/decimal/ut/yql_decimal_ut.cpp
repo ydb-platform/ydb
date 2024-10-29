@@ -215,6 +215,8 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
         UNIT_ASSERT(FromStringEx("-1e-99", 10, 2) == 0);
         UNIT_ASSERT(FromStringEx("-510e-3", 1, 0) == -1);
         UNIT_ASSERT(FromStringEx("+99E3", 5, 0) == 99000);
+        UNIT_ASSERT(FromStringEx("2.1E-130", 35, 2) == 0);
+        UNIT_ASSERT(FromStringEx("2.1E0", 35, 2) == 210);
     }
 
     Y_UNIT_TEST(TestFormStringExInvalidValues) {
@@ -225,8 +227,11 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
 
         UNIT_ASSERT(IsError(FromStringEx("E2", 35, 15))); // empty
         UNIT_ASSERT(IsError(FromStringEx("E2E4", 35, 15))); // empty
-        UNIT_ASSERT(IsError(FromStringEx("12E0", 35, 15))); // zero isn't avail
         UNIT_ASSERT(IsError(FromStringEx("NANE5", 35, 15))); // nan with exp
+        UNIT_ASSERT(IsError(FromStringEx("infE5", 35, 15))); // inf with exp
+        UNIT_ASSERT(IsError(FromStringEx("-infe-5", 35, 15))); // inf with exp
+        UNIT_ASSERT(IsError(FromStringEx("2.1E0X", 35, 2))); // not fully parsed exp
+        UNIT_ASSERT(IsError(FromStringEx("2.1E+-1", 35, 2))); // two signs
     }
 
     Y_UNIT_TEST(TestSpecialAsString) {

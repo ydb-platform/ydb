@@ -66,7 +66,7 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TReadPortionInfoWithBlobs::GetEn
 
 bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
     const ui32 entityId, std::vector<const TColumnRecord*>& records, std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
-    records = TPortionDataAccessor(GetPortionInfo()).GetColumnChunksPointers(entityId);
+    records = PortionInfo.GetColumnChunksPointers(entityId);
     if (records.empty()) {
         return false;
     }

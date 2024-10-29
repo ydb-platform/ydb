@@ -27,7 +27,7 @@ public:
         for (auto&& portion : Portions) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())(
                 "portion_id", portion->GetPortionId());
-            TPortionDataAccessor(*portion).RemoveFromDatabase(db);
+            TPortionDataAccessor(portion).RemoveFromDatabase(db);
         }
         return true;
     }
@@ -74,7 +74,7 @@ INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(
     THashMap<TString, THashSet<TUnifiedBlobId>> blobsByStorage;
     for (auto&& portion : portions) {
         auto schemaPtr = schemas->FindPtr(portion->GetPortionId());
-        TPortionDataAccessor(*portion).FillBlobIdsByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
+        TPortionDataAccessor(portion).FillBlobIdsByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
     }
     for (auto&& [storageId, blobs] : blobsByStorage) {
         if (storageId == NBlobOperations::TGlobal::DefaultStorageId) {

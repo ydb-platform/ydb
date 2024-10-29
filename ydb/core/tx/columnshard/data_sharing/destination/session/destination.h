@@ -88,7 +88,7 @@ protected:
     }
 
 public:
-    bool TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo& portion);
+    bool TryTakePortionBlobs(const TVersionedIndex& vIndex, const std::shared_ptr<const TPortionInfo>& portion);
 
     TSourceCursorForDestination& GetCursorVerified(const TTabletId& tabletId) {
         auto it = Cursors.find(tabletId);

@@ -405,7 +405,7 @@ public:
                 break;
             }
             txSizeLimit += i->GetTxVolume();
-            if (predictor->AddPortion(*i) > sizeLimit && result.size() > 1) {
+            if (predictor->AddPortion(i) > sizeLimit && result.size() > 1) {
                 break;
             }
         }

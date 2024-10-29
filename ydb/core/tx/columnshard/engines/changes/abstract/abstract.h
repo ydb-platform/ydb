@@ -232,7 +232,7 @@ protected:
 public:
     class IMemoryPredictor {
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) = 0;
         virtual ~IMemoryPredictor() = default;
     };
 

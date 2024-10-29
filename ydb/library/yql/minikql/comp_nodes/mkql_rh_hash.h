@@ -6,8 +6,8 @@
 #include <vector>
 #include <span>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/utils/prefetch.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <util/digest/city.h>
 #include <util/generic/scope.h>
@@ -301,9 +301,7 @@ private:
         auto newCapacity = GetNewCapacity();
         char *newData, *newDataEnd;
 
-        Cerr << "Hashtable " << (void *)this << " growing: from " << Capacity << " to " << newCapacity <<  "\n";
         Allocate(newCapacity, newData, newDataEnd);
-        Cerr << "Successfully grow " << (void *)this << "\n";
 
         Y_DEFER {
             Allocator.deallocate(newData, newDataEnd - newData);
@@ -324,14 +322,12 @@ private:
         auto newCapacity = GetNewCapacity();
         char *newData, *newDataEnd;
 
-        Cerr << "Hashtable " << (void *)this << " growing: from " << Capacity << " to " << newCapacity <<  "\n";
         try {
             Allocate(newCapacity, newData, newDataEnd);
-        } catch (const TMemoryLimitExceededException& e) {
-            Cerr << "Got memory limit expection " << (void *)this << "\n";
+        } catch (...) {
+            YQL_LOG(INFO) << "TRobinHoodHashBase failed to grow from " << Capacity << " to " << newCapacity << "\n";
             return false;
         }
-        Cerr << "Successfully grow " << (void *)this << "\n";
         Y_DEFER {
             Allocator.deallocate(newData, newDataEnd - newData);
         };

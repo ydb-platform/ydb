@@ -279,7 +279,6 @@ public:
         Throat = States.GetKey(itInsert) + KeyWidth;
         if (isNew) {
             if (!States.UnsafeCheckGrow()) {
-                YQL_LOG(INFO) << "State " << (void *)this << " no longer growing\n";
                 // first out of memory is safe because spilling still can help us
                 IsOutOfMemory = true;
             }
@@ -850,7 +849,6 @@ private:
     }
 
     bool IsSwitchToSpillingModeCondition() const {
-        return false;
         return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
     }
 

@@ -2551,8 +2551,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     TStringBuilder sb;
                     sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        sb << " " << portion.GetPortionId();
-                        deletedPortions.insert(portion.GetPortionId());
+                        sb << " " << portion->GetPortionId();
+                        deletedPortions.insert(portion->GetPortionId());
                     }
                     sb << Endl;
                     Cerr << sb;

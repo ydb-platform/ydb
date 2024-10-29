@@ -189,10 +189,9 @@ void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, I
 void TGranuleMeta::CommitImmediateOnExecute(
     NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
     AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
-    auto copy = portion.GetPortionInfo();
-    copy.SetCommitSnapshot(snapshot);
+    portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
-    copy.SaveMetaToDatabase(wrapper);
+    portion.GetPortionInfo().SaveMetaToDatabase(wrapper);
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {

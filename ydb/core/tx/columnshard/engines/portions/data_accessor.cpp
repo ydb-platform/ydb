@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
+#include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
@@ -534,6 +535,38 @@ void TPortionDataAccessor::FullValidation() const {
     AFL_VERIFY(blobIdxs.size());
     AFL_VERIFY(PortionInfo->BlobIds.size() == blobIdxs.size());
     AFL_VERIFY(PortionInfo->BlobIds.size() == *blobIdxs.rbegin() + 1);
+}
+
+void TPortionDataAccessor::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
+    PortionInfo->SerializeToProto(proto);
+    for (auto&& r : PortionInfo->Records) {
+        *proto.AddRecords() = r.SerializeToProto();
+    }
+
+    for (auto&& r : PortionInfo->Indexes) {
+        *proto.AddIndexes() = r.SerializeToProto();
+    }
+}
+
+NKikimr::TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& /*proto*/) {
+/*
+    for (auto&& i : proto.GetRecords()) {
+        auto parse = TColumnRecord::BuildFromProto(i);
+        if (!parse) {
+            return parse;
+        }
+        PortionInfo->Records.emplace_back(std::move(parse.DetachResult()));
+    }
+    for (auto&& i : proto.GetIndexes()) {
+        auto parse = TIndexChunk::BuildFromProto(i);
+        if (!parse) {
+            return parse;
+        }
+        PortionInfo->Indexes.emplace_back(std::move(parse.DetachResult()));
+    }
+    PortionInfo->Precalculate();
+*/
+    return TConclusionStatus::Success();
 }
 
 TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAccessor::TPreparedColumn::AssembleAccessor() const {

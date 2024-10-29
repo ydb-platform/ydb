@@ -69,6 +69,10 @@ public:
         : PortionInfo(&portionInfo) {
     }
 
+    TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
+        : PortionInfo(portionInfo.get()) {
+    }
+
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
         for (auto&& i : PortionInfo->Records) {
@@ -94,34 +98,9 @@ public:
         return result;
     }
 
-    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
-        for (auto&& r : PortionInfo->Records) {
-            *proto.AddRecords() = r.SerializeToProto();
-        }
+    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
-        for (auto&& r : PortionInfo->Indexes) {
-            *proto.AddIndexes() = r.SerializeToProto();
-        }
-    }
-
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
-        for (auto&& i : proto.GetRecords()) {
-            auto parse = TColumnRecord::BuildFromProto(i);
-            if (!parse) {
-                return parse;
-            }
-            PortionInfo->Records.emplace_back(std::move(parse.DetachResult()));
-        }
-        for (auto&& i : proto.GetIndexes()) {
-            auto parse = TIndexChunk::BuildFromProto(i);
-            if (!parse) {
-                return parse;
-            }
-            PortionInfo->Indexes.emplace_back(std::move(parse.DetachResult()));
-        }
-        PortionInfo->Precalculate();
-        return TConclusionStatus::Success();
-    }
+    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
     ui64 GetColumnRawBytes(const std::set<ui32>& entityIds, const bool validation = true) const;
     ui64 GetColumnBlobBytes(const std::set<ui32>& entityIds, const bool validation = true) const;

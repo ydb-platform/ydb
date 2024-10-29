@@ -491,14 +491,11 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr
     return true;
 }
 
-void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo) {
-    if (exInfo) {
-        UpdatePortionStats(portionInfo, EStatsUpdateType::DEFAULT, exInfo);
-    } else {
-        UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
-    }
-
-    GetGranulePtrVerified(portionInfo.GetPathId())->UpsertPortion(portionInfo);
+void TColumnEngineForLogs::AppendPortion(const TPortionInfo& portionInfo) {
+    auto granule = GetGranulePtrVerified(portionInfo.GetPathId());
+    AFL_VERIFY(!granule->GetPortionOptional(portionInfo.GetPortionId()));
+    UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
+    granule->UpsertPortion(portionInfo);
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {

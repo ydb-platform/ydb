@@ -2536,11 +2536,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     sb << "Compaction old portions:";
                     ui64 srcPathId{ 0 };
                     for (const auto& portionInfo : compact->SwitchedPortions) {
-                        const ui64 pathId = portionInfo.GetPathId();
+                        const ui64 pathId = portionInfo->GetPathId();
                         UNIT_ASSERT(!srcPathId || srcPathId == pathId);
                         srcPathId = pathId;
-                        oldPortions.insert(portionInfo.GetPortionId());
-                        sb << portionInfo.GetPortionId() << ",";
+                        oldPortions.insert(portionInfo->GetPortionId());
+                        sb << portionInfo->GetPortionId() << ",";
                     }
                     sb << Endl;
                     Cerr << sb;

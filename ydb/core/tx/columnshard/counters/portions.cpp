@@ -3,14 +3,14 @@
 
 namespace NKikimr::NColumnShard {
 
-void TPortionCategoryCounters::AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& p) {
+void TPortionCategoryCounters::AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
     RecordsCount->Add(p->GetRecordsCount());
     Count->Add(1);
     BlobBytes->Add(p->GetTotalBlobBytes());
     RawBytes->Add(p->GetTotalRawBytes());
 }
 
-void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& p) {
+void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
     RecordsCount->Remove(p->GetRecordsCount());
     Count->Remove(1);
     BlobBytes->Remove(p->GetTotalBlobBytes());
@@ -21,7 +21,7 @@ void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<NOlap::TPorti
 
 namespace NKikimr::NOlap {
 
-void TSimplePortionsGroupInfo::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
+void TSimplePortionsGroupInfo::AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
     AFL_VERIFY(p);
     AddPortion(*p);
 }
@@ -33,7 +33,7 @@ void TSimplePortionsGroupInfo::AddPortion(const TPortionInfo& p) {
     ChunksCount += p.GetChunksCount();
 }
 
-void TSimplePortionsGroupInfo::RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
+void TSimplePortionsGroupInfo::RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
     AFL_VERIFY(p);
     RemovePortion(*p);
 }

@@ -14,7 +14,7 @@ void TPortionsBucket::RebuildOptimizedFeature(const TInstant currentInstant) con
     }
 }
 
-std::shared_ptr<NKikimr::NOlap::TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule,
+std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule,
     const std::shared_ptr<NDataLocks::TManager>& locksManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IStoragesManager>& storagesManager) const {
     auto context = Logic->BuildTask(TInstant::Now(), GetMemLimit(), *this);
     AFL_VERIFY(context.GetPortions().size() > 1)("size", context.GetPortions().size());

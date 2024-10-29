@@ -54,6 +54,8 @@ class TPortionDataAccessor;
 
 class TPortionInfo {
 public:
+    using TConstPtr = std::shared_ptr<const TPortionInfo>;
+    using TPtr = std::shared_ptr<TPortionInfo>;
     using TRuntimeFeatures = ui8;
     enum class ERuntimeFeature : TRuntimeFeatures {
         Optimized = 1 /* "optimized" */
@@ -89,7 +91,7 @@ private:
     std::optional<ui64> ShardingVersion;
 
     TPortionMeta Meta;
-    YDB_READONLY(TRuntimeFeatures, RuntimeFeatures, 0);
+    TRuntimeFeatures RuntimeFeatures = 0;
     std::vector<TUnifiedBlobId> BlobIds;
 
     std::vector<TIndexChunk> Indexes;

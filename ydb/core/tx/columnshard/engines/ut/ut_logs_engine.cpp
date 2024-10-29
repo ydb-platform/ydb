@@ -319,9 +319,9 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
 
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
 
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, snap);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency("testing");
     return result;
@@ -349,13 +349,13 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     //    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, snap);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
-            for (auto&& r : i.GetPortionResult().GetRecords()) {
+            for (auto&& r : TPortionDataAccessor(i.GetPortionResult()).GetRecords()) {
                 Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionResult().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
             }
         }
@@ -376,9 +376,9 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
     changes->StartEmergency();
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, snap);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency("testing");
     return result;
@@ -394,9 +394,10 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
 
     changes->StartEmergency();
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(
+        NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, TSnapshot(1, 1));
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency("testing");
     return result;

@@ -51,8 +51,8 @@ public:
         return result;
     }
 
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p);
-    void RemovePortion(const std::shared_ptr<TPortionInfo>& p);
+    void AddPortion(const std::shared_ptr<const TPortionInfo>& p);
+    void RemovePortion(const std::shared_ptr<const TPortionInfo>& p);
 
     void AddPortion(const TPortionInfo& p);
     void RemovePortion(const TPortionInfo& p);
@@ -123,9 +123,8 @@ public:
         RawBytes = agents.RawBytes->GetClient();
     }
 
-    void AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& p);
-
-    void RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& p);
+    void AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p);
+    void RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p);
 };
 
 }   // namespace NKikimr::NColumnShard

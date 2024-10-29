@@ -70,14 +70,6 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     }
 
     *proto.MutableMeta() = Meta.SerializeToProto();
-
-    for (auto&& r : Records) {
-        *proto.AddRecords() = r.SerializeToProto();
-    }
-
-    for (auto&& r : Indexes) {
-        *proto.AddIndexes() = r.SerializeToProto();
-    }
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
@@ -190,7 +182,7 @@ bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) 
     return true;
 }
 
-NKikimr::NOlap::NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageId(
+NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageId(
     const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
     if (HasInsertWriteId()) {
         NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
@@ -211,7 +203,7 @@ void TPortionInfo::Precalculate() {
             PrecalculatedColumnRawBytes += r.GetMeta().GetRawBytes();
             PrecalculatedColumnBlobBytes += r.BlobRange.GetSize();
             if (r.GetColumnId() == Records.front().GetColumnId()) {
-                PrecalculatedRecordsCount = r.GetMeta().GetRecordsCount();
+                PrecalculatedRecordsCount += r.GetMeta().GetRecordsCount();
             }
         };
         TPortionDataAccessor::AggregateIndexChunksData(aggr, Records, nullptr, true);

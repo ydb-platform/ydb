@@ -89,7 +89,7 @@ protected:
                 if (readyPortions.emplace(p->GetPortionId()).second) {
                     auto it = Schemas->find(p->GetPortionId());
                     AFL_VERIFY(it != Schemas->end());
-                    auto restored = TReadPortionInfoWithBlobs::RestorePortion(*p, blobs, it->second->GetIndexInfo());
+                    auto restored = TReadPortionInfoWithBlobs::RestorePortion(p, blobs, it->second->GetIndexInfo());
                     auto restoredBatch = restored.RestoreBatch(*it->second, *it->second, {});
                     if (restoredBatch.IsFail()) {
                         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("portion", p->DebugString())("fail", restoredBatch.GetErrorMessage());

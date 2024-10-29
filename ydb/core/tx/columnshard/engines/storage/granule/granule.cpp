@@ -182,7 +182,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
-    (static_cast<TColumnEngineForLogs&>(engine)).UpsertPortion(*it->second);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*it->second);
     InsertedPortions.erase(it);
 }
 
@@ -196,7 +196,7 @@ void TGranuleMeta::CommitImmediateOnExecute(
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {
-    (static_cast<TColumnEngineForLogs&>(engine)).UpsertPortion(*portion);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*portion);
 }
 
 }   // namespace NKikimr::NOlap

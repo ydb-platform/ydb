@@ -25,8 +25,8 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlob
     return TPortionDataAccessor(PortionInfo).PrepareForAssemble(data, resultSchema, blobs).AssembleToGeneralContainer(seqColumns);
 }
 
-NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
-    const TPortionInfo& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
+TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
+    const TPortionInfo::TConstPtr& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
     TReadPortionInfoWithBlobs result(portion);
     THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> records =
         TPortionDataAccessor(result.PortionInfo).RestoreEntityChunks(blobs, indexInfo);
@@ -38,11 +38,12 @@ NKikimr::NOlap::TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePort
     return result;
 }
 
-std::vector<NKikimr::NOlap::TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
-    const std::vector<TPortionInfo>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TVersionedIndex& tables) {
+std::vector<TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
+    const std::vector<TPortionInfo::TConstPtr>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    const TVersionedIndex& tables) {
     std::vector<TReadPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
-        const auto schema = i.GetSchema(tables);
+        const auto schema = i->GetSchema(tables);
         result.emplace_back(RestorePortion(i, blobs, schema->GetIndexInfo()));
     }
     return result;
@@ -90,8 +91,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "we don't need sync portion");
         return {};
     }
-    NYDBTest::TControllers::GetColumnShardController()->OnPortionActualization(source.PortionInfo);
-    auto pages = TPortionDataAccessor(source.PortionInfo).BuildPages();
+    NYDBTest::TControllers::GetColumnShardController()->OnPortionActualization(source.PortionInfo.GetPortionInfo());
+    auto pages = source.PortionInfo.BuildPages();
     std::vector<ui32> pageSizes;
     for (auto&& p : pages) {
         pageSizes.emplace_back(p.GetRecordsCount());
@@ -113,7 +114,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         }
     }
 
-    TPortionInfoConstructor constructor(source.PortionInfo, false, true);
+    TPortionInfoConstructor constructor(source.PortionInfo.GetPortionInfo(), false, true);
     constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
     constructor.SetSchemaVersion(to->GetVersion());
     constructor.MutableMeta().ResetTierName(targetTier);
@@ -124,7 +125,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
     }
 
-    const NSplitter::TEntityGroups groups = source.PortionInfo.GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());
+    const NSplitter::TEntityGroups groups = source.PortionInfo.GetPortionInfo().GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<NArrow::NSplitter::TSerializationStats>());
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 

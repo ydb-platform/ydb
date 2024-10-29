@@ -59,7 +59,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
     ui32 fetchedChunks = 0;
     ui32 nullChunks = 0;
     for (auto&& i : columnIds) {
-        auto columnChunks = TPortionDataAccessor(*Portion).GetColumnChunksPointers(i);
+        auto columnChunks = TPortionDataAccessor(Portion).GetColumnChunksPointers(i);
         if (columnChunks.empty()) {
             continue;
         }

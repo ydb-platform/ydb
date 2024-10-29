@@ -26,14 +26,9 @@ private:
         }
 
         THashSet<ui64> portionIds;
-        auto targetLevel = GetNextLevel();
-
-
-        const ui64 affectedRawBytes = targetLevel->GetAffectedPortionBytes(
-            Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
-        /*
+        ui64 affectedRawBytes = 0;
         auto chain =
-            targetLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+            NextLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
         if (chain) {
             auto it = Portions.begin();
             auto itNext = chain->GetPortions().begin();
@@ -51,10 +46,8 @@ private:
                 }
             }
         }
-*/
-
-        const ui64 mb = (affectedRawBytes + PortionsInfo.GetRawBytes()) / 1000000 + 1;
-        return 1000000000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
+        const ui64 mb = ((affectedRawBytes + PortionsInfo.GetRawBytes()) >> 20) + 1;
+        return 1000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
     }
 
 public:
@@ -72,8 +65,7 @@ public:
         return false;
     }
 
-    virtual void DoModifyPortions(
-        const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override {
+    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         for (auto&& i : remove) {
             auto it = Portions.find(i);
             AFL_VERIFY(it != Portions.end());

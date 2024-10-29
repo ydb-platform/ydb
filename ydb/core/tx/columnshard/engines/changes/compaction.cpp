@@ -14,7 +14,7 @@ void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     if (ui32 switched = SwitchedPortions.size()) {
         out << "switch " << switched << " portions:(";
         for (auto& portionInfo : SwitchedPortions) {
-            out << portionInfo;
+            out << portionInfo->DebugString(false);
         }
         out << "); ";
     }
@@ -69,7 +69,7 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
 }
 
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(
-    std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
+    std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
     , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);
@@ -77,8 +77,8 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(
     SwitchedPortions.reserve(portions.size());
     for (const auto& portionInfo : portions) {
         Y_ABORT_UNLESS(!portionInfo->HasRemoveSnapshot());
-        SwitchedPortions.emplace_back(*portionInfo);
-        AddPortionToRemove(*portionInfo);
+        SwitchedPortions.emplace_back(portionInfo);
+        AddPortionToRemove(portionInfo);
         Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
     }
     //    Y_ABORT_UNLESS(SwitchedPortions.size());

@@ -23,7 +23,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, snapshot));
         LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
-        NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+        NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         changes->WriteIndexOnExecute(Self, context);
 
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
@@ -59,7 +59,8 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     const ui64 bytesWritten = changes->GetBlobsAction().GetWritingTotalSize();
 
     if (!Ev->Get()->IndexChanges->IsAborted()) {
-        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+        NOlap::TWriteIndexCompleteContext context(
+            ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
@@ -81,12 +82,12 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     : TBase(self)
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
-{
+    , CurrentSnapshot(Self->GetCurrentSnapshotForInternalModification()) {
     AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
 
     auto changes = Ev->Get()->IndexChanges;
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
-        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, Self->GetCurrentSnapshotForInternalModification()));
+        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, CurrentSnapshot));
     }
 }
 

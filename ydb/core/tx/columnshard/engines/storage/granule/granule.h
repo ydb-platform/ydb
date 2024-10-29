@@ -140,9 +140,9 @@ public:
         ActualizationIndex->RefreshTiering(tiering, context);
     }
 
-    TConclusionStatus IsInnerPortion(const std::shared_ptr<TPortionInfo>& portion) const {
+    TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
-            return TConclusionStatus::Fail("empty portion pointer");
+            return TConclusionStatus::Fail("empty input portion pointer");
         }
         auto it = Portions.find(portion->GetPortionId());
         if (it == Portions.end()) {
@@ -151,24 +151,25 @@ public:
         if (portion->GetPathId() != GetPathId()) {
             return TConclusionStatus::Fail("portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId()));
         }
-        return TConclusionStatus::Success();
+        return it->second;
     }
 
     template <class TModifier>
-    void ModifyPortionOnExecute(NTable::TDatabase& db, const std::shared_ptr<TPortionInfo>& portion, const TModifier& modifier) const {
-        IsInnerPortion(portion).Validate("modify portion on execute");
-        auto copy = *portion;
+    void ModifyPortionOnExecute(IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
+        const auto innerPortion = GetInnerPortion(portion).DetachResult();
+        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        auto copy = *innerPortion;
         modifier(copy);
-        TDbWrapper wrapper(db, nullptr);
-        TPortionDataAccessor(copy).SaveToDatabase(wrapper, 0, true);
+        TPortionDataAccessor(copy).SaveToDatabase(wrapper, firstPKColumnId, false);
     }
 
     template <class TModifier>
-    void ModifyPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion, const TModifier& modifier) {
-        IsInnerPortion(portion).Validate("modify portion on complete");
-        OnBeforeChangePortion(portion);
-        modifier(portion);
-        OnAfterChangePortion(portion, nullptr);
+    void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
+        const auto innerPortion = GetInnerPortion(portion).DetachResult();
+        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        OnBeforeChangePortion(innerPortion);
+        modifier(innerPortion);
+        OnAfterChangePortion(innerPortion, nullptr);
     }
 
     void InsertPortionOnExecute(

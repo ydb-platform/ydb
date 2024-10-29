@@ -7,7 +7,6 @@
 #include <span>
 
 #include <ydb/library/yql/utils/prefetch.h>
-#include <ydb/library/yql/utils/log/log.h>
 
 #include <util/digest/city.h>
 #include <util/generic/scope.h>

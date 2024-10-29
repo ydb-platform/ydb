@@ -120,6 +120,7 @@ public:
     NColumnShard::TLoadTimeSignals SchemaPresetLoadTimeCounters;
     NColumnShard::TLoadTimeSignals TableVersionsLoadTimeCounters;
     NColumnShard::TLoadTimeSignals SchemaPresetVersionsLoadTimeCounters;
+    NColumnShard::TLoadTimeSignals PrechargeTimeCounters;
 
 public:
     TTableLoadTimeCounters()
@@ -127,6 +128,7 @@ public:
     , SchemaPresetLoadTimeCounters("SchemaPreset")
     , TableVersionsLoadTimeCounters("TableVersionss")
     , SchemaPresetVersionsLoadTimeCounters("SchemaPresetVersions")
+    , PrechargeTimeCounters("Precharge")
     {
     }
 };

@@ -1198,8 +1198,9 @@ public:
             const auto& writeInfo = WriteInfos.at(token);
             YQL_ENSURE(writeInfo.Closed);
             if (writeInfo.Metadata.Priority != 0) {
-                YQL_ENSURE(!writeInfo.Serializer->IsFinished());
-                writeTokensFoFlush.push_back(token);
+                if (!writeInfo.Serializer->IsFinished()) {
+                    writeTokensFoFlush.push_back(token);
+                }
             } else {
                 YQL_ENSURE(writeInfo.Serializer->IsFinished());
             }
@@ -1274,12 +1275,13 @@ public:
                 result.TotalDataSize += inFlightBatch.Data->GetMemory();
                 const ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(evWrite)
                         .AddDataToPayload(inFlightBatch.Data->SerializeToString());
+                const auto& writeInfo = WriteInfos.at(inFlightBatch.Token);
                 evWrite.AddOperation(
-                    WriteInfos.at(inFlightBatch.Token).Metadata.OperationType,
-                    WriteInfos.at(inFlightBatch.Token).Metadata.TableId,
-                    WriteInfos.at(inFlightBatch.Token).Serializer->GetWriteColumnIds(),
+                    writeInfo.Metadata.OperationType,
+                    writeInfo.Metadata.TableId,
+                    writeInfo.Serializer->GetWriteColumnIds(),
                     payloadIndex,
-                    WriteInfos.at(inFlightBatch.Token).Serializer->GetDataFormat());
+                    writeInfo.Serializer->GetDataFormat());
             } else {
                 YQL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());   
             }

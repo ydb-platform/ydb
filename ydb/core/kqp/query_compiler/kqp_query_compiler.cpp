@@ -1141,6 +1141,7 @@ private:
                 settingsProto.SetInconsistentTx(true);
             }
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
+            settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
             if (settings.Mode().Cast().StringValue() == "replace") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE);

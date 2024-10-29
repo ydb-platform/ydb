@@ -739,6 +739,7 @@ public:
 
     void FlushBuffers() {
         ShardedWriteController->FlushBuffers();
+        UpdateShards();
     }
 
     void Flush() {
@@ -808,7 +809,7 @@ public:
                 return builder;
             }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
-            << ", OperationsCount=" << metadata->OperationsCount << ", IsFinal=" << metadata->IsFinal
+            << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
             << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
         Send(
             PipeCacheId,
@@ -1390,9 +1391,6 @@ public:
         for (auto& [_, queue] : DataQueues) {
             YQL_ENSURE(queue.empty());
         }
-        for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->FlushBuffers();
-        }
         Process();
     }
 
@@ -1628,11 +1626,17 @@ public:
 
     void Handle(TEvKqpBuffer::TEvFlush::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->FlushBuffers();
+        }
         Flush();
     }
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->FlushBuffers();
+        }
         if (TxManager->IsReadOnly()) {
             Rollback();
             State = EState::FINISHED;

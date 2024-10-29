@@ -282,7 +282,7 @@ public:
 
     void GrowStates() {
         if (IsOutOfMemory < AllowOutOfMemory) {
-            if (!States.UnsafeCheckGrow()) {
+            if (!States.TryCheckGrow()) {
                 IsOutOfMemory = true;
             }
         } else {

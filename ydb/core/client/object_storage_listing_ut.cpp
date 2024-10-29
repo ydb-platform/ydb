@@ -4,6 +4,7 @@
 #include <ydb/public/api/protos/draft/ydb_object_storage.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <grpc++/client_context.h>
 #include <grpc++/create_channel.h>
 
@@ -102,39 +103,37 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
                 }}
                 PartitionConfig {
                     ExecutorCacheSize: 100
+                    CompactionPolicy {
+                        InMemSizeToSnapshot: 2000
+                        InMemStepsToSnapshot: 1
+                        InMemForceStepsToSnapshot: 50
+                        InMemForceSizeToSnapshot: 16777216
+                        InMemCompactionBrokerQueue: 0
+                        ReadAheadHiThreshold: 1048576
+                        ReadAheadLoThreshold: 16384
+                        MinDataPageSize: 300
+                        SnapBrokerQueue: 0
 
-                                        CompactionPolicy {
-                                                InMemSizeToSnapshot: 2000
-                                                InMemStepsToSnapshot: 1
-                                                InMemForceStepsToSnapshot: 50
-                                                InMemForceSizeToSnapshot: 16777216
-                                                InMemCompactionBrokerQueue: 0
-                                                ReadAheadHiThreshold: 1048576
-                                                ReadAheadLoThreshold: 16384
-                                                MinDataPageSize: 300
-                                                SnapBrokerQueue: 0
+                        LogOverheadSizeToSnapshot: 16777216
+                        LogOverheadCountToSnapshot: 500
+                        DroppedRowsPercentToCompact: 146
 
-                                                LogOverheadSizeToSnapshot: 16777216
-                                                LogOverheadCountToSnapshot: 500
-                                                DroppedRowsPercentToCompact: 146
-
-                                                Generation {
-                                                  GenerationId: 0
-                                                  SizeToCompact: 0
-                                                  CountToCompact: 2000
-                                                  ForceCountToCompact: 4000
-                                                  ForceSizeToCompact: 100000000
-                                                  #CompactionBrokerQueue: 4294967295
-                                                  KeepInCache: false
-                                                  ResourceBrokerTask: "compaction_gen1"
-                                                  ExtraCompactionPercent: 100
-                                                  ExtraCompactionMinSize: 16384
-                                                  ExtraCompactionExpPercent: 110
-                                                  ExtraCompactionExpMaxSize: 0
-                                                  UpliftPartSize: 0
-                                                }
-                                        }
-
+                        Generation {
+                            GenerationId: 0
+                            SizeToCompact: 0
+                            CountToCompact: 2000
+                            ForceCountToCompact: 4000
+                            ForceSizeToCompact: 100000000
+                            #CompactionBrokerQueue: 4294967295
+                            KeepInCache: false
+                            ResourceBrokerTask: "compaction_gen1"
+                            ExtraCompactionPercent: 100
+                            ExtraCompactionMinSize: 16384
+                            ExtraCompactionExpPercent: 110
+                            ExtraCompactionExpMaxSize: 0
+                            UpliftPartSize: 0
+                        }
+                    }
                 }
             )");
     }
@@ -970,6 +969,106 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
             UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
             UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
         }
+    }
+
+    Y_UNIT_TEST(TestSkipShards) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        GRPC_PORT = pm.GetPort(2135);
+        cleverServer.EnableGRpc(GRPC_PORT);
+
+        TFlatMsgBusClient annoyingClient(port);
+
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "Dir");
+        annoyingClient.CreateTable("/dc-1/Dir",
+            R"(Name: "Table"
+                Columns { Name: "Hash"      Type: "Uint64"}
+                Columns { Name: "Name"      Type: "Utf8"}
+                Columns { Name: "Path"      Type: "Utf8"}
+                Columns { Name: "Version"   Type: "Uint64"}
+                Columns { Name: "Timestamp" Type: "Uint64"}
+                Columns { Name: "Data"      Type: "String"}
+                Columns { Name: "ExtraData" Type: "String"}
+                Columns { Name: "Int32Data" Type: "Int32"}
+                Columns { Name: "Unused1"   Type: "Uint32"}
+                Columns { Name: "SomeBool"  Type: "Bool"}
+                KeyColumnNames: [
+                    "Hash",
+                    "Name",
+                    "Path",
+                    "Version"
+                    ]
+                SplitBoundary { KeyPrefix {
+                    Tuple { Optional { Uint64 : 100 }}
+                    Tuple { Optional { Text : 'Bucket100' }}
+                    Tuple { Optional { Text : '/Photos/test5/inner/inner2/a.jpg' }}
+                }}
+                SplitBoundary { KeyPrefix {
+                    Tuple { Optional { Uint64 : 100 }}
+                    Tuple { Optional { Text : 'Bucket100' }}
+                    Tuple { Optional { Text : '/Photos/test6/a.jpg' }}
+                }}
+            )");
+
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/folder/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/games/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test2/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test3/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test4/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/d.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test5/inner/inner2/e.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/a.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/b.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/inner/inner2/c.jpg", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/xyz.io", 1, 10, "", "Table");
+        S3WriteRow(annoyingClient, 100, "Bucket100", "/Photos/test6/yyyyy.txt", 1, 10, "", "Table");
+
+        const auto& runtime = cleverServer.GetRuntime();
+
+        TAtomic requestCount = 0;
+        
+        auto captureEvents = [&requestCount](TAutoPtr<IEventHandle> &event) -> auto {
+            switch (event->GetTypeRewrite()) {
+                case TEvDataShard::EvObjectStorageListingRequest: {
+                    AtomicIncrement(requestCount);
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime->SetObserverFunc(captureEvents);
+
+        TVector<TString> folders;
+        TVector<TString> files;
+        DoS3Listing(GRPC_PORT, 100, "/", "/", nullptr, nullptr, {}, 1000, folders, files, Ydb::ObjectStorage::ListingRequest_EMatchType_EQUAL);
+
+        TVector<TString> expectedFolders = {"/Photos/"};
+        TVector<TString> expectedFiles = {};
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
+        UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
+        UNIT_ASSERT_EQUAL(2, AtomicGet(requestCount));
     }
 
     Y_UNIT_TEST(Decimal) {

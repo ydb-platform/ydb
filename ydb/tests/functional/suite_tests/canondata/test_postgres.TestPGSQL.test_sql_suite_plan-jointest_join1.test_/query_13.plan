@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-LeftJoin (Grace)-Filter",
+                                        "Node Type": "Limit-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -57,27 +57,6 @@
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "item.J2_TBL.k == 1"
-                                            },
-                                            {
-                                                "Condition": "J1_TBL.i = J2_TBL.i",
-                                                "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 15
-                                                    },
-                                                    {
-                                                        "InternalOperatorId": 3
-                                                    }
-                                                ],
-                                                "Name": "LeftJoin (Grace)"
-                                            },
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 13
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "Exist(item.i)"
                                             }
                                         ],
                                         "PlanNodeId": 6,

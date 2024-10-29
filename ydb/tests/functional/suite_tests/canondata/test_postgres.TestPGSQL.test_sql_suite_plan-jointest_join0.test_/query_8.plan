@@ -37,7 +37,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-LeftJoin (Grace)-Filter",
+                                        "Node Type": "Aggregate-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -57,7 +57,7 @@
                                                         "InternalOperatorId": 2
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Grace)"
+                                                "Name": "LeftJoin (MapJoin)"
                                             },
                                             {
                                                 "Inputs": [
@@ -86,7 +86,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "InnerJoin (Grace)-Filter-Filter",
+                                                                        "Node Type": "InnerJoin (MapJoin)-Filter-Filter",
                                                                         "Operators": [
                                                                             {
                                                                                 "Condition": "t2.thousand = t3.unique2",
@@ -98,7 +98,7 @@
                                                                                         "InternalOperatorId": 2
                                                                                     }
                                                                                 ],
-                                                                                "Name": "InnerJoin (Grace)"
+                                                                                "Name": "InnerJoin (MapJoin)"
                                                                             },
                                                                             {
                                                                                 "Inputs": [

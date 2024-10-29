@@ -35,7 +35,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-LeftJoin (Grace)-Filter",
+                                                "Node Type": "TopSort-TopSort",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -53,22 +53,12 @@
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "ExternalPlanNodeId": 17
-                                                            },
-                                                            {
-                                                                "InternalOperatorId": 2
+                                                                "ExternalPlanNodeId": 7
                                                             }
                                                         ],
-                                                        "Name": "LeftJoin (Grace)"
-                                                    },
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "ExternalPlanNodeId": 15
-                                                            }
-                                                        ],
-                                                        "Name": "Filter",
-                                                        "Predicate": "Exist(item.Group)"
+                                                        "Limit": "1001",
+                                                        "Name": "TopSort",
+                                                        "TopSortBy": ""
                                                     }
                                                 ],
                                                 "PlanNodeId": 8,

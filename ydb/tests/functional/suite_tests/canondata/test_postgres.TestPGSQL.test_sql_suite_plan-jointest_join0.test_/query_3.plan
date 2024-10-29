@@ -37,7 +37,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Aggregate-InnerJoin (Grace)-Filter-Filter",
+                                        "Node Type": "Aggregate-InnerJoin (MapJoin)-Filter-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -57,7 +57,7 @@
                                                         "InternalOperatorId": 3
                                                     }
                                                 ],
-                                                "Name": "InnerJoin (Grace)"
+                                                "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
                                                 "Inputs": [

@@ -53,7 +53,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Aggregate-LeftJoin (Grace)-Filter",
+                                                        "Node Type": "Aggregate-LeftJoin (MapJoin)-Filter",
                                                         "Operators": [
                                                             {
                                                                 "Aggregation": "{_yql_agg_0: COUNT(item.t2.q1,state._yql_agg_0)}",
@@ -75,7 +75,7 @@
                                                                         "InternalOperatorId": 2
                                                                     }
                                                                 ],
-                                                                "Name": "LeftJoin (Grace)"
+                                                                "Name": "LeftJoin (MapJoin)"
                                                             },
                                                             {
                                                                 "Inputs": [

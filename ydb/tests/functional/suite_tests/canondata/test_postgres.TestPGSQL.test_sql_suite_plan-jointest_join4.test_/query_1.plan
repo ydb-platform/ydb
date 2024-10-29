@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter-LeftJoin (Grace)-Filter",
+                                        "Node Type": "Limit-Filter-LeftJoin (MapJoin)-Filter",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -59,7 +59,7 @@
                                                         "InternalOperatorId": 3
                                                     }
                                                 ],
-                                                "Name": "LeftJoin (Grace)"
+                                                "Name": "LeftJoin (MapJoin)"
                                             },
                                             {
                                                 "Inputs": [
@@ -88,7 +88,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "LeftJoin (Grace)-Filter",
+                                                                        "Node Type": "LeftJoin (MapJoin)-Filter",
                                                                         "Operators": [
                                                                             {
                                                                                 "Condition": "nt2.nt1_id = ss1.id",
@@ -100,7 +100,7 @@
                                                                                         "InternalOperatorId": 1
                                                                                     }
                                                                                 ],
-                                                                                "Name": "LeftJoin (Grace)"
+                                                                                "Name": "LeftJoin (MapJoin)"
                                                                             },
                                                                             {
                                                                                 "Inputs": [

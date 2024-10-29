@@ -790,6 +790,14 @@ private:
             return true;
         }
 
+        TString prefixColumns = PrefixColumns.GetBuffer();
+        TString lastCommonPrefix = NextPrefix(CommonPrefixesRows.back());
+
+        TSerializedCellVec::UnsafeAppendCells({TCell(lastCommonPrefix.Data(), lastCommonPrefix.Size())}, prefixColumns);
+
+        TSerializedCellVec afterLastFolderPrefix;
+        afterLastFolderPrefix.Parse(prefixColumns);
+
         auto& partitions = KeyRange->GetPartitions();
         
         for (CurrentShardIdx++; CurrentShardIdx < partitions.size(); CurrentShardIdx++) {
@@ -798,19 +806,14 @@ private:
             auto& range = partition.Range;
 
             if (range && range->EndKeyPrefix.GetCells().size() > 0) {
-                TString prefixColumns = PrefixColumns.GetBuffer();
-                TString lastCommonPrefix = NextPrefix(CommonPrefixesRows.back());
-                TSerializedCellVec::UnsafeAppendCells({TCell::Make<TString>(lastCommonPrefix)}, prefixColumns);
-                TSerializedCellVec afterLastFolderPrefix;
-                afterLastFolderPrefix.Parse(prefixColumns);
-                
                 auto& endKeyPrefix = range->EndKeyPrefix;
 
+                // Check if range's end greater than the lookup key.
                 int cmp = CompareTypedCellVectors(
-                        afterLastFolderPrefix.GetCells().data(),
-                        endKeyPrefix.GetCells().data(),
-                        KeyColumnTypes.data(),
-                        afterLastFolderPrefix.GetCells().size()
+                    endKeyPrefix.GetCells().data(),
+                    afterLastFolderPrefix.GetCells().data(),
+                    KeyColumnTypes.data(),
+                    afterLastFolderPrefix.GetCells().size()
                 );
 
                 if (cmp >= 0) {

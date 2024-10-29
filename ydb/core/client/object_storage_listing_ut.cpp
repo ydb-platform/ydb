@@ -518,7 +518,6 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         PrepareS3Data(annoyingClient);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
-//        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
         TestS3Listing(annoyingClient, 50, "", "", 10, {});
         TestS3Listing(annoyingClient, 50, "", "/", 7, {});
@@ -700,7 +699,6 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         PrepareS3Data(annoyingClient);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NActors::NLog::PRI_DEBUG);
-//        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         TestS3ListingRequest({"100", "Bucket100"}, "/", "/", "", {"Path"}, 10,
             Ydb::StatusIds::SUCCESS,
@@ -974,7 +972,13 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
     Y_UNIT_TEST(TestSkipShards) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
+        TServerSettings serverSettings(port);
+
+        TStringStream ss;
+
+        serverSettings.SetLogBackend(new TStreamLogBackend(&ss));
+
+        TServer cleverServer = TServer(serverSettings);
         GRPC_PORT = pm.GetPort(2135);
         cleverServer.EnableGRpc(GRPC_PORT);
 
@@ -1045,19 +1049,7 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
 
         const auto& runtime = cleverServer.GetRuntime();
 
-        TAtomic requestCount = 0;
-        
-        auto captureEvents = [&requestCount](TAutoPtr<IEventHandle> &event) -> auto {
-            switch (event->GetTypeRewrite()) {
-                case TEvDataShard::EvObjectStorageListingRequest: {
-                    AtomicIncrement(requestCount);
-                    break;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-
-        runtime->SetObserverFunc(captureEvents);
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         TVector<TString> folders;
         TVector<TString> files;
@@ -1066,9 +1058,22 @@ Y_UNIT_TEST_SUITE(TObjectStorageListingTest) {
         TVector<TString> expectedFolders = {"/Photos/"};
         TVector<TString> expectedFiles = {};
 
+        TString log = ss.Str();
+        TString sub = "S3 Listing: start at key";
+
+        int count = 0;
+        size_t pos = log.find(sub);
+
+        while (pos != TString::npos) {
+            ++count;
+            pos = log.find(sub, pos + sub.length());
+        }
+
         UNIT_ASSERT_VALUES_EQUAL(expectedFolders, folders);
         UNIT_ASSERT_VALUES_EQUAL(expectedFiles, files);
-        UNIT_ASSERT_EQUAL(2, AtomicGet(requestCount));
+        // Three partitions, second should be skipped, because it's next prefix of /Photos/ (/Photos0) exceeds 
+        // the range of second partition. Third (last) partition will always be checked.
+        UNIT_ASSERT_EQUAL(2, count);
     }
 
     Y_UNIT_TEST(Decimal) {

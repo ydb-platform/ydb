@@ -36,6 +36,14 @@ public:
         }
     }
 
+    TListPortionsLock(const TString& lockName, const std::vector<TPortionInfo::TConstPtr>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
+        for (auto&& p : portions) {
+            Portions.emplace(p->GetAddress());
+            Granules.emplace(p->GetPathId());
+        }
+    }
+
     TListPortionsLock(const TString& lockName, const std::vector<TPortionInfo>& portions, const bool readOnly = false)
         : TBase(lockName, readOnly) {
         for (auto&& p : portions) {

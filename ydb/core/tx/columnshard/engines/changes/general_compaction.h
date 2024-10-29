@@ -36,7 +36,7 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : SwitchedPortions) {
-            result = predictor->AddPortion(*p);
+            result = predictor->AddPortion(p);
         }
         return result;
     }
@@ -65,7 +65,7 @@ public:
         std::list<TColumnInfo> MaxMemoryByColumnChunk;
 
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override;
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override;
     };
 
     static std::shared_ptr<IMemoryPredictor> BuildMemoryPredictor();

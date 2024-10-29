@@ -31,7 +31,7 @@ public:
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
                 "portion_id", portionInfo->GetAddress().DebugString());
             portionInfo->SetRemoveSnapshot(TSnapshot(1, 1));
-            TPortionDataAccessor(*portionInfo).SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
+            TPortionDataAccessor(portionInfo).SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), false);
         }
         if (BrokenPortions.size()) {
             TStringBuilder sb;
@@ -164,7 +164,7 @@ INormalizerTask::TPtr TNormalizer::BuildTask(
     for (auto&& portion : portions) {
         auto schemaPtr = schemas->FindPtr(portion->GetPortionId());
         THashMap<TString, THashSet<TBlobRange>> blobsByStorage;
-        TPortionDataAccessor(*portion).FillBlobRangesByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
+        TPortionDataAccessor(portion).FillBlobRangesByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
         if (blobsByStorage.size() > 1 || !blobsByStorage.contains(NBlobOperations::TGlobal::DefaultStorageId)) {
             continue;
         }

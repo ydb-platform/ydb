@@ -40,7 +40,7 @@ std::vector<TPortionInfo::TConstPtr> TOneHeadLogic::GetPortionsForMerge(const TI
                     compactedFinished = currentCompactedPortions.empty();
                 } else {
                     result.emplace_back(p.GetPortionInfo());
-                    memUsage = predictor->AddPortion(*p.GetPortionInfo());
+                    memUsage = predictor->AddPortion(p.GetPortionInfo());
                     txSizeLimit += p->GetTxVolume();
                 }
             }

@@ -153,7 +153,7 @@ public:
             auto predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
             for (auto&& i : Portions) {
                 if (CurrentLevelPortionIds.contains(i->GetPortionId())) {
-                    if (predictor->AddPortion(*i) < MemoryUsage || result.size() < 2) {
+                    if (predictor->AddPortion(i) < MemoryUsage || result.size() < 2) {
                         result.emplace_back(i);
                     } else {
                         break;
@@ -234,7 +234,7 @@ public:
         Portions.emplace_back(portion);
         CurrentLevelPortionsInfo.AddPortion(portion);
         if (repackMoved || (chain && chain->GetPortions().size())) {
-            MemoryUsage = Predictor->AddPortion(*portion);
+            MemoryUsage = Predictor->AddPortion(portion);
         }
 
         if (chain) {
@@ -250,7 +250,7 @@ public:
                     }
                     TargetLevelPortionsInfo.AddPortion(i);
                     Portions.emplace_back(i);
-                    MemoryUsage = Predictor->AddPortion(*i);
+                    MemoryUsage = Predictor->AddPortion(i);
                     AFL_VERIFY(NextLevelPortionIds.emplace(i->GetPortionId()).second);
                 }
             }

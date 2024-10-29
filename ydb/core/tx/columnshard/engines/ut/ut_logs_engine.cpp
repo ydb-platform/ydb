@@ -355,7 +355,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
-            for (auto&& r : TPortionDataAccessor(i.GetPortionResult()).GetRecords()) {
+            for (auto&& r : TPortionDataAccessor(i.GetPortionResultPtr()).GetRecords()) {
                 Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionResult().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
             }
         }

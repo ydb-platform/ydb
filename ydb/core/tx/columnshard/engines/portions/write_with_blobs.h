@@ -143,7 +143,7 @@ public:
     };
 private:
     std::optional<TPortionInfoConstructor> PortionConstructor;
-    std::optional<TPortionInfo> PortionResult;
+    TPortionInfo::TPtr PortionResult;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 public:
     std::vector<TBlobInfo>& MutableBlobs() {
@@ -166,7 +166,7 @@ public:
     void FinalizePortionConstructor() {
         AFL_VERIFY(!!PortionConstructor);
         AFL_VERIFY(!PortionResult);
-        PortionResult = PortionConstructor->Build(true);
+        PortionResult = PortionConstructor->BuildPtr(true);
         PortionConstructor.reset();
     }
 
@@ -174,6 +174,12 @@ public:
         AFL_VERIFY(!PortionConstructor);
         AFL_VERIFY(!!PortionResult);
         return *PortionResult;
+    }
+
+    const TPortionInfo::TPtr& GetPortionResultPtr() const {
+        AFL_VERIFY(!PortionConstructor);
+        AFL_VERIFY(!!PortionResult);
+        return PortionResult;
     }
 
     TPortionInfoConstructor& GetPortionConstructor() {

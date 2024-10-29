@@ -113,15 +113,15 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     return TConclusionStatus::Success();
 }
 
-TConclusion<TPortionInfo> TPortionInfo::BuildFromProto(
+TConclusion<TPortionInfo::TPtr> TPortionInfo::BuildFromProto(
     const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo) {
     TPortionMetaConstructor constructor;
     if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo)) {
         return TConclusionStatus::Fail("cannot parse meta");
     }
-    TPortionInfo result(constructor.Build());
+    std::shared_ptr<TPortionInfo> result(new TPortionInfo(constructor.Build()));
     {
-        auto parse = result.DeserializeFromProto(proto);
+        auto parse = result->DeserializeFromProto(proto);
         if (!parse) {
             return parse;
         }

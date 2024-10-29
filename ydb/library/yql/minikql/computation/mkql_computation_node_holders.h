@@ -582,7 +582,7 @@ public:
     {
     }
 
-    inline static TArrowBlock& From(const NUdf::TUnboxedValue& value) {
+    inline static TArrowBlock& From(NUdf::TUnboxedValuePod& value) {
         return *static_cast<TArrowBlock*>(value.AsRawBoxed());
     }
 

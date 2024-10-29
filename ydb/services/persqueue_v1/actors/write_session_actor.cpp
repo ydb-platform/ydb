@@ -497,7 +497,7 @@ void TWriteSessionActor<UseMigrationProtocol>::InitAfterDiscovery(const TActorCo
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::SetupBytesWrittenByUserAgentCounter(const TString& topicPath) {
     static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
-    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents")
+    BytesWrittenByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
         ->GetSubgroup("topic", topicPath)

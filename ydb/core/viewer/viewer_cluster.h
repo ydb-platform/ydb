@@ -342,8 +342,9 @@ private:
     }
 
     void InitSystemWhiteboardRequest(NKikimrWhiteboard::TEvSystemStateRequest* request) {
-        //request->AddFieldsRequired(-1);
-        Y_UNUSED(request);
+        request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
     }
 
     void InitTabletWhiteboardRequest(NKikimrWhiteboard::TEvTabletStateRequest* request) {
@@ -462,14 +463,16 @@ private:
             }
         }
 
+        std::unordered_set<TString> hostPassed;
+
         for (TNode& node : NodeData) {
             const NKikimrWhiteboard::TSystemStateInfo& systemState = node.SystemState;
             (*ClusterInfo.MutableMapDataCenters())[node.DataCenter]++;
-            if (systemState.HasNumberOfCpus()) {
+            if (hostPassed.insert(systemState.GetHost()).second) {
                 ClusterInfo.SetNumberOfCpus(ClusterInfo.GetNumberOfCpus() + systemState.GetNumberOfCpus());
-            }
-            if (systemState.LoadAverageSize() > 0) {
-                ClusterInfo.SetLoadAverage(ClusterInfo.GetLoadAverage() + systemState.GetLoadAverage(0));
+                if (systemState.LoadAverageSize() > 0) {
+                    ClusterInfo.SetLoadAverage(ClusterInfo.GetLoadAverage() + systemState.GetLoadAverage(0));
+                }
             }
             if (systemState.HasVersion()) {
                 (*ClusterInfo.MutableMapVersions())[systemState.GetVersion()]++;
@@ -477,8 +480,8 @@ private:
             if (systemState.HasClusterName() && !ClusterInfo.GetName()) {
                 ClusterInfo.SetName(systemState.GetClusterName());
             }
-            ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
             ClusterInfo.SetMemoryUsed(ClusterInfo.GetMemoryUsed() + systemState.GetMemoryUsed());
+            ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
             if (!node.Disconnected && node.SystemState.HasSystemState()) {
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);
             }
@@ -500,14 +503,24 @@ private:
                     targetPoolStat->SetName(poolName);
                 }
                 double poolUsage = targetPoolStat->GetUsage() * targetPoolStat->GetThreads();
-                poolUsage += poolStat.GetUsage() * poolStat.GetThreads();
+                ui32 usageThreads = poolStat.GetLimit() ? poolStat.GetLimit() : poolStat.GetThreads();
+                poolUsage += poolStat.GetUsage() * usageThreads;
                 ui32 poolThreads = targetPoolStat->GetThreads() + poolStat.GetThreads();
                 if (poolThreads != 0) {
                     double threadUsage = poolUsage / poolThreads;
                     targetPoolStat->SetUsage(threadUsage);
                     targetPoolStat->SetThreads(poolThreads);
                 }
-                ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + poolStat.GetUsage() * poolStat.GetThreads());
+                if (systemState.GetCoresTotal() == 0) {
+                    ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + poolStat.GetUsage() * usageThreads);
+                    if (poolStat.GetName() != "IO") {
+                        ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + poolStat.GetThreads());
+                    }
+                }
+            }
+            if (systemState.GetCoresTotal() != 0) {
+                ClusterInfo.SetCoresUsed(ClusterInfo.GetCoresUsed() + systemState.GetCoresUsed());
+                ClusterInfo.SetCoresTotal(ClusterInfo.GetCoresTotal() + systemState.GetCoresTotal());
             }
         }
 

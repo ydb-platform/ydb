@@ -219,7 +219,6 @@ runs:
               --build "release" --sanitize="address"
             )
             if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
             ;;
@@ -228,7 +227,6 @@ runs:
               --build "release" --sanitize="thread"
             )
             if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
             ;;
@@ -237,7 +235,6 @@ runs:
               --build "release" --sanitize="memory"
             )
             if [ $TEST_RETRY_COUNT -z ]; then
-              TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
             ;;

@@ -221,6 +221,8 @@ public:
     }
 
     void HandleTimeout() {
+        // Don't need to set the RateLimiterCreationInProgress = false 
+        // because of the PassAway will be called in this callback
         if (RateLimiterCreationInProgress) {
             RateLimiterCounters->Timeout->Inc();
             RateLimiterCounters->InFly->Dec();

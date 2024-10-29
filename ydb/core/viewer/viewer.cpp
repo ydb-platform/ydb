@@ -522,6 +522,10 @@ private:
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
             return;
         }
+        if (path.StartsWith("/healthcheck")) {
+            ctx.ExecutorThread.RegisterActor(new TJsonHealthCheck(this, ev));
+            return;
+        }
         // TODO: check path validity
         // TODO: cache
         if (msg->Request.GetPathInfo().StartsWith('/')) {

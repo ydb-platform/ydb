@@ -382,10 +382,8 @@ void DumpMem() {
     TStringStream out;
     Cout << "Dump AllocMonitor statistic..." << Endl;
     monitor->Update(TDuration::Seconds(1));
-    monitor->DumpForLog(out, 256);
-
     TFileOutput file(DumpMemPath);
-    file.Write(out.Str());
+    monitor->Dump(file, "/memory/heap");
     file.Finish();
 }
 

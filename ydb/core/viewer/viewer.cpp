@@ -1,5 +1,6 @@
 #include "viewer.h"
 #include "counters_hosts.h"
+#include "viewer_healthcheck.h"
 #include "json_handlers.h"
 #include "log.h"
 #include "viewer_request.h"

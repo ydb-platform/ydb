@@ -111,16 +111,15 @@ public:
     // should be called after Insert if isNew is true
     Y_FORCE_INLINE void CheckGrow() {
         if (Size * 2 >= Capacity) {
-            SafeGrow();
+            Grow();
         }
     }
 
     // should be called after Insert if isNew is true
-    // Unsafety reasons described in UnsafeGrow
-    // So this is much less preferable then CheckGrow
-    Y_FORCE_INLINE bool UnsafeCheckGrow() {
+    // This is much less preferable then CheckGrow reason described near TryGrow and Grow
+    Y_FORCE_INLINE bool TryCheckGrow() {
         if (Size * 2 >= Capacity) {
-            if (!UnsafeGrow()) {
+            if (!TryGrow()) {
                 return false;
             }
         }
@@ -130,7 +129,7 @@ public:
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
         while (2 * (Size + batchRequest.size()) >= Capacity) {
-            SafeGrow();
+            Grow();
         }
 
         for (size_t i = 0; i < batchRequest.size(); ++i) {
@@ -297,7 +296,7 @@ private:
     }
 
     // This can throw exception if allocating new data exceeds memory limit but otherwise will be successful and therefore is safe
-    Y_NO_INLINE void SafeGrow() {
+    Y_NO_INLINE void Grow() {
         auto newCapacity = GetNewCapacity();
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
@@ -306,7 +305,7 @@ private:
 
     // This will not throw exception even if it fails to allocate more memory but instead returns false (if memory is allocated successfully performs grow and returns true)
     // So this call will be successful even if it fails to grow and it is up to caller to gurantee that subsequent operations will not overflow data
-    Y_NO_INLINE bool UnsafeGrow() {
+    Y_NO_INLINE bool TryGrow() {
         auto newCapacity = GetNewCapacity();
         char *newData = nullptr;
         char *newDataEnd = nullptr;

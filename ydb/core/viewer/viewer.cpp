@@ -1,5 +1,6 @@
 #include "viewer.h"
 #include "counters_hosts.h"
+#include "viewer_healthcheck.h"
 #include "json_handlers.h"
 #include "log.h"
 #include "viewer_request.h"
@@ -520,6 +521,10 @@ private:
         }
         if (path.StartsWith("/counters/hosts")) {
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
+            return;
+        }
+        if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
+            ctx.ExecutorThread.RegisterActor(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity

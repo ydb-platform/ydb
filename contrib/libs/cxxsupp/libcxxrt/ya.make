@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-09-24)
+VERSION(2024-10-14)
 
-ORIGINAL_SOURCE(https://github.com/libcxxrt/libcxxrt/archive/40e4fa2049930412a2c43cdf0c39b6b5aa735341.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libcxxrt/libcxxrt/archive/76435c4451aeb5e04e9500b090293347a38cef8d.tar.gz)
 
 ADDINCL(
     contrib/libs/cxxsupp/libcxxrt

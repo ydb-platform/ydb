@@ -113,8 +113,8 @@ RESOURCE(
     s10_canonical/q21.result tpch/s10_canonical/q21.result
     s10_canonical/q22.result tpch/s10_canonical/q22.result
 
-    s100_canonical/q2.result tpch/s100_canonical/q2.result
     s100_canonical/q1.result tpch/s100_canonical/q1.result
+    s100_canonical/q2.result tpch/s100_canonical/q2.result
     s100_canonical/q3.result tpch/s100_canonical/q3.result
     s100_canonical/q4.result tpch/s100_canonical/q4.result
     s100_canonical/q5.result tpch/s100_canonical/q5.result
@@ -122,8 +122,8 @@ RESOURCE(
     s100_canonical/q7.result tpch/s100_canonical/q7.result
     s100_canonical/q8.result tpch/s100_canonical/q8.result
     s100_canonical/q9.result tpch/s100_canonical/q9.result
-    s100_canonical/q11.result tpch/s100_canonical/q11.result
     s100_canonical/q10.result tpch/s100_canonical/q10.result
+    s100_canonical/q11.result tpch/s100_canonical/q11.result
     s100_canonical/q12.result tpch/s100_canonical/q12.result
     s100_canonical/q13.result tpch/s100_canonical/q13.result
     s100_canonical/q14.result tpch/s100_canonical/q14.result
@@ -136,8 +136,8 @@ RESOURCE(
     s100_canonical/q21.result tpch/s100_canonical/q21.result
     s100_canonical/q22.result tpch/s100_canonical/q22.result
 
-    s1000_canonical/q2.result tpch/s1000_canonical/q2.result
     s1000_canonical/q1.result tpch/s1000_canonical/q1.result
+    s1000_canonical/q2.result tpch/s1000_canonical/q2.result
     s1000_canonical/q3.result tpch/s1000_canonical/q3.result
     s1000_canonical/q4.result tpch/s1000_canonical/q4.result
     s1000_canonical/q5.result tpch/s1000_canonical/q5.result
@@ -145,8 +145,8 @@ RESOURCE(
     s1000_canonical/q7.result tpch/s1000_canonical/q7.result
     s1000_canonical/q8.result tpch/s1000_canonical/q8.result
     s1000_canonical/q9.result tpch/s1000_canonical/q9.result
-    s1000_canonical/q11.result tpch/s1000_canonical/q11.result
     s1000_canonical/q10.result tpch/s1000_canonical/q10.result
+    s1000_canonical/q11.result tpch/s1000_canonical/q11.result
     s1000_canonical/q12.result tpch/s1000_canonical/q12.result
     s1000_canonical/q13.result tpch/s1000_canonical/q13.result
     s1000_canonical/q14.result tpch/s1000_canonical/q14.result
@@ -158,6 +158,20 @@ RESOURCE(
     s1000_canonical/q20.result tpch/s1000_canonical/q20.result
     s1000_canonical/q21.result tpch/s1000_canonical/q21.result
     s1000_canonical/q22.result tpch/s1000_canonical/q22.result
+
+    s10000_canonical/q1.result tpch/s10000_canonical/q1.result
+    s10000_canonical/q2.result tpch/s10000_canonical/q2.result
+    s10000_canonical/q3.result tpch/s10000_canonical/q3.result
+    s10000_canonical/q5.result tpch/s10000_canonical/q5.result
+    s10000_canonical/q6.result tpch/s10000_canonical/q6.result
+    s10000_canonical/q7.result tpch/s10000_canonical/q7.result
+    s10000_canonical/q8.result tpch/s10000_canonical/q8.result
+    s10000_canonical/q11.result tpch/s10000_canonical/q11.result
+    s10000_canonical/q12.result tpch/s10000_canonical/q12.result
+    s10000_canonical/q13.result tpch/s10000_canonical/q13.result
+    s10000_canonical/q14.result tpch/s10000_canonical/q14.result
+    s10000_canonical/q15.result tpch/s10000_canonical/q15.result
+    s10000_canonical/q22.result tpch/s10000_canonical/q22.result
 )
 
 PEERDIR(

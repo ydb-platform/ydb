@@ -66,7 +66,7 @@ public:
     }
 
     TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
-        : PortionInfo(portionInfo.get()) {
+        : PortionInfo(portionInfo) {
     }
 
     std::set<ui32> GetColumnIds() const {

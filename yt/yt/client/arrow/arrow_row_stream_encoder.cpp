@@ -39,7 +39,7 @@ constexpr i64 ArrowAlignment = 8;
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    const TString& str)
+    const std::string& str)
 {
     return flatbufBuilder->CreateString(str.data(), str.length());
 }

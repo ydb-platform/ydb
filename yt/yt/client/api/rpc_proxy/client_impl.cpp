@@ -2310,7 +2310,7 @@ TFuture<IUnversionedRowsetPtr> TClient::ReadQueryResult(
     if (options.Columns) {
         auto* protoColumns = req->mutable_columns();
         for (const auto& column : *options.Columns) {
-            protoColumns->add_items(column);
+            protoColumns->add_items(ToProto(column));
         }
     }
     if (options.LowerRowIndex) {
@@ -2720,7 +2720,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     const TShuffleHandlePtr& shuffleHandle,
-    const TString& partitionColumn,
+    const std::string& partitionColumn,
     const TTableWriterConfigPtr& config)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2728,7 +2728,7 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     InitStreamingRequest(*req);
 
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
-    req->set_partition_column(partitionColumn);
+    req->set_partition_column(ToProto(partitionColumn));
     req->set_writer_config(ConvertToYsonString(config).ToString());
 
     return CreateRpcClientOutputStream(std::move(req))

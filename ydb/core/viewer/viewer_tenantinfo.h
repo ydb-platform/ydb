@@ -565,7 +565,7 @@ public:
             THashMap<TTabletId, const NKikimrWhiteboard::TTabletStateInfo*> tabletInfoIndex;
 
             if (Tablets) {
-                const auto& tenantNodes(TenantNodes[name]);
+                const auto& tenantNodes(TenantNodes[id]);
                 bool hasTabletInfo = false;
                 for (TNodeId nodeId : tenantNodes) {
                     auto it = OffloadedTabletStateResponse.find(nodeId);

@@ -89,14 +89,19 @@ public:
     }
 
     virtual void WritePortion(const NOlap::TPortionInfo& portion) override {
-        Portions[portion.GetPortionId()] = portion.MakeCopy();
+        auto it = Portions.find(portion.GetPortionId());
+        if (it == Portions.end()) {
+            Portions.emplace(portion.GetPortionId(), portion.MakeCopy());
+        } else {
+            it->second = portion.MakeCopy();
+        }
     }
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) override {
         AFL_VERIFY(Portions.erase(portion.GetPortionId()));
     }
     virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
-            callback(NOlap::TPortionInfoConstructor(i, false, true), i.GetMeta().SerializeToProto());
+            callback(NOlap::TPortionInfoConstructor(i.second, false, true), i.second.GetMeta().SerializeToProto());
         }
         return true;
     }

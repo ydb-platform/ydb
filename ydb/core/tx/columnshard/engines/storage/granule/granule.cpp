@@ -145,8 +145,8 @@ void TGranuleMeta::UpsertPortionOnLoad(std::shared_ptr<TPortionInfo>&& portion) 
         AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portion).second);
         AFL_VERIFY(!Portions.contains(portion->GetPortionId()));
     } else {
-        auto portionId = portion.GetPortionId();
-        AFL_VERIFY(Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion))).second);
+        auto portionId = portion->GetPortionId();
+        AFL_VERIFY(Portions.emplace(portionId, portion)).second);
     }
 }
 

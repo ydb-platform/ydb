@@ -282,6 +282,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     Version = schema.GetVersion();
+    Precalculate();
     Validate();
     return true;
 }
@@ -550,10 +551,19 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     if (diff.GetCompressionOptions()) {
         DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());
     }
+    Precalculate();
     Validate();
 }
 
+void TIndexInfo::Precalculate() {
+    UsedStorageIds = std::make_shared<std::set<TString>>();
+    for (auto&& i : ColumnFeatures) {
+        UsedStorageIds->emplace(i->GetOperator()->GetStorageId());
+    }
+}
+
 void TIndexInfo::Validate() const {
+    AFL_VERIFY(!!UsedStorageIds);
     AFL_VERIFY(ColumnFeatures.size() == SchemaColumnIdsWithSpecials.size());
     AFL_VERIFY(ColumnFeatures.size() == (ui32)SchemaWithSpecials->num_fields());
     AFL_VERIFY(ColumnFeatures.size() == (ui32)Schema->num_fields() + IIndexInfo::SpecialColumnsCount);

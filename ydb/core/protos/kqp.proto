@@ -63,6 +63,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_COMMITTED = 2;
     ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
     ISOLATION_LEVEL_READ_STALE = 4;
+    ISOLATION_LEVEL_SNAPSHOT_RO = 5;
 };
 
 message TTopicOperationsRequest {

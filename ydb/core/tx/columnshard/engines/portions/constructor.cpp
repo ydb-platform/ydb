@@ -13,14 +13,19 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
     AFL_VERIFY(!Constructed);
     Constructed = true;
 
+    MetaConstructor.ColumnRawBytes = 0;
+    MetaConstructor.ColumnBlobBytes = 0;
+    MetaConstructor.IndexRawBytes = 0;
+    MetaConstructor.IndexBlobBytes = 0;
+
     MetaConstructor.RecordsCount = GetRecordsCount();
     for (auto&& r : Records) {
-        MetaConstructor.ColumnRawBytes += r.GetMeta().GetRawBytes();
-        MetaConstructor.ColumnBlobBytes += r.GetBlobRange().GetSize();
+        *MetaConstructor.ColumnRawBytes += r.GetMeta().GetRawBytes();
+        *MetaConstructor.ColumnBlobBytes += r.GetBlobRange().GetSize();
     }
     for (auto&& r : Indexes) {
-        MetaConstructor.IndexRawBytes += r.GetRawBytes();
-        MetaConstructor.IndexBlobBytes += r.GetDataSize();
+        *MetaConstructor.IndexRawBytes += r.GetRawBytes();
+        *MetaConstructor.IndexBlobBytes += r.GetDataSize();
     }
 
     std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));

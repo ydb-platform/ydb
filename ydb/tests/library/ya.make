@@ -101,6 +101,7 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/sdk/python/enable_v3_new_behavior
+    ydb/tests/library/wardens
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
 )

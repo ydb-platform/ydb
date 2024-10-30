@@ -246,7 +246,8 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         for (auto&& [granuleId, pathConstructors] : constructors) {
             auto g = GetGranulePtrVerified(granuleId);
             for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false));
+                auto portion = *constructor.Build(false).GetPortionInfoPtr();
+                g->UpsertPortionOnLoad(std::move(portion));
             }
         }
     }
@@ -382,7 +383,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(info);
+            changes->PortionsToDrop.push_back(TPortionDataAccessor(info));
             ++portionsFromDrop;
         }
     }
@@ -407,7 +408,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(std::move(it->second[i]));
+            changes->PortionsToDrop.push_back(TPortionDataAccessor(it->second[i]));
             if (i + 1 < it->second.size()) {
                 it->second[i] = std::move(it->second.back());
             }

@@ -65,9 +65,12 @@ public:
         }
     }
 
-    TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo) {
     }
+
+    static TConclusion<TPortionDataAccessor> BuildFromProto(
+        const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
 
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
@@ -79,6 +82,14 @@ public:
 
     const TPortionInfo& GetPortionInfo() const {
         return *PortionInfo;
+    }
+
+    TPortionInfo& MutablePortionInfo() const {
+        return const_cast<TPortionInfo&>(*PortionInfo);
+    }
+
+    std::shared_ptr<TPortionInfo> MutablePortionInfoPtr() const {
+        return std::const_pointer_cast<TPortionInfo>(PortionInfo);
     }
 
     const TPortionInfo::TConstPtr& GetPortionInfoPtr() const {

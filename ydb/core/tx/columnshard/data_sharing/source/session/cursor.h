@@ -18,7 +18,7 @@ class TSharedBlobsManager;
 
 class TSourceCursor {
 private:
-    std::map<ui64, std::map<ui32, TPortionInfo::TPtr>> PortionsForSend;
+    std::map<ui64, std::map<ui32, TPortionDataAccessor>> PortionsForSend;
     THashMap<ui64, NEvents::TPathIdData> PreviousSelected;
     THashMap<ui64, NEvents::TPathIdData> Selected;
     THashMap<TTabletId, TTaskForTablet> Links;
@@ -105,8 +105,8 @@ public:
 
     void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
-    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-        const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index);
+    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions,
+        const TVersionedIndex& index);
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
         const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
 };

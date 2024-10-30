@@ -18,7 +18,7 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
     ui32 chunksCount = 0;
     bool selectMore = true;
     for (; itCurrentPath != PortionsForSend.end() && selectMore; ++itCurrentPath) {
-        std::vector<TPortionInfo::TPtr> portions;
+        std::vector<TPortionDataAccessor> portions;
         for (; itPortion != itCurrentPath->second.end(); ++itPortion) {
             selectMore = (count < 10000 && chunksCount < 1000000);
             if (!selectMore) {
@@ -26,8 +26,8 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
                 NextPortionId = itPortion->first;
             } else {
                 portions.emplace_back(itPortion->second);
-                chunksCount += TPortionDataAccessor(portions.back()).GetRecords().size();
-                chunksCount += TPortionDataAccessor(portions.back()).GetIndexes().size();
+                chunksCount += portions.back().GetRecords().size();
+                chunksCount += portions.back().GetIndexes().size();
                 ++count;
             }
         }
@@ -158,16 +158,15 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions, const TVersionedIndex& index) {
+    const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions, const TVersionedIndex& index) {
     AFL_VERIFY(!IsStartedFlag);
-    std::map<ui64, std::map<ui32, std::shared_ptr<TPortionInfo>>> local;
-    std::vector<std::shared_ptr<TPortionInfo>> portionsLock;
+    std::map<ui64, std::map<ui32, TPortionDataAccessor>> local;
     NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
     for (auto&& i : portions) {
         hashCalcer.Start();
-        std::map<ui32, std::shared_ptr<TPortionInfo>> portionsMap;
+        std::map<ui32, TPortionDataAccessor> portionsMap;
         for (auto&& p : i.second) {
-            const ui64 portionId = p->GetPortionId();
+            const ui64 portionId = p.GetPortionInfo().GetPortionId();
             hashCalcer.Update((ui8*)&portionId, sizeof(portionId));
             AFL_VERIFY(portionsMap.emplace(portionId, p).second);
         }

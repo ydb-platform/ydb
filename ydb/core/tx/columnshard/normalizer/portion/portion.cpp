@@ -23,7 +23,9 @@ public:
         TDbWrapper db(txc.DB, nullptr);
 
         for (auto&& portionInfo : Portions) {
-            portionInfo.SaveToDatabase(db, true);
+            auto schema = Schemas->FindPtr(portionInfo.GetPortionInfo().GetPortionId());
+            AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
+            portionInfo.SaveToDatabase(db, (*schema)->GetIndexInfo().GetPKFirstColumnId(), true);
         }
         return true;
     }

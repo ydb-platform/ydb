@@ -229,7 +229,7 @@ public:
         return SchemeNeedActualization;
     }
 
-    const std::set<TString>& GetUsedStorageIds(const TString& portionTierName) const {
+    std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
         if (portionTierName && portionTierName != IStoragesManager::DefaultStorageId) {
             return { portionTierName };
         } else {

@@ -1070,8 +1070,9 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             --!syntax_v1
             CREATE TABLE `/Root/origin` (
                 id UInt64,
+                order UInt64,
                 value Text,
-                PRIMARY KEY (id)
+                PRIMARY KEY (id, order)
             ) WITH (
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64,
                 AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 64,
@@ -1120,8 +1121,11 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 AsStruct(ListFromRange(0, 150000) AS v)
             );
 
-            UPSERT INTO `/Root/origin` (id, value)
-            SELECT RandomNumber(v) AS id, CAST('0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF' AS Utf8?)  AS value
+            UPSERT INTO `/Root/origin` (id, order, value)
+            SELECT
+                RandomNumber(v) AS id,
+                v AS order,
+                CAST('0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF' AS Utf8?)  AS value
             FROM as_table($sample)
                 FLATTEN BY (v);
         )");

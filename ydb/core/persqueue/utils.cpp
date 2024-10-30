@@ -2,6 +2,7 @@
 
 #include <deque>
 
+#include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -218,6 +219,24 @@ void TPartitionGraph::Travers(ui32 id, const std::function<bool (ui32 id)>& func
     Travers0(queue, func);
 }
 
+bool TPartitionGraph::Empty() const {
+    return Partitions.empty();
+}
+
+TPartitionGraph::operator bool() const {
+    return !Empty();
+}
+
+TString TPartitionGraph::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    for (const auto& [k,_] : Partitions) {
+        sb << k << ", ";
+    }
+    sb << "}";
+    return sb;
+}
+
 template<typename TPartition>
 inline int GetPartitionId(TPartition p) {
     return p.GetPartitionId();
@@ -294,6 +313,12 @@ bool TPartitionGraph::Node::IsRoot() const {
     return Parents.empty();
 }
 
+bool TPartitionGraph::Node::IsParent(ui32 partitionId) const {
+    return AnyOf(Parents, [=](const auto& p) {
+        return p->Id == partitionId;
+    });
+}
+
 TPartitionGraph MakePartitionGraph(const NKikimrPQ::TPQTabletConfig& config) {
     return TPartitionGraph(BuildGraph<NKikimrPQ::TPQTabletConfig::TPartition>(config.GetAllPartitions()));
 }
@@ -304,6 +329,14 @@ TPartitionGraph MakePartitionGraph(const NKikimrPQ::TUpdateBalancerConfig& confi
 
 TPartitionGraph MakePartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
     return TPartitionGraph(BuildGraph<NKikimrSchemeOp::TPersQueueGroupDescription::TPartition>(config.GetPartitions()));
+}
+
+TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrPQ::TPQTabletConfig& config) {
+    return std::make_shared<TPartitionGraph>(MakePartitionGraph(config));
+}
+
+TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
+    return std::make_shared<TPartitionGraph>(MakePartitionGraph(config));
 }
 
 void TLastCounter::Use(const TString& value, const TInstant& now) {

@@ -86,7 +86,7 @@ all:
 
 #### Параметры развертывания fq-connector-go {#inventory-edit-fq-connector-go}
 
-Для запуска [федеративных запросов](../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../concepts/federated_query/architecture.md#connectors) [fq-connector-go](../../deploy/manual/connector.md#fq-connector-go).
+Для запуска [федеративных запросов](../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../concepts/federated_query/architecture.md#connectors) [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go).
 
 Если необходимо развернуть fq-connector-go, внесите следующие изменения в разделе `vars` инвентори-файла:
 
@@ -205,7 +205,7 @@ all:
 
 ### Подготовка конфигурационного файла fq-connector-go {#fq-connector-go-config-prepare}
 
-Если [включено развертывание fq-connector-go](#inventory-edit-fq-connector-go), может потребоваться изменить его конфигурационный файл. Конфигурационный файл находится по пути `files/fq-connector-go/config.yaml`. Его описание можно найти [в этой статье](../../deploy/manual/connector.md#fq-connector-go-config).
+Если [включено развертывание fq-connector-go](#inventory-edit-fq-connector-go), может потребоваться изменить его конфигурационный файл. Конфигурационный файл находится по пути `files/fq-connector-go/config.yaml`. Его описание можно найти [в этой статье](../manual/federated-queries/connector-deployment.md#fq-connector-go-config).
 
 ## Развёртывание кластера {{ ydb-short-name }} { #erasure-setup }
 

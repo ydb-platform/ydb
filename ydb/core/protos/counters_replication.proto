@@ -7,10 +7,17 @@ option (TabletTypeName) = "ReplicationController"; // Used as prefix for all cou
 
 enum ESimpleCounters {
     COUNTER_SIMPLE_IGNORE = 0;
+    COUNTER_SESSIONS = 1 [(CounterOpts) = {Name: "Sessions"}];
+    COUNTER_WORKERS = 2 [(CounterOpts) = {Name: "Workers"}];
+    COUNTER_BOOT_QUEUE = 3 [(CounterOpts) = {Name: "BootQueue"}];
+    COUNTER_STOP_QUEUE = 4 [(CounterOpts) = {Name: "StopQueue"}];
+    COUNTER_DATA_LAG = 5 [(CounterOpts) = {Name: "DataLag"}];
 }
 
 enum ECumulativeCounters {
     COUNTER_CUMULATIVE_IGNORE = 0;
+    COUNTER_CREATE_SESSION = 1 [(CounterOpts) = {Name: "CreateSession"}];
+    COUNTER_DELETE_SESSION = 2 [(CounterOpts) = {Name: "DeleteSession"}];
 }
 
 enum EPercentileCounters {

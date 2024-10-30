@@ -637,7 +637,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
     }
 
     for (size_t row_ind = 0; row_ind < count; row_ind += BlockRows_) {
-        const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
+        const size_t cur_block_size = std::min<size_t>(count - row_ind, BlockRows_);
         size_t cols_past = 0;
 
         for (const auto &simd_block : SIMDBlock_) {
@@ -816,7 +816,7 @@ void TTupleLayoutFallback<TTraits>::Unpack(
     }
 
     for (size_t row_ind = 0; row_ind < count; row_ind += BlockRows_) {
-        const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
+        const size_t cur_block_size = std::min<size_t>(count - row_ind, BlockRows_);
         size_t cols_past = 0;
 
         for (const auto &simd_block : SIMDBlock_) {

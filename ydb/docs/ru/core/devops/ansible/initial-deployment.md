@@ -218,10 +218,10 @@ all:
 
   | Порт   | Описание                                                   |
   |--------|------------------------------------------------------------|
-  | `2135` | Порт для защищенного GRPCS-соединения (TLS).               |
-  | `19001`| Порт для Interconnect-соединения нод {{ ydb-short-name }}. |
-  | `8765` | HTTPS-порт мониторинга кластера.                           |
-  | `5432` | Порт используется для работы совместимости {{ ydb-short-name }} с PostgreSQL. |
+  | 2135 | Порт для [основного API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md), основанного на защищённом [gRPC](https://grpc.io/) соединении поверх [TLS](../../reference/configuration/tls.md).               |
+  | 19001 | Порт для [интерконнекта акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect). |
+  | 8765 | HTTPS-порт для [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд.                           |
+  | 5432 | Порт для [режима совместимости с PostgreSQL](../../postgresql/intro.md). |
 
 {% endcut %}
 

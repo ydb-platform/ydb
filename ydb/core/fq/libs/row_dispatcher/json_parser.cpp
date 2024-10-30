@@ -328,9 +328,13 @@ public:
         with_lock (Alloc) {
             ClearColumns(Buffer.NumberValues);
 
+            const ui64 firstOffset = Buffer.Offsets.front();
             size_t rowId = 0;
             simdjson::ondemand::document_stream documents = Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE);
             for (auto document : documents) {
+                if (Y_UNLIKELY(rowId >= Buffer.NumberValues)) {
+                    throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << rowId + 1;
+                }
                 for (auto item : document.get_object()) {
                     const auto it = ColumnsIndex.find(item.escaped_key().value());
                     if (it == ColumnsIndex.end()) {
@@ -348,7 +352,6 @@ public:
                 rowId++;
             }
 
-            const ui64 firstOffset = Buffer.Offsets.front();
             if (rowId != Buffer.NumberValues) {
                 throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << rowId;
             }

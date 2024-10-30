@@ -26,6 +26,7 @@ add_library(ydb-library-binary_json)
 
 
 target_compile_options(ydb-library-binary_json PRIVATE
+  -Wno-assume
   -DUDF_ABI_VERSION_MAJOR=2
   -DUDF_ABI_VERSION_MINOR=27
   -DUDF_ABI_VERSION_PATCH=0

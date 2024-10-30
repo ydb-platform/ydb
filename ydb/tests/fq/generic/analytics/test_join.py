@@ -72,7 +72,8 @@ class TestJoinAnalytics:
             JOIN {ydb_conn_name}.{table_name} AS ydb
             ON pg.id = ydb.id
             JOIN {gp_conn_name}.{table_name} AS gp
-            ON pg.id = gp.id;
+            ON pg.id = gp.id
+            ORDER BY data_pg;
             """
 
         query_id = fq_client.create_query(query_name, sql, type=query_type).result.query_id

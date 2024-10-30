@@ -134,13 +134,15 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
         (*explicitMessageGroups)[mg.GetId()] = {0, std::move(keyRange)};
     }
 
-    auto* node = graph.GetPartition(partitionId);
-    Y_VERIFY_S(node, "Partition " << partitionId << " not found. Known partitions " << graph.DebugString());
-    for (const auto& p : partitionsData.GetPartition()) {
-        if (node->IsParent(p.GetPartitionId())) {
-            for (const auto& g : p.GetMessageGroup()) {
-                auto& group = (*explicitMessageGroups)[g.GetId()];
-                group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+    if (graph) {
+        auto* node = graph.GetPartition(partitionId);
+        Y_VERIFY_S(node, "Partition " << partitionId << " not found. Known partitions " << graph.DebugString());
+        for (const auto& p : partitionsData.GetPartition()) {
+            if (node->IsParent(p.GetPartitionId())) {
+                for (const auto& g : p.GetMessageGroup()) {
+                    auto& group = (*explicitMessageGroups)[g.GetId()];
+                    group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+                }
             }
         }
     }

@@ -308,7 +308,7 @@ public:
                                 << ")";
     }
 
-    void UpsertPortionOnLoad(std::shared_ptr<TPortionInfo>&& portion);
+    void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

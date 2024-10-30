@@ -133,15 +133,14 @@ TGranuleMeta::TGranuleMeta(
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
 
-void TGranuleMeta::UpsertPortionOnLoad(std::shared_ptr<TPortionInfo>&& portion) {
-    
+void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion) {
     if (portion->HasInsertWriteId() && !portion->HasCommitSnapshot()) {
         const TInsertWriteId insertWriteId = portion->GetInsertWriteIdVerified();
         AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portion).second);
         AFL_VERIFY(!Portions.contains(portion->GetPortionId()));
     } else {
         auto portionId = portion->GetPortionId();
-        AFL_VERIFY(Portions.emplace(portionId, portion)).second);
+        AFL_VERIFY(Portions.emplace(portionId, portion).second);
     }
 }
 
@@ -175,7 +174,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
-    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*it->second);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(it->second);
     InsertedPortions.erase(it);
 }
 
@@ -188,7 +187,7 @@ void TGranuleMeta::CommitImmediateOnExecute(
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {
-    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*portion);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(portion);
 }
 
 }   // namespace NKikimr::NOlap

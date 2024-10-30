@@ -106,13 +106,11 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         THashSet<ui64> portionsToRestore;
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContext chunk(rowset, &DsGroupSelector);
-            if (dbPortions.contains(chunk.GetPortionId())) {
-                continue;
-            } else {
+            if (!dbPortions.contains(chunk.GetPortionId())) {
                 portionsToRestore.emplace(chunk.GetPortionId());
-            }
-            if (chunk.GetMetaProto().HasPortionMeta()) {
-                AFL_VERIFY(portionsToWrite.emplace(chunk.GetPortionId(), chunk).second);
+                if (chunk.GetMetaProto().HasPortionMeta()) {
+                    AFL_VERIFY(portionsToWrite.emplace(chunk.GetPortionId(), chunk).second);
+                }
             }
 
             if (!rowset.Next()) {
@@ -130,10 +128,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     std::vector<TPatchItem> package;
 
     for (auto&& [_, chunkWithPortionData] : portionsToWrite) {
-        package.emplace_back(tablesManager.GetPrimaryIndexSafe()
-                                 .GetVersionedIndex()
-                                 .GetSchema(chunkWithPortionData.GetMinSnapshotDeprecated())
-                                 ->GetVersion(),
+        package.emplace_back(
+            tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(chunkWithPortionData.GetMinSnapshotDeprecated())->GetVersion(),
             std::move(chunkWithPortionData));
         if (package.size() == 100) {
             std::vector<TPatchItem> local;

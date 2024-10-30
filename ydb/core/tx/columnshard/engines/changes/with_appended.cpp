@@ -12,6 +12,7 @@ namespace NKikimr::NOlap {
 
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> usedPortionIds;
+
     for (auto&& [_, i] : PortionsToRemove) {
         Y_ABORT_UNLESS(!i->HasRemoveSnapshot());
         AFL_VERIFY(usedPortionIds.emplace(i->GetPortionId()).second)("portion_info", i->DebugString(true));
@@ -109,7 +110,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             context.EngineLogs.AddCleanupPortion(i);
         }
         for (auto& portionBuilder : AppendedPortions) {
-            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult().GetPortionInfo());
+            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult().MutablePortionInfoPtr());
         }
     }
 }

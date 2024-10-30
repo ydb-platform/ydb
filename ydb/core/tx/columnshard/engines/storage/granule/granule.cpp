@@ -9,21 +9,16 @@
 
 namespace NKikimr::NOlap {
 
-void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
-    auto it = Portions.find(info.GetPortionId());
-    AFL_VERIFY(info.GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.DebugString())("path_id", GetPathId());
+void TGranuleMeta::AppendPortion(const TPortionInfo::TPtr& info) {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
+    auto it = Portions.find(info->GetPortionId());
+    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
 
-    AFL_VERIFY(info.ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info.DebugString());
+    AFL_VERIFY(info->ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info->DebugString());
 
-    if (it == Portions.end()) {
-        OnBeforeChangePortion(nullptr);
-        auto portionNew = std::make_shared<TPortionInfo>(info);
-        it = Portions.emplace(portionNew->GetPortionId(), portionNew).first;
-    } else {
-        OnBeforeChangePortion(it->second);
-        it->second = std::make_shared<TPortionInfo>(info);
-    }
+    AFL_VERIFY(it == Portions.end());
+    OnBeforeChangePortion(nullptr);
+    it = Portions.emplace(info->GetPortionId(), info).first;
     OnAfterChangePortion(it->second, nullptr);
 }
 

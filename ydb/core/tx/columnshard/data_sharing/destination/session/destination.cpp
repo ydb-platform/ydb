@@ -20,7 +20,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
             portion.MutablePortionInfo().SetPathId(it->second);
-            index.AppendPortion(portion.GetPortionInfo());
+            index.AppendPortion(portion.MutablePortionInfoPtr());
         }
     }
     return TConclusionStatus::Success();

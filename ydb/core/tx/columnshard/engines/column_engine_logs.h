@@ -199,7 +199,7 @@ public:
         UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
     }
 
-    void AppendPortion(const TPortionInfo& portionInfo);
+    void AppendPortion(const TPortionInfo::TPtr& portionInfo);
 
 private:
     TVersionedIndex VersionedIndex;

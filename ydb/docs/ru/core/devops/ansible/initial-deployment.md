@@ -216,11 +216,11 @@ all:
 
 На каждом сервере кластера запускается по одному статическому узлу. В systemd он называется`ydbd-storage`. Статический узел принимает входящие соединения на следующих портах:
 
-  | Порт   | Описание                                                   |
-  |--------|------------------------------------------------------------|
-  | 2135 | Порт для [основного API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md), основанного на защищённом [gRPC](https://grpc.io/) соединении поверх [TLS](../../reference/configuration/tls.md).               |
+  | Порт | Описание |
+  |------|---------|
+  | 2135 | Порт для [основного API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md), основанного на защищённом [gRPC](https://grpc.io/) соединении поверх [TLS](../../reference/configuration/tls.md). |
   | 19001 | Порт для [интерконнекта акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect). |
-  | 8765 | HTTPS-порт для [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд.                           |
+  | 8765 | HTTPS-порт для [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд. |
   | 5432 | Порт для [режима совместимости с PostgreSQL](../../postgresql/intro.md). |
 
 {% endcut %}
@@ -230,13 +230,13 @@ all:
 По умолчанию при развёртывании кластера через Ansible на каждом сервере запускается по два динамических узла. В systemd они называются `ydbd-database-a` и `ydbd-database-b`. Они принимают входящие соединения на следующих портах:
 
   #|
-  || Название динамического узла           | Порт    | Описание                                                   ||
-  || `ydbd-database-a` | `2136`  | Порты для защищенного GRPCS-соединения (TLS).              ||
-  || `ydbd-database-b` | `2137`  | ^                                                          ||
-  || `ydbd-database-a` | `19002` | Порты для Interconnect-соединения нод {{ ydb-short-name }}.||
-  || `ydbd-database-b` | `19003` | ^                                                          ||
-  || `ydbd-database-a` | `8766`  | HTTPS-порты мониторинга кластера.                          ||
-  || `ydbd-database-b` | `8767`  | ^                                                          ||
+  || Название динамического узла | Порт | Описание ||
+  || `ydbd-database-a` | 2136  | Порты для [основного API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md), основанного на защищённом [gRPC](https://grpc.io/) соединении поверх [TLS](../../reference/configuration/tls.md). ||
+  || `ydbd-database-b` | 2137  | ^ ||
+  || `ydbd-database-a` | 19002 | Порт для [интерконнекта акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect). ||
+  || `ydbd-database-b` | 19003 | ^ ||
+  || `ydbd-database-a` | 8766  | HTTPS-порт для [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд. ||
+  || `ydbd-database-b` | 8767  | ^ ||
   |#
 
 {% endcut %}
@@ -247,7 +247,7 @@ all:
 
 {% endcut %}
 
-В результате выполнения плейбука будет создан кластер {{ ydb-short-name }}, на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа и запущен Embedded UI на порту 8765. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765):
+В результате выполнения плейбука будет создан кластер {{ ydb-short-name }} (ноды используют gRPC-порты 19001-19003 и 5432 порт), на котором развернута тестовая база данных – `database`, создан `root` пользователь с максимальными правами доступа. Работать с кластером можно с помощью {{ ydb-short-name }} [CLI](../../reference/ydb-cli/index.md), посылая API-вызовы на порт 2135, а также через [Embedded UI](../../reference/embedded-ui/index.md), который работает на порту 8765. Для подключения к Embedded UI можно настроить SSH-туннелирование. Для этого на локальной машине выполните команду `ssh -L 8765:localhost:8765 -i <ssh private key> <user>@<first ydb static node ip>`. После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765):
 
 ![ydb-web-ui](../../_assets/ydb-web-console.png)
 

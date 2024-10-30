@@ -59,7 +59,8 @@ enum class ENormalizerSequentialId: ui32 {
     EmptyPortionsCleaner,
     CleanInsertionDedup,
     GCCountersNormalizer,
-    SyncChunksWithPortions,
+    RestorePortionFromChunks,
+    SyncPortionFromChunks,
 
     MAX
 };

@@ -924,6 +924,8 @@ private:
     YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
+    YDB_READONLY(TSnapshot, RemoveSnapshot, TSnapshot::Zero());
+    YDB_READONLY(TSnapshot, MinDeprecatedSnapshot, TSnapshot::Zero());
 
 public:
     const TChunkAddress& GetAddress() const {
@@ -942,7 +944,10 @@ public:
     template <class TSource>
     TColumnChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
         : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>(),
-              rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>()) {
+              rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>())
+        , RemoveSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>())
+        , MinDeprecatedSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>())
+    {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
         TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Blob>();
         Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());

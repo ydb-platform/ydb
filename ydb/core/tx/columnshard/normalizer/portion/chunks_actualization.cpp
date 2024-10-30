@@ -86,6 +86,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     bool ready = true;
     ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme());
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }

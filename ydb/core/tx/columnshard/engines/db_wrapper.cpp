@@ -43,7 +43,7 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 
-void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
+void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
     NIceDb::TNiceDb db(Database);
     auto rowProto = row.GetMeta().SerializeToProto();
     using IndexColumns = NColumnShard::Schema::IndexColumns;
@@ -104,9 +104,6 @@ bool TDbWrapper::LoadColumns(const std::function<void(const TColumnChunkLoadCont
     }
 
     while (!rowset.EndOfSet()) {
-        NOlap::TSnapshot minSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
-        NOlap::TSnapshot removeSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
-
         NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
         callback(chunkLoadContext);
 

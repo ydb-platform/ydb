@@ -243,7 +243,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         for (auto&& [granuleId, pathConstructors] : constructors) {
             auto g = GetGranulePtrVerified(granuleId);
             for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false).GetPortionInfoPtr());
+                g->UpsertPortionOnLoad(constructor.Build(false).MutablePortionInfoPtr());
             }
         }
     }

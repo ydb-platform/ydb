@@ -71,6 +71,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
+    Meta
     PathId = proto.GetPathId();
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
@@ -107,7 +108,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         }
         Indexes.emplace_back(std::move(parse.DetachResult()));
     }
-    Precalculate();
     return TConclusionStatus::Success();
 }
 

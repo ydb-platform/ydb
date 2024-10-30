@@ -393,7 +393,7 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
 
     if (useGraceCore) {
         auto flags = Build<TCoNameValueTupleList>(ctx, join.Pos())
-            .Add().Name().Build("Broadcast")
+            .Add().Name().Build("Broadcast").Build()
             .Done();
 
         return Build<TDqPhyGraceJoin>(ctx, join.Pos())

@@ -119,6 +119,8 @@ class ConnectionParams:
 
         if self.token is not None and len(self.token.split(' ')) == 2:
             self.token_type, self.token = self.token.split(' ')
+            if self.token_type == 'NONE':
+                self.token_type = ''
         else:
             self.token_type = 'OAuth'
 
@@ -345,7 +347,7 @@ def invoke_grpc(func, *params, explicit_host=None, host=None):
 
     hostport = '%s:%d' % (host, connection_params.grpc_port)
     retval = None
-    if connection_params.mon_protocol == 'grpcs':
+    if connection_params.mon_protocol == 'grpcs' or connection_params.mon_protocol == 'https':
         creds = grpc.ssl_channel_credentials(connection_params.get_cafile_data())
         with grpc.secure_channel(hostport, creds, options) as channel:
             retval = work(channel)

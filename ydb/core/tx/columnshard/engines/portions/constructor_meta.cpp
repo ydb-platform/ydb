@@ -76,8 +76,8 @@ bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPor
     RecordsCount = TValidator::CheckNotNull(portionMeta.GetRecordsCount());
     ColumnRawBytes = TValidator::CheckNotNull(portionMeta.GetColumnRawBytes());
     ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
-    IndexRawBytes = TValidator::CheckNotNull(portionMeta.GetIndexRawBytes());
-    IndexBlobBytes = TValidator::CheckNotNull(portionMeta.GetIndexBlobBytes());
+    IndexRawBytes = portionMeta.GetIndexRawBytes();
+    IndexBlobBytes = portionMeta.GetIndexBlobBytes();
     if (portionMeta.GetIsInserted()) {
         Produced = TPortionMeta::EProduced::INSERTED;
     } else if (portionMeta.GetIsCompacted()) {

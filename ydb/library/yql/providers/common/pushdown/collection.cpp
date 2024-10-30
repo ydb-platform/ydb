@@ -424,6 +424,38 @@ bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, c
     return true;
 }
 
+bool SqlInCanBePushed(const TCoSqlIn& sqlIn, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+    const TExprBase& expr = sqlIn.Collection();
+    const TExprBase& lookup = sqlIn.Lookup();
+
+    if (!CheckExpressionNodeForPushdown(lookup, lambdaArg, settings)) {
+        return false;
+    }
+
+    TExprNode::TPtr collection;
+    if (expr.Ref().IsList()) {
+        collection = expr.Ptr();
+    } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
+        collection = maybeAsList.Cast().Ptr();
+    } else {
+        return false;
+    }
+
+    const TTypeAnnotationNode* inputType = lambdaBody.Ptr()->GetTypeAnn();
+    for (auto& child : collection->Children()) {
+        if (!CheckExpressionNodeForPushdown(TExprBase(child), lambdaArg, settings)) {
+            return false;
+        }
+
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DoNotCheckCompareArgumentsTypes)) {
+            if (!IsComparableTypes(lookup, TExprBase(child), false, inputType, settings)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, const TSettings& settings) {
     /*
      * There are three ways of comparison in following format:
@@ -560,18 +592,9 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
         CollectExpressionPredicate(predicateTree, predicate.Cast<TCoMember>(), lambdaArg);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators) && (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>())) {
          CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
-     } else if (predicate.Maybe<TCoSqlIn>()) {
+     } else if (settings.IsEnabled(TSettings::EFeatureFlag::InOperator) && predicate.Maybe<TCoSqlIn>()) {
         auto sqlIn = predicate.Cast<TCoSqlIn>();
-
-        [[maybe_unused]] const TExprBase& collection = sqlIn.Collection();
-        [[maybe_unused]] const TExprBase& lookup = sqlIn.Lookup();
-
-        //[[maybe_unused]] const TExprBase& opt = sqlIn.Options();
-
-        bool check = CheckExpressionNodeForPushdown(lookup, lambdaArg, settings);
-        YQL_LOG(TRACE) << "CollectPredicates TCoSqlIn check " << check;
-      //  predicateTree.Op = EBoolOp::In;
-        predicateTree.CanBePushed = true;
+        predicateTree.CanBePushed = SqlInCanBePushed(sqlIn, lambdaArg, lambdaBody, settings);
      } else {
         predicateTree.CanBePushed = false;
     }

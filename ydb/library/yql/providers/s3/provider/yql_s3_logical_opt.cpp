@@ -271,11 +271,15 @@ public:
    static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
                                                                 TExprContext& ctx, TPositionHandle pos)
     {
+        YQL_CLOG(TRACE, ProviderS3) << "SplitForPartialPushdown " ;
+
         if (predicateTree.CanBePushed) {
+            YQL_CLOG(TRACE, ProviderS3) << "SplitForPartialPushdown 1" ;
             return predicateTree;
         }
 
         if (predicateTree.Op != NPushdown::EBoolOp::And) {
+            YQL_CLOG(TRACE, ProviderS3) << "SplitForPartialPushdown 2" ;
             return NPushdown::TPredicateNode(); // Not valid, => return the same node from optimizer
         }
 
@@ -287,6 +291,7 @@ public:
         }
         NPushdown::TPredicateNode predicateToPush;
         predicateToPush.SetPredicates(pushable, ctx, pos);
+        YQL_CLOG(TRACE, ProviderS3) << "SplitForPartialPushdown end" ;
         return predicateToPush;
     }
 

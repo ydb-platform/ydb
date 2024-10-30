@@ -800,7 +800,7 @@ public:
     }
 
     void Handle(TEvSchedulerNewPool::TPtr& ev) {
-        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->Database, ev->Get()->Pool));
+        Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(ev->Get()->DatabaseId, ev->Get()->Pool));
     }
 
     void Handle(TEvPingPool::TPtr& ev) {

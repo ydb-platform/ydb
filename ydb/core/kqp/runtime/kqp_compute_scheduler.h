@@ -120,7 +120,7 @@ struct TEvSchedulerNewPool : public TEventLocal<TEvSchedulerNewPool, TKqpCompute
     TString Pool;
 
     TEvSchedulerNewPool(TString database, TString pool)
-        : Database(database)
+        : DatabaseId(database)
         , Pool(pool)
     {
     }

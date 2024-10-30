@@ -410,10 +410,6 @@ message TPredicate {
             NE = 4; // "$column != value"
             GE = 5; // "$column >= value"
             G = 6;  // "$column > value"
-            IND = 7;// "$column IS NOT DISTINCT value"
-            ID = 8; // "$column IS DISTINCT value"
-            SW = 9; // "StartsWith($column, value) / like "value%"
-            EW = 10; // "EndWith($column, value) / like "%value"
         }
 
         EOperation operation = 1;

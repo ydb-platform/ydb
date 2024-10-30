@@ -199,8 +199,6 @@ public:
                 NPq::NProto::TDqPqTopicSource srcDesc;
                 TDqPqTopicSource topicSource = maybeTopicSource.Cast();
 
-                Cerr << "FillSourceSettings 888 " << Endl;
-
                 TPqTopic topic = topicSource.Topic();
                 srcDesc.SetTopicPath(TString(topic.Path().Value()));
                 srcDesc.SetDatabase(TString(topic.Database().Value()));
@@ -259,11 +257,9 @@ public:
 
                 NYql::NConnector::NApi::TPredicate predicateProto;
                 auto serializedProto = topicSource.FilterPredicate().Ref().Content();
-
                 if (!predicateProto.ParseFromString(serializedProto)) {
-                        // todo
+                    YQL_CLOG(ERROR, ProviderPq) << "ParseFromString failed";
                 }
-
 
                 sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);

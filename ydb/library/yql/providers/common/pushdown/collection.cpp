@@ -56,10 +56,6 @@ bool IsSupportedPredicate(const TCoCompare& predicate, const TSettings& settings
         return true;
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::LikeOperator) && IsLikeOperator(predicate)) {
         return true;
-    } else if (predicate.Maybe<TCoAggrEqual>()) {
-        return true;
-    } else if (predicate.Maybe<TCoAggrNotEqual>()) {
-        return true;
     }
 
     return false;
@@ -555,7 +551,7 @@ void CollectExpressionPredicate(TPredicateNode& predicateTree, const TCoMember& 
 
 } // anonymous namespace end
 
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {    
+void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (predicate.Maybe<TCoCoalesce>()) {
         if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators))
             CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
@@ -591,11 +587,11 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::ExpressionAsPredicate) && predicate.Maybe<TCoMember>()) {
         CollectExpressionPredicate(predicateTree, predicate.Cast<TCoMember>(), lambdaArg);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators) && (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>())) {
-         CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
-     } else if (settings.IsEnabled(TSettings::EFeatureFlag::InOperator) && predicate.Maybe<TCoSqlIn>()) {
+        CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::InOperator) && predicate.Maybe<TCoSqlIn>()) {
         auto sqlIn = predicate.Cast<TCoSqlIn>();
         predicateTree.CanBePushed = SqlInCanBePushed(sqlIn, lambdaArg, lambdaBody, settings);
-     } else {
+    } else {
         predicateTree.CanBePushed = false;
     }
 }

@@ -263,7 +263,6 @@ public:
             return node;
         }
 
-
         NYql::NConnector::NApi::TPredicate predicateProto;
         auto predicate = newFilterLambda.Cast();
 

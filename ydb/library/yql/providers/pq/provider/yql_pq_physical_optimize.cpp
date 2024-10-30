@@ -28,7 +28,6 @@ public:
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TPqPhysicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TPqWriteTopic::Match, HNDL(PqWriteTopic));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToPqTopicSource));
 #undef HNDL
 
         SetGlobal(0); // Stage 0 of this optimizer is global => we can remap nodes.
@@ -124,11 +123,6 @@ public:
 
         return dqQueryBuilder.Done();
     }
-
-     TMaybeNode<TExprBase> PushFilterToPqTopicSource(TExprBase node, TExprContext& /*ctx*/) const {
-        return node;
-    }
-
 
 private:
     TPqState::TPtr State_;

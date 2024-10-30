@@ -51,12 +51,14 @@ namespace NKikimr {
         return defaultPercent * multiplier;
     }
 
+    const ui32 MIN_CAN_BE_FREED_CHUNKS = 9;
+
     bool HugeHeapDefragmentationRequired(
         ui32 hugeCanBeFreedChunks,
         ui32 hugeTotalChunks,
         double defragThreshold) {
         
-        if (hugeCanBeFreedChunks < 10)
+        if (hugeCanBeFreedChunks <= MIN_CAN_BE_FREED_CHUNKS)
             return false;
         
         double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
@@ -78,9 +80,9 @@ namespace NKikimr {
         return HugeHeapDefragmentationRequired(hugeCanBeFreedChunks, hugeTotalChunks, defragThreshold);
     }
 
-    ui32 MaxInflyghtDefragChunks(const TOutOfSpaceState& oos, ui32 maxChunksToDefrag) {
+    ui32 MaxInflyghtDefragChunks(const TOutOfSpaceState& oos, ui32 maxChunksToDefrag, ui32 hugeCanBeFreedChunks) {
         if (oos.GetLocalColor() > TSpaceColor::GREEN) {
-            return maxChunksToDefrag;
+            return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
         } else {
             return 1;
         }
@@ -139,7 +141,7 @@ namespace NKikimr {
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflyghtDefragChunks(oos, DCtx->MaxChunksToDefrag));
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflyghtDefragChunks(oos, DCtx->MaxChunksToDefrag, canBeFreedChunks));
                         Y_ABORT_UNLESS(chunksToDefrag);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),

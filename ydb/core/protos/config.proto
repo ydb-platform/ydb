@@ -1349,7 +1349,7 @@ message TImmediateControlsConfig {
             Description: "Huge garbage threshold = DefaultHugeGarbagePerMille * min((free space share) / (this param), 1)",
             MinValue: 1,
             MaxValue: 1000,
-            DefaultValue: 130 }];
+            DefaultValue: 260 }];
     }
 
     message TTabletControls {

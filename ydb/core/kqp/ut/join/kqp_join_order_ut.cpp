@@ -377,10 +377,9 @@ WHERE
         ;
         )";
 
-        auto q = session.PrepareDataQuery(query).ExtractValueSync().GetQuery();
         auto params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$param0")
-                .Datetime(TInstant::Now())
+                .Timestamp(TInstant::Now())
                 .Build()
             .AddParam("$resourceTypes")
                 .BeginList()
@@ -389,9 +388,10 @@ WHERE
                 .Build()
             .Build();
 
-        auto result = q.Execute(
-            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-            std::move(params)).ExtractValueSync();
+        auto tableClient = kikimr.GetTableClient();
+        auto it = tableClient.StreamExecuteScanQuery(query, params).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto goodResult = CollectStreamResult(it);
     }
 
     Y_UNIT_TEST(Chain65Nodes) {

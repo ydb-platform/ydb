@@ -114,17 +114,6 @@ public:
         }
     }
 
-    // should be called after Insert if isNew is true
-    // This is much less preferable then CheckGrow reason described near TryGrow and Grow
-    Y_FORCE_INLINE bool TryCheckGrow() {
-        if (Size * 2 >= Capacity) {
-            if (!TryGrow()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     template <typename TSink>
     Y_NO_INLINE void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
         while (2 * (Size + batchRequest.size()) >= Capacity) {
@@ -294,31 +283,7 @@ private:
         }
     }
 
-    // This can throw exception if allocating new data exceeds memory limit but otherwise will be successful and therefore is safe
     Y_NO_INLINE void Grow() {
-        auto newCapacity = GetNewCapacity();
-        char *newData, *newDataEnd;
-        Allocate(newCapacity, newData, newDataEnd);
-        PlacementGrow(newData, newDataEnd, newCapacity);
-    }
-
-    // This will not throw exception even if it fails to allocate more memory but instead returns false (if memory is allocated successfully performs grow and returns true)
-    // So this call will be successful even if it fails to grow and it is up to caller to gurantee that subsequent operations will not overflow data
-    Y_NO_INLINE bool TryGrow() {
-        auto newCapacity = GetNewCapacity();
-        char *newData = nullptr;
-        char *newDataEnd = nullptr;
-        try {
-            Allocate(newCapacity, newData, newDataEnd);
-        } catch (...) {
-            Y_ENSURE(newData == nullptr && newDataEnd == nullptr);
-            return false;
-        }
-        PlacementGrow(newData, newDataEnd, newCapacity);
-        return true;
-    }
-
-    ui64 GetNewCapacity() {
         ui64 growFactor;
         if (Capacity < 100'000) {
             growFactor = 8;
@@ -327,11 +292,10 @@ private:
         } else {
             growFactor = 2;
         }
-        return Capacity * growFactor;
-    }
-
-    void PlacementGrow(char *newData, char *newDataEnd, ui64 newCapacity) {
+        auto newCapacity = Capacity * growFactor;
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
+        char *newData, *newDataEnd;
+        Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {
             Allocator.deallocate(newData, newDataEnd - newData);
         };

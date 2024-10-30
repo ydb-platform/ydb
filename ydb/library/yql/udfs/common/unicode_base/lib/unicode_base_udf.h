@@ -107,6 +107,10 @@ namespace {
         const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
         char* pos = nullptr;
         unsigned long long res = std::strtoull(input, &pos, base);
+        if (!res && errno == EINVAL) {
+            UdfTerminate("Incorrect base");
+        }
+        
         ui64 ret = static_cast<ui64>(res);
         if (!res && pos == input) {
             UdfTerminate("Input string is not a number");
@@ -125,6 +129,10 @@ namespace {
         const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
         char* pos = nullptr;
         unsigned long long res = std::strtoull(input, &pos, base);
+        if (!res && errno == EINVAL) {
+            return TUnboxedValuePod();
+        }
+
         ui64 ret = static_cast<ui64>(res);
         if (!res && pos == input) {
             return TUnboxedValuePod();

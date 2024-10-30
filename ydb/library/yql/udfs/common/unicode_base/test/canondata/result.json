@@ -44,6 +44,11 @@
             "uri": "file://test.test_ToUint64F2_/extracted"
         }
     ],
+    "test.test[ToUint64F3]": [
+        {
+            "uri": "file://test.test_ToUint64F3_/extracted"
+        }
+    ],
     "test.test[ToUint64]": [
         {
             "uri": "file://test.test_ToUint64_/results.txt"

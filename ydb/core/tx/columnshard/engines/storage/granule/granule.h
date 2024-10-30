@@ -134,12 +134,6 @@ private:
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
-public:
-    void RefreshTiering(const std::optional<TTiering>& tiering) {
-        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->RefreshTiering(tiering, context);
-    }
-
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
             return TConclusionStatus::Fail("empty input portion pointer");
@@ -153,6 +147,12 @@ public:
                 "portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId()));
         }
         return it->second;
+    }
+
+public:
+    void RefreshTiering(const std::optional<TTiering>& tiering) {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->RefreshTiering(tiering, context);
     }
 
     template <class TModifier>
@@ -308,7 +308,7 @@ public:
                                 << ")";
     }
 
-    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion);
+    void UpsertPortionOnLoad(std::shared_ptr<TPortionInfo>&& portion);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

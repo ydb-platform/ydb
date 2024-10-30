@@ -78,7 +78,7 @@ public:
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) override;
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) override;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) override;

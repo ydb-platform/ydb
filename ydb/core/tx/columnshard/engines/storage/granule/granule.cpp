@@ -138,17 +138,15 @@ TGranuleMeta::TGranuleMeta(
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
 
-std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
+void TGranuleMeta::UpsertPortionOnLoad(std::shared_ptr<TPortionInfo>&& portion) {
     if (portion.HasInsertWriteId() && !portion.HasCommitSnapshot()) {
-        const TInsertWriteId insertWriteId = portion.GetInsertWriteIdVerified();
-        auto emplaceInfo = InsertedPortions.emplace(insertWriteId, std::make_shared<TPortionInfo>(std::move(portion)));
-        AFL_VERIFY(emplaceInfo.second);
-        return emplaceInfo.first->second;
+    if (portion->HasInsertWriteId() && !portion->HasCommitSnapshot()) {
+        const TInsertWriteId insertWriteId = portion->GetInsertWriteIdVerified();
+        AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portion).second);
+        AFL_VERIFY(!Portions.contains(portion->GetPortionId()));
     } else {
         auto portionId = portion.GetPortionId();
-        auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
-        AFL_VERIFY(emplaceInfo.second);
-        return emplaceInfo.first->second;
+        AFL_VERIFY(Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion))).second);
     }
 }
 

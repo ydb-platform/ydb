@@ -65,14 +65,8 @@ private:
     friend class TPortionDataAccessor;
     friend class TPortionInfoConstructor;
 
-    ui64 PrecalculatedColumnRawBytes = 0;
-    ui64 PrecalculatedColumnBlobBytes = 0;
-    ui64 PrecalculatedRecordsCount = 0;
-    ui64 PrecalculatedIndexBlobBytes = 0;
-    ui64 PrecalculatedIndexRawBytes = 0;
-    bool Precalculated = false;
-
-    void Precalculate();
+    TPortionInfo(const TPortionInfo&) = default;
+    TPortionInfo& operator=(const TPortionInfo&) = default;
 
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
@@ -108,6 +102,10 @@ private:
 
 public:
     void SaveMetaToDatabase(IDbWrapper& db) const;
+
+    TPortionInfo MakeCopy() const {
+        return *this;
+    }
 
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
         return BlobIds;
@@ -433,18 +431,15 @@ public:
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
     ui32 GetRecordsCount() const {
-        AFL_VERIFY(Precalculated);
-        return PrecalculatedRecordsCount;
+        return GetMeta().GetRecordsCount();
     }
 
     ui64 GetIndexBlobBytes() const noexcept {
-        AFL_VERIFY(Precalculated);
-        return PrecalculatedIndexBlobBytes;
+        return GetMeta().GetIndexBlobBytes();
     }
 
     ui64 GetIndexRawBytes() const noexcept {
-        AFL_VERIFY(Precalculated);
-        return PrecalculatedIndexRawBytes;
+        return GetMeta().GetIndexRawBytes();
     }
 
     ui64 GetColumnRawBytes() const;

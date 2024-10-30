@@ -462,6 +462,7 @@ namespace NKikimr::NHttpProxy {
 
         public:
             void Bootstrap(const TActorContext& ctx) {
+                PoolId = AppData()->UserPoolId;
                 StartTime = ctx.Now();
                 try {
                     HttpContext.RequestBodyToProto(&Request);

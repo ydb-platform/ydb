@@ -99,8 +99,8 @@ static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared
                 } else {
                     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
                     if (binaryJson.IsFail()) {
-                        return arrow::Status::SerializationError(
-                            "Cannot serialize json (", binaryJson.GetErrorMessage(), "): ", valueBuf.SubStr(0, Min(valueBuf.Size(), 1024ul)));
+                        return arrow::Status::SerializationError("Cannot serialize json (", binaryJson.GetErrorMessage(),
+                            "): ", valueBuf.SubStr(0, Min(valueBuf.Size(), size_t{1024})));
                     }
                     auto appendResult = builder.Append(binaryJson->Data(), binaryJson->Size());
                     if (!appendResult.ok()) {

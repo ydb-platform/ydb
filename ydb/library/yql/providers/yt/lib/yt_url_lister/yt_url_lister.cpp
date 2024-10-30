@@ -23,26 +23,29 @@ public:
     TYtUrlLister() = default;
 
 public:
-    bool Accept(const THttpURL& url) const override {
-        auto rawScheme = url.GetField(NUri::TField::FieldScheme);
+    bool Accept(const TString& url) const override {
+        auto httpUrl = ParseURL(url);
+        auto rawScheme = httpUrl.GetField(NUri::TField::FieldScheme);
         return NUri::EqualNoCase(rawScheme, Scheme);
     }
 
-    TVector<TUrlListEntry> ListUrl(const THttpURL& url, const TString& token) const override {
+    TVector<TUrlListEntry> ListUrl(const TString& url, const TString& token) const override {
         InitYtApiOnce();
 
-        TCgiParameters params(url.GetField(NUri::TField::FieldQuery));
+        auto httpUrl = ParseURL(url);
+
+        TCgiParameters params(httpUrl.GetField(NUri::TField::FieldQuery));
 
         NYT::TCreateClientOptions createOpts;
         if (token) {
             createOpts.Token(token);
         }
 
-        auto host = url.PrintS(NUri::TField::FlagHostPort);
+        auto host = httpUrl.PrintS(NUri::TField::FlagHostPort);
 
         auto path = params.Has("path")
             ? params.Get("path")
-            : TString(TStringBuf(url.GetField(NUri::TField::FieldPath)).Skip(1));
+            : TString(TStringBuf(httpUrl.GetField(NUri::TField::FieldPath)).Skip(1));
 
         auto client = NYT::CreateClient(host, createOpts);
         NYT::IClientBasePtr tx = client;
@@ -67,7 +70,7 @@ public:
                 url.Set(NUri::TField::FieldQuery, TStringBuilder() << "transaction_id=" << txId);
             }
 
-            return url;
+            return url.PrintS();
         };
 
         NYT::TListOptions listOpts;

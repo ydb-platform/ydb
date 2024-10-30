@@ -110,6 +110,12 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             config.AddPartitions()->SetPartitionId(partitionId);
         }
     }
+
+    if (!config.AllPartitionsSize()) {
+        for (const auto& partition : config.GetPartitions()) {
+            config.AddAllPartitions()->CopyFrom(partition);
+        }
+    }
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

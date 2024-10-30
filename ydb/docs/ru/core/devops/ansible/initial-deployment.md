@@ -241,8 +241,6 @@ all:
 
 {% endcut %}
 
-В итоге, на каждом хосте задействуются следующие порты: `2135` - `2137`, `5432`, `8765` - `8767`, `19001` - `19003`. Порты могут быть переназначены через `systemd units` {{ ydb-short-name }}.
-
 {% cut "Подробное пошаговое описание установки {{ ydb-short-name }}" %}
 
 {% include [ansible-install-steps](./_includes/ansible-install-steps.md) %}

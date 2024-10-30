@@ -1448,7 +1448,7 @@ private:
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
         auto joinAlgo = "(Grace)";
         for (size_t i=0; i<join.Flags().Size(); i++) {
-            if (join.Flags().Item(i).StringValue() == "Broadcast") {
+            if (join.Flags().Item(i).Name().StringValue() == "Broadcast") {
                 joinAlgo = "(MapJoin)";
             }
         }
@@ -1470,7 +1470,7 @@ private:
     std::variant<ui32, TArgContext> Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
         auto joinAlgo = "(Grace)";
         for (size_t i=0; i<join.Flags().Size(); i++) {
-            if (join.Flags().Item(i).StringValue() == "Broadcast") {
+            if (join.Flags().Item(i).Name().StringValue() == "Broadcast") {
                 joinAlgo = "(MapJoin)";
             }
         }

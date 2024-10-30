@@ -242,7 +242,7 @@ TExprBase DqPeepholeRewriteMapJoinWithGraceCore(const TExprBase& node, TExprCont
     auto rightInput = ExpandJoinInput(*itemTypeRight, ctx.NewCallable(graceJoin.RightInput().Pos(), "ToFlow", {graceJoin.RightInput().Ptr()}), ctx, rightConvertedItems, pos);
 
     TExprNode::TListType flags;
-    if (auto maybeFlags = graceJoin.Flags().Maybe<TCoAtomList>()) {
+    if (auto maybeFlags = graceJoin.Flags().Maybe<TCoNameValueTupleList>()) {
         flags = maybeFlags.Cast().Ref().ChildrenList();
     }
 

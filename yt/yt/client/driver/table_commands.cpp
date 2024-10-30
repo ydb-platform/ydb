@@ -1565,7 +1565,7 @@ void TAlterTableReplicaCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<TYPath>>(
         "replica_path",
         [] (TThis* command) -> auto& {
             return command->Options.ReplicaPath;

@@ -186,9 +186,9 @@ public:
         return TabletId;
     }
 
-    void AddCleanupPortion(const TPortionInfo& info) {
-        AFL_VERIFY(info.HasRemoveSnapshot());
-        CleanupPortions[info.GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
+    void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
+        AFL_VERIFY(info->HasRemoveSnapshot());
+        CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         VersionedIndex.AddShardingInfo(shardingInfo);
@@ -213,7 +213,7 @@ private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id
-    std::map<TInstant, std::vector<TPortionInfo>> CleanupPortions;
+    std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;
     TColumnEngineStats Counters;
     std::shared_ptr<TVersionCounters> VersionCounters;
     ui64 LastPortion;

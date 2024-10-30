@@ -505,8 +505,8 @@ class SpecificationTests(unittest.TestCase):
         spec = self._makeOne()
         self.assertEqual(spec.__bases__, ())
         self.assertEqual(len(spec._implied), 2)
-        self.assertTrue(spec in spec._implied)
-        self.assertTrue(Interface in spec._implied)
+        self.assertIn(spec, spec._implied)
+        self.assertIn(Interface, spec._implied)
         self.assertEqual(len(spec.dependents), 0)
 
     def test_subscribe_first_time(self):
@@ -536,7 +536,7 @@ class SpecificationTests(unittest.TestCase):
         spec.unsubscribe(dep)
         self.assertEqual(spec.dependents[dep], 1)
         spec.unsubscribe(dep)
-        self.assertFalse(dep in spec.dependents)
+        self.assertNotIn(dep, spec.dependents)
 
     def test___setBases_subscribes_bases_and_notifies_dependents(self):
         from zope.interface.interface import Interface
@@ -568,7 +568,7 @@ class SpecificationTests(unittest.TestCase):
         spec._implied[IFoo] = ()
         spec.changed(spec)
         self.assertIsNone(spec._v_attrs)
-        self.assertFalse(IFoo in spec._implied)
+        self.assertNotIn(IFoo, spec._implied)
 
     def test_interfaces_skips_already_seen(self):
         from zope.interface.interface import Interface
@@ -600,7 +600,7 @@ class SpecificationTests(unittest.TestCase):
         spec = self._makeOne()
         foo = object()
         spec._v_attrs = {'foo': foo}
-        self.assertTrue(spec.get('foo') is foo)
+        self.assertIs(spec.get('foo'), foo)
 
     def test_get_hit_from_base_wo__v_attrs(self):
         from zope.interface.interface import Attribute
@@ -613,8 +613,8 @@ class SpecificationTests(unittest.TestCase):
             bar = Attribute('bar')
 
         spec = self._makeOne([IFoo, IBar])
-        self.assertTrue(spec.get('foo') is IFoo.get('foo'))
-        self.assertTrue(spec.get('bar') is IBar.get('bar'))
+        self.assertIs(spec.get('foo'), IFoo.get('foo'))
+        self.assertIs(spec.get('bar'), IBar.get('bar'))
 
     def test_multiple_inheritance_no_interfaces(self):
         # If we extend an object that implements interfaces,
@@ -998,7 +998,7 @@ class InterfaceClassTests(unittest.TestCase):
 
     def test___contains___miss(self):
         one = self._makeOne()
-        self.assertFalse('nonesuch' in one)
+        self.assertNotIn('nonesuch', one)
 
     def test___contains___hit(self):
         from zope.interface.interface import Attribute
@@ -1012,8 +1012,8 @@ class InterfaceClassTests(unittest.TestCase):
             'bar': fromFunction(_bar),
         }
         one = self._makeOne(attrs=ATTRS)
-        self.assertTrue('foo' in one)
-        self.assertTrue('bar' in one)
+        self.assertIn('foo', one)
+        self.assertIn('bar', one)
 
     def test_direct_miss(self):
         one = self._makeOne()
@@ -1102,7 +1102,7 @@ class InterfaceClassTests(unittest.TestCase):
         self.assertRaises(Invalid, iface.validateInvariants, obj, _errors)
         self.assertEqual(_fail_called_with, [((obj,), {})])
         self.assertEqual(len(_errors), 1)
-        self.assertTrue(isinstance(_errors[0], Invalid))
+        self.assertIsInstance(_errors[0], Invalid)
 
     def test_validateInvariants_fail_in_base_wo_errors_passed(self):
         from zope.interface.exceptions import Invalid
@@ -1151,7 +1151,7 @@ class InterfaceClassTests(unittest.TestCase):
         self.assertEqual(_passable_called_with, [((obj,), {})])
         self.assertEqual(_fail_called_with, [((obj,), {})])
         self.assertEqual(len(_errors), 1)
-        self.assertTrue(isinstance(_errors[0], Invalid))
+        self.assertIsInstance(_errors[0], Invalid)
 
     def test_validateInvariants_inherited_not_called_multiple_times(self):
         _passable_called_with = []
@@ -1191,29 +1191,29 @@ class InterfaceClassTests(unittest.TestCase):
     def test_comparison_with_None(self):
         # pylint:disable=singleton-comparison,misplaced-comparison-constant
         iface = self._makeOne()
-        self.assertTrue(iface < None)    # noqa E711
-        self.assertTrue(iface <= None)   # noqa E711
-        self.assertFalse(iface == None)  # noqa E711
-        self.assertTrue(iface != None)   # noqa E711
+        self.assertLess(iface, None)  # noqa E711
+        self.assertLessEqual(iface, None)  # noqa E711
+        self.assertNotEqual(iface, None)  # noqa E711
+        self.assertNotEqual(iface, None)  # noqa E711
         self.assertFalse(iface >= None)  # noqa E711
         self.assertFalse(iface > None)   # noqa E711
 
         self.assertFalse(None < iface)   # noqa E711
         self.assertFalse(None <= iface)  # noqa E711
-        self.assertFalse(None == iface)  # noqa E711
-        self.assertTrue(None != iface)   # noqa E711
-        self.assertTrue(None >= iface)   # noqa E711
-        self.assertTrue(None > iface)    # noqa E711
+        self.assertNotEqual(None, iface)  # noqa E711
+        self.assertNotEqual(None, iface)  # noqa E711
+        self.assertGreaterEqual(None, iface)  # noqa E711
+        self.assertGreater(None, iface)  # noqa E711
 
     def test_comparison_with_same_instance(self):
         # pylint:disable=comparison-with-itself
         iface = self._makeOne()
 
         self.assertFalse(iface < iface)
-        self.assertTrue(iface <= iface)
-        self.assertTrue(iface == iface)
-        self.assertFalse(iface != iface)
-        self.assertTrue(iface >= iface)
+        self.assertLessEqual(iface, iface)
+        self.assertEqual(iface, iface)
+        self.assertEqual(iface, iface)
+        self.assertGreaterEqual(iface, iface)
         self.assertFalse(iface > iface)
 
     def test_comparison_with_same_named_instance_in_other_module(self):
@@ -1221,18 +1221,18 @@ class InterfaceClassTests(unittest.TestCase):
         one = self._makeOne('IName', __module__='__tests__.tests.one')
         other = self._makeOne('IName', __module__='__tests__.tests.other')
 
-        self.assertTrue(one < other)
+        self.assertLess(one, other)
         self.assertFalse(other < one)
-        self.assertTrue(one <= other)
+        self.assertLessEqual(one, other)
         self.assertFalse(other <= one)
-        self.assertFalse(one == other)
-        self.assertFalse(other == one)
-        self.assertTrue(one != other)
-        self.assertTrue(other != one)
+        self.assertNotEqual(one, other)
+        self.assertNotEqual(other, one)
+        self.assertNotEqual(one, other)
+        self.assertNotEqual(other, one)
         self.assertFalse(one >= other)
-        self.assertTrue(other >= one)
+        self.assertGreaterEqual(other, one)
         self.assertFalse(one > other)
-        self.assertTrue(other > one)
+        self.assertGreater(other, one)
 
     def test_assignment_to__class__(self):
         # https://github.com/zopefoundation/zope.interface/issues/6
@@ -1299,7 +1299,7 @@ class InterfaceTests(unittest.TestCase):
         class I1(Interface):
             attr = Attribute("My attr")
 
-        self.assertTrue(I1['attr'].interface is I1)
+        self.assertIs(I1['attr'].interface, I1)
 
     def test_methods_link_to_interface(self):
         from zope.interface import Interface
@@ -1308,7 +1308,7 @@ class InterfaceTests(unittest.TestCase):
             def method(foo, bar, bingo):
                 "A method"
 
-        self.assertTrue(I1['method'].interface is I1)
+        self.assertIs(I1['method'].interface, I1)
 
     def test_classImplements_simple(self):
         from zope.interface import Interface
@@ -1339,10 +1339,10 @@ class InterfaceTests(unittest.TestCase):
         self.assertTrue(ICurrent.implementedBy(Current))
         self.assertFalse(IOther.implementedBy(Current))
         self.assertEqual(ICurrent, ICurrent)
-        self.assertTrue(ICurrent in implementedBy(Current))
-        self.assertFalse(IOther in implementedBy(Current))
-        self.assertTrue(ICurrent in providedBy(current))
-        self.assertFalse(IOther in providedBy(current))
+        self.assertIn(ICurrent, implementedBy(Current))
+        self.assertNotIn(IOther, implementedBy(Current))
+        self.assertIn(ICurrent, providedBy(current))
+        self.assertNotIn(IOther, providedBy(current))
 
     def test_classImplements_base_not_derived(self):
         from zope.interface import Interface
@@ -1366,10 +1366,10 @@ class InterfaceTests(unittest.TestCase):
 
         self.assertTrue(IBase.implementedBy(Current))
         self.assertFalse(IDerived.implementedBy(Current))
-        self.assertTrue(IBase in implementedBy(Current))
-        self.assertFalse(IDerived in implementedBy(Current))
-        self.assertTrue(IBase in providedBy(current))
-        self.assertFalse(IDerived in providedBy(current))
+        self.assertIn(IBase, implementedBy(Current))
+        self.assertNotIn(IDerived, implementedBy(Current))
+        self.assertIn(IBase, providedBy(current))
+        self.assertNotIn(IDerived, providedBy(current))
 
     def test_classImplements_base_and_derived(self):
         from zope.interface import Interface
@@ -1393,12 +1393,12 @@ class InterfaceTests(unittest.TestCase):
 
         self.assertTrue(IBase.implementedBy(Current))
         self.assertTrue(IDerived.implementedBy(Current))
-        self.assertFalse(IBase in implementedBy(Current))
-        self.assertTrue(IBase in implementedBy(Current).flattened())
-        self.assertTrue(IDerived in implementedBy(Current))
-        self.assertFalse(IBase in providedBy(current))
-        self.assertTrue(IBase in providedBy(current).flattened())
-        self.assertTrue(IDerived in providedBy(current))
+        self.assertNotIn(IBase, implementedBy(Current))
+        self.assertIn(IBase, implementedBy(Current).flattened())
+        self.assertIn(IDerived, implementedBy(Current))
+        self.assertNotIn(IBase, providedBy(current))
+        self.assertIn(IBase, providedBy(current).flattened())
+        self.assertIn(IDerived, providedBy(current))
 
     def test_classImplements_multiple(self):
         from zope.interface import Interface
@@ -1428,10 +1428,10 @@ class InterfaceTests(unittest.TestCase):
 
         self.assertTrue(ILeft.implementedBy(Ambi))
         self.assertTrue(IRight.implementedBy(Ambi))
-        self.assertTrue(ILeft in implementedBy(Ambi))
-        self.assertTrue(IRight in implementedBy(Ambi))
-        self.assertTrue(ILeft in providedBy(ambi))
-        self.assertTrue(IRight in providedBy(ambi))
+        self.assertIn(ILeft, implementedBy(Ambi))
+        self.assertIn(IRight, implementedBy(Ambi))
+        self.assertIn(ILeft, providedBy(ambi))
+        self.assertIn(IRight, providedBy(ambi))
 
     def test_classImplements_multiple_w_explict_implements(self):
         from zope.interface import Interface
@@ -1469,12 +1469,12 @@ class InterfaceTests(unittest.TestCase):
         self.assertTrue(ILeft.implementedBy(Mixed))
         self.assertFalse(IRight.implementedBy(Mixed))
         self.assertTrue(IOther.implementedBy(Mixed))
-        self.assertTrue(ILeft in implementedBy(Mixed))
-        self.assertFalse(IRight in implementedBy(Mixed))
-        self.assertTrue(IOther in implementedBy(Mixed))
-        self.assertTrue(ILeft in providedBy(mixed))
-        self.assertFalse(IRight in providedBy(mixed))
-        self.assertTrue(IOther in providedBy(mixed))
+        self.assertIn(ILeft, implementedBy(Mixed))
+        self.assertNotIn(IRight, implementedBy(Mixed))
+        self.assertIn(IOther, implementedBy(Mixed))
+        self.assertIn(ILeft, providedBy(mixed))
+        self.assertNotIn(IRight, providedBy(mixed))
+        self.assertIn(IOther, providedBy(mixed))
 
     def testInterfaceExtendsInterface(self):
         from zope.interface import Interface
@@ -1594,11 +1594,11 @@ class InterfaceTests(unittest.TestCase):
 
         self.assertEqual(len(name_values), 2)
         self.assertEqual(name_values[0][0], 'attr')
-        self.assertTrue(isinstance(name_values[0][1], Attribute))
+        self.assertIsInstance(name_values[0][1], Attribute)
         self.assertEqual(name_values[0][1].__name__, 'attr')
         self.assertEqual(name_values[0][1].__doc__, 'My attr')
         self.assertEqual(name_values[1][0], 'method')
-        self.assertTrue(isinstance(name_values[1][1], Method))
+        self.assertIsInstance(name_values[1][1], Method)
         self.assertEqual(name_values[1][1].__name__, 'method')
         self.assertEqual(name_values[1][1].__doc__, 'My method')
 
@@ -1626,15 +1626,15 @@ class InterfaceTests(unittest.TestCase):
 
         self.assertEqual(len(name_values), 3)
         self.assertEqual(name_values[0][0], 'attr2')
-        self.assertTrue(isinstance(name_values[0][1], Attribute))
+        self.assertIsInstance(name_values[0][1], Attribute)
         self.assertEqual(name_values[0][1].__name__, 'attr2')
         self.assertEqual(name_values[0][1].__doc__, 'My attr2')
         self.assertEqual(name_values[1][0], 'method')
-        self.assertTrue(isinstance(name_values[1][1], Method))
+        self.assertIsInstance(name_values[1][1], Method)
         self.assertEqual(name_values[1][1].__name__, 'method')
         self.assertEqual(name_values[1][1].__doc__, 'My method, overridden')
         self.assertEqual(name_values[2][0], 'method2')
-        self.assertTrue(isinstance(name_values[2][1], Method))
+        self.assertIsInstance(name_values[2][1], Method)
         self.assertEqual(name_values[2][1].__name__, 'method2')
         self.assertEqual(name_values[2][1].__doc__, 'My method2')
 
@@ -1642,19 +1642,19 @@ class InterfaceTests(unittest.TestCase):
 
         self.assertEqual(len(name_values), 4)
         self.assertEqual(name_values[0][0], 'attr')
-        self.assertTrue(isinstance(name_values[0][1], Attribute))
+        self.assertIsInstance(name_values[0][1], Attribute)
         self.assertEqual(name_values[0][1].__name__, 'attr')
         self.assertEqual(name_values[0][1].__doc__, 'My attr')
         self.assertEqual(name_values[1][0], 'attr2')
-        self.assertTrue(isinstance(name_values[1][1], Attribute))
+        self.assertIsInstance(name_values[1][1], Attribute)
         self.assertEqual(name_values[1][1].__name__, 'attr2')
         self.assertEqual(name_values[1][1].__doc__, 'My attr2')
         self.assertEqual(name_values[2][0], 'method')
-        self.assertTrue(isinstance(name_values[2][1], Method))
+        self.assertIsInstance(name_values[2][1], Method)
         self.assertEqual(name_values[2][1].__name__, 'method')
         self.assertEqual(name_values[2][1].__doc__, 'My method, overridden')
         self.assertEqual(name_values[3][0], 'method2')
-        self.assertTrue(isinstance(name_values[3][1], Method))
+        self.assertIsInstance(name_values[3][1], Method)
         self.assertEqual(name_values[3][1].__name__, 'method2')
         self.assertEqual(name_values[3][1].__doc__, 'My method2')
 
@@ -1678,12 +1678,12 @@ class InterfaceTests(unittest.TestCase):
                 "My method"
 
         a_desc = ISimple.getDescriptionFor('attr')
-        self.assertTrue(isinstance(a_desc, Attribute))
+        self.assertIsInstance(a_desc, Attribute)
         self.assertEqual(a_desc.__name__, 'attr')
         self.assertEqual(a_desc.__doc__, 'My attr')
 
         m_desc = ISimple.getDescriptionFor('method')
-        self.assertTrue(isinstance(m_desc, Method))
+        self.assertIsInstance(m_desc, Method)
         self.assertEqual(m_desc.__name__, 'method')
         self.assertEqual(m_desc.__doc__, 'My method')
 
@@ -1708,22 +1708,22 @@ class InterfaceTests(unittest.TestCase):
                 "My method2"
 
         a_desc = IDerived.getDescriptionFor('attr')
-        self.assertTrue(isinstance(a_desc, Attribute))
+        self.assertIsInstance(a_desc, Attribute)
         self.assertEqual(a_desc.__name__, 'attr')
         self.assertEqual(a_desc.__doc__, 'My attr')
 
         m_desc = IDerived.getDescriptionFor('method')
-        self.assertTrue(isinstance(m_desc, Method))
+        self.assertIsInstance(m_desc, Method)
         self.assertEqual(m_desc.__name__, 'method')
         self.assertEqual(m_desc.__doc__, 'My method, overridden')
 
         a2_desc = IDerived.getDescriptionFor('attr2')
-        self.assertTrue(isinstance(a2_desc, Attribute))
+        self.assertIsInstance(a2_desc, Attribute)
         self.assertEqual(a2_desc.__name__, 'attr2')
         self.assertEqual(a2_desc.__doc__, 'My attr2')
 
         m2_desc = IDerived.getDescriptionFor('method2')
-        self.assertTrue(isinstance(m2_desc, Method))
+        self.assertIsInstance(m2_desc, Method)
         self.assertEqual(m2_desc.__name__, 'method2')
         self.assertEqual(m2_desc.__doc__, 'My method2')
 
@@ -1747,12 +1747,12 @@ class InterfaceTests(unittest.TestCase):
                 "My method"
 
         a_desc = ISimple['attr']
-        self.assertTrue(isinstance(a_desc, Attribute))
+        self.assertIsInstance(a_desc, Attribute)
         self.assertEqual(a_desc.__name__, 'attr')
         self.assertEqual(a_desc.__doc__, 'My attr')
 
         m_desc = ISimple['method']
-        self.assertTrue(isinstance(m_desc, Method))
+        self.assertIsInstance(m_desc, Method)
         self.assertEqual(m_desc.__name__, 'method')
         self.assertEqual(m_desc.__doc__, 'My method')
 
@@ -1777,22 +1777,22 @@ class InterfaceTests(unittest.TestCase):
                 "My method2"
 
         a_desc = IDerived['attr']
-        self.assertTrue(isinstance(a_desc, Attribute))
+        self.assertIsInstance(a_desc, Attribute)
         self.assertEqual(a_desc.__name__, 'attr')
         self.assertEqual(a_desc.__doc__, 'My attr')
 
         m_desc = IDerived['method']
-        self.assertTrue(isinstance(m_desc, Method))
+        self.assertIsInstance(m_desc, Method)
         self.assertEqual(m_desc.__name__, 'method')
         self.assertEqual(m_desc.__doc__, 'My method, overridden')
 
         a2_desc = IDerived['attr2']
-        self.assertTrue(isinstance(a2_desc, Attribute))
+        self.assertIsInstance(a2_desc, Attribute)
         self.assertEqual(a2_desc.__name__, 'attr2')
         self.assertEqual(a2_desc.__doc__, 'My attr2')
 
         m2_desc = IDerived['method2']
-        self.assertTrue(isinstance(m2_desc, Method))
+        self.assertIsInstance(m2_desc, Method)
         self.assertEqual(m2_desc.__name__, 'method2')
         self.assertEqual(m2_desc.__doc__, 'My method2')
 
@@ -1802,7 +1802,7 @@ class InterfaceTests(unittest.TestCase):
         class IEmpty(Interface):
             pass
 
-        self.assertFalse('nonesuch' in IEmpty)
+        self.assertNotIn('nonesuch', IEmpty)
 
     def test___contains__simple(self):
         from zope.interface import Attribute
@@ -1814,8 +1814,8 @@ class InterfaceTests(unittest.TestCase):
             def method():
                 "My method"
 
-        self.assertTrue('attr' in ISimple)
-        self.assertTrue('method' in ISimple)
+        self.assertIn('attr', ISimple)
+        self.assertIn('method', ISimple)
 
     def test___contains__derived(self):
         from zope.interface import Attribute
@@ -1836,10 +1836,10 @@ class InterfaceTests(unittest.TestCase):
             def method2():
                 "My method2"
 
-        self.assertTrue('attr' in IDerived)
-        self.assertTrue('method' in IDerived)
-        self.assertTrue('attr2' in IDerived)
-        self.assertTrue('method2' in IDerived)
+        self.assertIn('attr', IDerived)
+        self.assertIn('method', IDerived)
+        self.assertIn('attr2', IDerived)
+        self.assertIn('method2', IDerived)
 
     def test___iter__empty(self):
         from zope.interface import Interface
@@ -2223,10 +2223,10 @@ class InterfaceTests(unittest.TestCase):
         class I3(I2):
             pass
 
-        self.assertTrue(I3.get('a') is I1.get('a'))
+        self.assertIs(I3.get('a'), I1.get('a'))
 
         I2.__bases__ = (Interface,)
-        self.assertTrue(I3.get('a') is None)
+        self.assertIsNone(I3.get('a'))
 
     def test___call___defers_to___conform___(self):
         from zope.interface import Interface
@@ -2254,7 +2254,7 @@ class InterfaceTests(unittest.TestCase):
             pass
 
         c = C()
-        self.assertTrue(IFoo(c) is c)
+        self.assertIs(IFoo(c), c)
 
     def test___call___miss_wo_alternate(self):
         from zope.interface import Interface
@@ -2278,7 +2278,7 @@ class InterfaceTests(unittest.TestCase):
             pass
 
         c = C()
-        self.assertTrue(IFoo(c, self) is self)
+        self.assertIs(IFoo(c, self), self)
 
     def test___call___w_adapter_hook(self):
         from zope.interface import Interface
@@ -2301,7 +2301,7 @@ class InterfaceTests(unittest.TestCase):
         old_adapter_hooks = adapter_hooks[:]
         adapter_hooks[:] = [_miss, _hit]
         try:
-            self.assertTrue(IFoo(c) is self)
+            self.assertIs(IFoo(c), self)
         finally:
             adapter_hooks[:] = old_adapter_hooks
 

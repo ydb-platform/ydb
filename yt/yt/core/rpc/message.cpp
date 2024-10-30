@@ -144,7 +144,7 @@ TSharedRefArray CreateResponseMessage(
     const std::vector<TSharedRef>& attachments)
 {
     NProto::TResponseHeader header;
-    header.set_codec(ToProto<int>(NCompression::ECodec::None));
+    header.set_codec(ToProto(NCompression::ECodec::None));
     TSharedRefArrayBuilder builder(
         2 + attachments.size(),
         GetAllocationSpaceForProtoWithHeader(header) + body.ByteSizeLong(),
@@ -237,10 +237,10 @@ void ToProto(
 {
     protoParameters->set_window_size(parameters.WindowSize);
     if (parameters.ReadTimeout) {
-        protoParameters->set_read_timeout(ToProto<i64>(*parameters.ReadTimeout));
+        protoParameters->set_read_timeout(ToProto(*parameters.ReadTimeout));
     }
     if (parameters.WriteTimeout) {
-        protoParameters->set_write_timeout(ToProto<i64>(*parameters.WriteTimeout));
+        protoParameters->set_write_timeout(ToProto(*parameters.WriteTimeout));
     }
 }
 

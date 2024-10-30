@@ -31,49 +31,42 @@ struct TTestInfo {
 };
 
 class TQueryResultInfo {
+    YDB_READONLY_PROTECT_DEF(std::vector<std::vector<NYdb::TValue>>, Result);
+    YDB_READONLY_PROTECT_DEF(TVector<NYdb::TColumn>, Columns);
 protected:
-    std::vector<std::vector<NYdb::TValue>> Result;
-    TVector<NYdb::TColumn> Columns;
-public:
-    std::map<TString, ui32> GetColumnsRemap() const {
-        std::map<TString, ui32> result;
-        ui32 idx = 0;
-        for (auto&& i : Columns) {
-            result.emplace(i.Name, idx++);
-        }
-        return result;
-    }
+    using TColumnsRemap = std::map<TString, ui32>;
+    TColumnsRemap GetColumnsRemap() const;
 
-    const std::vector<std::vector<NYdb::TValue>>& GetResult() const {
-        return Result;
-    }
-    const TVector<NYdb::TColumn>& GetColumns() const {
-        return Columns;
-    }
+public:
     bool IsExpected(std::string_view expected) const;
+    TString CalcHash() const;
 };
 
 class TQueryBenchmarkResult {
+public:
+    using TRawResults = TVector<NYdb::TResultSet>;
+
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
-    YDB_READONLY_DEF(TString, YSONResult);
+    YDB_READONLY_DEF(TRawResults, RawResults);
     YDB_READONLY_DEF(TQueryResultInfo, QueryResult);
     YDB_READONLY_DEF(TDuration, ServerTiming);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     TQueryBenchmarkResult() = default;
 public:
-    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult,
+    static TQueryBenchmarkResult Result(TRawResults&& rawResults, const TQueryResultInfo& queryResult,
         const TDuration& serverTiming, const TString& queryPlan, const TString& planAst)
     {
         TQueryBenchmarkResult result;
-        result.YSONResult = yson;
+        result.RawResults = std::move(rawResults);
         result.QueryResult = queryResult;
         result.ServerTiming = serverTiming;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
         return result;
     }
+
     static TQueryBenchmarkResult Error(const TString& error, const TString& queryPlan, const TString& planAst) {
         TQueryBenchmarkResult result;
         result.ErrorInfo = error;
@@ -81,6 +74,7 @@ public:
         result.PlanAst = planAst;
         return result;
     }
+
     operator bool() const {
         return !ErrorInfo;
     }

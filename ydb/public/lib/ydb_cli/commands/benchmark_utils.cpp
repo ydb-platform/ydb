@@ -9,6 +9,7 @@
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/csv/csv.h>
+#include <library/cpp/digest/md5/md5.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
@@ -160,9 +161,12 @@ private:
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     YDB_ACCESSOR_DEF(TString, DeadlineName);
-
+    TQueryBenchmarkResult::TRawResults RawResults;
 public:
     virtual ~IQueryResultScanner() = default;
+    TQueryBenchmarkResult::TRawResults&& ExtractRawResults() {
+        return std::move(RawResults);
+    }
     virtual void OnStart(const TVector<NYdb::TColumn>& columns) = 0;
     virtual void OnBeforeRow() = 0;
     virtual void OnAfterRow() = 0;
@@ -208,11 +212,11 @@ public:
             }
 
             if (streamPart.HasResultSet()) {
-                auto result = streamPart.ExtractResultSet();
-                auto columns = result.GetColumnsMeta();
+                RawResults.emplace_back(streamPart.ExtractResultSet());
+                auto columns = RawResults.back().GetColumnsMeta();
 
                 OnStart(columns);
-                NYdb::TResultSetParser parser(result);
+                NYdb::TResultSetParser parser(RawResults.back());
                 while (parser.TryNextRow()) {
                     OnBeforeRow();
                     for (ui32 i = 0; i < columns.size(); ++i) {
@@ -262,37 +266,6 @@ public:
     }
 };
 
-class TYSONResultScanner: public IQueryResultScanner {
-private:
-    TStringStream ResultString;
-    mutable std::unique_ptr<NYson::TYsonWriter> Writer;
-public:
-    TYSONResultScanner() {
-    }
-    TString GetResult() const {
-        Writer.reset();
-        return ResultString.Str();
-    }
-    virtual void OnStart(const TVector<NYdb::TColumn>& /*columns*/) override {
-        Writer = std::make_unique<NYson::TYsonWriter>(&ResultString, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
-        Writer->OnBeginList();
-    }
-    virtual void OnBeforeRow() override {
-        Writer->OnListItem();
-        Writer->OnBeginList();
-    }
-    virtual void OnAfterRow() override {
-        Writer->OnEndList();
-    }
-    virtual void OnRowItem(const NYdb::TColumn& /*c*/, const NYdb::TValue& value) override {
-        Writer->OnListItem();
-        FormatValueYson(value, *Writer);
-    }
-    virtual void OnFinish() override {
-        Writer->OnEndList();
-    }
-};
-
 class TCSVResultScanner: public IQueryResultScanner, public TQueryResultInfo {
 public:
     TCSVResultScanner() {
@@ -328,26 +301,24 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& cl
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     settings.Explain(explainOnly);
-    if (auto error = SetTimeoutSettings(settings, deadline)) {
+    if (const auto error = SetTimeoutSettings(settings, deadline)) {
         return *error;
     }
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
-    if (auto error = ResultByStatus(it, deadline.Name)) {
+    if (const auto error = ResultByStatus(it, deadline.Name)) {
         return *error;
     }
 
-    std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
     std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
     TQueryResultScannerComposite composite;
     composite.SetDeadlineName(deadline.Name);
-    composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(
             composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
-            scannerYson->GetResult(),
+            composite.ExtractRawResults(),
             *scannerCSV,
             composite.GetServerTiming(),
             composite.GetQueryPlan(),
@@ -379,18 +350,16 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
         return *error;
     }
 
-    std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
     std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
     TQueryResultScannerComposite composite;
     composite.SetDeadlineName(deadline.Name);
-    composite.AddScanner(scannerYson);
     composite.AddScanner(scannerCSV);
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(
             composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
     } else {
         return TQueryBenchmarkResult::Result(
-            scannerYson->GetResult(),
+            composite.ExtractRawResults(),
             *scannerCSV,
             composite.GetServerTiming(),
             composite.GetQueryPlan(),
@@ -629,6 +598,26 @@ bool CompareValue(const NYdb::TValue& v, TStringBuf vExpected) {
     }
 }
 
+TQueryResultInfo::TColumnsRemap TQueryResultInfo::GetColumnsRemap() const {
+    TColumnsRemap result;
+    ui32 idx = 0;
+    for (auto&& i : Columns) {
+        result.emplace(i.Name, idx++);
+    }
+    return result;
+}
+
+TString TQueryResultInfo::CalcHash() const {
+    MD5 hasher;
+    for (const auto& row: Result) {
+        for (const auto& v: row) {
+            hasher.Update(FormatValueYson(v, NYson::EYsonFormat::Binary));
+        }
+    }
+    char buf[25];
+    return hasher.End_b64(buf);
+}
+
 bool TQueryResultInfo::IsExpected(std::string_view expected) const {
     if (expected.empty()) {
         return true;
@@ -647,7 +636,7 @@ bool TQueryResultInfo::IsExpected(std::string_view expected) const {
 
     std::vector<ui32> columnIndexes;
     {
-        const std::map<TString, ui32> columns = GetColumnsRemap();
+        const auto columns = GetColumnsRemap();
         auto copy = expectedLines.front();
         NCsvFormat::CsvSplitter splitter(copy);
         while (true) {

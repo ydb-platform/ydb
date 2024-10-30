@@ -1,3 +1,4 @@
+#include "constructor_meta.h"
 #include "data_accessor.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
@@ -548,25 +549,31 @@ void TPortionDataAccessor::SerializeToProto(NKikimrColumnShardDataSharingProto::
     }
 }
 
-NKikimr::TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& /*proto*/) {
-/*
-    for (auto&& i : proto.GetRecords()) {
-        auto parse = TColumnRecord::BuildFromProto(i);
-        if (!parse) {
-            return parse;
-        }
-        PortionInfo->Records.emplace_back(std::move(parse.DetachResult()));
-    }
-    for (auto&& i : proto.GetIndexes()) {
-        auto parse = TIndexChunk::BuildFromProto(i);
-        if (!parse) {
-            return parse;
-        }
-        PortionInfo->Indexes.emplace_back(std::move(parse.DetachResult()));
-    }
-    PortionInfo->Precalculate();
-*/
+TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& /*proto*/) {
     return TConclusionStatus::Success();
+}
+
+TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
+    const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo) {
+    TPortionMetaConstructor constructor;
+    if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo)) {
+        return TConclusionStatus::Fail("cannot parse meta");
+    }
+    std::shared_ptr<TPortionInfo> resultPortion(new TPortionInfo(constructor.Build()));
+    {
+        auto parse = resultPortion->DeserializeFromProto(proto);
+        if (!parse) {
+            return parse;
+        }
+    }
+    {
+        TPortionDataAccessor result(resultPortion);
+        auto parse = result.DeserializeFromProto(proto);
+        if (!parse) {
+            return parse;
+        }
+        return result;
+    }
 }
 
 TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAccessor::TPreparedColumn::AssembleAccessor() const {

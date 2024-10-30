@@ -15,7 +15,7 @@ class TCompositeReadBlobs;
 
 class TPortionDataAccessor {
 private:
-    const TPortionInfo* PortionInfo;
+    TPortionInfo::TConstPtr PortionInfo;
 
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
@@ -65,13 +65,12 @@ public:
         }
     }
 
-    TPortionDataAccessor(const TPortionInfo& portionInfo)
-        : PortionInfo(&portionInfo) {
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
+        : PortionInfo(portionInfo) {
     }
 
-    TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
-        : PortionInfo(portionInfo.get()) {
-    }
+    static TConclusion<TPortionDataAccessor> BuildFromProto(
+        const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
 
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
@@ -83,6 +82,18 @@ public:
 
     const TPortionInfo& GetPortionInfo() const {
         return *PortionInfo;
+    }
+
+    TPortionInfo& MutablePortionInfo() const {
+        return const_cast<TPortionInfo&>(*PortionInfo);
+    }
+
+    std::shared_ptr<TPortionInfo> MutablePortionInfoPtr() const {
+        return std::const_pointer_cast<TPortionInfo>(PortionInfo);
+    }
+
+    const TPortionInfo::TConstPtr& GetPortionInfoPtr() const {
+        return PortionInfo;
     }
 
     void RemoveFromDatabase(IDbWrapper& db) const;

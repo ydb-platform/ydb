@@ -197,6 +197,12 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             and (test.get('pass_count') + test.get('fail_count')) > 3
             and test.get('fail_count') > 2
         )
+        ## тесты может запускаться 1 раз в день. если за последние 7 дней набирается трешход то мьютим
+        ## падения сегодня более весомы ??  
+        ## за 7 дней смотреть?
+        #----
+        ## Mute Flaky редко запускаемых тестов
+        ##   Разобраться почему 90 % флакающих тестов имеют только 1 падение и в статусе Flaky только 2 дня      
         flaky_tests_debug = sorted(flaky_tests_debug)
         add_lines_to_file(os.path.join(output_path, 'flaky_debug.txt'), flaky_tests_debug)
 
@@ -281,6 +287,7 @@ def read_tests_from_file(file_path):
 
 
 def create_mute_issues(all_tests, file_path):
+    base_date = datetime.datetime(1970, 1, 1)
     tests_from_file = read_tests_from_file(file_path)
     muted_tests_in_issues = get_muted_tests_from_issues()
     prepared_tests_by_suite = {}
@@ -303,6 +310,7 @@ def create_mute_issues(all_tests, file_path):
                             'full_name': test.get('full_name'),
                             'success_rate': test.get('success_rate'),
                             'days_in_state': test.get('days_in_state'),
+                            'date_window': (base_date + datetime.timedelta(days=test.get('date_window'))).date() ,
                             'owner': test.get('owner'),
                             'state': test.get('state'),
                             'summary': test.get('summary'),
@@ -378,7 +386,7 @@ if __name__ == "__main__":
         help='create issues by muted_ya like files',
     )
     create_issues_parser.add_argument(
-        '--file_path', default='/home/kirrysin/fork/mute_update/flaky.txt', required=False, help='file path'
+        '--file_path', default=f'{repo_path}/mute_update/flaky.txt', required=False, help='file path'
     )
 
     args = parser.parse_args()

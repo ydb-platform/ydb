@@ -43,9 +43,12 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
     return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, insertTable, loadTime);
 }
 
-void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
     NIceDb::TNiceDb db(Database);
     auto rowProto = row.GetMeta().SerializeToProto();
+    if (row.GetChunkIdx() == 0 && row.GetColumnId() == firstPKColumnId) {
+        *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
+    }
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto removeSnapshot = portion.GetRemoveSnapshotOptional();
     db.Table<IndexColumns>().Key(0, 0, row.ColumnId,

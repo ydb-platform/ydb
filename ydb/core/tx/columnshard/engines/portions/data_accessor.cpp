@@ -497,12 +497,12 @@ ui64 TPortionDataAccessor::GetMinMemoryForReadColumns(const std::optional<std::s
     return maxRawBytes;
 }
 
-void TPortionDataAccessor::SaveToDatabase(IDbWrapper& db, const bool saveOnlyMeta) const {
+void TPortionDataAccessor::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const {
     FullValidation();
     db.WritePortion(*PortionInfo);
     if (!saveOnlyMeta) {
         for (auto& record : PortionInfo->Records) {
-            db.WriteColumn(*PortionInfo, record);
+            db.WriteColumn(*PortionInfo, record, firstPKColumnId);
         }
         for (auto& record : PortionInfo->Indexes) {
             db.WriteIndex(*PortionInfo, record);

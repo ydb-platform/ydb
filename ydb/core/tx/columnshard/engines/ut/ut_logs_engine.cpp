@@ -106,8 +106,12 @@ public:
         return true;
     }
 
-    void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row) override {
+    void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override {
         auto rowProto = row.GetMeta().SerializeToProto();
+        if (firstPKColumnId == row.GetColumnId() && row.GetChunkIdx() == 0) {
+            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
+        }
+
         auto& data = Indices[0].Columns[portion.GetPathId()];
         NOlap::TColumnChunkLoadContext loadContext(
             portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), portion.RestoreBlobRange(row.BlobRange), rowProto);

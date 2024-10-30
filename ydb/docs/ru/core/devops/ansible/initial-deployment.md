@@ -233,9 +233,9 @@ all:
   || Название динамического узла | Порт | Описание ||
   || `ydbd-database-a` | 2136  | Порты для [основного API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md), основанного на защищённом [gRPC](https://grpc.io/) соединении поверх [TLS](../../reference/configuration/tls.md). ||
   || `ydbd-database-b` | 2137  | ^ ||
-  || `ydbd-database-a` | 19002 | Порт для [интерконнекта акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect). ||
+  || `ydbd-database-a` | 19002 | Порты для [интерконнекта акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect). ||
   || `ydbd-database-b` | 19003 | ^ ||
-  || `ydbd-database-a` | 8766  | HTTPS-порт для [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд. ||
+  || `ydbd-database-a` | 8766  | HTTPS-порты для [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд. ||
   || `ydbd-database-b` | 8767  | ^ ||
   |#
 

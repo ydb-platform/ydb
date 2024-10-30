@@ -179,7 +179,7 @@ inline size_t EstimateSize(TCellsRef cells) {
             size += AlignUp(cellSize);
         }
     }
-    
+
     return size;
 }
 
@@ -558,6 +558,9 @@ public:
     explicit operator bool() const {
         return !Cells.empty();
     }
+
+    // read headers, assuming the buf is correct and append additional cells at the end
+    static bool UnsafeAppendCells(TConstArrayRef<TCell> cells, TString& serializedCellVec);
 
     static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 

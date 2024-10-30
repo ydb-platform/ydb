@@ -12,6 +12,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/counters_replication.pb.h>
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -91,6 +92,7 @@ private:
     void Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
 
     void CreateSession(ui32 nodeId, const TActorContext& ctx);
@@ -167,6 +169,8 @@ private:
 
 private:
     const TTabletLogPrefix LogPrefix;
+    THolder<TTabletCountersBase> TabletCountersPtr;
+    TTabletCountersBase* TabletCounters;
 
     TSysParams SysParams;
     THashMap<ui64, TReplication::TPtr> Replications;

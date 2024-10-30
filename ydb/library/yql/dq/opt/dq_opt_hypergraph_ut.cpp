@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
     template<typename TLhsArg, typename TRhsArg>
     std::shared_ptr<IBaseOptimizerNode> Join(const TLhsArg& lhsArg, const TRhsArg& rhsArg, TString on="", EJoinKind kind = EJoinKind::InnerJoin) {
         if constexpr (std::is_convertible_v<TLhsArg, std::string> && std::is_convertible_v<TRhsArg, std::string>) {
-            if (on.Empty()) {
+            if (on.empty()) {
                 on = Sprintf("%s=%s", lhsArg, rhsArg);
             }
         }

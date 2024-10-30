@@ -32,7 +32,6 @@ def test_join(
     runner = configure_runner(runner_type=runner_type, settings=settings)
     scenario.join(
         test_name=request.node.name,
-        clickhouse_client=clients.ClickHouse,
         postgresql_client=clients.PostgreSQL,
         runner=runner,
         settings=settings,

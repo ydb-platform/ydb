@@ -25,5 +25,7 @@ $z0_0100001_12 = 0.0100001;
 $z0_06_12 = 0.06;
 $z0_2_12 = 0.2;
 
+$scale_factor = 1;
+
 $round = ($x, $y) -> { return Math::Round($x, $y); };
 $upscale = ($x) -> { return $x; };

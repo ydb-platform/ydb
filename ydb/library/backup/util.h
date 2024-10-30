@@ -18,8 +18,8 @@
 namespace NYdb {
 
 namespace NBackup {
-    void SetLog(std::shared_ptr<::TLog>&& log);
-    std::shared_ptr<::TLog>& GetLog();
+    void SetLog(const std::shared_ptr<::TLog>& log);
+    const std::shared_ptr<::TLog>& GetLog();
 }
 
 // Retrive path relative to database root from absolute

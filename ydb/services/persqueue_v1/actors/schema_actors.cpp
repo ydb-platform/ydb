@@ -1587,7 +1587,18 @@ void TAlterTopicActorInternal::HandleCacheNavigateResponse(TEvTxProxySchemeCache
     }
     TUpdateSchemeBase::HandleCacheNavigateResponse(ev);
     auto& schemeTx = Response->Response.ModifyScheme;
-    FillModifyScheme(schemeTx, ActorContext(), GetRequest().WorkingDir, GetRequest().Name);
+    std::pair <TString, TString> pathPair;
+    try {
+        pathPair = NKikimr::NGRpcService::SplitPath(GetTopicPath());
+    } catch (const std::exception &ex) {
+        Response->Response.Issues.AddIssue(NYql::ExceptionToIssue(ex));
+        RespondWithCode(Ydb::StatusIds::BAD_REQUEST);
+        return;
+    }
+
+    const auto& workingDir = pathPair.first;
+    const auto& name = pathPair.second;
+    FillModifyScheme(schemeTx, ActorContext(), workingDir, name);
 }
 
 void TAlterTopicActorInternal::ModifyPersqueueConfig(
@@ -1601,7 +1612,7 @@ void TAlterTopicActorInternal::ModifyPersqueueConfig(
     TString error;
     Y_UNUSED(selfInfo);
 
-    auto status = FillProposeRequestImpl(GetRequest().Request, groupConfig, appData, error, false);
+    auto status = FillProposeRequestImpl(GetRequest().Request, groupConfig, appData, error, GetCdcStreamName().Defined());
     if (!error.empty()) {
         Response->Response.Issues.AddIssue(error);
     }

@@ -104,7 +104,7 @@ private:
 
 class TResultSetPrinter {
 public:
-    TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; });
+    TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; }, IOutputStream& output = Cout, size_t maxWidth = 0);
     ~TResultSetPrinter();
 
     void Print(const TResultSet& resultSet);
@@ -126,6 +126,8 @@ private:
     EDataFormat Format;
     std::function<bool()> IsInterrupted;
     std::unique_ptr<TResultSetParquetPrinter> ParquetPrinter;
+    IOutputStream& Output;
+    size_t MaxWidth;
 };
 
 class TQueryPlanPrinter {

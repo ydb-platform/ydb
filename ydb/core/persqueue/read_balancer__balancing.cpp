@@ -260,7 +260,12 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
                         GetPrefix() << " has been released for merge but target family is not exists.");
                 return true;
             }
-            Consumer.MergeFamilies(it->second.get(), this, ctx);
+            auto* targetFamily = it->second.get();
+            if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
+                Consumer.MergeFamilies(targetFamily, this, ctx);
+            } else {
+                WantedPartitions.clear();
+            }
 
             return true;
     }
@@ -477,6 +482,23 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
     return session->Pipe != LastPipe;
 }
 
+template<typename TCollection>
+bool TPartitionFamily::CanAttach(const TCollection& partitionsIds) {
+    if (partitionsIds.empty()) {
+        return true;
+    }
+
+    if (Consumer.WithCommonSessions) {
+        return true;
+    }
+
+    return AnyOf(SpecialSessions, [&](const auto& s) {
+        return s.second->AllPartitionsReadable(partitionsIds);
+    });
+}
+
+template bool TPartitionFamily::CanAttach(const std::unordered_set<ui32>& partitionsIds);
+template bool TPartitionFamily::CanAttach(const std::vector<ui32>& partitionsIds);
 
 void TPartitionFamily::ClassifyPartitions() {
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(Partitions);
@@ -586,6 +608,7 @@ TConsumer::TConsumer(TBalancer& balancer, const TString& consumerName)
     : Balancer(balancer)
     , ConsumerName(consumerName)
     , NextFamilyId(0)
+    , WithCommonSessions(false)
     , BalanceScheduled(false)
 {
 }
@@ -881,6 +904,7 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
         }
     } else {
         OrderedSessions.reset();
+        WithCommonSessions = true;
     }
 }
 
@@ -901,6 +925,9 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
     Sessions.erase(session->Pipe);
     if (!session->WithGroups()) {
         OrderedSessions.reset();
+        WithCommonSessions = AnyOf(Sessions, [](const auto s) {
+            return !s.second->WithGroups();
+        });
     }
 
     for (auto* family : Snapshot(Families)) {
@@ -920,6 +947,11 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
                     }
                 }
             }
+
+            if (!family->CanAttach(family->WantedPartitions)) {
+                targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            }
+
             if (family->Reset(targetStatus, ctx)) {
                 UnreadableFamilies[family->Id] = family;
                 FamiliesRequireBalancing.erase(family->Id);
@@ -1020,34 +1052,41 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
     });
 
     if (partition.NeedReleaseChildren()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                GetPrefix() << "Attache partitions [" << JoinRange(", ", newPartitions.begin(), newPartitions.end()) << "] to " << family->DebugStr());
         for (auto id : newPartitions) {
-            auto* node = GetPartitionGraph().GetPartition(id);
-            bool allParentsMerged = true;
-            if (node->Parents.size() > 1) {
-                // The partition was obtained as a result of the merge.
-                for (auto* c : node->Parents) {
-                    auto* other = FindFamily(c->Id);
-                    if (!other) {
-                        allParentsMerged = false;
-                        continue;
-                    }
+            if (family->CanAttach(std::vector{id})) {
+                auto* node = GetPartitionGraph().GetPartition(id);
+                bool allParentsMerged = true;
+                if (node->Parents.size() > 1) {
+                    // The partition was obtained as a result of the merge.
+                    for (auto* c : node->Parents) {
+                        auto* other = FindFamily(c->Id);
+                        if (!other) {
+                            allParentsMerged = false;
+                            continue;
+                        }
 
-                    if (other != family) {
-                        auto [f, v] = MergeFamilies(family, other, ctx);
-                        allParentsMerged = v;
+                        if (other != family) {
+                            auto [f, v] = MergeFamilies(family, other, ctx);
+                            allParentsMerged = v;
+                            family = f;
+                        }
+                    }
+                }
+
+                if (allParentsMerged) {
+                    auto* other = FindFamily(id);
+                    if (other && other != family) {
+                        auto [f, _] = MergeFamilies(family, other, ctx);
                         family = f;
+                    } else {
+                        family->AttachePartitions({id}, ctx);
                     }
                 }
-            }
-
-            if (allParentsMerged) {
-                auto* other = FindFamily(id);
-                if (other && other != family) {
-                    auto [f, _] = MergeFamilies(family, other, ctx);
-                    family = f;
-                } else {
-                    family->AttachePartitions({id}, ctx);
-                }
+            } else {
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
+                        GetPrefix() << "Can't attache partition " << id << " to " << family->DebugStr());
             }
         }
     } else {

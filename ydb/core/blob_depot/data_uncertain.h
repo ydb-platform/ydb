@@ -7,7 +7,18 @@
 
 namespace NKikimr::NBlobDepot {
 
+    struct TUncertaintyResolverScope {
+        enum class EKeyBlobState {
+            INITIAL, // just created blob, no activity
+            QUERY_IN_FLIGHT, // blob should have BlobContext referring to this key too
+            CONFIRMED, // we got OK for this blob
+            WASNT_WRITTEN, // we got NODATA for this blob, this key needs to be deleted if possible
+            ERROR, // we got ERROR or any other reply for this blob
+        };
+    };
+
     class TBlobDepot::TData::TUncertaintyResolver {
+        using EKeyBlobState = TUncertaintyResolverScope::EKeyBlobState;
         TBlobDepot* const Self;
 
         struct TPendingUncertainKey {};
@@ -19,14 +30,6 @@ namespace NKikimr::NBlobDepot {
             TResolveOnHold(TResolveResultAccumulator&& result)
                 : Result(std::move(result))
             {}
-        };
-
-        enum class EKeyBlobState {
-            INITIAL, // just created blob, no activity
-            QUERY_IN_FLIGHT, // blob should have BlobContext referring to this key too
-            CONFIRMED, // we got OK for this blob
-            WASNT_WRITTEN, // we got NODATA for this blob, this key needs to be deleted if possible
-            ERROR, // we got ERROR or any other reply for this blob
         };
 
         struct TKeyContext {
@@ -51,16 +54,6 @@ namespace NKikimr::NBlobDepot {
         ui64 NumKeysResolved = 0;
         ui64 NumKeysUnresolved = 0;
         ui64 NumKeysDropped = 0;
-
-        friend void Out<EKeyBlobState>(IOutputStream& s, EKeyBlobState value) {
-            switch (value) {
-                case EKeyBlobState::INITIAL:            s << "INITIAL";             break;
-                case EKeyBlobState::QUERY_IN_FLIGHT:    s << "QUERY_IN_FLIGHT";     break;
-                case EKeyBlobState::CONFIRMED:          s << "CONFIRMED";           break;
-                case EKeyBlobState::WASNT_WRITTEN:      s << "WASNT_WRITTEN";       break;
-                case EKeyBlobState::ERROR:              s << "ERROR";               break;
-            }
-        }
 
     public:
         TUncertaintyResolver(TBlobDepot *self);

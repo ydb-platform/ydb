@@ -5,7 +5,6 @@ import six
 from hamcrest import all_of, has_property, has_properties
 from hamcrest.core.base_matcher import BaseMatcher
 
-import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
 from ydb.tests.library.common.msgbus_types import EReplyStatus, TStorageStatusFlags
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.matchers.collection import contains
@@ -198,21 +197,6 @@ class KeyValueResponseProtobufMatcher(BaseMatcher):
         )
         return self
 
-    def add_storage_channel_status_result(
-            self,
-            flags=TStorageStatusFlags.StatusIsValid,
-            storage_channel_type=msgbus_kv.TKeyValueRequest.MAIN,
-            status=EReplyStatus.OK
-    ):
-        self.__storage_channel_result_matchers.append(
-            has_properties(
-                Status=status,
-                StorageChannel=storage_channel_type,
-                StatusFlags=int(flags)
-            )
-        )
-        return self
-
 
 def is_response_with_status(status):
     return ProtobufWithStatusMatcher(status)
@@ -234,12 +218,3 @@ def is_response_with_status_and_fields(status, **kwargs):
         is_response_with_status(status),
         has_properties(**kwargs)
     )
-
-
-def is_valid_read_range_response(key_value_pairs,
-                                 main_status=MessageBusStatus.MSTATUS_OK, result_status=EReplyStatus.OK):
-    return KeyValueResponseProtobufMatcher(main_status).read_range(key_value_pairs, status=result_status)
-
-
-def is_valid_keyvalue_protobuf_response():
-    return KeyValueResponseProtobufMatcher()

@@ -4,8 +4,6 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/optimizer/optimizer.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -13,18 +11,15 @@ namespace NKikimr::NOlap {
 
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
-    auto it = Portions.find(info.GetPortion());
+    auto it = Portions.find(info.GetPortionId());
     AFL_VERIFY(info.GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.DebugString())("path_id", GetPathId());
 
     AFL_VERIFY(info.ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info.DebugString());
-    for (auto& record : info.Records) {
-        AFL_VERIFY(record.Valid())("event", "incorrect_record")("record", record.DebugString())("portion", info.DebugString());
-    }
 
     if (it == Portions.end()) {
         OnBeforeChangePortion(nullptr);
         auto portionNew = std::make_shared<TPortionInfo>(info);
-        it = Portions.emplace(portionNew->GetPortion(), portionNew).first;
+        it = Portions.emplace(portionNew->GetPortionId(), portionNew).first;
     } else {
         OnBeforeChangePortion(it->second);
         it->second = std::make_shared<TPortionInfo>(info);
@@ -93,22 +88,18 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 
 void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
-    Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
     Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
-    Y_ABORT_UNLESS(Activity.erase(EActivity::GeneralCompaction));
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
     Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionStarted() {
     AllowInsertionFlag = false;
-    Y_ABORT_UNLESS(Activity.empty());
-    Activity.emplace(EActivity::GeneralCompaction);
 }
 
 void TGranuleMeta::RebuildAdditiveMetrics() const {
@@ -191,21 +182,20 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
-    (static_cast<TColumnEngineForLogs&>(engine)).UpsertPortion(*it->second);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*it->second);
     InsertedPortions.erase(it);
 }
 
 void TGranuleMeta::CommitImmediateOnExecute(
-    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const std::shared_ptr<TPortionInfo>& portion) const {
-    AFL_VERIFY(portion);
-    AFL_VERIFY(!InsertedPortions.contains(portion->GetInsertWriteIdVerified()));
-    portion->SetCommitSnapshot(snapshot);
+    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
+    AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
+    portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
-    portion->SaveToDatabase(wrapper, 0, false);
+    portion.SaveToDatabase(wrapper, 0, false);
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {
-    (static_cast<TColumnEngineForLogs&>(engine)).UpsertPortion(*portion);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*portion);
 }
 
 }   // namespace NKikimr::NOlap

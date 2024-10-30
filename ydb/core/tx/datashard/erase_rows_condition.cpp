@@ -169,8 +169,8 @@ class TExpirationCondition: public IEraseRowsCondition {
                 return value <= *wallClockSerialized;
             case NScheme::NTypeIds::Pg: {
                 int result = NPg::PgNativeBinaryCompare(
-                    value.Data(), value.Size(),
-                    wallClockSerialized->Data(), wallClockSerialized->Size(),
+                    value.data(), value.size(),
+                    wallClockSerialized->data(), wallClockSerialized->size(),
                     Type.GetPgTypeDesc());
                 return result <= 0;
             }

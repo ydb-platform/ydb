@@ -39,6 +39,8 @@
 
 // postgis
 "postgis_lib_version",
+"st_interiorringn",
+"st_collectionhomogenize",
 
 //dbeaver
 "pg_get_expr",

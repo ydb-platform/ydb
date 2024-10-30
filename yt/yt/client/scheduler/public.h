@@ -142,6 +142,7 @@ DEFINE_ENUM(EAbortReason,
     ((RootVolumePreparationFailed)     ( 54))
     ((InterruptionFailed)              ( 55))
     ((OperationIncarnationChanged)     ( 56))
+    ((AddressResolveFailed)            ( 57))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

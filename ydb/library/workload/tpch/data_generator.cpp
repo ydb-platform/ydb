@@ -46,23 +46,19 @@ TBulkDataGeneratorList TTpchWorkloadDataInitializerGenerator::DoGetBulkInitialDa
 }
 
 
-ui64 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum, bool useState) {
+ui64 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum) {
     if (tableNum == NONE) {
         return 0;
     }
-    ui64 position = 0;
-    if (useState && owner.StateProcessor && owner.StateProcessor->GetState().contains(tdefs[tableNum].name)) {
-        position = owner.StateProcessor->GetState().at(tdefs[tableNum].name).Position;
-    }
     if (tableNum >= NATION) {
-        return owner.GetProcessIndex() ? 0 : (tdefs[tableNum].base - position);
+        return owner.GetProcessIndex() ? 0 : tdefs[tableNum].base;
     }
     ui64 rowCount = tdefs[tableNum].base * owner.GetScale();
     ui64 extraRows = 0;
     if (owner.GetProcessIndex() + 1 >= owner.GetProcessCount()) {
         extraRows = rowCount % owner.GetProcessCount();
     }
-    return rowCount / owner.GetProcessCount() + extraRows - position;
+    return rowCount / owner.GetProcessCount() + extraRows;
 }
 
 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TContext::TContext(const TBulkDataGenerator& owner, int tableNum, TGeneratorStateProcessor* state)
@@ -112,15 +108,14 @@ TString TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::GetFullTableN
 }
 
 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum)
-    : IBulkDataGenerator(tdefs[tableNum].name, CalcCountToGenerate(owner, tableNum, true))
+    : IBulkDataGenerator(tdefs[tableNum].name, CalcCountToGenerate(owner, tableNum))
     , TableNum(tableNum)
     , Owner(owner)
-    , TableSize(CalcCountToGenerate(owner, tableNum, false))
 {}
 
 TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::GenerateDataPortion() {
     TDataPortions result;
-    if (TableSize == 0) {
+    if (GetSize() == 0) {
         return result;
     }
     TContexts ctxs;
@@ -138,11 +133,16 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWo
         if (!!Owner.StateProcessor) {
             if (const auto* state = MapFindPtr(Owner.StateProcessor->GetState(), GetName())) {
                 Generated = state->Position;
+                result.push_back(MakeIntrusive<TDataPortion>(
+                    GetFullTableName(tdefs[TableNum].name),
+                    TDataPortion::TSkip(),
+                    Generated
+                ));
                 GenSeed(TableNum, Generated);
             }
         }
     }
-    const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
+    const auto count = GetSize() > Generated ? std::min(ui64(GetSize() - Generated), Owner.Params.BulkSize) : 0;
     if (!count) {
         return result;
     }

@@ -2,6 +2,7 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
 namespace NKikimr {
@@ -523,8 +524,9 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         if (table.Columns.contains(colId)) {
             const TUserTable::TUserColumn &column = table.Columns.at(colId);
             Y_ABORT_UNLESS(column.Name == col.GetName());
-            // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() == col.GetTypeId());
+            const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), &col.GetTypeInfo());
+            Y_ABORT_UNLESS(column.Type == typeInfoMod.TypeInfo);
+            Y_ABORT_UNLESS(column.TypeMod == typeInfoMod.TypeMod);
             Y_ABORT_UNLESS(col.HasFamily());
         }
     }

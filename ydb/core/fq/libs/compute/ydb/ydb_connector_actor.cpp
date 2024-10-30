@@ -55,7 +55,7 @@ public:
         settings.TraceId(event.TraceId);
 
         if (WorkloadManager.GetEnable()) {
-            settings.PoolId(WorkloadManager.GetExecutionResourcePool());
+            settings.ResourcePool(WorkloadManager.GetExecutionResourcePool());
         }
 
         NYdb::TParamsBuilder paramsBuilder;

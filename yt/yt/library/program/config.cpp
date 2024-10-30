@@ -93,7 +93,7 @@ void TStockpileDynamicConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.BaseClassParameter("thread_count", &TThis::ThreadCount)
         .Optional()
-        .GreaterThan(0);
+        .GreaterThanOrEqual(0);
     registrar.BaseClassParameter("strategy", &TThis::Strategy)
         .Optional();
     registrar.BaseClassParameter("period", &TThis::Period)

@@ -23,7 +23,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, snapshot));
         LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
-        NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+        NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         changes->WriteIndexOnExecute(Self, context);
 
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
@@ -48,9 +48,10 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 }
 
 void TTxWriteIndex::Complete(const TActorContext& ctx) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID()));
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
+        "task_id", changes->GetTaskIdentifier()));
     TMemoryProfileGuard mpg("TTxWriteIndex::Complete::" + changes->TypeString());
     ACFL_DEBUG("event", "TTxWriteIndex::Complete")("change_type", changes->TypeString())("details", changes->DebugString());
 
@@ -58,7 +59,8 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     const ui64 bytesWritten = changes->GetBlobsAction().GetWritingTotalSize();
 
     if (!Ev->Get()->IndexChanges->IsAborted()) {
-        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+        NOlap::TWriteIndexCompleteContext context(
+            ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
@@ -80,13 +82,12 @@ TTxWriteIndex::TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr
     : TBase(self)
     , Ev(ev)
     , TabletTxNo(++Self->TabletTxCounter)
-{
+    , CurrentSnapshot(Self->GetCurrentSnapshotForInternalModification()) {
     AFL_VERIFY(Ev && Ev->Get()->IndexChanges);
 
-    NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
     auto changes = Ev->Get()->IndexChanges;
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
-        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, snapshot));
+        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnTxCreate(changes, CurrentSnapshot));
     }
 }
 

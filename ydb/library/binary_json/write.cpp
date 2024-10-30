@@ -571,25 +571,25 @@ template <typename TOnDemandValue>
         }
         case simdjson::ondemand::json_type::number: {
             switch (value.get_number_type()) {
-                case simdjson::fallback::number_type::floating_point_number: {
+                case simdjson::builtin::number_type::floating_point_number: {
                     double v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
                     callbacks.OnDouble(v);
                     break;
                 }
-                case simdjson::fallback::number_type::signed_integer: {
-                    i64 v;
+                case simdjson::builtin::number_type::signed_integer: {
+                    int64_t v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
                     callbacks.OnInteger(v);
                     break;
                 }
-                case simdjson::fallback::number_type::unsigned_integer: {
-                    ui64 v;
+                case simdjson::builtin::number_type::unsigned_integer: {
+                    uint64_t v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
                     callbacks.OnUInteger(v);
                     break;
                 }
-                case simdjson::fallback::number_type::big_integer:
+                case simdjson::builtin::number_type::big_integer:
                     double v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
                     callbacks.OnDouble(v);
@@ -600,7 +600,9 @@ template <typename TOnDemandValue>
         case simdjson::ondemand::json_type::null: {
             auto is_null = value.is_null();
             RETURN_IF_NOT_SUCCESS(is_null.error());
-            Y_ABORT_UNLESS(is_null.value_unsafe());
+            if (Y_UNLIKELY(!is_null.value_unsafe())) {
+                return simdjson::error_code::N_ATOM_ERROR;
+            }
             callbacks.OnNull();
             break;
         }
@@ -662,13 +664,13 @@ template <typename TOnDemandValue>
             break;
         }
         case simdjson::dom::element_type::INT64: {
-            i64 v;
+            int64_t v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
             callbacks.OnInteger(v);
             break;
         }
         case simdjson::dom::element_type::UINT64: {
-            ui64 v;
+            uint64_t v;
             RETURN_IF_NOT_SUCCESS(value.get(v));
             callbacks.OnUInteger(v);
             break;

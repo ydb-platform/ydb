@@ -48,6 +48,6 @@ jobs:
       run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 
     - name: Collect test history data with window 50 run release-asan for main
       run: python3 .github/scripts/analytics/flaky_tests_history_n_runs.py --runs=50 --build_type=release-asan
-      continue-on-error: true
+      
 
 

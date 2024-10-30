@@ -32,5 +32,5 @@ message TIndexColumnMeta {
     optional uint32 RawBytes = 2;
     optional NKikimrSSA.TProgram.TConstant MinValue = 3;
     optional NKikimrSSA.TProgram.TConstant MaxValue = 4;
-    optional TIndexPortionMeta PortionMeta = 5[deprecated]; // First PK column could contain portion info
+    optional TIndexPortionMeta PortionMeta = 5[deprecated = true]; // First PK column could contain portion info
 }

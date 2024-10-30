@@ -10,11 +10,15 @@ namespace NKikimr::NOlap::NSyncChunksWithPortions1 {
 
 class TPatchItem {
 private:
-    YDB_READONLY_DEF(TPortionLoadContext, PortionInfo);
+    TPortionLoadContext PortionInfo;
     YDB_READONLY_DEF(std::vector<TColumnChunkLoadContext>, Records);
     YDB_READONLY_DEF(std::vector<TIndexChunkLoadContext>, Indexes);
 
 public:
+    const TPortionLoadContext& GetPortionInfo() const {
+        return PortionInfo;
+    }
+
     TPatchItem(TPortionLoadContext&& portion, std::vector<TColumnChunkLoadContext>&& records, std::vector<TIndexChunkLoadContext>&& indexes)
         : PortionInfo(std::move(portion))
         , Records(std::move(records))
@@ -29,8 +33,8 @@ private:
     std::vector<TPatchItem> Patches;
 
 public:
-    TChanges(TBatch&& addresses)
-        : Addresses(addresses) {
+    TChanges(std::vector<TPatchItem>&& patches)
+        : Patches(std::move(patches)) {
     }
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
@@ -46,8 +50,8 @@ public:
             for (auto&& c : i.GetRecords()) {
                 columnRawBytes += c.GetMetaProto().GetRawBytes();
                 columnBlobBytes += c.GetBlobRange().GetSize();
-                if (i.GetRecords().front().GetColumnId() == c.GetColumnId()) {
-                    recordsCount += c.GetMetaProto().GetRecordsCount();
+                if (i.GetRecords().front().GetAddress().GetColumnId() == c.GetAddress().GetColumnId()) {
+                    recordsCount += c.GetMetaProto().GetNumRows();
                 }
             }
             for (auto&& c : i.GetIndexes()) {
@@ -75,7 +79,7 @@ public:
 };
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
-    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -86,7 +90,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    THashMap<ui64, std::vector<TPortionLoadContext>> dbPortions;
+    THashMap<ui64, TPortionLoadContext> dbPortions;
     THashMap<ui64, std::vector<TColumnChunkLoadContext>> recordsByPortion;
     THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesByPortion;
     
@@ -148,7 +152,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     }
 
     std::vector<INormalizerTask::TPtr> tasks;
-    ACFL_INFO("normalizer", "TChunksNormalizer")("message", TStringBuilder() << chunks.size() << " chunks found");
     if (dbPortions.empty()) {
         return tasks;
     }
@@ -162,16 +165,17 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         auto itRecords = recordsByPortion.find(portion.GetPortionId());
         AFL_VERIFY(itRecords != recordsByPortion.end());
         auto itIndexes = indexesByPortion.find(portion.GetPortionId());
-        package.emplace_back(portion, itRecords->second, (itIndexes == indexesByPortion.end()) ? {}, itIndexes->second);
+        auto indexes = (itIndexes == indexesByPortion.end()) ? Default<std::vector<TIndexChunkLoadContext>>() : itIndexes->second;
+        package.emplace_back(std::move(portion), std::move(itRecords->second), std::move(indexes));
         if (package.size() == 100) {
             std::vector<TPatchItem> local;
             local.swap(package);
-            tasks.emplace_back(std::make_shared<TTrivialNormalizerTask<TChanges>>(std::move(local)));
+            tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChanges>(std::move(local))));
         }
     }
 
     if (package.size() > 0) {
-        tasks.emplace_back(std::make_shared<TTrivialNormalizerTask<TChanges>>(std::move(package)));
+        tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChanges>(std::move(package))));
     }
     return tasks;
 }

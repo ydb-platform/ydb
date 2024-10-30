@@ -969,6 +969,10 @@ private:
     const ui32 RecordsCount;
     const ui32 RawBytes;
 public:
+    ui32 GetRawBytes() const {
+        return RawBytes;
+    }
+
     ui32 GetDataSize() const {
         if (BlobRange) {
             return BlobRange->GetSize();

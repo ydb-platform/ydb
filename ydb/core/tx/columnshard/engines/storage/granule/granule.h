@@ -160,7 +160,7 @@ public:
         IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
-        auto copy = *innerPortion;
+        auto copy = innerPortion->MakeCopy();
         modifier(copy);
         TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, firstPKColumnId, false);
     }

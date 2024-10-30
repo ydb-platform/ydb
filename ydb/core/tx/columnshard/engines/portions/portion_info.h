@@ -101,6 +101,9 @@ private:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
 public:
+    TPortionInfo(TPortionInfo&&) = default;
+    TPortionInfo& operator=(TPortionInfo&&) = default;
+
     void SaveMetaToDatabase(IDbWrapper& db) const;
 
     TPortionInfo MakeCopy() const {

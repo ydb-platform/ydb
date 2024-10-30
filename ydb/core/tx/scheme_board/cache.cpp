@@ -1232,7 +1232,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columns.BeginObject()
                         .WriteKey("Id").WriteULongLong(column.Id)
                         .WriteKey("Name").WriteString(column.Name)
-                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId()) // TODO: support pg types
+                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId())
+                        .WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType, column.PTypeMod))
                         .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
                     .EndObject();
                 }

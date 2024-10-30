@@ -75,7 +75,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         result.emplace_back();
         result.back().Query = query;
         if (Params.GetCheckCanonical()) {
-            const auto key = resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + ToString(&query - queries.data()) + ".result";
+            const auto key = "resfs/file/" + resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + ToString(&query - queries.data()) + ".result";
             if (NResource::Has(key)) {
                 result.back().ExpectedResult = NResource::Find(key);
             }

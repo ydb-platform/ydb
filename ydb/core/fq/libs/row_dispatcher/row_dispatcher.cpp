@@ -127,6 +127,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TRowDispatcherMetrics Metrics;
     NYql::IPqGateway::TPtr PqGateway;
+    THashSet<TActorId> InterconnectSessions;
 
     struct ConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -216,6 +217,7 @@ public:
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
 
     void DeleteConsumer(const ConsumerSessionKey& key);
+    void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     void UpdateMetrics();
 
     STRICT_STFUNC(
@@ -279,12 +281,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
     LOG_ROW_DISPATCHER_DEBUG("Coordinator changed, old leader " << CoordinatorActorId << ", new " << ev->Get()->CoordinatorActorId);
 
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
-    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(*CoordinatorActorId, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery);
     for (auto actorId : CoordinatorChangedSubscribers) {
         Send(
             actorId,
             new NFq::TEvRowDispatcher::TEvCoordinatorChanged(ev->Get()->CoordinatorActorId),
-            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+            IEventHandle::FlagTrackDelivery);
     }
 }
 
@@ -324,11 +326,12 @@ void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr&) {
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChangesSubscribe from " << ev->Sender);
+    UpdateInterconnectSessions(ev->InterconnectSession);
     CoordinatorChangedSubscribers.insert(ev->Sender);
     if (!CoordinatorActorId) {
         return;
     }
-    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(*CoordinatorActorId), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(ev->Sender, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(*CoordinatorActorId), IEventHandle::FlagTrackDelivery);
 }
 
 void TRowDispatcher::UpdateMetrics() {
@@ -372,7 +375,7 @@ void TRowDispatcher::UpdateMetrics() {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
-
+    UpdateInterconnectSessions(ev->InterconnectSession);
     TMaybe<ui64> readOffset;
     if (ev->Get()->Record.HasOffset()) {
         readOffset = ev->Get()->Record.GetOffset();
@@ -632,6 +635,18 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
         auto consumerInfoPtr = it->second; 
         consumerInfoPtr->Stat = clientStat;
     }
+}
+
+void TRowDispatcher::UpdateInterconnectSessions(const NActors::TActorId& interconnectSession) {
+    if (!interconnectSession) {
+        return;
+    }
+    auto sessionsIt = InterconnectSessions.find(interconnectSession);
+    if (sessionsIt != InterconnectSessions.end()) {
+        return;
+    }
+    Send(interconnectSession, new NActors::TEvents::TEvSubscribe, IEventHandle::FlagTrackDelivery);
+    InterconnectSessions.insert(interconnectSession);
 }
 
 } // namespace

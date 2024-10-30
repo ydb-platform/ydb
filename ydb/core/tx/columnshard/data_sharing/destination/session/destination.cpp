@@ -19,8 +19,8 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
-            portion->SetPathId(it->second);
-            index.AppendPortion(*portion);
+            portion.MutablePortionInfo().SetPathId(it->second);
+            index.AppendPortion(portion.GetPortionInfo());
         }
     }
     return TConclusionStatus::Success();
@@ -161,13 +161,13 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
 }
 
 bool TDestinationSession::DoStart(
-    const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) {
+    const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) {
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;
     for (auto&& i : portions) {
         for (auto&& p : i.second) {
-            TPortionDataAccessor(p).FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
+            p.FillBlobIdsByStorage(local, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
         }
     }
     std::swap(CurrentBlobIds, local);
@@ -175,9 +175,9 @@ bool TDestinationSession::DoStart(
     return true;
 }
 
-bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionInfo::TConstPtr& portion) {
+bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionDataAccessor& portion) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
-    TPortionDataAccessor(portion).FillBlobIdsByStorage(blobIds, vIndex);
+    portion.FillBlobIdsByStorage(blobIds, vIndex);
     ui32 containsCounter = 0;
     ui32 newCounter = 0;
     for (auto&& i : blobIds) {

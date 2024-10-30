@@ -36,7 +36,7 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : SwitchedPortions) {
-            result = predictor->AddPortion(p);
+            result = predictor->AddPortion(p.GetPortionInfoPtr());
         }
         return result;
     }

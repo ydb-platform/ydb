@@ -13,6 +13,7 @@ class TColumnShard;
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+class TPortionDataAccessor;
 namespace NDataLocks {
 class TManager;
 }
@@ -42,7 +43,7 @@ private:
     EState State = EState::Created;
 protected:
     TTransferContext TransferContext;
-    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) = 0;
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) = 0;
     virtual THashSet<ui64> GetPathIdsForStart() const = 0;
 public:
     virtual ~TCommonSession() = default;

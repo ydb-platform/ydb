@@ -11,25 +11,25 @@ namespace NKikimr::NOlap {
 
 void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
     auto address = chunk->GetChunkAddressVerified();
-    AFL_VERIFY(TPortionDataAccessor(PortionInfo).HasEntityAddress(address))("address", address.DebugString());
+    AFL_VERIFY(PortionInfo.HasEntityAddress(address))("address", address.DebugString());
     AFL_VERIFY(Chunks.emplace(address, chunk).second)("address", address.DebugString());
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
     const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const {
     THashMap<TChunkAddress, TString> blobs;
-    for (auto&& i : TPortionDataAccessor(PortionInfo).GetRecords()) {
+    for (auto&& i : PortionInfo.GetRecords()) {
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
-    return TPortionDataAccessor(PortionInfo).PrepareForAssemble(data, resultSchema, blobs).AssembleToGeneralContainer(seqColumns);
+    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs).AssembleToGeneralContainer(seqColumns);
 }
 
 TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
-    const TPortionInfo::TConstPtr& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
+    const TPortionDataAccessor& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
     TReadPortionInfoWithBlobs result(portion);
     THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> records =
-        TPortionDataAccessor(result.PortionInfo).RestoreEntityChunks(blobs, indexInfo);
+        result.PortionInfo.RestoreEntityChunks(blobs, indexInfo);
     for (auto&& [storageId, chunksByAddress] : records) {
         for (auto&& [_, chunk] : chunksByAddress) {
             result.RestoreChunk(chunk);
@@ -39,11 +39,11 @@ TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
 }
 
 std::vector<TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
-    const std::vector<TPortionInfo::TConstPtr>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
     const TVersionedIndex& tables) {
     std::vector<TReadPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
-        const auto schema = i->GetSchema(tables);
+        const auto schema = i.GetPortionInfo().GetSchema(tables);
         result.emplace_back(RestorePortion(i, blobs, schema->GetIndexInfo()));
     }
     return result;

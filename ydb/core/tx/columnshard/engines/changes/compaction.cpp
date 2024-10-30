@@ -14,7 +14,7 @@ void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     if (ui32 switched = SwitchedPortions.size()) {
         out << "switch " << switched << " portions:(";
         for (auto& portionInfo : SwitchedPortions) {
-            out << portionInfo->DebugString(false);
+            out << portionInfo.GetPortionInfo().DebugString(false);
         }
         out << "); ";
     }
@@ -35,7 +35,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {
-        TPortionDataAccessor(p).FillBlobRangesByStorage(blobRanges, index);
+        p.FillBlobRangesByStorage(blobRanges, index);
     }
 
     for (const auto& p : blobRanges) {
@@ -69,17 +69,17 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
 }
 
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(
-    std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext)
+    std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
     , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);
 
     SwitchedPortions.reserve(portions.size());
     for (const auto& portionInfo : portions) {
-        Y_ABORT_UNLESS(!portionInfo->HasRemoveSnapshot());
+        Y_ABORT_UNLESS(!portionInfo.GetPortionInfo().HasRemoveSnapshot());
         SwitchedPortions.emplace_back(portionInfo);
-        AddPortionToRemove(portionInfo);
-        Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
+        AddPortionToRemove(portionInfo.GetPortionInfoPtr());
+        Y_ABORT_UNLESS(portionInfo.GetPortionInfo().GetPathId() == GranuleMeta->GetPathId());
     }
     //    Y_ABORT_UNLESS(SwitchedPortions.size());
 }

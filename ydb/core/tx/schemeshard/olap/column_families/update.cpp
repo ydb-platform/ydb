@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/formats/arrow/serializer/utils.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -18,15 +19,15 @@ NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDes
         return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName()
                                                                  << "`: unknow codec for column family `" << familyDescription.GetName() << "`");
     }
-    if (familyDescription.HasColumnCodecLevel() && !arrow::util::Codec::SupportsCompressionLevel(codec.value())) {
+    if (familyDescription.HasColumnCodecLevel() && !NArrow::SupportsCompressionLevel(codec.value())) {
         return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: codec `"
                                                                  << NArrow::CompressionToString(familyDescription.GetColumnCodec())
                                                                  << "` is not support compression level");
     }
     if (familyDescription.HasColumnCodecLevel()) {
         int level = familyDescription.GetColumnCodecLevel();
-        int minLevel = NArrow::TStatusValidator::GetValid(arrow::util::Codec::MinimumCompressionLevel(codec.value()));
-        int maxLevel = NArrow::TStatusValidator::GetValid(arrow::util::Codec::MaximumCompressionLevel(codec.value()));
+        int minLevel = NArrow::MinimumCompressionLevel(codec.value()).value();
+        int maxLevel = NArrow::MaximumCompressionLevel(codec.value()).value();
         if (level < minLevel || level > maxLevel) {
             return NKikimr::TConclusionStatus::Fail(TStringBuilder()
                                                     << "family `" << familyDescription.GetName() << "`: incorrect level for codec `"

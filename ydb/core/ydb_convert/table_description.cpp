@@ -768,8 +768,6 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
 
         if (!column.Getfamily().Empty()) {
             columnDesc->SetColumnFamilyName(column.Getfamily());
-        } else {
-            columnDesc->SetColumnFamilyName("default");
         }
     }
 

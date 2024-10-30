@@ -174,14 +174,14 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
         }
 
         if (colProto.HasColumnFamilyId() && colProto.GetColumnFamilyId() != col->GetColumnFamilyId()) {
-            errors.AddError(
-                "Column '" + colName + "' has column family id " + colProto.GetColumnFamilyId() + " that does not match schema preset");
+            errors.AddError(TStringBuilder() << "Column '" << colName << "' has column family id " << colProto.GetColumnFamilyId()
+                                             << " that does not match schema preset");
             return false;
         }
 
         if (colProto.HasColumnFamilyName() && colProto.GetColumnFamilyName() != col->GetColumnFamilyName()) {
-            errors.AddError(
-                "Column '" + colName + "' has column family name `" + colProto.GetColumnFamilyName() + "` that does not match schema preset");
+            errors.AddError(TStringBuilder() << "Column '" << colName << "' has column family name `" << colProto.GetColumnFamilyName()
+                                             << "` that does not match schema preset");
             return false;
         }
 

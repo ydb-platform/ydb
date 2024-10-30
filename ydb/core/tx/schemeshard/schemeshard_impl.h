@@ -90,16 +90,16 @@ private:
         TSchemeShard* Self;
     };
 
-    using TCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
+    using TBackgroundCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
         TShardCompactionInfo,
         TCompactionQueueImpl,
         TEvPrivate::EvRunBackgroundCompaction,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::SCHEMESHARD_BACKGROUND_COMPACTION>;
 
-    class TCompactionStarter : public TCompactionQueue::IStarter {
+    class TBackgroundCompactionStarter : public TBackgroundCompactionQueue::IStarter {
     public:
-        TCompactionStarter(TSchemeShard* self)
+        TBackgroundCompactionStarter(TSchemeShard* self)
             : Self(self)
         { }
 
@@ -290,8 +290,8 @@ public:
     TAutoPtr<NTabletPipe::IClientCache> PipeClientCache;
     TPipeTracker PipeTracker;
 
-    TCompactionStarter CompactionStarter;
-    TCompactionQueue* CompactionQueue = nullptr;
+    TBackgroundCompactionStarter BackgroundCompactionStarter;
+    TBackgroundCompactionQueue* BackgroundCompactionQueue = nullptr;
 
     TBorrowedCompactionStarter BorrowedCompactionStarter;
     TBorrowedCompactionQueue* BorrowedCompactionQueue = nullptr;
@@ -632,6 +632,7 @@ public:
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
     void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
     void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
+    void OnShardRemoved(const TShardIdx& shardIdx);
     auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId, ui32 followerId,
         TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats, const TActorContext& ctx);
 
@@ -904,8 +905,6 @@ public:
 
     void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
-
-    void ShardRemoved(const TShardIdx& shardIdx);
 
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardCompactionInfo& info);
     void OnBackgroundCompactionTimeout(const TShardCompactionInfo& info);

@@ -17,11 +17,10 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
         }
         dbWrapper.WriteCounter(TColumnEngineForLogs::LAST_PORTION, *lastPortionPtr);
     }
-    auto schemaPtr = index.GetVersionedIndex().GetLastSchema();
     THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> sharedBlobIds;
     for (auto&& i : PortionsByPathId) {
         for (auto&& p : i.second.GetPortions()) {
-            p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+            p.SaveToDatabase(dbWrapper, false);
         }
     }
     NIceDb::TNiceDb db(txc.DB);

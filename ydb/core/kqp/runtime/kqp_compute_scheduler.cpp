@@ -507,11 +507,6 @@ struct TComputeScheduler::TImpl {
 
     TDuration MaxDelay = TDuration::Seconds(10);
 
-<<<<<<< HEAD
-    void AssignWeights() { }
-
-    void CreateGroup(TString groupName, double maxShare, NMonotonic::TMonotonic now) {
-        PoolId[groupName] = Records.size();
     void CreateGroup(THolder<IObservableValue<double>> share, NMonotonic::TMonotonic now, std::optional<TString> groupName = std::nullopt) {
         auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
         group->Share = std::move(share);

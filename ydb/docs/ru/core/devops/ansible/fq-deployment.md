@@ -62,15 +62,6 @@
 
 {% endnote %}
 
-{% note info %}
-
-На момент написания этой инструкции версия {{ ydb-short-name }} 24.3.3 была недоступна для [загрузки в предсобранном виде](../../downloads/index.md#ydb-server). Вы можете прибегнуть к установке {{ ydb-short-name }} из исходного кода. Для этого в разделе `vars` инвентори-файла `files/50-inventory.yaml`:
-
-* Удалите/закомментируйте строки `ydb_version`, `ydb_archive`, `ydbd_binary`, `ydb_cli_binary`
-* Используйте `ydb_git_version: 24.3.3`
-
-{% endnote %}
-
 Шаги, для включения функции multislot развертывания:
 
 1. Внесите дополнительные изменения в раздел `vars` инвентори-файла `files/50-inventory.yaml`:

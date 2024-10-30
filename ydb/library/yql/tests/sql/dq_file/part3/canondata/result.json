@@ -1,48 +1,4 @@
 {
-    "test.test[SeqMode-simple2-default.txt-Analyze]": [
-        {
-            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
-            "size": 922,
-            "uri": "https://{canondata_backend}/1871182/ce7d828d2a2ea239250d1680b87e1f852ea16f1c/resource.tar.gz#test.test_SeqMode-simple2-default.txt-Analyze_/plan.txt"
-        }
-    ],
-    "test.test[SeqMode-simple2-default.txt-Debug]": [
-        {
-            "checksum": "73a6294eedc5a74c645ce5709a385223",
-            "size": 390,
-            "uri": "https://{canondata_backend}/1871182/ce7d828d2a2ea239250d1680b87e1f852ea16f1c/resource.tar.gz#test.test_SeqMode-simple2-default.txt-Debug_/opt.yql_patched"
-        }
-    ],
-    "test.test[SeqMode-simple2-default.txt-Plan]": [
-        {
-            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
-            "size": 922,
-            "uri": "https://{canondata_backend}/1871182/ce7d828d2a2ea239250d1680b87e1f852ea16f1c/resource.tar.gz#test.test_SeqMode-simple2-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[SeqMode-simple2-default.txt-Results]": [],
-    "test.test[SeqMode-subquery_shared_subquery-default.txt-Analyze]": [
-        {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1689644/c4917577871e8102a3addfa5cbff8d09c1b57f32/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Analyze_/plan.txt"
-        }
-    ],
-    "test.test[SeqMode-subquery_shared_subquery-default.txt-Debug]": [
-        {
-            "checksum": "c16c2bdd152fa4152fcc079e849add4e",
-            "size": 231,
-            "uri": "https://{canondata_backend}/1689644/c4917577871e8102a3addfa5cbff8d09c1b57f32/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Debug_/opt.yql_patched"
-        }
-    ],
-    "test.test[SeqMode-subquery_shared_subquery-default.txt-Plan]": [
-        {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1689644/c4917577871e8102a3addfa5cbff8d09c1b57f32/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[SeqMode-subquery_shared_subquery-default.txt-Results]": [],
     "test.test[action-eval_for-default.txt-Analyze]": [
         {
             "checksum": "a48ccc9922567dfee1170d2c2df45b6e",

@@ -1,25 +1,4 @@
 {
-    "test.test[SeqMode-simple1-default.txt-Debug]": [
-        {
-            "checksum": "503f28a841febb4da0acfd7eaa3b6726",
-            "size": 221,
-            "uri": "https://{canondata_backend}/1599023/5db0f10485a6290e53d28cea305c76c948722d52/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[SeqMode-simple1-default.txt-Plan]": [
-        {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1599023/5db0f10485a6290e53d28cea305c76c948722d52/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[SeqMode-simple1-default.txt-Results]": [
-        {
-            "checksum": "3432be66794780aaeaad6d43b71e08e5",
-            "size": 695,
-            "uri": "https://{canondata_backend}/1599023/5db0f10485a6290e53d28cea305c76c948722d52/resource.tar.gz#test.test_SeqMode-simple1-default.txt-Results_/results.txt"
-        }
-    ],
     "test.test[action-action_eval_cluster_use--Debug]": [
         {
             "checksum": "05c618321f81367d5ae07fbc260422d4",
@@ -2632,6 +2611,27 @@
             "checksum": "6b8a0c2bdb8657f924d0ba48ce77d5b7",
             "size": 919,
             "uri": "https://{canondata_backend}/1775059/3537a7096af92f6c747d78f769fafb259258445e/resource.tar.gz#test.test_select-one_labeled_column-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[seq_mode-shared_subquery_expr-default.txt-Debug]": [
+        {
+            "checksum": "c3b412221e71f29cbeb0f3b11269298e",
+            "size": 264,
+            "uri": "https://{canondata_backend}/1937150/5d89af465ea55c167881d70bced93e980e6a0183/resource.tar.gz#test.test_seq_mode-shared_subquery_expr-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[seq_mode-shared_subquery_expr-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1937150/5d89af465ea55c167881d70bced93e980e6a0183/resource.tar.gz#test.test_seq_mode-shared_subquery_expr-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[seq_mode-shared_subquery_expr-default.txt-Results]": [
+        {
+            "checksum": "bdea5726342a2fbb8acd35387e11e129",
+            "size": 1388,
+            "uri": "https://{canondata_backend}/1937150/5d89af465ea55c167881d70bced93e980e6a0183/resource.tar.gz#test.test_seq_mode-shared_subquery_expr-default.txt-Results_/results.txt"
         }
     ],
     "test.test[tpch-q7-default.txt-Debug]": [

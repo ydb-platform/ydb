@@ -2478,6 +2478,27 @@
             "uri": "file://test.test_schema-select_all_inferschema_range-empty_fail-Results_/extracted"
         }
     ],
+    "test.test[seq_mode-shared_subquery_expr_after_commit-default.txt-Debug]": [
+        {
+            "checksum": "1ef2a9d1d8faaed2b6fa70ff1940ef8b",
+            "size": 1623,
+            "uri": "https://{canondata_backend}/1871002/819f942fa8ece6318e6a1b37c40eea0597b503dd/resource.tar.gz#test.test_seq_mode-shared_subquery_expr_after_commit-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[seq_mode-shared_subquery_expr_after_commit-default.txt-Plan]": [
+        {
+            "checksum": "95e11f601846f4acb504922e5ea51cce",
+            "size": 5769,
+            "uri": "https://{canondata_backend}/1871002/819f942fa8ece6318e6a1b37c40eea0597b503dd/resource.tar.gz#test.test_seq_mode-shared_subquery_expr_after_commit-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[seq_mode-shared_subquery_expr_after_commit-default.txt-Results]": [
+        {
+            "checksum": "bdea5726342a2fbb8acd35387e11e129",
+            "size": 1388,
+            "uri": "https://{canondata_backend}/1871002/819f942fa8ece6318e6a1b37c40eea0597b503dd/resource.tar.gz#test.test_seq_mode-shared_subquery_expr_after_commit-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[simple_columns-simple_columns_join_subreq_all_key_without-default.txt-Debug]": [
         {
             "checksum": "bba7fb1f99036f5b5aaa969ee8c818e1",

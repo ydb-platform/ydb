@@ -1,46 +1,4 @@
 {
-    "test.test[SeqMode-simple2-default.txt-Debug]": [
-        {
-            "checksum": "98d3153bd99c2b9dafc9441d9361cbf1",
-            "size": 322,
-            "uri": "https://{canondata_backend}/1936947/3ccfebe60f8c9d8e103bc1f87a018441843b7a6a/resource.tar.gz#test.test_SeqMode-simple2-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[SeqMode-simple2-default.txt-Plan]": [
-        {
-            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
-            "size": 922,
-            "uri": "https://{canondata_backend}/1936947/3ccfebe60f8c9d8e103bc1f87a018441843b7a6a/resource.tar.gz#test.test_SeqMode-simple2-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[SeqMode-simple2-default.txt-Results]": [
-        {
-            "checksum": "a6a199a723446ad8a3448321a1f45717",
-            "size": 1388,
-            "uri": "https://{canondata_backend}/1936947/3ccfebe60f8c9d8e103bc1f87a018441843b7a6a/resource.tar.gz#test.test_SeqMode-simple2-default.txt-Results_/results.txt"
-        }
-    ],
-    "test.test[SeqMode-subquery_shared_subquery-default.txt-Debug]": [
-        {
-            "checksum": "455bb91c90922f43059733d1683f895f",
-            "size": 163,
-            "uri": "https://{canondata_backend}/1814674/ac7af1133e1de84821ad7673ffb20b01934c9e0f/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Debug_/opt.yql"
-        }
-    ],
-    "test.test[SeqMode-subquery_shared_subquery-default.txt-Plan]": [
-        {
-            "checksum": "b4dd508a329723c74293d80f0278c705",
-            "size": 505,
-            "uri": "https://{canondata_backend}/1814674/ac7af1133e1de84821ad7673ffb20b01934c9e0f/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Plan_/plan.txt"
-        }
-    ],
-    "test.test[SeqMode-subquery_shared_subquery-default.txt-Results]": [
-        {
-            "checksum": "bc869f8ef33f1104d4820db1c72aa316",
-            "size": 659,
-            "uri": "https://{canondata_backend}/1814674/ac7af1133e1de84821ad7673ffb20b01934c9e0f/resource.tar.gz#test.test_SeqMode-subquery_shared_subquery-default.txt-Results_/results.txt"
-        }
-    ],
     "test.test[action-eval_for-default.txt-Debug]": [
         {
             "checksum": "bd2921e9525e2b86fbe2a1d0a6ee7aa7",

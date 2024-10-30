@@ -1264,12 +1264,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     col.WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType, column.PTypeMod));
 
                     switch (column.PType.GetTypeId()) {
-                        case NScheme::NTypeIds::Decimal:
-                            col.WriteKey("Precision").WriteInt(column.PType.GetDecimalType().GetPrecision());
-                            col.WriteKey("Scale").WriteInt(column.PType.GetDecimalType().GetScale());
-                            break;
-                        default:
-                            break;
+                    case NScheme::NTypeIds::Decimal:
+                        col.WriteKey("Precision").WriteInt(column.PType.GetDecimalType().GetPrecision());
+                        col.WriteKey("Scale").WriteInt(column.PType.GetDecimalType().GetScale());
+                        break;
+                    default:
+                        break;
                     }
 
                     col.EndObject();

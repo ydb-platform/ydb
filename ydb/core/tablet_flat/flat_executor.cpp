@@ -4377,39 +4377,31 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     };
 
-    for (size_t group : xrange(rowScheme->Families.size())) {
-        auto familyId = rowScheme->Families[group];
-        const auto* family = tableInfo->Families.FindPtr(familyId);
-        if (Y_UNLIKELY(!family)) {
-            // FIXME: workaround for KIKIMR-17222
-            // Column families with default settings may be missing in schema,
-            // so we have to use a static variable as a substitute
-            static const NTable::TScheme::TFamily defaultFamilySettings;
-            family = &defaultFamilySettings;
-        }
-        Y_ABORT_UNLESS(family, "Cannot find family %" PRIu32 " in table %" PRIu32, familyId, table);
+    for (size_t groupIndex : xrange(rowScheme->Families.size())) {
+        auto familyId = rowScheme->Families[groupIndex];
+        static const NTable::TScheme::TFamily defaultFamilySettings;
+        const auto& family = tableInfo->Families.Value(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
+        
+        auto* room = tableInfo->Rooms.FindPtr(family.Room);
+        Y_ABORT_UNLESS(room, "Cannot find room %" PRIu32 " in table %" PRIu32, family.Room, table);
 
-        auto roomId = family->Room;
-        auto* room = tableInfo->Rooms.FindPtr(roomId);
-        Y_ABORT_UNLESS(room, "Cannot find room %" PRIu32 " in table %" PRIu32, roomId, table);
+        auto& pageGroup = comp->Layout.Groups.at(groupIndex);
+        auto& writeGroup = comp->Writer.Groups.at(groupIndex);
 
-        auto& pageGroup = comp->Layout.Groups.at(group);
-        auto& writeGroup = comp->Writer.Groups.at(group);
-
-        pageGroup.Codec = family->Codec;
+        pageGroup.Codec = family.Codec;
         pageGroup.PageSize = policy->MinDataPageSize;
         pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
         pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
 
-        writeGroup.Cache = Max(family->Cache, cache);
+        writeGroup.Cache = Max(family.Cache, cache);
         writeGroup.MaxBlobSize = NBlockIO::BlockSize;
         writeGroup.Channel = room->Main;
         addChannel(room->Main);
 
-        if (group == 0) {
+        if (groupIndex == 0) {
             // Small/Large edges are taken from the leader family
-            comp->Layout.SmallEdge = family->Small;
-            comp->Layout.LargeEdge = family->Large;
+            comp->Layout.SmallEdge = family.Small;
+            comp->Layout.LargeEdge = family.Large;
 
             // Small/Large channels are taken from the leader family
             comp->Writer.BlobsChannels = room->Blobs;

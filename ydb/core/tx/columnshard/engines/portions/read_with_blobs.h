@@ -34,10 +34,10 @@ private:
 
 public:
     static std::vector<TReadPortionInfoWithBlobs> RestorePortions(
-        const std::vector<TPortionInfo::TConstPtr>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+        const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TVersionedIndex& tables);
     static TReadPortionInfoWithBlobs RestorePortion(
-        const TPortionInfo::TConstPtr& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+        const TPortionDataAccessor& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TIndexInfo& indexInfo);
 
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const;

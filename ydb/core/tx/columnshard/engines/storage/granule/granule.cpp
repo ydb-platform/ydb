@@ -187,12 +187,11 @@ void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, I
 }
 
 void TGranuleMeta::CommitImmediateOnExecute(
-    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const std::shared_ptr<TPortionInfo>& portion) const {
-    AFL_VERIFY(portion);
-    AFL_VERIFY(!InsertedPortions.contains(portion->GetInsertWriteIdVerified()));
-    portion->SetCommitSnapshot(snapshot);
+    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
+    AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
+    portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
-    TPortionDataAccessor(portion).SaveToDatabase(wrapper, 0, false);
+    portion.SaveToDatabase(wrapper, 0, false);
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {

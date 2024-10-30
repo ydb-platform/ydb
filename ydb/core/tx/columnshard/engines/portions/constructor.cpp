@@ -9,29 +9,29 @@
 
 namespace NKikimr::NOlap {
 
-TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) {
+TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormalization) {
     AFL_VERIFY(!Constructed);
     Constructed = true;
-    TPortionInfo result(MetaConstructor.Build());
+    std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
     AFL_VERIFY(PathId);
-    result.PathId = PathId;
-    result.PortionId = GetPortionIdVerified();
+    result->PathId = PathId;
+    result->PortionId = GetPortionIdVerified();
 
     AFL_VERIFY(MinSnapshotDeprecated);
     AFL_VERIFY(MinSnapshotDeprecated->Valid());
-    result.MinSnapshotDeprecated = *MinSnapshotDeprecated;
+    result->MinSnapshotDeprecated = *MinSnapshotDeprecated;
     if (RemoveSnapshot) {
         AFL_VERIFY(RemoveSnapshot->Valid());
-        result.RemoveSnapshot = *RemoveSnapshot;
+        result->RemoveSnapshot = *RemoveSnapshot;
     }
-    result.SchemaVersion = SchemaVersion;
-    result.ShardingVersion = ShardingVersion;
-    result.CommitSnapshot = CommitSnapshot;
-    result.InsertWriteId = InsertWriteId;
+    result->SchemaVersion = SchemaVersion;
+    result->ShardingVersion = ShardingVersion;
+    result->CommitSnapshot = CommitSnapshot;
+    result->InsertWriteId = InsertWriteId;
     AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
 
-    if (result.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
-//        AFL_VERIFY(!!InsertWriteId);
+    if (result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+        //        AFL_VERIFY(!!InsertWriteId);
     } else {
         AFL_VERIFY(!CommitSnapshot);
         AFL_VERIFY(!InsertWriteId);
@@ -91,14 +91,14 @@ TPortionInfo TPortionInfoConstructor::Build(const bool needChunksNormalization) 
         }
     }
 
-    result.Indexes = std::move(Indexes);
-    result.Indexes.shrink_to_fit();
-    result.Records = std::move(Records);
-    result.Records.shrink_to_fit();
-    result.BlobIds = std::move(BlobIds);
-    result.BlobIds.shrink_to_fit();
-    result.Precalculate();
-    return result;
+    result->Indexes = std::move(Indexes);
+    result->Indexes.shrink_to_fit();
+    result->Records = std::move(Records);
+    result->Records.shrink_to_fit();
+    result->BlobIds = std::move(BlobIds);
+    result->BlobIds.shrink_to_fit();
+    result->Precalculate();
+    return TPortionDataAccessor(result);
 }
 
 ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
@@ -129,7 +129,7 @@ void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContex
     }
 }
 
-const NKikimr::NOlap::TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord&& record) {
+const TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord&& record) {
     Y_ABORT_UNLESS(record.ColumnId);
     Records.emplace_back(std::move(record));
     return Records.back();

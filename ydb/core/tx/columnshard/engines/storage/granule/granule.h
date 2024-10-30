@@ -207,7 +207,7 @@ public:
     }
 
     void CommitImmediateOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const std::shared_ptr<TPortionInfo>& portion) const;
+        NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const;
 
     void CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine);
 

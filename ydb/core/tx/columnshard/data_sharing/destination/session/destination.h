@@ -78,7 +78,7 @@ private:
     THashMap<TString, THashSet<TUnifiedBlobId>> CurrentBlobIds;
 
 protected:
-    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) override;
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) override;
     virtual THashSet<ui64> GetPathIdsForStart() const override {
         THashSet<ui64> result;
         for (auto&& i : PathIds) {
@@ -88,7 +88,7 @@ protected:
     }
 
 public:
-    bool TryTakePortionBlobs(const TVersionedIndex& vIndex, const std::shared_ptr<const TPortionInfo>& portion);
+    bool TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionDataAccessor& portion);
 
     TSourceCursorForDestination& GetCursorVerified(const TTabletId& tabletId) {
         auto it = Cursors.find(tabletId);

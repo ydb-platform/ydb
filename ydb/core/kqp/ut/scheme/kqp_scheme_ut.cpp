@@ -8749,53 +8749,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapColumnFamilies) {
-    TString EColumnCodecToString(const NKikimrSchemeOp::EColumnCodec& codec) {
-        switch (codec) {
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-                return "UNCOMPRESSED";
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-                return "ZSTD";
-            case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-                return "LZ4";
-        }
-        return "";
-    }
-
-    TString GetNameCodecFromSerializer(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer) {
-        return EColumnCodecToString(serializer.GetArrowCompression().GetCodec());
-    }
-
-    TString GetNameCodecFromSchema(const NKikimrSchemeOp::TColumnTableSchema& schema, ui32 index) {
-        return EColumnCodecToString(schema.GetColumnFamilies()[index].GetColumnCodec());
-    }
-
-    TString GetColumnFamilyName(const NKikimrSchemeOp::TColumnTableSchema& schema, ui32 index) {
-        return schema.GetColumnFamilies()[index].GetName();
-    }
-
-    ui32 GetColumnFamilyId(const NKikimrSchemeOp::TColumnTableSchema& schema, ui32 index) {
-        return schema.GetColumnFamilies()[index].GetId();
-    }
-
-    std::optional<i32> GetColumnFamilyCodecLevel(const NKikimrSchemeOp::TColumnTableSchema& schema, ui32 index) {
-        auto family = schema.GetColumnFamilies()[index];
-        if (family.HasColumnCodecLevel()) {
-            return family.GetColumnCodecLevel();
-        }
-        return {};
-    }
-
-    TString GetNameCodecFromColumn(const NKikimrSchemeOp::TOlapColumnDescription& column) {
-        return EColumnCodecToString(column.GetSerializer().GetArrowCompression().GetCodec());
-    }
-
-    std::optional<i32> GetCodecLevelFromColumn(const NKikimrSchemeOp::TOlapColumnDescription& column) {
-        if (column.GetSerializer().GetArrowCompression().HasLevel()) {
-            return column.GetSerializer().GetArrowCompression().GetLevel();
-        }
-        return {};
-    }
-
     Y_UNIT_TEST(CreateWithoutColumnFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

@@ -382,7 +382,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
 
     THashMap<TString, ui32> columnFamiliesByName;
     ui32 columnFamilyId = 1;
-    bool IsDefaultColumnFamily = false;
     for (const auto& family : metadata.ColumnFamilies) {
         if (family.Data.Defined()) {
             code = Ydb::StatusIds::BAD_REQUEST;
@@ -399,7 +398,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         familyDescription->SetName(family.Name);
         if (familyDescription->GetName() == "default") {
             familyDescription->SetId(0);
-            IsDefaultColumnFamily = true;
         } else {
             familyDescription->SetId(columnFamilyId++);
         }
@@ -429,12 +427,6 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             familyDescription->SetColumnCodecLevel(family.CompressionLevel.GetRef());
         }
     }
-    if (!IsDefaultColumnFamily) {
-        Y_ENSURE(columnFamiliesByName.emplace("default", 0).second);
-        auto familyDescription = schema.AddColumnFamilies();
-        familyDescription->SetName("default");
-        familyDescription->SetColumnCodec(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
-    }
 
     schema.SetNextColumnFamilyId(columnFamilyId);
 
@@ -453,18 +445,20 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
 
         if (!columnFamiliesByName.empty()) {
-            TString familyName = "default";
+            TString columnFamilyName = "default";
+            ui32 columnFamilyId = 0;
             if (columnIt->second.Families.size()) {
-                familyName = *columnIt->second.Families.begin();
+                columnFamilyName = *columnIt->second.Families.begin();
+                auto columnFamilyIdIt = columnFamiliesByName.find(columnFamilyName);
+                if (columnFamilyIdIt.IsEnd()) {
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << " Unknow column family `" << columnFamilyName << "` for column `" << columnDesc.GetName() << "`";
+                    return false;
+                }
+                columnFamilyId = columnFamilyIdIt->second;
             }
-            auto columnFamilyIdIt = columnFamiliesByName.find(familyName);
-            if (columnFamilyIdIt.IsEnd()) {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << " Unknow column family `" << familyName << "` for column `" << columnDesc.GetName() << "`";
-                return false;
-            }
-            columnDesc.SetColumnFamilyName(familyName);
-            columnDesc.SetColumnFamilyId(columnFamilyIdIt->second);
+            columnDesc.SetColumnFamilyName(columnFamilyName);
+            columnDesc.SetColumnFamilyId(columnFamilyId);
         }
     }
 

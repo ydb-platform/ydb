@@ -740,13 +740,13 @@ void TCommandProfileCommon::Config(TConfig& config) {
         .RequiredArgument("STR").StoreResult(&IamEndpoint);
     }
     opts.AddLongOption("ca-file",
-        "Path to a file containing the PEM encoding of the server root certificates for tls connections.")
+        "Path to a file containing PEM encoded root certificates for tls connections.")
         .RequiredArgument("PATH").StoreResult(&CaCertsFile);
     opts.AddLongOption("client-cert-file",
-        "Path to a file containing the PEM encoding of the client certificate for tls connections")
+        "Path to a file containing PEM encoded client certificate for tls connections")
         .RequiredArgument("PATH").StoreResult(&ClientCertFile);
     opts.AddLongOption("client-cert-key-file",
-        "Path to a file containing the PEM encoding of the client certificate private key for tls connections")
+        "Path to a file containing PEM encoded client certificate private key for tls connections")
         .RequiredArgument("PATH").StoreResult(&ClientCertPrivateKeyFile);
     if (!IsStdinInteractive()) {
         GetOptionsFromStdin();
@@ -1100,11 +1100,11 @@ void TCommandUpdateProfile::Config(TConfig& config) {
     if (config.UseIamAuth) {
         opts.AddLongOption("no-iam-endpoint", "Delete endpoint of IAM service from the profile").StoreTrue(&NoIamEndpoint);
     }
-    opts.AddLongOption("no-ca-file", "Delete path to file containing the PEM encoding of the "
+    opts.AddLongOption("no-ca-file", "Delete path to file containing PEM encoded "
         "server root certificates for tls connections from the profile").StoreTrue(&NoCaCertsFile);
-    opts.AddLongOption("no-client-cert-file", "Delete path to a file containing the PEM encoding of the "
+    opts.AddLongOption("no-client-cert-file", "Delete path to a file containing PEM encoded "
         "client certificate for tls connections").StoreTrue(&NoClientCertFile);
-    opts.AddLongOption("no-client-cert-key-file", "Delete path to a file containing the PEM encoding of the "
+    opts.AddLongOption("no-client-cert-key-file", "Delete path to a file containing PEM encoded "
         "client certificate private key for tls connections").StoreTrue(&NoClientCertPrivateKeyFile);
 }
 

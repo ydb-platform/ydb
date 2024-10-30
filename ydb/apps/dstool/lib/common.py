@@ -159,7 +159,7 @@ class ConnectionParams:
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
         g.add_argument('--mon-protocol', type=str, metavar='PROTOCOL', choices=('http', 'https'), help='HTTP monitoring protocol for viewer JSON access')
         g.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
-        g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='Path to a file containing the PEM encoding of the server root certificates for tls connections.')
+        g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='Path to a file containing PEM encoded root certificates for tls connections.')
         g.add_argument('--http', action='store_true', help='Use HTTP to connect to blob storage controller instead of GRPC')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
         g.add_argument('--insecure', action='store_true', help='Allow insecure HTTPS fetching')

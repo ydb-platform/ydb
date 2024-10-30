@@ -134,7 +134,7 @@ TGranuleMeta::TGranuleMeta(
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(std::shared_ptr<TPortionInfo>&& portion) {
-    if (portion.HasInsertWriteId() && !portion.HasCommitSnapshot()) {
+    
     if (portion->HasInsertWriteId() && !portion->HasCommitSnapshot()) {
         const TInsertWriteId insertWriteId = portion->GetInsertWriteIdVerified();
         AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portion).second);

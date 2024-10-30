@@ -46,7 +46,7 @@ public:
         return true;
     }
 
-    void WriteColumn(const TPortionInfo&, const TColumnRecord&) override {
+    void WriteColumn(const TPortionInfo&, const TColumnRecord&, const ui32 /*firstPKColumnId*/) override {
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }

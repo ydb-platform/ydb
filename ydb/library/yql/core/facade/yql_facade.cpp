@@ -80,13 +80,13 @@ TProgram::TStatus SyncExecution(
             (program->*method)(std::forward<Params2>(params)...);
     YQL_ENSURE(future.Initialized());
     future.Wait();
-    YQL_ENSURE(!future.HasException());
+    HandleFutureException(future);
 
     TProgram::TStatus status = future.GetValue();
     while (status == TProgram::TStatus::Async) {
         auto continueFuture = program->ContinueAsync();
         continueFuture.Wait();
-        YQL_ENSURE(!continueFuture.HasException());
+        HandleFutureException(continueFuture);
         status = continueFuture.GetValue();
     }
 

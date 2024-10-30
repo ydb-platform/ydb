@@ -104,8 +104,10 @@ private:
         AFL_VERIFY(BlobIds.size());
     }
 
-public:
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
+
+public:
+    void SaveMetaToDatabase(IDbWrapper& db) const;
 
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
         return BlobIds;
@@ -236,7 +238,6 @@ public:
     ui64 GetTxVolume() const;   // fake-correct method for determ volume on rewrite this portion in transaction progress
     ui64 GetMetadataMemorySize() const;
 
-    static TConclusion<TPortionInfo::TPtr> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     ui64 GetPathId() const {

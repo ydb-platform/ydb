@@ -113,28 +113,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     return TConclusionStatus::Success();
 }
 
-TConclusion<TPortionInfo::TPtr> TPortionInfo::BuildFromProto(
-    const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo) {
-    TPortionMetaConstructor constructor;
-    if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo)) {
-        return TConclusionStatus::Fail("cannot parse meta");
-    }
-    std::shared_ptr<TPortionInfo> result(new TPortionInfo(constructor.Build()));
-    {
-        auto parse = result->DeserializeFromProto(proto);
-        if (!parse) {
-            return parse;
-        }
-    }
-    {
-        auto parse = TPortionDataAccessor(result).DeserializeFromProto(proto);
-        if (!parse) {
-            return parse;
-        }
-    }
-    return result;
-}
-
 const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
     if (HasInsertWriteId()) {
         return { NBlobOperations::TGlobal::DefaultStorageId };
@@ -217,6 +195,11 @@ void TPortionInfo::Precalculate() {
         };
         TPortionDataAccessor::AggregateIndexChunksData(aggr, Indexes, nullptr, true);
     }
+}
+
+void TPortionInfo::SaveMetaToDatabase(IDbWrapper& db) const {
+    FullValidation();
+    db.WritePortion(*this);
 }
 
 }   // namespace NKikimr::NOlap

@@ -21,7 +21,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     THashMap<TString, THashSet<NBlobCache::TUnifiedBlobId>> sharedBlobIds;
     for (auto&& i : PortionsByPathId) {
         for (auto&& p : i.second.GetPortions()) {
-            TPortionDataAccessor(p).SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+            p.SaveToDatabase(dbWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
         }
     }
     NIceDb::TNiceDb db(txc.DB);
@@ -47,7 +47,7 @@ TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std
                 ++p;
             } else {
                 i.second.MutablePortions()[p] = std::move(i.second.MutablePortions().back());
-                i.second.MutablePortions()[p]->ResetShardingVersion();
+                i.second.MutablePortions()[p].MutablePortionInfo().ResetShardingVersion();
                 i.second.MutablePortions().pop_back();
             }
         }

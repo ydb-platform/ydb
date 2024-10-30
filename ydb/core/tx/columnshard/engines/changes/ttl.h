@@ -13,13 +13,12 @@ private:
 
     class TPortionForEviction {
     private:
-        TPortionInfo::TConstPtr PortionInfo;
+        TPortionDataAccessor PortionInfo;
         TPortionEvictionFeatures Features;
     public:
-        TPortionForEviction(const TPortionInfo::TConstPtr& portion, TPortionEvictionFeatures&& features)
+        TPortionForEviction(const TPortionDataAccessor& portion, TPortionEvictionFeatures&& features)
             : PortionInfo(portion)
             , Features(std::move(features)) {
-            AFL_VERIFY(PortionInfo);
         };
 
         TPortionEvictionFeatures& GetFeatures() {
@@ -30,7 +29,7 @@ private:
             return Features;
         }
 
-        const TPortionInfo::TConstPtr& GetPortionInfo() const {
+        const TPortionDataAccessor& GetPortionInfo() const {
             return PortionInfo;
         }
     };
@@ -50,13 +49,13 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : PortionsToEvict) {
-            result = predictor->AddPortion(p.GetPortionInfo());
+            result = predictor->AddPortion(p.GetPortionInfo().GetPortionInfoPtr());
         }
         return result;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         const auto pred = [](const TPortionForEviction& p) {
-            return p.GetPortionInfo()->GetAddress();
+            return p.GetPortionInfo().GetPortionInfo().GetAddress();
         };
         return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
     }
@@ -89,8 +88,8 @@ public:
     ui32 GetPortionsToEvictCount() const {
         return PortionsToEvict.size();
     }
-    void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
-        AFL_VERIFY(!info->HasRemoveSnapshot());
+    void AddPortionToEvict(const TPortionDataAccessor& info, TPortionEvictionFeatures&& features) {
+        AFL_VERIFY(!info.GetPortionInfo().HasRemoveSnapshot());
         PortionsToEvict.emplace_back(info, std::move(features));
     }
 

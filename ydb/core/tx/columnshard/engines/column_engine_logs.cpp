@@ -218,8 +218,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
         if (!db.LoadColumns([&](const TColumnChunkLoadContext& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPathId(), loadContext.GetPortionId());
-                auto currentSchema = schema.GetSchema(*constructor);
-                constructor->LoadRecord(currentSchema->GetIndexInfo(), loadContext);
+                constructor->LoadRecord(loadContext);
             })) {
             timer.AddLoadingFail();
             return false;

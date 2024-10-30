@@ -14,11 +14,11 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
     Constructed = true;
 
     MetaConstructor.RecordsCount = GetRecordsCount();
-    for (auto&& i : Records) {
+    for (auto&& r : Records) {
         MetaConstructor.ColumnRawBytes += r.GetMeta().GetRawBytes();
         MetaConstructor.ColumnBlobBytes += r.GetBlobRange().GetSize();
     }
-    for (auto&& i : Indexes) {
+    for (auto&& r : Indexes) {
         MetaConstructor.IndexRawBytes += r.GetRawBytes();
         MetaConstructor.IndexBlobBytes += r.GetDataSize();
     }
@@ -121,7 +121,7 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
     return index.GetSchema(*MinSnapshotDeprecated);
 }
 
-void TPortionInfoConstructor::LoadRecord(const TIndexInfo& indexInfo, const TColumnChunkLoadContext& loadContext) {
+void TPortionInfoConstructor::LoadRecord(const TColumnChunkLoadContext& loadContext) {
     TColumnRecord rec(RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext);
     Records.push_back(std::move(rec));
 }

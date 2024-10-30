@@ -11,7 +11,7 @@ copy=[
     ".idea/vcs.xml",
 ]
 
-[targets.EMPTY]
+[targets.EXTRA_ONLY]
 template="build.gradle.kts.jinja"
 
 [targets.jar]

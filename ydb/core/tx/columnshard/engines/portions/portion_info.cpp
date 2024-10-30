@@ -71,7 +71,6 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
-    Meta
     PathId = proto.GetPathId();
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();

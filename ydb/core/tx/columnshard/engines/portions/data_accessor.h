@@ -97,7 +97,7 @@ public:
     }
 
     void RemoveFromDatabase(IDbWrapper& db) const;
-    void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
+    void SaveToDatabase(IDbWrapper& db, const bool saveOnlyMeta) const;
 
     NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;

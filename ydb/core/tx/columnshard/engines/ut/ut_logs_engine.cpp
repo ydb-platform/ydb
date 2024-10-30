@@ -88,24 +88,24 @@ public:
         return true;
     }
 
-    virtual void WritePortion(const NOlap::TPortionInfo& /*portion*/) override {
-
+    virtual void WritePortion(const NOlap::TPortionInfo& portion) override {
+        Portions[portion.GetPortionId()] = portion.MakeCopy();
     }
-    virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
-
+    virtual void ErasePortion(const NOlap::TPortionInfo& portion) override {
+        AFL_VERIFY(Portions.erase(portion.GetPortionId()));
     }
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
+        for (auto&& i : Portions) {
+            callback(NOlap::TPortionInfoConstructor(i, false, true), i.GetMeta().SerializeToProto());
+        }
         return true;
     }
 
-    void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override {
+    void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row) override {
         auto rowProto = row.GetMeta().SerializeToProto();
-        if (firstPKColumnId == row.GetColumnId() && row.GetChunkIdx() == 0) {
-            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
-        }
-
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), portion.RestoreBlobRange(row.BlobRange), rowProto);
+        NOlap::TColumnChunkLoadContext loadContext(
+            portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), portion.RestoreBlobRange(row.BlobRange), rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
             itInsertInfo.first->second = loadContext;
@@ -153,7 +153,7 @@ public:
         portionLocal.MutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) override {
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
@@ -163,7 +163,7 @@ public:
                     auto itContextLoader = LoadContexts[copy.GetAddress()].find(rec.GetAddress());
                     Y_ABORT_UNLESS(itContextLoader != LoadContexts[copy.GetAddress()].end());
                     auto address = copy.GetAddress();
-                    callback(std::move(copy), itContextLoader->second);
+                    callback(itContextLoader->second);
                     LoadContexts[address].erase(itContextLoader);
                 }
             }
@@ -192,6 +192,7 @@ private:
     THashMap<TInsertWriteId, TInsertedData> Inserted;
     THashMap<ui64, TSet<TCommittedData>> Committed;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
+    THashMap<ui64, NOlap::TPortionInfo> Portions;
     THashMap<ui32, TIndex> Indices;
 };
 

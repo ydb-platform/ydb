@@ -12,8 +12,6 @@ namespace NKikimr::NOlap {
 
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> usedPortionIds;
-    auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
-
     for (auto&& [_, i] : PortionsToRemove) {
         Y_ABORT_UNLESS(!i->HasRemoveSnapshot());
         AFL_VERIFY(usedPortionIds.emplace(i->GetPortionId()).second)("portion_info", i->DebugString(true));
@@ -21,7 +19,7 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
             portionCopy.SetRemoveSnapshot(context.Snapshot);
         };
         context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, i, pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+            .ModifyPortionOnExecute(context.DBWrapper, i, pred);
     }
 
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
@@ -38,14 +36,14 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         const auto& portionInfo = portionInfoWithBlobs.GetPortionResult().GetPortionInfoPtr();
         AFL_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second)("portion_info", portionInfo->DebugString(true));
-        portionInfoWithBlobs.GetPortionResult().SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+        portionInfoWithBlobs.GetPortionResult().SaveToDatabase(context.DBWrapper, false);
     }
     for (auto&& [_, i] : PortionsToMove) {
         const auto pred = [&](TPortionInfo& portionCopy) {
             portionCopy.MutableMeta().ResetCompactionLevel(TargetCompactionLevel.value_or(0));
         };
         context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, i, pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+            .ModifyPortionOnExecute(context.DBWrapper, i, pred);
     }
 }
 

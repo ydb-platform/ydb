@@ -1,5 +1,5 @@
-#include "restore_portion_from_chunks.h"
 #include "normalizer.h"
+#include "restore_portion_from_chunks.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -10,8 +10,8 @@ namespace NKikimr::NOlap::NRestorePortionsFromChunks {
 
 class TPatchItem {
 private:
-    TColumnChunkLoadContext ChunkInfo;
     YDB_READONLY(ui32, SchemaVersion, 0);
+    TColumnChunkLoadContext ChunkInfo;
 
 public:
     const TColumnChunkLoadContext& GetChunkInfo() const {
@@ -20,9 +20,7 @@ public:
 
     TPatchItem(const ui32 schemaVersion, TColumnChunkLoadContext&& chunkInfo)
         : SchemaVersion(schemaVersion)
-        , ChunkInfo(std::move(chunkInfo))
-    {
-
+        , ChunkInfo(std::move(chunkInfo)) {
     }
 };
 
@@ -38,19 +36,16 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Patches) {
-            AFL_VERIFY(i.GetMetaProto().HasPortionMeta());
-            auto metaProtoString = i.GetMetaProto().GetPortionMeta().SerializeAsString();
+            AFL_VERIFY(i.GetChunkInfo().GetMetaProto().HasPortionMeta());
+            auto metaProtoString = i.GetChunkInfo().GetMetaProto().GetPortionMeta().SerializeAsString();
             using IndexPortions = NColumnShard::Schema::IndexPortions;
-            const auto removeSnapshot = i.GetRemoveSnapshot();
-            const auto minSnapshotDeprecated = i.GetMinSnapshotDeprecated();
+            const auto removeSnapshot = i.GetChunkInfo().GetRemoveSnapshot();
+            const auto minSnapshotDeprecated = i.GetChunkInfo().GetMinSnapshotDeprecated();
             db.Table<IndexPortions>()
-                .Key(portion.GetPathId(), portion.GetPortionId())
-                .Update(NIceDb::TUpdate<IndexPortions::SchemaVersion>(i.GetSchemaVersion()),
-                    NIceDb::TUpdate<IndexPortions::ShardingVersion>(0),
-                    NIceDb::TUpdate<IndexPortions::CommitPlanStep>(0),
-                    NIceDb::TUpdate<IndexPortions::CommitTxId>(0),
-                    NIceDb::TUpdate<IndexPortions::InsertWriteId>(0),
-                    NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot.GetPlanStep()),
+                .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId())
+                .Update(NIceDb::TUpdate<IndexPortions::SchemaVersion>(i.GetSchemaVersion()), NIceDb::TUpdate<IndexPortions::ShardingVersion>(0),
+                    NIceDb::TUpdate<IndexPortions::CommitPlanStep>(0), NIceDb::TUpdate<IndexPortions::CommitTxId>(0),
+                    NIceDb::TUpdate<IndexPortions::InsertWriteId>(0), NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot.GetPlanStep()),
                     NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot.GetTxId()),
                     NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(minSnapshotDeprecated.GetPlanStep()),
                     NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(minSnapshotDeprecated.GetTxId()),
@@ -63,11 +58,10 @@ public:
     virtual ui64 GetSize() const override {
         return Patches.size();
     }
-
 };
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
-    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -85,7 +79,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     }
 
     THashMap<ui64, TPortionLoadContext> dbPortions;
-    
+
     {
         auto rowset = db.Table<Schema::IndexPortions>().Select();
         if (!rowset.IsReady()) {
@@ -101,7 +95,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
             }
         }
     }
-
 
     THashMap<ui64, TColumnChunkLoadContext> portionsToWrite;
     {
@@ -126,8 +119,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
                 return TConclusionStatus::Fail("Not ready");
             }
         }
+        AFL_VERIFY(portionsToRestore.size() == portionsToWrite.size());
     }
-    AFL_VERIFY(portionsToRestore.size() == portionsToWrite.size());
 
     std::vector<INormalizerTask::TPtr> tasks;
     if (portionsToWrite.empty()) {
@@ -137,7 +130,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     std::vector<TPatchItem> package;
 
     for (auto&& [_, chunkWithPortionData] : portionsToWrite) {
-        package.emplace_back(tm.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(NOlap::TSnapshot(Key.GetPlanStep(), Key.GetTxId()))->GetSchemaVersion(),
+        package.emplace_back(tablesManager.GetPrimaryIndexSafe()
+                                 .GetVersionedIndex()
+                                 .GetSchema(chunkWithPortionData.GetMinSnapshotDeprecated())
+                                 ->GetVersion(),
             std::move(chunkWithPortionData));
         if (package.size() == 100) {
             std::vector<TPatchItem> local;
@@ -152,4 +148,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     return tasks;
 }
 
-}   // namespace NKikimr::NOlap::NChunksActualization
+}   // namespace NKikimr::NOlap::NRestorePortionsFromChunks

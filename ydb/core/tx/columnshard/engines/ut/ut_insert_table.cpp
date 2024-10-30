@@ -46,11 +46,11 @@ public:
         return true;
     }
 
-    void WriteColumn(const TPortionInfo&, const TColumnRecord&, const ui32 /*firstPKColumnId*/) override {
+    void WriteColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>&) override {
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>&) override {
         return true;
     }
 

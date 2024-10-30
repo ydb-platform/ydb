@@ -157,12 +157,12 @@ public:
 
     template <class TModifier>
     void ModifyPortionOnExecute(
-        IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
+        IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier) const {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         auto copy = innerPortion->MakeCopy();
         modifier(copy);
-        TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, firstPKColumnId, false);
+        TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, false);
     }
 
     template <class TModifier>
@@ -177,7 +177,7 @@ public:
     void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
         AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
-        portion.SaveToDatabase(wrapper, 0, false);
+        portion.SaveToDatabase(wrapper, false);
     }
 
     void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {
@@ -190,7 +190,7 @@ public:
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
         TDbWrapper wrapper(txc.DB, nullptr);
-        TPortionDataAccessor(it->second).SaveToDatabase(wrapper, 0, true);
+        TPortionDataAccessor(it->second).SaveToDatabase(wrapper, true);
     }
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);

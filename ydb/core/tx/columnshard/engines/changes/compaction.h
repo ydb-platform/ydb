@@ -30,9 +30,9 @@ protected:
     }
 
 public:
-    std::vector<TPortionInfo::TConstPtr> SwitchedPortions; // Portions that would be replaced by new ones
+    std::vector<TPortionDataAccessor> SwitchedPortions; // Portions that would be replaced by new ones
 
-    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
     static TString StaticTypeName() {

@@ -1,11 +1,13 @@
 #pragma once
 #include "base_with_blobs.h"
 #include "constructor.h"
+#include "data_accessor.h"
 
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
+
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
 
@@ -22,17 +24,17 @@ public:
         std::vector<std::shared_ptr<IPortionDataChunk>> ChunksOrdered;
         bool Finished = false;
         void AddChunk(TWritePortionInfoWithBlobsConstructor& owner, const std::shared_ptr<IPortionDataChunk>& chunk);
+
     public:
         TBlobInfo(const std::shared_ptr<IBlobsStorageOperator>& bOperator)
-            : Operator(bOperator)
-        {
-
+            : Operator(bOperator) {
         }
 
         class TBuilder {
         private:
             TBlobInfo* OwnerBlob;
             TWritePortionInfoWithBlobsConstructor* OwnerPortion;
+
         public:
             TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobsConstructor& portion)
                 : OwnerBlob(&blob)
@@ -68,6 +70,7 @@ public:
             return result;
         }
     };
+
 private:
     std::optional<TPortionInfoConstructor> PortionConstructor;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
@@ -81,16 +84,17 @@ private:
         return TBlobInfo::TBuilder(Blobs.back(), *this);
     }
     friend class TWritePortionInfoWithBlobsResult;
+
 public:
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
-        const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const ui64 granule, const ui64 schemaVersion,
+        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
-        TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators);
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionInfoConstructor&& constructor,
+        const std::shared_ptr<IStoragesManager>& operators);
 
     std::vector<TBlobInfo>& GetBlobs() {
         return Blobs;
@@ -104,7 +108,6 @@ public:
         AFL_VERIFY(!!PortionConstructor);
         return *PortionConstructor;
     }
-
 };
 
 class TWritePortionInfoWithBlobsResult {
@@ -130,9 +133,7 @@ public:
         TBlobInfo(const TString& blobData, TBlobChunks&& chunks, const std::shared_ptr<IBlobsStorageOperator>& stOperator)
             : Chunks(std::move(chunks))
             , ResultBlob(blobData)
-            , Operator(stOperator)
-        {
-
+            , Operator(stOperator) {
         }
 
         const TString& GetResultBlob() const {
@@ -141,10 +142,12 @@ public:
 
         void RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId);
     };
+
 private:
     std::optional<TPortionInfoConstructor> PortionConstructor;
-    TPortionInfo::TPtr PortionResult;
+    std::optional<TPortionDataAccessor> PortionResult;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
+
 public:
     std::vector<TBlobInfo>& MutableBlobs() {
         return Blobs;
@@ -166,20 +169,14 @@ public:
     void FinalizePortionConstructor() {
         AFL_VERIFY(!!PortionConstructor);
         AFL_VERIFY(!PortionResult);
-        PortionResult = PortionConstructor->BuildPtr(true);
+        PortionResult = PortionConstructor->Build(true);
         PortionConstructor.reset();
     }
 
-    const TPortionInfo& GetPortionResult() const {
+    const TPortionDataAccessor& GetPortionResult() const {
         AFL_VERIFY(!PortionConstructor);
         AFL_VERIFY(!!PortionResult);
         return *PortionResult;
-    }
-
-    const TPortionInfo::TPtr& GetPortionResultPtr() const {
-        AFL_VERIFY(!PortionConstructor);
-        AFL_VERIFY(!!PortionResult);
-        return PortionResult;
     }
 
     TPortionInfoConstructor& GetPortionConstructor() {
@@ -194,4 +191,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

@@ -60,19 +60,18 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         (*schemas)[p.GetPortionIdVerified()] = schema.GetSchema(p);
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> package;
-    package.reserve(100);
+    std::vector<TPortionDataAccessor> package;
 
     ui64 brokenPortioncCount = 0;
     for (auto&& portionConstructor : portions) {
-        auto portionInfo = std::make_shared<TPortionInfo>(portionConstructor.second.Build(false));
-        if (CheckPortion(tablesManager, *portionInfo)) {
+        auto portionInfo = portionConstructor.second.Build(false);
+        if (CheckPortion(tablesManager, portionInfo)) {
             continue;
         }
         ++brokenPortioncCount;
         package.emplace_back(portionInfo);
         if (package.size() == 1000) {
-            std::vector<std::shared_ptr<TPortionInfo>> local;
+            std::vector<TPortionDataAccessor> local;
             local.swap(package);
             auto task = BuildTask(std::move(local), schemas);
             if (!!task) {

@@ -11,10 +11,10 @@ namespace NKikimr::NOlap {
 
 class TBlobsRemovingResult: public INormalizerChanges {
     std::shared_ptr<IBlobsDeclareRemovingAction> RemovingAction;
-    std::vector<std::shared_ptr<TPortionInfo>> Portions;
+    std::vector<TPortionDataAccessor> Portions;
 
 public:
-    TBlobsRemovingResult(std::shared_ptr<IBlobsDeclareRemovingAction> removingAction, std::vector<std::shared_ptr<TPortionInfo>>&& portions)
+    TBlobsRemovingResult(std::shared_ptr<IBlobsDeclareRemovingAction> removingAction, std::vector<TPortionDataAccessor>&& portions)
         : RemovingAction(removingAction)
         , Portions(std::move(portions)) {
     }
@@ -25,9 +25,9 @@ public:
 
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& portion : Portions) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion->GetPathId())(
-                "portion_id", portion->GetPortionId());
-            TPortionDataAccessor(portion).RemoveFromDatabase(db);
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("message", "remove lost portion")("path_id", portion.GetPortionInfo().GetPathId())(
+                "portion_id", portion.GetPortionInfo().GetPortionId());
+            portion.RemoveFromDatabase(db);
         }
         return true;
     }
@@ -43,10 +43,10 @@ public:
 
 class TBlobsRemovingTask: public INormalizerTask {
     std::vector<TUnifiedBlobId> Blobs;
-    std::vector<std::shared_ptr<TPortionInfo>> Portions;
+    std::vector<TPortionDataAccessor> Portions;
 
 public:
-    TBlobsRemovingTask(std::vector<TUnifiedBlobId>&& blobs, std::vector<std::shared_ptr<TPortionInfo>>&& portions)
+    TBlobsRemovingTask(std::vector<TUnifiedBlobId>&& blobs, std::vector<TPortionDataAccessor>&& portions)
         : Blobs(std::move(blobs))
         , Portions(std::move(portions)) {
     }
@@ -64,17 +64,17 @@ public:
     }
 };
 
-bool TCleanPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& portionInfo) const {
-    return tablesManager.HasTable(portionInfo.GetAddress().GetPathId(), true);
+bool TCleanPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const {
+    return tablesManager.HasTable(portionInfo.GetPortionInfo().GetAddress().GetPathId(), true);
 }
 
 INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(
-    std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
     std::vector<TUnifiedBlobId> blobIds;
     THashMap<TString, THashSet<TUnifiedBlobId>> blobsByStorage;
     for (auto&& portion : portions) {
-        auto schemaPtr = schemas->FindPtr(portion->GetPortionId());
-        TPortionDataAccessor(portion).FillBlobIdsByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
+        auto schemaPtr = schemas->FindPtr(portion.GetPortionInfo().GetPortionId());
+        portion.FillBlobIdsByStorage(blobsByStorage, schemaPtr->get()->GetIndexInfo());
     }
     for (auto&& [storageId, blobs] : blobsByStorage) {
         if (storageId == NBlobOperations::TGlobal::DefaultStorageId) {

@@ -119,16 +119,8 @@ struct TEvSchedulerNewPool : public TEventLocal<TEvSchedulerNewPool, TKqpCompute
     TString DatabaseId;
     TString Pool;
 
-<<<<<<< HEAD
-    TEvSchedulerNewPool(TString databaseId, TString pool, double maxShare)
-        : DatabaseId(databaseId)
-||||||| parent of efd8a439c77 (Per query cpu limits (#8520))
-    TEvSchedulerNewPool(TString database, TString pool, double maxShare)
-        : Database(database)
-=======
     TEvSchedulerNewPool(TString database, TString pool)
         : Database(database)
->>>>>>> efd8a439c77 (Per query cpu limits (#8520))
         , Pool(pool)
     {
     }

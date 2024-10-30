@@ -353,6 +353,10 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
     auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), rightInput, rightFilterKeys);
 
     if (useGraceCore) {
+        auto flags = Build<TCoAtomList>(ctx, join.Pos())
+            .Add<TCoAtom>().Value("Broadcast").Build()
+            .Done();
+
         return Build<TDqPhyGraceJoin>(ctx, join.Pos())
             .LeftInput(leftFilteredInput)
             .LeftLabel(join.LeftLabel())
@@ -362,6 +366,7 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
             .JoinKeys(join.JoinKeys())
             .LeftJoinKeyNames(join.LeftJoinKeyNames())
             .RightJoinKeyNames(join.RightJoinKeyNames())
+            .Flags(flags)
             .Done();
     } else {
         return Build<TDqPhyMapJoin>(ctx, join.Pos())

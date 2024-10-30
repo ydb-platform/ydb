@@ -11,6 +11,13 @@ PROJECT_ID = '45'
 TEST_HISTORY_DASHBOARD = "https://datalens.yandex/4un3zdm0zcnyr"
 CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 
+# Github api (personal access token (classic)) token shoud have permitions to
+# repo
+# - repo:status
+# - repo_deployment
+# - public_repo
+# admin:org
+# project
 
 def run_query(query, variables=None):
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]

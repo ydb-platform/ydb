@@ -20,7 +20,6 @@ from update_mute_issues import (
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# ... (load your config file here, this is where you should have your ydb endpoint and database)
 dir = os.path.dirname(__file__)
 config = configparser.ConfigParser()
 config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
@@ -109,8 +108,8 @@ def execute_query(driver):
     
     '''
 
-    query = ydb.ScanQuery(query_string, {})  # Removed unnecessary arguments
-    table_client = ydb.TableClient(driver, ydb.TableClientSettings())  # Simplified
+    query = ydb.ScanQuery(query_string, {})
+    table_client = ydb.TableClient(driver, ydb.TableClientSettings())
     it = table_client.scan_query(query)
     results = []
     while True:
@@ -156,7 +155,7 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
 
         deleted_tests_debug = sorted(deleted_tests_debug)
         add_lines_to_file(os.path.join(output_path, 'deleted_debug.txt'), deleted_tests_debug)
-        # Get muted stable tests directly from the query result
+
         muted_stable_tests = set(
             f"{test.get('suite_folder')} {test.get('test_name')}\n"
             for test in all_tests
@@ -261,7 +260,6 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         logging.info(f"Muted before script: {muted_before_count} tests")
         logging.info(f"Muted stable : {len(muted_stable_tests)}")
         logging.info(f"Flaky tests : {len(flaky_tests)}")
-        # logging.info(f"Deleted (no runs) tests : {len(deleted_tests)}")
         logging.info(f"Result: Muted without deleted and stable : {len(new_muted_ya_tests)}")
         logging.info(f"Result: Muted without deleted and stable, with flaky : {len(new_muted_ya_tests_with_flaky)}")
         logging.info(f"Result: Unmuted tests : stable {unmuted_stable} and deleted {unmuted_deleted}")

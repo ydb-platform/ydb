@@ -45,6 +45,8 @@ SortIncludes: Never
 ReflowComments: false
 SpacesBeforeTrailingComments: 1
 AlignTrailingComments: Leave
+SkipMacroDefinitionBody: true
+SpaceBeforeInheritanceColon: false
 
 # Don't touch these macros
 WhitespaceSensitiveMacros: [

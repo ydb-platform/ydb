@@ -7,6 +7,7 @@ namespace NKikimr {
 
 class TCountMinSketch {
 private:
+    ui64 Version = 1;
     ui64 Width;
     ui64 Depth;
     ui64 ElementCount;
@@ -62,6 +63,6 @@ public:
     TCountMinSketch& operator+=(const TCountMinSketch& rhs);
 };
 
-static_assert(sizeof(TCountMinSketch) == 24);
+static_assert(sizeof(TCountMinSketch) == 32);
 
 } // NKikimr

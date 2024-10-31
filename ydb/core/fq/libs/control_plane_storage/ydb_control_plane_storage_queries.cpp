@@ -1901,9 +1901,11 @@ TInstant TYdbControlPlaneStorageActor::GetExecutionDeadline(
     }
 
     auto executionDeadline = std::min(userExecutionDeadline, systemExecutionDeadline);
-    if (systemExecutionDeadline - now == TDuration::Zero()) {
+    if (systemExecutionDeadline == now && userExecutionDeadline  == now) {
+        executionDeadline = TInstant::Zero();
+    } else if (systemExecutionDeadline == now) {
         executionDeadline = userExecutionDeadline;
-    } else if (userExecutionDeadline - now == TDuration::Zero()) {
+    } else if (userExecutionDeadline == now) {
         executionDeadline = systemExecutionDeadline;
     }
     return executionDeadline;

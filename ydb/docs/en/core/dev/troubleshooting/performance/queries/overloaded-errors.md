@@ -2,7 +2,11 @@
 
 {{ ydb-short-name }} returns `OVERLOADED` errors in the following cases:
 
-* Overloaded table partitions with over 10000 operations in their queue.
+* Overloaded table partitions with over 15000 queries in their queue.
+
+* The outbound CDC queue exceeds the limit of 10000 elements or 125 MB.
+
+* Table partitions in states other than normal, for example partitions in the process of splitting or merging.
 
 * The number of sessions with a {{ ydb-short-name }} node has reached the limit of 1000.
 

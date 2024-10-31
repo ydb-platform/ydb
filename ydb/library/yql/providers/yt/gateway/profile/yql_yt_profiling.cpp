@@ -149,11 +149,15 @@ public:
     }
 
     TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
-        return Slave_->DownloadTables(std::move(options));
+        auto profileScope = YQL_PROFILE_FUNC_VAL(TRACE);
+        auto future = Slave_->DownloadTables(std::move(options));
+        return YQL_PROFILE_BIND_VAL(future, profileScope);
     }
 
     TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
-        return Slave_->UploadTable(std::move(options));
+        auto profileScope = YQL_PROFILE_FUNC_VAL(TRACE);
+        auto future = Slave_->UploadTable(std::move(options));
+        return YQL_PROFILE_BIND_VAL(future, profileScope);
     }
 
     NThreading::TFuture<TRunResult> GetTableStat(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {

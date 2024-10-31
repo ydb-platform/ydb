@@ -281,15 +281,15 @@ public:
     }
 
     void GrowStates() {
-        if (IsOutOfMemory < AllowOutOfMemory) {
-            try {
-                States.CheckGrow();
-            } catch (TMemoryLimitExceededException) {
-                YQL_LOG(INFO) << "State failed to grow\n";
-                IsOutOfMemory = true;
-            }
-        } else {
+        try {
             States.CheckGrow();
+        } catch (TMemoryLimitExceededException) {
+            YQL_LOG(INFO) << "State failed to grow";
+            if (IsOutOfMemory < AllowOutOfMemory) {
+                IsOutOfMemory = true;
+            } else {
+                throw;
+            }
         }
     }
 

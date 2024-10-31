@@ -22,6 +22,7 @@ private:
     YDB_READONLY(ui32, ColumnBlobBytes, 0);
     YDB_READONLY(ui32, IndexRawBytes, 0);
     YDB_READONLY(ui32, IndexBlobBytes, 0);
+    YDB_READONLY_DEF(std::vector<TUnifiedBlobId>, BlobIds);
 
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;

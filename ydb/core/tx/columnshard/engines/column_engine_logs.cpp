@@ -216,7 +216,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = SignalCounters.ColumnsLoadingTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
-        if (!db.LoadColumns([&](const TColumnChunkLoadContext& loadContext) {
+        if (!db.LoadColumns([&](const TColumnChunkLoadContextV1& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPathId(), loadContext.GetPortionId());
                 constructor->LoadRecord(loadContext);
             })) {

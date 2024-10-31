@@ -35,7 +35,7 @@ std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<N
 
 class TTestDbWrapper : public IDbWrapper {
 private:
-    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContext>> LoadContexts;
+    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
 public:
     struct TIndex {
         THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Columns; // pathId -> portions
@@ -113,8 +113,8 @@ public:
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContext loadContext(
-            portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), portion.RestoreBlobRange(row.BlobRange), rowProto);
+        NOlap::TColumnChunkLoadContextV1 loadContext(
+            portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), row.BlobRange, rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
             itInsertInfo.first->second = loadContext;
@@ -162,7 +162,7 @@ public:
         portionLocal.MutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) override {
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {

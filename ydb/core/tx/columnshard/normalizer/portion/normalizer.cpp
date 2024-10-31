@@ -115,7 +115,7 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     }
 
     TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
-    auto initPortion = [&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContext& loadContext) {
+    auto initPortion = [&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContextV1& loadContext) {
         auto currentSchema = schema.GetSchema(portion);
         portion.SetSchemaVersion(currentSchema->GetVersion());
 
@@ -133,14 +133,10 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     };
 
     while (!rowset.EndOfSet()) {
-        TPortionInfoConstructor portion(rowset.GetValue<Schema::IndexColumns::PathId>(), rowset.GetValue<Schema::IndexColumns::Portion>());
-        Y_ABORT_UNLESS(rowset.GetValue<Schema::IndexColumns::Index>() == 0);
+        TPortionInfoConstructor portion(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::Portion>());
+        Y_ABORT_UNLESS(rowset.GetValue<Schema::IndexColumnsV1::Index>() == 0);
 
-        portion.SetMinSnapshotDeprecated(
-            NOlap::TSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>()));
-        portion.SetRemoveSnapshot(rowset.GetValue<Schema::IndexColumns::XPlanStep>(), rowset.GetValue<Schema::IndexColumns::XTxId>());
-
-        NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, &DsGroupSelector);
+        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset, &DsGroupSelector);
         initPortion(std::move(portion), chunkLoadContext);
 
         if (!rowset.Next()) {

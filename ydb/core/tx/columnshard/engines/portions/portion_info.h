@@ -1,4 +1,4 @@
-#pragma once
+bl#pragma once
 #include "column_record.h"
 #include "common.h"
 #include "index_chunk.h"
@@ -86,7 +86,6 @@ private:
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
-    std::vector<TUnifiedBlobId> BlobIds;
 
     std::vector<TIndexChunk> Indexes;
     std::vector<TColumnRecord> Records;

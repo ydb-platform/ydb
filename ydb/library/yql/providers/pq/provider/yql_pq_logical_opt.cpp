@@ -257,25 +257,27 @@ public:
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
-        
+
         auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
             return node;
         }
 
-        NYql::NConnector::NApi::TPredicate predicateProto;
         auto predicate = newFilterLambda.Cast();
+        if (NYql::IsEmptyFilterPredicate(predicate)) {
+            return node;
+        }
 
-        if (!NYql::IsEmptyFilterPredicate(predicate)) {
-            TStringBuilder err;
-            if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-                predicateProto.Clear();
-            }
+        TStringBuilder err;
+        NYql::NConnector::NApi::TPredicate predicateProto;
+        if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+            return node;
         }
         
         TString serializedProto;
         if (!predicateProto.SerializeToString(&serializedProto)) {
+            YQL_CLOG(ERROR, ProviderPq) << "SerializeToString failed";
             return node;
         }            
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";

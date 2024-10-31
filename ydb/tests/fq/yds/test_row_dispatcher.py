@@ -79,6 +79,7 @@ def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match
         time.sleep(1)
     pass
 
+
 class TestPqRowDispatcher(TestYdsBase):
 
     def run_and_check(self, kikimr, client, sql, input, output, expected_predicate):
@@ -93,6 +94,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         issues = str(client.describe_query(query_id).result.query.transient_issue)
         assert expected_predicate in issues, "Incorrect Issues: " + issues
+
     @yq_v1
     def test_read_raw_format_with_row_dispatcher(self, kikimr, client):
         client.create_yds_connection(

@@ -4,6 +4,7 @@
 #include "flat_redo_writer.h"
 #include "flat_dbase_scheme.h"
 #include "flat_sausage_solid.h"
+#include "util_channel.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -13,7 +14,9 @@ namespace NTable {
         using TGlobId = NPageCollection::TGlobId;
 
     public:
-        TAnnex(const TScheme &scheme) : Scheme(scheme) { }
+        TAnnex(const TScheme &scheme, const THashMap<ui32, float>& approximateFreeSpaceShareByChannel)
+            : Scheme(scheme)
+            , ApproximateFreeSpaceShareByChannel(approximateFreeSpaceShareByChannel) { }
 
         TVector<NPageCollection::TMemGlob> Unwrap() noexcept
         {
@@ -47,7 +50,10 @@ namespace NTable {
             auto blob = NPage::TLabelWrapper::Wrap(data, EPage::Opaque, 0);
 
             const ui32 ref = Blobs.size();
-            const TLogoBlobID fake(0, 0, 0, Room->Blobs, blob.size(), ref);
+
+            ui8 bestChannel = SelectChannel(ApproximateFreeSpaceShareByChannel, Room->Blobs);
+
+            const TLogoBlobID fake(0, 0, 0, bestChannel, blob.size(), ref);
 
             Blobs.emplace_back(TGlobId{ fake, 0 }, std::move(blob));
 
@@ -68,6 +74,7 @@ namespace NTable {
 
     private:
         const TScheme &Scheme;
+        const THashMap<ui32, float>& ApproximateFreeSpaceShareByChannel;
         TVector<NPageCollection::TMemGlob> Blobs;
 
         /*_ Simple table info lookup cache */

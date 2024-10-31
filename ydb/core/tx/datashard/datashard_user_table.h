@@ -124,12 +124,12 @@ struct TUserTable : public TThrRefBase {
             return MainChannelByStorageEnum();
         }
 
-        ui32 ExternalChannel() const {
+        THashSet<ui32> ExternalChannels() const {
             if (!*Room) {
-                return ExternalChannelByStorageEnum();
+                return {ExternalChannelByStorageEnum()};
             }
 
-            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::External, 1);
+            return Room->GetExternalChannels(1);
         }
 
         ui32 ExternalChannelByStorageEnum() const {

@@ -1093,6 +1093,10 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
             if (srcStorage.HasExternalThreshold()) {
                 dstStorage.SetExternalThreshold(srcStorage.GetExternalThreshold());
             }
+
+            if (srcStorage.HasExternalChannelsCount()) {
+                dstStorage.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
+            }
         }
     }
 

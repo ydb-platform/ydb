@@ -5,6 +5,7 @@
 #include "flat_writer_banks.h"
 #include "flat_writer_blocks.h"
 #include "util_basics.h"
+#include "util_channel.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -22,8 +23,9 @@ namespace NWriter {
 
         TBundle(const TLogoBlobID &base, const TConf &conf)
             : Groups(conf.Groups)
-            , BlobsChannel(conf.BlobsChannel)
+            , BlobsChannels(conf.BlobsChannels)
             , ExtraChannel(conf.ExtraChannel)
+            , ApproximateFreeSpaceShareByChannel(conf.ApproximateFreeSpaceShareByChannel)
             , Banks(base, conf.Slots)
         {
             Y_ABORT_UNLESS(Groups.size() >= 1, "There must be at least one page collection group");
@@ -83,7 +85,9 @@ namespace NWriter {
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
         {
-            auto glob = Banks.Data.Do(BlobsChannel, blob.size());
+            ui8 bestChannel = NTable::SelectChannel(ApproximateFreeSpaceShareByChannel, BlobsChannels);
+            
+            auto glob = Banks.Data.Do(bestChannel, blob.size());
 
             Blobs.emplace_back(glob, std::move(blob));
             Growth->Pass(ref);
@@ -149,8 +153,9 @@ namespace NWriter {
 
     private:
         const TVector<TConf::TGroup> Groups;
-        const ui8 BlobsChannel;
+        const TVector<ui8> BlobsChannels;
         const ui8 ExtraChannel;
+        const THashMap<ui32, float>& ApproximateFreeSpaceShareByChannel;
         TBanks Banks;
         TVector<NPageCollection::TGlob> Blobs;
         TVector<THolder<TBlocks>> Blocks;

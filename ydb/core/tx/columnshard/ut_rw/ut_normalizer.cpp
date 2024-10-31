@@ -308,9 +308,16 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
-        auto* repair = runtime.GetAppData().ColumnShardConfig.MutableRepairs()->Add();
-        repair->SetClassName("SchemaVersionCleaner");
-        repair->SetDescription("Removing unused schema versions");
+        {
+            auto* repair = runtime.GetAppData().ColumnShardConfig.MutableRepairs()->Add();
+            repair->SetClassName("SchemaVersionCleaner");
+            repair->SetDescription("Removing unused schema versions");
+        }
+        {
+            auto* repair = runtime.GetAppData().ColumnShardConfig.MutableRepairs()->Add();
+            repair->SetClassName("PortionsCleaner");
+            repair->SetDescription("Removing dirty portions withno tables");
+        }
 
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),

@@ -27,6 +27,16 @@ bool TTxStartSourceCursor::DoExecute(NTabletFlatExecutor::TTransactionContext& t
         }
     }
 
+    std::sort(schemeHistory.begin(), schemeHistory.end(), [](const auto& lhs, const auto& rhs) {
+        if (lhs.GetId() != rhs.GetId()) {
+            return lhs.GetId() < rhs.GetId();
+        }
+        if (lhs.GetSinceStep() != rhs.GetSinceStep()) {
+            return lhs.GetSinceStep() < rhs.GetSinceStep();
+        }
+        return lhs.GetSinceTxId() < rhs.GetSinceTxId();
+    });
+
     Session->StartCursor(*Self, std::move(Portions), std::move(schemeHistory));
     return true;
 }

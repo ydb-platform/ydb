@@ -124,7 +124,7 @@ void TColumnEngineForLogs::UpdatePortionStats(
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
     bool switchOptimizer = false;
     if (!VersionedIndex.IsEmpty()) {
-        const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
+        const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetSchema(snapshot)->GetIndexInfo();
         Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
     }
@@ -152,8 +152,9 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.GetDiff()) {
         AFL_VERIFY(!VersionedIndex.IsEmpty());
+
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
-            *schema.GetDiff(), VersionedIndex.GetLastSchema()->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+            *schema.GetDiff(), VersionedIndex.GetSchema(snapshot)->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }

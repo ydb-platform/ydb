@@ -888,10 +888,18 @@ public:
     }
 
     NThreading::TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
+        if (QContext_.CanRead()) {
+            TDownloadTablesResult res;
+            res.SetSuccess();
+            return NThreading::MakeFuture(std::move(res));
+        }
         return Inner_->DownloadTables(std::move(options));
     }
 
     NThreading::TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
+        if (QContext_.CanRead()) {
+            throw yexception() << "Can't replay UploadTable";
+        }
         return Inner_->UploadTable(std::move(options));
     }
 

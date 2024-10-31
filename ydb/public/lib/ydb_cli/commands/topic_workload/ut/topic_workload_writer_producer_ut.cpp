@@ -46,17 +46,24 @@ namespace NTests {
 
         class TFixture : public NUnitTest::TBaseFixture {
         protected: 
+            TFixture() : 
+                WriteSession(std::make_shared<MockWriteSession>()),
+                Clock(CreateClock()),
+                LoggedData(),
+                Log(CreateLogger()),
+                GeneratedMessages(TTopicWorkloadWriterWorker::GenerateMessages(100'000))
+            {}
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(
                 // we need error flag = true, cause without it, stats collector will go into the infinite loop
                 // during the call to PrintWindowStatsLoop. And this call is the only way to deque write events to
                 // statisitcs. 
                 1, 1, false, false, 5, 60, 0, 99, std::make_shared<std::atomic_bool>(true), false
             );
-            std::shared_ptr<MockWriteSession> WriteSession = std::make_shared<MockWriteSession>();
-            NUnifiedAgent::TClock Clock = CreateClock();
-            std::shared_ptr<TLog> Log = CreateLogger();
+            std::shared_ptr<MockWriteSession> WriteSession;
+            NUnifiedAgent::TClock Clock;
             TStringStream LoggedData;
-            std::vector<TString> GeneratedMessages = TTopicWorkloadWriterWorker::GenerateMessages(100'000);
+            std::shared_ptr<TLog> Log;
+            std::vector<TString> GeneratedMessages;
 
             TTopicWorkloadWriterProducer CreateProducer();
             TWriteSessionEvent::TAcksEvent CreateAckEvent(ui64 seqno);
@@ -127,7 +134,7 @@ namespace NTests {
                 .Codec = {},
                 .UseTransactions = true,
                 .UseAutoPartitioning = false,
-                .CommitPeriodMs = 100,
+                .CommitIntervalMs = 100,
                 .CommitMessages = 0
             };
         }

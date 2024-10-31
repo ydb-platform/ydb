@@ -36,8 +36,9 @@ namespace NYdb {
             bool UseAutoPartitioning = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;
-            size_t CommitPeriodMs = 15'000;
+            size_t CommitIntervalMs = 15'000;
             size_t CommitMessages = 1'000'000;
+            bool UseCpuTimestamp = false;
         };
 
         class TTopicWorkloadWriterProducer;
@@ -60,6 +61,8 @@ namespace NYdb {
             void Process(TInstant endTime);
 
             TInstant GetExpectedCurrMessageCreationTimestamp() const;
+
+            TInstant GetCreateTimestampForNextMessage();
 
             void TryCommitTx(TInstant& commitTime);
             void TryCommitTableChanges();

@@ -73,7 +73,7 @@ private:
 };
 
 class TColumnParser {
-    using TParser = std::function<void(simdjson::fallback::ondemand::value, NYql::NUdf::TUnboxedValue&)>;
+    using TParser = std::function<void(simdjson::builtin::ondemand::value, NYql::NUdf::TUnboxedValue&)>;
 
 public:
     const std::string Name;
@@ -97,7 +97,7 @@ public:
         }
     }
 
-    void ParseJsonValue(simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+    void ParseJsonValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
         Parser(jsonValue, resultValue);
         NumberValues++;
     }
@@ -130,7 +130,7 @@ private:
     }
 
     static TParser AddOptional(TParser parser) {
-        return [parser](simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+        return [parser](simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             parser(std::move(jsonValue), resultValue);
             if (resultValue) {
                 resultValue = resultValue.MakeOptional();
@@ -140,9 +140,9 @@ private:
 
     static TParser GetJsonValueParser(NYql::NUdf::EDataSlot dataSlot, bool optional) {
         const auto& typeInfo = NYql::NUdf::GetDataTypeInfo(dataSlot);
-        return [dataSlot, optional, &typeInfo](simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+        return [dataSlot, optional, &typeInfo](simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             switch (jsonValue.type()) {
-                case simdjson::fallback::ondemand::json_type::number: {
+                case simdjson::builtin::ondemand::json_type::number: {
                     try {
                         switch (dataSlot) {
                             case NYql::NUdf::EDataSlot::Int8:
@@ -155,7 +155,7 @@ private:
                                 resultValue = ParseJsonNumber<i32>(jsonValue.get_int64().value());
                                 break;
                             case NYql::NUdf::EDataSlot::Int64:
-                                resultValue = NYql::NUdf::TUnboxedValuePod(jsonValue.get_int64().value());
+                                resultValue = ParseJsonNumber<i64>(jsonValue.get_int64().value());
                                 break;
 
                             case NYql::NUdf::EDataSlot::Uint8:
@@ -168,7 +168,7 @@ private:
                                 resultValue = ParseJsonNumber<ui32>(jsonValue.get_uint64().value());
                                 break;
                             case NYql::NUdf::EDataSlot::Uint64:
-                                resultValue = NYql::NUdf::TUnboxedValuePod(jsonValue.get_uint64().value());
+                                resultValue = ParseJsonNumber<ui64>(jsonValue.get_uint64().value());
                                 break;
 
                             case NYql::NUdf::EDataSlot::Double:
@@ -187,7 +187,7 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::string: {
+                case simdjson::builtin::ondemand::json_type::string: {
                     const auto rawString = jsonValue.get_string().value();
                     resultValue = NKikimr::NMiniKQL::ValueFromString(dataSlot, rawString);
                     if (Y_UNLIKELY(!resultValue)) {
@@ -197,8 +197,8 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::array:
-                case simdjson::fallback::ondemand::json_type::object: {
+                case simdjson::builtin::ondemand::json_type::array:
+                case simdjson::builtin::ondemand::json_type::object: {
                     const auto rawJson = jsonValue.raw_json().value();
                     if (Y_UNLIKELY(dataSlot != NYql::NUdf::EDataSlot::Json)) {
                         throw yexception() << "found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " <<typeInfo.Name << ", please use Json type for nested values";
@@ -211,7 +211,7 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::boolean: {
+                case simdjson::builtin::ondemand::json_type::boolean: {
                     if (Y_UNLIKELY(dataSlot != NYql::NUdf::EDataSlot::Bool)) {
                         throw yexception() << "found unexpected bool value, expected data type " << typeInfo.Name;
                     }
@@ -219,7 +219,7 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::null: {
+                case simdjson::builtin::ondemand::json_type::null: {
                     if (Y_UNLIKELY(!optional)) {
                         throw yexception() << "found unexpected null value, expected non optional data type " << typeInfo.Name;
                     }

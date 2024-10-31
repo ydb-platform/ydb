@@ -391,15 +391,6 @@ private:
             outputBlockIndexes[GetHashPartitionIndex(datums.data(), i)].push_back(i);
         }
 
-        ui64 maxLen = 0;
-        for (auto& indexes : outputBlockIndexes) {
-            maxLen = std::max(maxLen, indexes.size());
-        }
-
-        if (maxLen > MaxOutputBlockLen_) {
-            MakeBuilders(maxLen);
-        }
-
         TVector<std::unique_ptr<TArgsDechunker>> outputData;
         for (size_t i = 0; i < Outputs_.size(); ++i) {
             ui64 outputBlockLen = outputBlockIndexes[i].size();
@@ -407,6 +398,7 @@ private:
                 outputData.emplace_back();
                 continue;
             }
+            MakeBuilders(outputBlockLen);
             const ui64* indexes = outputBlockIndexes[i].data();
 
             std::vector<arrow::Datum> output;

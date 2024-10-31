@@ -1,0 +1,76 @@
+# taxi-options
+BasedOnStyle: Google
+DerivePointerAlignment: false
+IncludeBlocks: Preserve
+AttributeMacros: ["noexcept"]
+IndentRequires: false
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+# No indent for public/protected/private
+AccessModifierOffset: -4
+# No pack for function calls and parameters
+BinPackParameters: false
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: false
+# Put open bracket on next line for multi line declarations, calls, conditions
+AlignAfterOpenBracket: BlockIndent
+AlwaysBreakAfterDefinitionReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 200
+
+# ydb options
+InsertNewlineAtEOF: true
+Standard: c++20
+UseTab: Never
+LineEnding: LF
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Left
+
+AlignConsecutiveAssignments: None
+AllowShortBlocksOnASingleLine: false
+# AllowShortCaseExpressionOnASingleLine: true # clang-format-19
+AllowShortCaseLabelsOnASingleLine: false
+# AllowShortCompoundRequirementOnASingleLine: true # clang-format-18
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Empty
+PackConstructorInitializers: Never
+BreakInheritanceList: BeforeComma
+
+# ydb options to decrease diff
+BreakConstructorInitializers: BeforeComma
+SortIncludes: Never
+ReflowComments: false
+SpacesBeforeTrailingComments: 1
+AlignTrailingComments: Leave
+
+# Don't touch these macros
+WhitespaceSensitiveMacros: [
+  Y_ABORT, Y_ABORT_UNLESS, Y_DEBUG_ABORT_UNLESS,
+  Y_FAIL, Y_VERIFY, Y_VERIFY_DEBUG,
+  Y_FAIL_S, Y_VERIFY_S, Y_VERIFY_DEBUG_S,
+  Y_DEBUG_ABORT, Y_DEBUG_ABORT_S, Y_ASSERT,
+  Y_THROW_UNLESS, Y_ENSURE,
+
+  LOG_EMERG_S, LOG_ALERT_S, LOG_CRIT_S, LOG_ERROR_S, LOG_WARN_S, LOG_NOTICE_S, LOG_INFO_S, LOG_DEBUG_S, LOG_TRACE_S,
+  LOG_S_EMERG, LOG_S_ALERT, LOG_S_CRIT, LOG_S_ERROR, LOG_S_WARN, LOG_S_NOTICE, LOG_S_INFO, LOG_S_DEBUG, LOG_S_TRACE,
+  TXLOG_LOG, TXLOG_ERROR, TXLOG_WARN, TXLOG_NOTICE, TXLOG_INFO, TXLOG_DEBUG, TXLOG_TRACE,
+
+  LOG_C, LOG_E, LOG_W, LOG_N, LOG_I, LOG_D, LOG_T,
+  EXPORT_LOG_C, EXPORT_LOG_E, EXPORT_LOG_W, EXPORT_LOG_N, EXPORT_LOG_I, EXPORT_LOG_D, EXPORT_LOG_T,
+  IMPORT_LOG_C, IMPORT_LOG_E, IMPORT_LOG_W, IMPORT_LOG_N, IMPORT_LOG_I, IMPORT_LOG_D, IMPORT_LOG_T,
+  CLOG_C, CLOG_E, CLOG_W, CLOG_N, CLOG_I, CLOG_D, CLOG_T,
+  CB_LOG_E, CB_LOG_W, CB_LOG_N, CB_LOG_I, CB_LOG_D, CB_LOG_T,
+  SBC_LOG_E, SBC_LOG_W, SBC_LOG_N, SBC_LOG_I, SBC_LOG_D, SBC_LOG_T,
+  SB_LOG_CRIT, SB_LOG_E, SB_LOG_W, SB_LOG_N, SB_LOG_I, SB_LOG_D, SB_LOG_T,
+  SBP_LOG_CRIT, SBP_LOG_E, SBP_LOG_W, SBP_LOG_N, SBP_LOG_I, SBP_LOG_D, SBP_LOG_T,
+  SBR_LOG_E, SBR_LOG_W, SBR_LOG_N, SBR_LOG_I, SBR_LOG_D, SBR_LOG_T,
+  SBS_LOG_E, SBS_LOG_W, SBS_LOG_N, SBS_LOG_I, SBS_LOG_D, SBS_LOG_T,
+  SS_LOG_E, SS_LOG_W, SS_LOG_N, SS_LOG_I, SS_LOG_D, SS_LOG_T,
+  SLOG_E, SLOG_W, SLOG_N, SLOG_I, SLOG_D, SLOG_T,
+  TXLOG_E, TXLOG_W, TXLOG_N, TXLOG_I, TXLOG_D, TXLOG_T,
+
+  SCHEMESHARD_INCOMING_EVENTS,
+]

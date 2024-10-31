@@ -7,7 +7,8 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     const TString& name,
     bool validateFeatureFlag,
     TOperationContext& context,
-    THolder<TProposeResponse>& result)
+    THolder<TProposeResponse>& result,
+    bool enforceBackupCollectionsDirExists)
 {
     bool backupServiceEnabled = AppData()->FeatureFlags.GetEnableBackupService();
     if (!backupServiceEnabled && validateFeatureFlag) {
@@ -45,7 +46,7 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     }
 
     const TPath& backupCollectionsPath = TPath::Resolve(backupCollectionsDir, context.SS);
-    {
+    if (enforceBackupCollectionsDirExists || backupCollectionsPath.IsResolved()) {
         const auto checks = backupCollectionsPath.Check();
         checks.NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()

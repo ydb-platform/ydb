@@ -256,7 +256,7 @@ private: //IDqComputeActorAsyncInput
                 }
                 ++row;
             }
-            if (Batches && (!KeysForLookup->empty() || !ReadyQueue.RowCount())) {
+            if (Batches && (!KeysForLookup->empty() || ReadyQueue.RowCount())) {
                 Batches->Inc();
                 LruHits->Add(ReadyQueue.RowCount());
                 LruMiss->Add(AwaitingQueue.size());

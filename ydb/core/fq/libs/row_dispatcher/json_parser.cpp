@@ -264,7 +264,7 @@ class TJsonParser::TImpl {
 public:
     TImpl(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout)
         : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
-        , TypeEnv(Alloc)
+        , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
         , BatchSize(batchSize)
         , BatchCreationTimeout(batchCreationTimeout)
         , ParsedValues(columns.size())
@@ -273,7 +273,7 @@ public:
 
         with_lock (Alloc) {
             auto functonRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
-            NKikimr::NMiniKQL::TProgramBuilder programBuilder(TypeEnv, *functonRegistry);
+            NKikimr::NMiniKQL::TProgramBuilder programBuilder(*TypeEnv, *functonRegistry);
 
             Columns.reserve(columns.size());
             for (size_t i = 0; i < columns.size(); i++) {
@@ -328,9 +328,13 @@ public:
         with_lock (Alloc) {
             ClearColumns(Buffer.NumberValues);
 
+            const ui64 firstOffset = Buffer.Offsets.front();
             size_t rowId = 0;
             simdjson::ondemand::document_stream documents = Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE);
             for (auto document : documents) {
+                if (Y_UNLIKELY(rowId >= Buffer.NumberValues)) {
+                    throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << rowId + 1;
+                }
                 for (auto item : document.get_object()) {
                     const auto it = ColumnsIndex.find(item.escaped_key().value());
                     if (it == ColumnsIndex.end()) {
@@ -348,7 +352,6 @@ public:
                 rowId++;
             }
 
-            const ui64 firstOffset = Buffer.Offsets.front();
             if (rowId != Buffer.NumberValues) {
                 throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << rowId;
             }
@@ -370,8 +373,12 @@ public:
     }
 
     ~TImpl() {
-        Alloc.Acquire();
-        ClearColumns(0);
+        with_lock (Alloc) {
+            ClearColumns(0);
+            ParsedValues.clear();
+            Columns.clear();
+            TypeEnv.reset();
+        }
     }
 
 private:
@@ -392,7 +399,7 @@ private:
 
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
+    std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
 
     const ui64 BatchSize;
     const TDuration BatchCreationTimeout;
@@ -402,7 +409,7 @@ private:
     TJsonParserBuffer Buffer;
     simdjson::ondemand::parser Parser;
 
-    TVector<std::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue>>> ParsedValues;
+    TVector<NKikimr::NMiniKQL::TUnboxedValueVector> ParsedValues;
 };
 
 TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout)

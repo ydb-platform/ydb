@@ -249,7 +249,7 @@ IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNo
 
             auto future = transformer.GetAsyncFuture(*root);
             future.Wait();
-            YQL_ENSURE(!future.HasException());
+            HandleFutureException(future);
 
             status = transformer.ApplyAsyncChanges(root, newRoot, ctx);
             if (newRoot) {
@@ -377,7 +377,7 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
     NThreading::TFuture<IGraphTransformer::TStatus> status = AsyncTransform(transformer, root, ctx, applyAsyncChanges);
     status.Subscribe(
        [asyncCallback](const NThreading::TFuture<IGraphTransformer::TStatus>& status) mutable -> void {
-           YQL_ENSURE(!status.HasException());
+           HandleFutureException(status);
            asyncCallback(status.GetValue());
        });
 }

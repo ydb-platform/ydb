@@ -50,6 +50,13 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(ECardinal, char,
     ((South) (3))
 );
 
+DEFINE_ENUM(EWithUnknown,
+    (First)
+    (Second)
+    (Unknown)
+);
+DEFINE_ENUM_UNKNOWN_VALUE(EWithUnknown, Unknown);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, size_t N>
@@ -203,6 +210,22 @@ TEST(TEnumTest, DomainValues)
     EXPECT_EQ(colorValues, ToVector(TEnumTraits<EColor>::GetDomainValues()));
 }
 
+TEST(TEnumTest, IsKnownValue)
+{
+    EXPECT_TRUE(TEnumTraits<ESimple>::IsKnownValue(ESimple::X));
+    EXPECT_TRUE(TEnumTraits<ESimple>::IsKnownValue(ESimple::Y));
+    EXPECT_TRUE(TEnumTraits<ESimple>::IsKnownValue(ESimple::Z));
+
+    EXPECT_FALSE(TEnumTraits<ESimple>::IsKnownValue(static_cast<ESimple>(100)));
+
+    EXPECT_TRUE(TEnumTraits<EColor>::IsKnownValue(EColor::Red));
+}
+
+TEST(TEnumTest, AllSetValue)
+{
+    EXPECT_EQ(TEnumTraits<EFlag>::GetAllSetValue(), EFlag::_1 | EFlag::_2 | EFlag::_3 | EFlag::_4);
+}
+
 TEST(TEnumTest, Decompose1)
 {
     auto f = EFlag(0);
@@ -278,6 +301,12 @@ TEST(TEnumTest, Cast)
         int widerTypeInvalueValue = (1 << 8) + 100;
         EXPECT_FALSE(TryEnumCast(widerTypeInvalueValue, &cardinal));
     }
+}
+
+TEST(TEnumTest, UnknownValue)
+{
+    EXPECT_EQ(TEnumTraits<EColor>::TryGetUnknownValue(), std::nullopt);
+    EXPECT_EQ(TEnumTraits<EWithUnknown>::TryGetUnknownValue(), EWithUnknown::Unknown);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

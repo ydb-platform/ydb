@@ -83,7 +83,7 @@ public:
     };
 
     TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot,
-        const NKikimrSchemeOp::TColumnTableSchema& schema);
+        const TSchemaInitializationData& schema);
     TColumnEngineForLogs(
         ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
 
@@ -131,7 +131,7 @@ public:
         IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
 
     void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) override;
-    void RegisterSchemaVersion(const TSnapshot& snapshot, const NKikimrSchemeOp::TColumnTableSchema& schema) override;
+    void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) override;
 
     std::shared_ptr<TSelectInfo> Select(
         ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const override;
@@ -182,19 +182,30 @@ public:
         return TabletId;
     }
 
-    void AddCleanupPortion(const TPortionInfo& info) {
-        CleanupPortions[info.GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
+    void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
+        AFL_VERIFY(info->HasRemoveSnapshot());
+        CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         VersionedIndex.AddShardingInfo(shardingInfo);
     }
-    void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
+
+    template <class TModifier>
+    void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
+        auto exPortion = portion->MakeCopy();
+        AFL_VERIFY(portion);
+        auto granule = GetGranulePtrVerified(portion->GetPathId());
+        granule->ModifyPortionOnComplete(portion, modifier);
+        UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
+    }
+
+    void AppendPortion(const TPortionInfo::TPtr& portionInfo);
 
 private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;
     TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id
-    std::map<TInstant, std::vector<TPortionInfo>> CleanupPortions;
+    std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;

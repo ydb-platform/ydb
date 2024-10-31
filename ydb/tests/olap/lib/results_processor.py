@@ -1,4 +1,5 @@
 from __future__ import annotations
+import allure
 import json
 import ydb
 import os
@@ -79,6 +80,7 @@ class ResultsProcessor:
         return os.path.join(YdbCluster.ydb_endpoint, YdbCluster.ydb_database, run_id)
 
     @classmethod
+    @allure.step
     def upload_results(
         cls,
         kind: str,

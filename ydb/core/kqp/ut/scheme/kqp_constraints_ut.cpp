@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(SerialTypeNegative2) {
+    Y_UNIT_TEST(SerialTypeForNonKeyColumn) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         {
             auto query = R"(
                 --!syntax_v1
-                CREATE TABLE `/Root/SerialTableNeg2` (
+                CREATE TABLE `/Root/SerialTable` (
                     Key Uint32,
                     Value Serial,
                     PRIMARY KEY (Key)
@@ -192,8 +192,73 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             )";
 
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST,
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            TString query = R"(
+                UPSERT INTO `/Root/SerialTable` (Key) VALUES (1);
+            )";
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
                                        result.GetIssues().ToString());
+        }
+
+        {
+            TString query = R"(
+                SELECT * FROM `/Root/SerialTable`;
+            )";
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+
+            CompareYson(R"([[[1u];1]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            TString query = R"(
+                ALTER TABLE `/Root/SerialTable` DROP COLUMN Value;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            TString query = R"(
+                ALTER TABLE `/Root/SerialTable` ALTER COLUMN Value DROP NOT NULL;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            TString query = R"(
+                ALTER TABLE `/Root/SerialTable`
+                ADD FAMILY Family2 (
+                     DATA = "test",
+                     COMPRESSION = "off"
+                ),
+                ALTER COLUMN Value SET FAMILY Family2;
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
     }
 

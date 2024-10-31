@@ -189,6 +189,14 @@ struct TBlobRange {
     ui32 Offset;
     ui32 Size;
 
+    ui32 GetSize() const {
+        return Size;
+    }
+
+    ui32 GetOffset() const {
+        return Offset;
+    }
+
     TString GetData(const TString& blobData) const;
 
     bool operator<(const TBlobRange& br) const {

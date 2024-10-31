@@ -41,7 +41,7 @@ class ObjectEventTests(unittest.TestCase, _ConformsToIObjectEvent):
     def test_ctor(self):
         target = object()
         event = self._makeOne(target)
-        self.assertTrue(event.object is target)
+        self.assertIs(event.object, target)
 
 
 class RegistrationEventTests(unittest.TestCase,

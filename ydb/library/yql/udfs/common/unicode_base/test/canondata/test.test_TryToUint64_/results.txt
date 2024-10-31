@@ -103,6 +103,35 @@
                                         "Uint64"
                                     ]
                                 ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Uint64"
+                                    ]
+                                ]
                             ];
                             [
                                 "column1";

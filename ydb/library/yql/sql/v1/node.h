@@ -1521,7 +1521,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
     TNodePtr BuildCommitClusters(TPosition pos);
     TNodePtr BuildRollbackClusters(TPosition pos);
-    TNodePtr BuildQuery(TPosition pos, const TVector<TNodePtr>& blocks, bool topLevel, TScopedStatePtr scoped);
+    TNodePtr BuildQuery(TPosition pos, const TVector<TNodePtr>& blocks, bool topLevel, TScopedStatePtr scoped, bool useSeq);
     TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault);
     TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq);
     TNodePtr BuildWorldIfNode(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode, bool isEvaluate);

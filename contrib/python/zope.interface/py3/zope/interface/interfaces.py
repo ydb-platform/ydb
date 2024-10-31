@@ -1156,6 +1156,7 @@ class IRegistrationEvent(IObjectEvent):
 class RegistrationEvent(ObjectEvent):
     """There has been a change in a registration
     """
+
     def __repr__(self):
         return f"{self.__class__.__name__} event:\n{self.object!r}"
 

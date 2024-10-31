@@ -97,10 +97,10 @@ public:
 
 protected:
     virtual INormalizerTask::TPtr BuildTask(
-        std::vector<std::shared_ptr<TPortionInfo>>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
+        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
     virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
-    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionInfo& /*portionInfo*/) const = 0;
+    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const = 0;
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& schema) const {
         return schema->GetPkColumnsIds();

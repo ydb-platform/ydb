@@ -16,6 +16,8 @@ namespace NYT::NTableClient {
 
 using namespace NYson;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TWalkContext
@@ -1053,7 +1055,7 @@ void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logi
 {
     switch (logicalType->GetMetatype()) {
         case ELogicalMetatype::Simple:
-            protoLogicalType->set_simple(static_cast<int>(logicalType->AsSimpleTypeRef().GetElement()));
+            protoLogicalType->set_simple(ToProto(logicalType->AsSimpleTypeRef().GetElement()));
             return;
         case ELogicalMetatype::Decimal:
             protoLogicalType->mutable_decimal()->set_precision(logicalType->AsDecimalTypeRef().GetPrecision());
@@ -2054,12 +2056,20 @@ public:
 
     const TLogicalTypePtr& GetSimpleType(ESimpleLogicalValueType type)
     {
-        return GetOrCrash(SimpleTypeMap_, type);
+        auto it = SimpleTypeMap_.find(type);
+        if (it == SimpleTypeMap_.end()) {
+            THROW_ERROR_EXCEPTION("Unknown type %Qlv", type);
+        }
+        return it->second;
     }
 
     const TLogicalTypePtr& GetOptionalType(ESimpleLogicalValueType type)
     {
-        return GetOrCrash(OptionalTypeMap_, type);
+        auto it = OptionalTypeMap_.find(type);
+        if (it == OptionalTypeMap_.end()) {
+            THROW_ERROR_EXCEPTION("Unknown type %Qlv", type);
+        }
+        return it->second;
     }
 
 private:

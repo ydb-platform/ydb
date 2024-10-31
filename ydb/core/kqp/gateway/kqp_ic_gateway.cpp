@@ -1296,6 +1296,18 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateBackupCollection(const TString&, const NYql::TCreateBackupCollectionSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> AlterBackupCollection(const TString&, const NYql::TAlterBackupCollectionSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> DropBackupCollection(const TString&, const NYql::TDropBackupCollectionSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateUser(const TString& cluster, const NYql::TCreateUserSettings& settings) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 

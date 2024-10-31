@@ -55,7 +55,6 @@ public:
         , Epoch_(createSessionResult.Epoch)
         , LastSequenceNumber_(createSessionResult.SequenceNumber)
         , UserMeta_(std::move(createSessionResult.UserMeta))
-        , BufferedRowWriter_(CreateWireProtocolWriter())
     {
         if (Options_.BackgroundFlushPeriod) {
             if (!Invoker_) {
@@ -97,18 +96,19 @@ public:
             Started_ = true;
         }
 
-        if (Closed_) {
+        if (Closed_ || Canceled_) {
             return false;
         }
 
         for (const auto& row : rows) {
-            BufferedRowWriter_->WriteUnversionedRow(row);
-            ++BufferedRowCount_;
+            CurrentBufferWriter_->WriteUnversionedRow(row);
+            ++CurrentBufferRowCount_;
         }
-        if (IsFlushNeeded()) {
+        if (IsCurrentBufferFull()) {
             if (!FlushExecutor_) {
                 return false;
             }
+            RotateBuffer();
             FlushExecutor_->ScheduleOutOfBand();
         }
         return true;
@@ -131,19 +131,24 @@ public:
 
     TFuture<void> Flush() override
     {
-        if (!FlushExecutor_) {
-            std::vector<TSharedRef> serializedRows;
-            {
-                auto guard = Guard(SpinLock_);
-                YT_LOG_DEBUG("Flushing rows (RowCount: %v)", BufferedRowCount_);
-                serializedRows = GetRowsToFlushAndResetBuffer();
-            }
-
-            return FlushImpl(serializedRows);
+        if (FlushExecutor_) {
+            FlushExecutor_->ScheduleOutOfBand();
+            return FlushExecutor_->GetExecutedEvent();
         }
 
-        FlushExecutor_->ScheduleOutOfBand();
-        return FlushExecutor_->GetExecutedEvent();
+        return TryToFlush(/*checkIfFlushNeeded*/ false);
+    }
+
+    void Cancel() override
+    {
+        auto guard = Guard(SpinLock_);
+
+        CurrentBufferWriter_ = CreateWireProtocolWriter();
+        CurrentBufferRowCount_ = 0;
+
+        BufferQueue_.clear();
+
+        Canceled_ = true;
     }
 
     TFuture<void> Close() override
@@ -189,87 +194,167 @@ private:
     std::atomic<TQueueProducerSequenceNumber> LastSequenceNumber_ = TQueueProducerSequenceNumber{0};
     INodePtr UserMeta_;
 
-    std::unique_ptr<IWireProtocolWriter> BufferedRowWriter_;
-    i64 BufferedRowCount_ = 0;
+    std::unique_ptr<IWireProtocolWriter> CurrentBufferWriter_ = CreateWireProtocolWriter();
+    i64 CurrentBufferRowCount_ = 0;
+
+    struct TBuffer
+    {
+        std::vector<TSharedRef> SerializedRows;
+        i64 RowCount;
+    };
+
+    std::deque<TBuffer> BufferQueue_;
 
     bool Started_ = false;
     TPeriodicExecutorPtr FlushExecutor_;
 
+    bool Canceled_ = false;
     bool Closed_ = false;
     TPromise<void> StoppedPromise_ = NewPromise<void>();
 
     YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
+    bool IsCurrentBufferFull() const
+    {
+        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+
+        return (Options_.BatchOptions.ByteSize && static_cast<i64>(CurrentBufferWriter_->GetByteSize()) >= *Options_.BatchOptions.ByteSize)
+            || (Options_.BatchOptions.RowCount && CurrentBufferRowCount_ >= *Options_.BatchOptions.RowCount);
+    }
+
     bool IsFlushNeeded() const
     {
         VERIFY_SPINLOCK_AFFINITY(SpinLock_);
 
-        return (Options_.BatchOptions.ByteSize && static_cast<i64>(BufferedRowWriter_->GetByteSize()) >= *Options_.BatchOptions.ByteSize)
-            || (Options_.BatchOptions.RowCount && BufferedRowCount_ >= *Options_.BatchOptions.RowCount);
+        return IsCurrentBufferFull() || !BufferQueue_.empty();
     }
 
-    TFuture<void> TryToFlush()
-    {
-        std::vector<TSharedRef> serializedRows;
-        {
-            auto guard = Guard(SpinLock_);
-            if (!IsFlushNeeded() && !Closed_) {
-                return VoidFuture;
-            }
-            serializedRows = GetRowsToFlushAndResetBuffer();
-        }
-        return FlushImpl(std::move(serializedRows));
-    }
-
-    std::vector<TSharedRef> GetRowsToFlushAndResetBuffer()
+    std::optional<TBuffer> GetBufferToFlush()
     {
         VERIFY_SPINLOCK_AFFINITY(SpinLock_);
 
+        RotateBuffer();
+
+        if (BufferQueue_.empty()) {
+            return std::nullopt;
+        }
+        auto buffer = std::optional<TBuffer>{std::move(BufferQueue_.front())};
+        BufferQueue_.pop_front();
+
+        return buffer;
+    }
+
+    TFuture<void> TryToFlush(bool checkIfFlushNeeded = true)
+    {
+        std::optional<TBuffer> buffer;
+        {
+            auto guard = Guard(SpinLock_);
+            if ((checkIfFlushNeeded && !IsFlushNeeded()) && !Closed_) {
+                return VoidFuture;
+            }
+            buffer = GetBufferToFlush();
+        }
+        if (!buffer) {
+            return VoidFuture;
+        }
+        return FlushImpl(std::move(*buffer))
+            .Apply(BIND([this, this_ = MakeStrong(this), checkIfFlushNeeded] {
+                return TryToFlush(checkIfFlushNeeded);
+            }));
+    }
+
+    void RotateBuffer()
+    {
+        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+
+        if (CurrentBufferRowCount_ <= 0) {
+            return;
+        }
+
         auto writer = CreateWireProtocolWriter();
-        writer->WriteSerializedRowset(BufferedRowCount_, BufferedRowWriter_->Finish());
-        BufferedRowWriter_ = CreateWireProtocolWriter();
-        BufferedRowCount_ = 0;
-        return writer->Finish();
+        writer->WriteSerializedRowset(CurrentBufferRowCount_, CurrentBufferWriter_->Finish());
+
+        BufferQueue_.push_back(TBuffer{
+            .SerializedRows = writer->Finish(),
+            .RowCount = CurrentBufferRowCount_,
+        });
+
+        CurrentBufferWriter_ = CreateWireProtocolWriter();
+        CurrentBufferRowCount_ = 0;
     }
 
     void OnFlush()
     {
-        std::vector<TSharedRef> serializedRows;
+        std::optional<TBuffer> buffer;
         {
             auto guard = Guard(SpinLock_);
-            YT_LOG_DEBUG("Flushing rows (RowCount: %v)", BufferedRowCount_);
-            serializedRows = GetRowsToFlushAndResetBuffer();
+
+            if (Canceled_) {
+                YT_LOG_DEBUG("Producer session was canceled, flush nothing");
+                StoppedPromise_.TrySet();
+                return;
+            }
+
+            buffer = GetBufferToFlush();
         }
 
-        WaitFor(FlushImpl(std::move(serializedRows)))
-            .ThrowOnError();
+        TError error;
+
+        if (buffer) {
+            auto& backoffStrategy = Options_.BackoffStrategy;
+            backoffStrategy.Restart();
+            while (backoffStrategy.Next()) {
+                if (Canceled_) {
+                    YT_LOG_DEBUG("Producer session was canceled, flush nothing");
+                    StoppedPromise_.TrySet();
+                    return;
+                }
+
+                // TODO(nadya73): Fix copying.
+                error = WaitFor(FlushImpl(*buffer));
+                if (error.IsOK()) {
+                    break;
+                }
+
+                TDelayedExecutor::WaitForDuration(backoffStrategy.GetBackoff());
+            }
+        } else {
+            YT_LOG_DEBUG("No buffer to flush, do nothing");
+        }
 
         bool isStopped = false;
         {
             auto guard = Guard(SpinLock_);
-            if (Closed_ && BufferedRowCount_ == 0) {
+            if (Closed_ && CurrentBufferRowCount_ == 0 && BufferQueue_.empty() || !error.IsOK()) {
                 isStopped = true;
             }
         }
 
         if (isStopped) {
-            StoppedPromise_.TrySet();
+            StoppedPromise_.TrySet(error);
         }
     }
 
-    TFuture<void> FlushImpl(std::vector<TSharedRef> serializedRows)
+    TFuture<void> FlushImpl(TBuffer buffer)
     {
+        YT_LOG_DEBUG("Trying to flush %v rows", buffer.RowCount);
+
         return Client_->StartTransaction(ETransactionType::Tablet)
-            .Apply(BIND([serializedRows = std::move(serializedRows), this, this_ = MakeStrong(this)] (const ITransactionPtr& transaction) {
+            .Apply(BIND([buffer = std::move(buffer), this, this_ = MakeStrong(this)] (const ITransactionPtr& transaction) {
                 TPushQueueProducerOptions pushQueueProducerOptions;
                 if (Options_.AutoSequenceNumber) {
                     pushQueueProducerOptions.SequenceNumber = TQueueProducerSequenceNumber{LastSequenceNumber_.load().Underlying() + 1};
                 }
 
-                return transaction->PushQueueProducer(ProducerPath_, QueuePath_, SessionId_, Epoch_, NameTable_, serializedRows, pushQueueProducerOptions)
+                return transaction->PushQueueProducer(ProducerPath_, QueuePath_, SessionId_, Epoch_, NameTable_, buffer.SerializedRows, pushQueueProducerOptions)
                     .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TPushQueueProducerResult& pushQueueProducerResult) {
                         LastSequenceNumber_.store(pushQueueProducerResult.LastSequenceNumber);
                         return transaction->Commit();
+                    }))
+                    .Apply(BIND([this, this_ = MakeStrong(this)] (const TTransactionCommitResult&) {
+                        if (Options_.AcknowledgmentCallback) {
+                            Options_.AcknowledgmentCallback(LastSequenceNumber_);
+                        }
                     }));
             })).AsVoid();
     }

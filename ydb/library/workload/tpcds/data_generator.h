@@ -70,7 +70,6 @@ public:
         };
         static TPositions CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
         const TTpcdsWorkloadDataInitializerGenerator& Owner;
-        ui64 TableSize;
     };
 };
 

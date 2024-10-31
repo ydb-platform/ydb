@@ -148,14 +148,14 @@ private:
     template<typename TStringType>
     struct TByData {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.Data();
+            return buf.data();
         }
     };
 
     template<typename TStringType>
     struct TBySize {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.Size();
+            return buf.size();
         }
     };
 

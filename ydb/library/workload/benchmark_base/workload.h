@@ -23,6 +23,7 @@ public:
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     TString GetFullTableName(const char* table) const;
+    static TString GetTablePathQuote(EQuerySyntax syntax);
     YDB_ACCESSOR_DEF(TString, Path);
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
     YDB_READONLY_DEF(TString, S3Endpoint);

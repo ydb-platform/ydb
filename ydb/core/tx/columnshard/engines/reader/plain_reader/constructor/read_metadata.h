@@ -145,11 +145,6 @@ public:
         return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
     }
 
-    size_t NumIndexedChunks() const {
-        Y_ABORT_UNLESS(SelectInfo);
-        return SelectInfo->NumChunks();
-    }
-
     size_t NumIndexedBlobs() const {
         Y_ABORT_UNLESS(SelectInfo);
         return SelectInfo->Stats().Blobs;
@@ -158,8 +153,7 @@ public:
     std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
-        out << " index chunks: " << NumIndexedChunks()
-            << " index blobs: " << NumIndexedBlobs()
+        out << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
       //      << " with program steps: " << (Program ? Program->Steps.size() : 0)
             << " at snapshot: " << GetRequestSnapshot().DebugString();

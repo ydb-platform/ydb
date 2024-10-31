@@ -77,6 +77,21 @@ TString TEvWorker::TEvStatus::ToString() const {
     << " }";
 }
 
+TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds)
+    : PartitionId(partitionId)
+    , AdjacentPartitionsIds(std::move(adjacentPartitionsIds))
+    , ChildPartitionsIds(std::move(childPartitionsIds))
+{
+}
+
+TString TEvWorker::TEvDataEnd::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " PartitionId: " << PartitionId
+        << " AdjacentPartitionsIds: " << JoinSeq(", ", AdjacentPartitionsIds)
+        << " ChildPartitionsIds: " << JoinSeq(", ", ChildPartitionsIds)
+    << " }";
+}
+
 class TWorker: public TActorBootstrapped<TWorker> {
     class TActorInfo {
         std::function<IActor*(void)> CreateFn;
@@ -196,6 +211,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
+    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        ev->Sender = SelfId();
+        Send(ev->Forward(Parent));
+    }
+
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
@@ -264,7 +286,7 @@ public:
     }
 
     explicit TWorker(
-            const TActorId& parent, 
+            const TActorId& parent,
             std::function<IActor*(void)>&& createReaderFn,
             std::function<IActor*(void)>&& createWriterFn)
         : Parent(parent)
@@ -288,6 +310,7 @@ public:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvData, Handle);
+            hFunc(TEvWorker::TEvDataEnd, Handle);
             hFunc(TEvWorker::TEvGone, Handle);
             sFunc(TEvents::TEvWakeup, ReportLag);
             sFunc(TEvents::TEvPoison, PassAway);

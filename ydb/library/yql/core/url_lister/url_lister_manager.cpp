@@ -16,15 +16,13 @@ public:
     }
 
 public:
-    TVector<TUrlListEntry> ListUrl(const THttpURL& url, const TString& tokenName) const override {
-        auto urlString = SubstParameters(url.PrintS(), Parameters, nullptr);
+    TVector<TUrlListEntry> ListUrl(const TString& url, const TString& tokenName) const override {
+        auto urlWithoutParameters = SubstParameters(url, Parameters, nullptr);
+        auto preprocessedUrl = urlWithoutParameters;
 
         if (UrlPreprocessing) {
-            auto [preprocessedUrlString, alias] = UrlPreprocessing->Preprocess(urlString);
-            urlString = preprocessedUrlString;
+            preprocessedUrl = UrlPreprocessing->Preprocess(urlWithoutParameters).first;
         }
-
-        auto patchedUrl = ParseURL(urlString);
 
         TString token;
         if (tokenName) {
@@ -41,12 +39,12 @@ public:
         }
 
         for (const auto& urlLister: UrlListers) {
-            if (urlLister->Accept(patchedUrl)) {
-                return urlLister->ListUrl(patchedUrl, token);
+            if (urlLister->Accept(preprocessedUrl)) {
+                return urlLister->ListUrl(preprocessedUrl, token);
             }
         }
 
-        ythrow yexception() << "Unsupported package url: " << urlString;
+        ythrow yexception() << "Unsupported package url: " << url;
     }
 
 public:

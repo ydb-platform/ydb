@@ -1,6 +1,8 @@
 /* ytfile can not */
 
-pragma package("project.package", "yt://plato/package");
+declare $cluster as String;
+
+pragma package("project.package", "yt://{$cluster}/package");
 
 import pkg.project.package.total symbols $do_total;
 

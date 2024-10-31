@@ -165,7 +165,7 @@ struct TPDiskConfig : public TThrRefBase {
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     ui32 CompletionThreadsCount = 1;
-    bool UseNoopScheduler = false;
+    bool UseNoopScheduler = true;
 
     bool MetadataOnly = false;
 

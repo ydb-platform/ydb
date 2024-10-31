@@ -98,7 +98,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
         portion.GetMinSnapshotDeprecated().GetPlanStep(), portion.GetMinSnapshotDeprecated().GetTxId(), portion.GetPortionId(), row.Chunk).Delete();
 }
 
-bool TDbWrapper::LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexColumns = NColumnShard::Schema::IndexColumns;
     auto rowset = db.Table<IndexColumns>().Prefix(0).Select();
@@ -107,15 +107,8 @@ bool TDbWrapper::LoadColumns(const std::function<void(NOlap::TPortionInfoConstru
     }
 
     while (!rowset.EndOfSet()) {
-        NOlap::TSnapshot minSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
-        NOlap::TSnapshot removeSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
-
-        NOlap::TPortionInfoConstructor constructor(rowset.GetValue<IndexColumns::PathId>(), rowset.GetValue<IndexColumns::Portion>());
-        constructor.SetMinSnapshotDeprecated(minSnapshot);
-        constructor.SetRemoveSnapshot(removeSnapshot);
-
         NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
-        callback(std::move(constructor), chunkLoadContext);
+        callback(chunkLoadContext);
 
         if (!rowset.Next()) {
             return false;

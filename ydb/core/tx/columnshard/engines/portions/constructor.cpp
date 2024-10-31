@@ -12,6 +12,22 @@ namespace NKikimr::NOlap {
 TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormalization) {
     AFL_VERIFY(!Constructed);
     Constructed = true;
+
+    MetaConstructor.ColumnRawBytes = 0;
+    MetaConstructor.ColumnBlobBytes = 0;
+    MetaConstructor.IndexRawBytes = 0;
+    MetaConstructor.IndexBlobBytes = 0;
+
+    MetaConstructor.RecordsCount = GetRecordsCount();
+    for (auto&& r : Records) {
+        *MetaConstructor.ColumnRawBytes += r.GetMeta().GetRawBytes();
+        *MetaConstructor.ColumnBlobBytes += r.GetBlobRange().GetSize();
+    }
+    for (auto&& r : Indexes) {
+        *MetaConstructor.IndexRawBytes += r.GetRawBytes();
+        *MetaConstructor.IndexBlobBytes += r.GetDataSize();
+    }
+
     std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
     AFL_VERIFY(PathId);
     result->PathId = PathId;
@@ -97,7 +113,6 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
     result->Records.shrink_to_fit();
     result->BlobIds = std::move(BlobIds);
     result->BlobIds.shrink_to_fit();
-    result->Precalculate();
     return TPortionDataAccessor(result);
 }
 
@@ -111,13 +126,9 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
     return index.GetSchema(*MinSnapshotDeprecated);
 }
 
-void TPortionInfoConstructor::LoadRecord(const TIndexInfo& indexInfo, const TColumnChunkLoadContext& loadContext) {
+void TPortionInfoConstructor::LoadRecord(const TColumnChunkLoadContext& loadContext) {
     TColumnRecord rec(RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext);
     Records.push_back(std::move(rec));
-
-    if (loadContext.GetPortionMeta()) {
-        AFL_VERIFY(MetaConstructor.LoadMetadata(*loadContext.GetPortionMeta(), indexInfo));
-    }
 }
 
 void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContext) {

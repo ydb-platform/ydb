@@ -50,7 +50,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>&) override {
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>&) override {
         return true;
     }
 

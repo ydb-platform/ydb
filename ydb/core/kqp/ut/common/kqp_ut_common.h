@@ -224,6 +224,7 @@ inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSet
 struct TCollectedStreamResult {
     TString ResultSetYson;
     TMaybe<TString> PlanJson;
+    TMaybe<TString> Ast;
     TMaybe<Ydb::TableStats::QueryStats> QueryStats;
     ui64 RowsCount = 0;
     ui64 ConsumedRuFromHeader = 0;

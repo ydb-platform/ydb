@@ -130,7 +130,7 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
         } else {
             it->second.Merge(std::move(portion));
         }
-        it->second.LoadRecord(currentSchema->GetIndexInfo(), loadContext);
+        it->second.LoadRecord(loadContext);
     };
 
     while (!rowset.EndOfSet()) {

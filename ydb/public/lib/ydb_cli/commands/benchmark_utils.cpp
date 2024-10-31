@@ -410,7 +410,7 @@ bool CompareValueImpl(const T& valResult, TStringBuf vExpected) {
 
 template <class T>
 bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected) {
-    constexpr T relativeFloatPrecession = 0.0001;
+    T relativeFloatPrecision = 0.0001;
     TStringBuf precesionStr;
     vExpected.Split("+-", vExpected, precesionStr);
     T valExpected;
@@ -418,16 +418,22 @@ bool CompareValueImplFloat(const T& valResult, TStringBuf vExpected) {
         Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
         return false;
     }
-    if (precesionStr) {
+    if (precesionStr.ChopSuffix("%")) {
+        if (!TryFromString<T>(precesionStr, relativeFloatPrecision)) {
+            Cerr << "cannot parse precision expected as " << typeid(valResult).name() << "(" << precesionStr << "%)" << Endl;
+            return false;
+        }
+        relativeFloatPrecision /= 100;
+    } else if (precesionStr) {
         T absolutePrecesion;
         if (!TryFromString<T>(precesionStr, absolutePrecesion)) {
-            Cerr << "cannot parse precession expected as " << typeid(valResult).name() << "(" << precesionStr << ")" << Endl;
+            Cerr << "cannot parse precision expected as " << typeid(valResult).name() << "(" << precesionStr << ")" << Endl;
             return false;
         }
         return valResult >= valExpected - absolutePrecesion && valResult <= valExpected + absolutePrecesion;
     }
 
-    return valResult > (1 - relativeFloatPrecession) * valExpected && valResult < (1 + relativeFloatPrecession) * valExpected;
+    return valResult > (1 - relativeFloatPrecision) * valExpected && valResult < (1 + relativeFloatPrecision) * valExpected;
 }
 
 template <>

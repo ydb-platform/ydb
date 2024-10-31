@@ -28,7 +28,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     if (type) {
         return result;
     }
-    auto resourcePrefix = Params.GetWorkloadName() + "/";
+    auto resourcePrefix = "resfs/file/" + Params.GetWorkloadName() + "/";
     SubstGlobal(resourcePrefix, "-", "");
     resourcePrefix.to_lower();
     TVector<TString> queries;
@@ -56,7 +56,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         }
     } else {
         NResource::TResources qresources;
-        const auto prefix = resourcePrefix + ToString(Params.GetSyntax()) + "/q";
+        const auto prefix = resourcePrefix + "queries/" + ToString(Params.GetSyntax()) + "/q";
         NResource::FindMatch(prefix, &qresources);
         for (const auto& r: qresources) {
             ui32 num;

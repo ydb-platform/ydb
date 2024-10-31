@@ -98,6 +98,7 @@ private:
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
+    std::shared_ptr<std::set<TString>> UsedStorageIds;
 
     bool SchemeNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
@@ -149,6 +150,7 @@ private:
         const std::shared_ptr<TSchemaObjectsCache>& cache) const;
 
     void Validate() const;
+    void Precalculate();
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);
@@ -228,15 +230,11 @@ public:
     }
 
     std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
-        std::set<TString> result;
         if (portionTierName && portionTierName != IStoragesManager::DefaultStorageId) {
-            result.emplace(portionTierName);
+            return { portionTierName };
         } else {
-            for (auto&& i : ColumnFeatures) {
-                result.emplace(i->GetOperator()->GetStorageId());
-            }
+            return *UsedStorageIds;
         }
-        return result;
     }
 
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {

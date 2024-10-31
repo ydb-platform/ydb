@@ -22,6 +22,10 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(format.h)
 
+CFLAGS(
+    -Wno-assume
+)
+
 END()
 
 RECURSE_FOR_TESTS(

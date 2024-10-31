@@ -2964,6 +2964,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disabledistinctoverwindow") {
             Ctx.DistinctOverWindow = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableDistinctOverWindow");
+        } else if (normalizedPragma == "seqmode") {
+            Ctx.SeqMode = true;
+            Ctx.IncrementMonCounter("sql_pragma", "SeqMode");
+        } else if (normalizedPragma == "disableseqmode") {
+            Ctx.SeqMode = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableSeqMode");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");
@@ -3312,7 +3318,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
         AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
     }
 
-    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
+    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped, Ctx.SeqMode);
     WarnUnusedNodes();
     return result;
 }
@@ -3382,7 +3388,7 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
         AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
     }
 
-    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
+    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped, Ctx.SeqMode);
     return result;
 }
 namespace {

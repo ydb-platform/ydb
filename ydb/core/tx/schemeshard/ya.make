@@ -64,7 +64,7 @@ SRCS(
     schemeshard__backup_collection_common.cpp
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
-    schemeshard__compaction.cpp
+    schemeshard__background_compaction.cpp
     schemeshard__conditional_erase.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp

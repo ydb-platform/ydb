@@ -901,27 +901,55 @@ struct Schema : NIceDb::Schema {
 }
 
 namespace NKikimr::NOlap {
+class TPortionLoadContext {
+private:
+    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexPortionMeta, MetaProto);
+
+public:
+    template <class TSource>
+    TPortionLoadContext(const TSource& rowset) {
+        PathId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>();
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
+        const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
+        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+    }
+};
+
 class TColumnChunkLoadContext {
 private:
     YDB_READONLY_DEF(TBlobRange, BlobRange);
     TChunkAddress Address;
+    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
+    YDB_READONLY(TSnapshot, RemoveSnapshot, TSnapshot::Zero());
+    YDB_READONLY(TSnapshot, MinSnapshotDeprecated, TSnapshot::Zero());
+
 public:
     const TChunkAddress& GetAddress() const {
         return Address;
     }
 
-    TColumnChunkLoadContext(const TChunkAddress& address, const TBlobRange& bRange, const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
+    TColumnChunkLoadContext(const ui64 pathId, const ui64 portionId, const TChunkAddress& address, const TBlobRange& bRange,
+        const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
         : BlobRange(bRange)
         , Address(address)
-        , MetaProto(metaProto)
-    {
-
+        , PathId(pathId)
+        , PortionId(portionId)
+        , MetaProto(metaProto) {
     }
 
     template <class TSource>
     TColumnChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>(), rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>()) {
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>())
+        , RemoveSnapshot(rowset.template GetValue<NColumnShard::Schema::IndexColumns::XPlanStep>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumns::XTxId>())
+        , MinSnapshotDeprecated(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PlanStep>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexColumns::TxId>())
+    {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
         TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Blob>();
         Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
@@ -929,18 +957,12 @@ public:
         BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
         BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Offset>();
         BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Size>();
+        PathId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>();
+        PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Portion>();
         AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
 
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Metadata>();
         AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
-    }
-
-    const NKikimrTxColumnShard::TIndexPortionMeta* GetPortionMeta() const {
-        if (MetaProto.HasPortionMeta()) {
-            return &MetaProto.GetPortionMeta();
-        } else {
-            return nullptr;
-        }
     }
 };
 
@@ -948,10 +970,25 @@ class TIndexChunkLoadContext {
 private:
     YDB_READONLY_DEF(std::optional<TBlobRange>, BlobRange);
     YDB_READONLY_DEF(std::optional<TString>, BlobData);
+    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(ui64, PortionId, 0);
     TChunkAddress Address;
     const ui32 RecordsCount;
     const ui32 RawBytes;
 public:
+    ui32 GetRawBytes() const {
+        return RawBytes;
+    }
+
+    ui32 GetDataSize() const {
+        if (BlobRange) {
+            return BlobRange->GetSize();
+        } else {
+            AFL_VERIFY(!!BlobData);
+            return BlobData->size();
+        }
+    }
+
     TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
         AFL_VERIFY(BlobRange);
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRange->BuildLink(blobLinkId));
@@ -964,7 +1001,9 @@ public:
 
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
+        : PathId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>())
+        , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PortionId>())
+        , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
         , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
         , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
     {

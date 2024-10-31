@@ -16,6 +16,13 @@ private:
     std::optional<TSnapshot> RecordSnapshotMax;
     std::optional<NPortion::EProduced> Produced;
     std::optional<ui64> CompactionLevel;
+
+    std::optional<ui32> RecordsCount;
+    std::optional<ui64> ColumnRawBytes;
+    std::optional<ui32> ColumnBlobBytes;
+    std::optional<ui32> IndexRawBytes;
+    std::optional<ui32> IndexBlobBytes;
+
     std::optional<ui32> DeletionsCount;
     friend class TPortionInfoConstructor;
     void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount, const std::optional<NArrow::TMinMaxSpecialKeys>& snapshotKeys, const TIndexInfo& indexInfo);

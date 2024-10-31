@@ -29,7 +29,7 @@ public:
             AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
                 "portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
-            auto copy = portionInfo.GetPortionInfo();
+            auto copy = portionInfo.GetPortionInfo().MakeCopy();
             copy.SetRemoveSnapshot(TSnapshot(1, 1));
             copy.SaveMetaToDatabase(db);
         }

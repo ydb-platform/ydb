@@ -134,12 +134,6 @@ private:
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
-public:
-    void RefreshTiering(const std::optional<TTiering>& tiering) {
-        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->RefreshTiering(tiering, context);
-    }
-
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
             return TConclusionStatus::Fail("empty input portion pointer");
@@ -155,12 +149,18 @@ public:
         return it->second;
     }
 
+public:
+    void RefreshTiering(const std::optional<TTiering>& tiering) {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->RefreshTiering(tiering, context);
+    }
+
     template <class TModifier>
     void ModifyPortionOnExecute(
         IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
-        auto copy = *innerPortion;
+        auto copy = innerPortion->MakeCopy();
         modifier(copy);
         TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, firstPKColumnId, false);
     }
@@ -298,7 +298,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void UpsertPortion(const TPortionInfo& info);
+    void AppendPortion(const TPortionInfo::TPtr& info);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"
@@ -308,7 +308,7 @@ public:
                                 << ")";
     }
 
-    std::shared_ptr<TPortionInfo> UpsertPortionOnLoad(TPortionInfo&& portion);
+    void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

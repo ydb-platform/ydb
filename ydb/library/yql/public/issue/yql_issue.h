@@ -315,7 +315,8 @@ public:
     void PrintWithProgramTo(
             IOutputStream& out,
             const TString& programFilename,
-            const TString& programText) const;
+            const TString& programText,
+            bool colorize = true) const;
 
     inline TString ToString(bool oneLine = false) const {
         TStringStream out;

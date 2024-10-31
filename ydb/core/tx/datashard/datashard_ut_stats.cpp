@@ -21,6 +21,32 @@ namespace {
         }
         ExecSQL(server, sender, query);
     }
+
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> HasPartCountCondition(ui64 count) {
+        return [count](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= count;
+        };
+    }
+
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> HasRowCountCondition(ui64 count) {
+        return [count](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetRowCount() >= count;
+        };
+    }
+
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> HasSchemaChangesCondition() {
+        Cerr << "waiting for schema changes" << Endl;
+        return [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetHasSchemaChanges();
+        };
+    }
+
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> DoesNotHaveSchemaChangesCondition() {
+        Cerr << "waiting for no schema changes" << Endl;
+        return [](const NKikimrTableStats::TTableStats& stats) {
+            return !stats.GetHasSchemaChanges();
+        };
+    }
 }
 
 Y_UNIT_TEST_SUITE(DataShardStats) {
@@ -80,7 +106,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 1);
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
@@ -144,7 +170,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 1);
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
@@ -201,7 +227,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 1);
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2000);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
@@ -283,7 +309,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 1);
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 5);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
@@ -340,7 +366,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             CompactTable(runtime, shard1, tableId1, false);
 
             Cerr << "... waiting for stats after compaction" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 1, (batch + 1) * batchItems);
+            auto stats = WaitTableStats(runtime, shard1, HasRowCountCondition((batch + 1) * batchItems));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), (batch + 1) * batchItems);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 1);
@@ -403,7 +429,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5), (6, 6), (7, 7), (8, 8)");
         {
             Cerr << "... waiting for stats" << Endl;
-            auto stats = WaitTableStats(runtime, shard1, 2);
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(2));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetPartCount(), 2);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 7);
@@ -514,7 +540,47 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_LE(stats.GetFollowerId(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRangeReadRows(), 2);
         }
-    }    
+    }
+
+    Y_UNIT_TEST(HasSchemaChanges_BTreeIndex) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ui64 shard1 = shards.at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        {
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetHasSchemaChanges(), false);
+        }
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
+
+        // Note: stats is rebuilt only on restarts and compactions
+        RebootTablet(runtime, shard1, sender);
+
+        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+    }
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)
 

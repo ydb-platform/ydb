@@ -537,7 +537,8 @@ public:
 
             auto schemeTableInfo = Self->Scheme().GetTableInfo(tableId);
             Y_ABORT_UNLESS(schemeTableInfo);
-            bool hasSchemaChanges = HasSchemaChanges(*subsetForStats, *schemeTableInfo, AppData(ctx)->FeatureFlags.GetEnableLocalDBBtreeIndex());
+            bool hasSchemaChanges = HasSchemaChanges(*subsetForStats, *schemeTableInfo, 
+                AppData(ctx)->FeatureFlags.GetEnableLocalDBBtreeIndex());
 
             if (shadowTableId) {
                 // HACK: we combine subsets of different tables

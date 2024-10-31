@@ -1903,7 +1903,9 @@ void WaitTableStatsImpl(TTestActorRuntime& runtime,
     UNIT_ASSERT(captured);
 }
 
-NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minRowReads, ui64 minRangeReadRows) {
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 datashardId, 
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition) 
+{
     NKikimrTxDataShard::TEvPeriodicTableStats stats;
     bool captured = false;
 
@@ -1914,10 +1916,10 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRunti
         if (!record.GetFollowerId())
             return;
 
-        if (record.GetDatashardId() != tabletId)
+        if (record.GetDatashardId() != datashardId)
             return;
         
-        if (record.GetTableStats().GetRowReads() < minRowReads || record.GetTableStats().GetRangeReadRows() < minRangeReadRows)
+        if (!condition(record.GetTableStats()))
             return;
 
         stats = record;
@@ -1929,7 +1931,9 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRunti
 }
 
 
-NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 minPartCount, ui64 minRows) {
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 datashardId,
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition) 
+{
     NKikimrTxDataShard::TEvPeriodicTableStats stats;
     bool captured = false;
 
@@ -1940,10 +1944,10 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
         if (record.GetFollowerId())
             return;
 
-        if (record.GetDatashardId() != tabletId)
+        if (record.GetDatashardId() != datashardId)
             return;
         
-        if (record.GetTableStats().GetPartCount() < minPartCount || record.GetTableStats().GetRowCount() < minRows)
+        if (!condition(record.GetTableStats()))
             return;
 
         stats = record;

@@ -34,7 +34,6 @@ void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {
     }
 }
 
-// todo: move from this file?
 bool HasSchemaChanges(const TPartView& partView, const TScheme::TTableInfo& tableInfo, const NTable::TRowScheme& rowScheme, bool enableBTreeIndex) {
     if (partView.Part->Stat.Rows == 0) {
         return false;

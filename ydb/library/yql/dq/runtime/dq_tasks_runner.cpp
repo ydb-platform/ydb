@@ -739,6 +739,12 @@ public:
                 AllocatedHolder->ProgramParsed.StatsRegistry->ForEachStat([this](const TStatKey& key, i64 value) {
                     Stats->MkqlStats.emplace_back(TMkqlStat{key, value});
                 });
+
+                auto& opStats = AllocatedHolder->ProgramParsed.StatsRegistry->GetOperatorStats();
+                Stats->OperatorStats.resize(opStats.size());
+                for (ui32 i = 0; i < opStats.size(); i++) {
+                    Stats->OperatorStats[i] = *opStats[i];
+                }
             }
         }
 

@@ -2806,6 +2806,55 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         }
                     }
                 }
+                if (!(*stat)->GetOperator().empty()) {
+                    auto& operatorStats = stats.InsertValue("Operator", NJson::JSON_ARRAY);
+                    for (auto op : (*stat)->GetOperator()) {
+                        auto& operatorInfo = operatorStats.AppendValue(NJson::JSON_MAP);
+                        operatorInfo["Id"] = op.first;
+                        if (op.second.HasBytes()) {
+                            FillAggrStat(operatorInfo, op.second.GetBytes(), "Bytes");
+                        }
+                        if (op.second.HasRows()) {
+                            FillAggrStat(operatorInfo, op.second.GetRows(), "Rows");
+                        }
+                        if (op.second.HasJoin()) {
+                            auto& join = op.second.GetJoin();
+                            auto& joinInfo = operatorInfo.InsertValue("Join", NJson::JSON_MAP);
+                            if (join.HasLeft()) {
+                                auto& left = join.GetLeft();
+                                auto& leftStat = joinInfo.InsertValue("Left", NJson::JSON_MAP);
+                                if (left.HasBloomStartMs()) {
+                                    FillAggrStat(leftStat, left.GetBloomStartMs(), "BloomStartMs");
+                                }
+                                if (left.HasBloomPositive()) {
+                                    FillAggrStat(leftStat, left.GetBloomPositive(), "BloomPositive");
+                                }
+                                if (left.HasBloomNegative()) {
+                                    FillAggrStat(leftStat, left.GetBloomNegative(), "BloomNegative");
+                                }
+                                if (left.HasBloomSkipped()) {
+                                    FillAggrStat(leftStat, left.GetBloomSkipped(), "BloomSkipped");
+                                }
+                            }
+                            if (join.HasRight()) {
+                                auto& right = join.GetRight();
+                                auto& rightStat = joinInfo.InsertValue("Right", NJson::JSON_MAP);
+                                if (right.HasBloomStartMs()) {
+                                    FillAggrStat(rightStat, right.GetBloomStartMs(), "BloomStartMs");
+                                }
+                                if (right.HasBloomPositive()) {
+                                    FillAggrStat(rightStat, right.GetBloomPositive(), "BloomPositive");
+                                }
+                                if (right.HasBloomNegative()) {
+                                    FillAggrStat(rightStat, right.GetBloomNegative(), "BloomNegative");
+                                }
+                                if (right.HasBloomSkipped()) {
+                                    FillAggrStat(rightStat, right.GetBloomSkipped(), "BloomSkipped");
+                                }
+                            }
+                        }
+                    }
+                }
 
                 NKqpProto::TKqpStageExtraStats kqpStageStats;
                 if ((*stat)->GetExtra().UnpackTo(&kqpStageStats)) {

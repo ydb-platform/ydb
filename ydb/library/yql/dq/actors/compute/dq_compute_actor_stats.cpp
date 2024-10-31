@@ -88,6 +88,31 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
         }
     }
 
+    if (StatsLevelCollectFull(level)) {
+        for (const auto& opStat : taskStats.OperatorStats) {
+            auto& op = *protoTask->MutableOperators()->Add();
+            op.SetOperatorId(opStat.OperatorId);
+            op.SetBytes(opStat.Bytes);
+            op.SetRows(opStat.Rows);
+            auto& join = *op.MutableJoin();
+            auto& left = *join.MutableLeft();
+            left.SetBloomStartMs(opStat.Join.Left.BloomStartMs);
+            left.SetBloomPositive(opStat.Join.Left.BloomPositive);
+            left.SetBloomNegative(opStat.Join.Left.BloomNegative);
+            left.SetBloomSkipped(opStat.Join.Left.BloomSkipped);
+            auto& right = *join.MutableRight();
+            right.SetBloomStartMs(opStat.Join.Right.BloomStartMs);
+            right.SetBloomPositive(opStat.Join.Right.BloomPositive);
+            right.SetBloomNegative(opStat.Join.Right.BloomNegative);
+            right.SetBloomSkipped(opStat.Join.Right.BloomSkipped);
+            auto& spilling = *join.MutableSpilling();
+            spilling.SetWriteBytes(opStat.Join.Spilling.WriteBytes);
+            spilling.SetWriteRows(opStat.Join.Spilling.WriteRows);
+            spilling.SetReadBytes(opStat.Join.Spilling.ReadBytes);
+            spilling.SetReadRows(opStat.Join.Spilling.ReadRows);
+        }
+    }
+
     TDqAsyncStats taskPushStats;
 
     for (auto& [srcStageId, inputChannels] : taskStats.InputChannels) {

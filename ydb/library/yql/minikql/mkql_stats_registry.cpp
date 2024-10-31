@@ -4,6 +4,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
+#include <util/string/cast.h>
 
 
 namespace NKikimr {
@@ -41,6 +42,21 @@ public:
         Values_[key.GetId()] += value;
     }
 
+    std::shared_ptr<TOperatorStat> RegisterOperatorStat(const TString& operatorId = "") override {
+        auto id = operatorId;
+        if (!id) {
+            id = ToString(OperatorStats_.size());
+        }
+        auto result = std::make_shared<TOperatorStat>();
+        result->OperatorId = id;
+        OperatorStats_.push_back(result);
+        return result;
+    }
+
+    const std::vector<std::shared_ptr<TOperatorStat>>& GetOperatorStats() override {
+        return OperatorStats_;
+    }
+
 private:
     void EnsureSize(const TStatKey& key) {
         if (Y_UNLIKELY(Values_.size() <= key.GetId())) {
@@ -50,6 +66,7 @@ private:
 
 private:
     TVector<i64> Values_;
+    std::vector<std::shared_ptr<TOperatorStat>> OperatorStats_;
 };
 
 /**

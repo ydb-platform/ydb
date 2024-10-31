@@ -84,11 +84,18 @@ TTable::EAddTupleResult TTable::AddTuple(  ui64 * intColumns, char ** stringColu
     if (!IsAny_ && other.TableBucketsStats[bucket].BloomFilter.IsFinalized())  {
         auto bucket2 = &other.TableBucketsStats[bucket];
         auto &bloomFilter = bucket2->BloomFilter;
+        if (!Stat_.BloomStartMs) {
+            Stat_.BloomStartMs = Now().MilliSeconds();
+        }
         ++BloomLookups_;
         if (bloomFilter.IsMissing(hash)) {
             ++BloomHits_;
+            Stat_.BloomNegative++;
             return EAddTupleResult::Unmatched;
         }
+        Stat_.BloomPositive++;
+    } else {
+        Stat_.BloomSkipped++;
     }
 
     std::vector<ui64, TMKQLAllocator<ui64>> & keyIntVals = TableBuckets[bucket].KeyIntVals;
@@ -1012,11 +1019,13 @@ void TTable::PrepareBucket(ui64 bucket) {
 }
 
 // Creates new table with key columns and data columns
-TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
+TTable::TTable( TJoinInputStat& stat,
+                ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
                 ui64 numberOfDataIntColumns, ui64 numberOfDataStringColumns,
                 ui64 numberOfKeyIColumns, ui64 numberOfDataIColumns,
                 ui64 nullsBitmapSize,  TColTypeInterface * colInterfaces, bool isAny ) :
 
+                Stat_(stat),
                 NumberOfKeyIntColumns(numberOfKeyIntColumns),
                 NumberOfKeyStringColumns(numberOfKeyStringColumns),
                 NumberOfKeyIColumns(numberOfKeyIColumns),

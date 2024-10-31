@@ -161,6 +161,35 @@ message TDqDataProviderStats {
     uint64 Splits = 5;
 }
 
+message TDqSpillingStats {
+    uint64 WriteBytes = 1;
+    uint64 WriteRows = 2;
+    uint64 ReadBytes = 3;
+    uint64 ReadRows = 4;
+}
+
+message TDqJoinInputStats {
+    uint64 BloomStartMs = 1;
+    uint64 BloomPositive = 2;
+    uint64 BloomNegative = 3;
+    uint64 BloomSkipped = 4;
+}
+
+message TDqJoinStats {
+    TDqJoinInputStats Left = 1;
+    TDqJoinInputStats Right = 2;
+    TDqSpillingStats Spilling = 3;
+}
+
+message TDqOperatorStats {
+    string OperatorId = 1;
+    uint64 Bytes = 2;
+    uint64 Rows = 3;
+    oneof Kind {
+        TDqJoinStats Join = 4;
+    }
+}
+
 message TDqTaskStats {
     reserved 154;
 
@@ -232,6 +261,8 @@ message TDqTaskStats {
     reserved 107;
     reserved 108;
     reserved 109;
+
+    repeated TDqOperatorStats Operators = 159;
 }
 
 message TDqComputeActorStats {
@@ -310,6 +341,34 @@ message TDqTableAggrStats {
     google.protobuf.Any Extra = 100;
 }
 
+message TDqSpillingStatsAggr {
+    TDqStatsAggr WriteBytes = 1;
+    TDqStatsAggr WriteRows = 2;
+    TDqStatsAggr ReadBytes = 3;
+    TDqStatsAggr ReadRows = 4;
+}
+
+message TDqJoinInputStatsAggr {
+    TDqStatsAggr BloomStartMs = 1;
+    TDqStatsAggr BloomPositive = 2;
+    TDqStatsAggr BloomNegative = 3;
+    TDqStatsAggr BloomSkipped = 4;
+}
+
+message TDqJoinStatsAggr {
+    TDqJoinInputStatsAggr Left = 1;
+    TDqJoinInputStatsAggr Right = 2;
+    TDqSpillingStatsAggr Spilling = 3;
+}
+
+message TDqOperatorStatsAggr {
+    TDqStatsAggr Bytes  = 1;
+    TDqStatsAggr Rows   = 2;
+    oneof Kind {
+        TDqJoinStatsAggr Join = 4;
+    }
+}
+
 // aggregated stats for all tasks of the stage
 message TDqStageStats {
     uint32 StageId = 1;
@@ -366,6 +425,7 @@ message TDqStageStats {
     map<string, TDqAsyncBufferStatsAggr> Egress = 20;  // egress to external consumer, per provider
     map<uint32, TDqAsyncBufferStatsAggr> Input = 22;   // input from other stage, per stage
     map<uint32, TDqAsyncBufferStatsAggr> Output = 23;  // output to other stage, per stage
+    map<string, TDqOperatorStatsAggr> Operator = 43;
     TDqStatsAggr MaxMemoryUsage = 24;
 
     google.protobuf.Any Extra = 100;

@@ -84,6 +84,53 @@ struct TTableStats {
     void Resize(ui32 taskCount);
 };
 
+struct TJoinInputStats {
+
+    TJoinInputStats() = default;
+    TJoinInputStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    std::vector<ui64> BloomStartMs;
+    std::vector<ui64> BloomPositive;
+    std::vector<ui64> BloomNegative;
+    std::vector<ui64> BloomSkipped;
+
+    void Resize(ui32 taskCount);
+};
+
+struct TSpillingStats {
+
+    TSpillingStats() = default;
+    TSpillingStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    std::vector<ui64> WriteBytes;
+    std::vector<ui64> WriteRows;
+    std::vector<ui64> ReadBytes;
+    std::vector<ui64> ReadRows;
+
+    void Resize(ui32 taskCount);
+};
+
+struct TOperatorStats {
+
+    TOperatorStats() = default;
+    TOperatorStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    std::vector<ui64> Rows;
+    std::vector<ui64> Bytes;
+    // join
+    TJoinInputStats Left;
+    TJoinInputStats Right;
+    TSpillingStats Spilling;
+
+    void Resize(ui32 taskCount);
+};
+
 struct TStageExecutionStats {
 
     NYql::NDq::TStageId StageId;
@@ -121,6 +168,7 @@ struct TStageExecutionStats {
     std::map<TString, TAsyncBufferStats> Egress;
     std::map<ui32, TAsyncBufferStats> Input;
     std::map<ui32, TAsyncBufferStats> Output;
+    std::map<TString, TOperatorStats> Operators;
 
     TTimeSeriesStats MaxMemoryUsage;
     ui32 HistorySampleCount;
@@ -128,7 +176,9 @@ struct TStageExecutionStats {
     void Resize(ui32 taskCount);
     void SetHistorySampleCount(ui32 historySampleCount);
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
-    ui64 UpdateAsyncStats(i32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
+    ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
+    void UpdateJoinInputStats(ui32 index, TJoinInputStats& joinInputStats, const NYql::NDqProto::TDqJoinInputStats& joinInputStat);
+    void UpdateSpillingStats(ui32 index, TSpillingStats& spillingStats, const NYql::NDqProto::TDqSpillingStats& spillingStat);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs);
 };
 

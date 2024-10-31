@@ -81,7 +81,7 @@ struct TGraceJoinPacker {
     bool IsAny; // Flag to support any join attribute
     inline void Pack() ; // Packs new tuple from TupleHolder and TuplePtrs to TupleIntVals, TupleStrSizes, TupleStrings
     inline void UnPack(); // Unpacks packed values from TupleIntVals, TupleStrSizes, TupleStrings into TupleHolder and TuplePtrs
-    TGraceJoinPacker(const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny);
+    TGraceJoinPacker(TJoinInputStat& stat, const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny);
 };
 
 
@@ -429,7 +429,7 @@ void TGraceJoinPacker::UnPack()  {
 }
 
 
-TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny) :
+TGraceJoinPacker::TGraceJoinPacker( TJoinInputStat& stat, const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny) :
                                     ColumnTypes(columnTypes)
                                     , HolderFactory(holderFactory)
                                     , IsAny(isAny) {
@@ -548,7 +548,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
         cti_p = ColumnInterfaces.data();
     }
 
-    TablePtr = std::make_unique<GraceJoin::TTable>(
+    TablePtr = std::make_unique<GraceJoin::TTable>( stat,
         PackedKeyIntColumnsNum, KeyStrColumnsNum, PackedDataIntColumnsNum,
         DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny );
 
@@ -567,7 +567,7 @@ public:
         IComputationWideFlowNode* flowLeft, IComputationWideFlowNode* flowRight,
         EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
         const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
-        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory,
+        const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, TComputationContext& ctx,
         const bool isSelfJoin, bool isSpillingAllowed)
     :  TBase(memInfo)
     ,   FlowLeft(flowLeft)
@@ -577,9 +577,10 @@ public:
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
     ,   RightRenames(rightRenames)
-    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly)))
-    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly)))
-    ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
+    ,   RuntimeStat(ctx.Stats->RegisterOperatorStat())
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(RuntimeStat->Join.Left, leftColumnsTypes, leftKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly)))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(RuntimeStat->Join.Right, rightColumnsTypes, rightKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly)))
+    ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>(JoinedStat))
     ,   JoinCompleted(std::make_unique<bool>(false))
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
     ,   HaveMoreLeftRows(std::make_unique<bool>(true))
@@ -770,6 +771,9 @@ private:
                 *valPtr = valsRight[RightRenames[2 * i]];
             }
         }
+
+        RuntimeStat->Rows++;
+        RuntimeStat->Bytes += (LeftRenames.size() + RightRenames.size()) * 8; // just UV size
     }
 
     void LogMemoryUsage() const {
@@ -993,6 +997,8 @@ private:
     const std::vector<ui32> RightRenames;
     const std::vector<TType *> LeftColumnsTypes;
     const std::vector<TType *> RightColumnsTypes;
+    std::shared_ptr<TOperatorStat> RuntimeStat;
+    TJoinInputStat JoinedStat;
     const std::unique_ptr<TGraceJoinPacker> LeftPacker;
     const std::unique_ptr<TGraceJoinPacker> RightPacker;
     const std::unique_ptr<GraceJoin::TTable> JoinedTablePtr;
@@ -1129,7 +1135,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
             state = ctx.HolderFactory.Create<TGraceJoinSpillingSupportState>(
                 FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
-                ctx.HolderFactory, IsSelfJoin_, IsSpillingAllowed);
+                ctx, IsSelfJoin_, IsSpillingAllowed);
         }
 
         IComputationWideFlowNode *const  FlowLeft;

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <util/generic/strbuf.h>
+#include <util/generic/string.h>
 #include <util/generic/intrlist.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
 #include <util/system/yassert.h>
+#include <memory>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -47,6 +49,34 @@ private:
     ui32 Id_;
 };
 
+struct TSpillingStat {
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+};
+
+struct TJoinInputStat {
+    ui64 BloomStartMs = 0;
+    ui64 BloomSkipped = 0;
+    ui64 BloomPositive = 0;
+    ui64 BloomNegative = 0;
+};
+
+struct TJoinStats {
+    TJoinInputStat Left;
+    TJoinInputStat Right;
+    TSpillingStat Spilling;
+};
+
+struct TOperatorStat {
+    TString OperatorId;
+    ui64 Rows = 0;
+    ui64 Bytes = 0;
+    // Operator specific stats
+    TJoinStats Join;
+};
+
 /**
  * @brief Sase interface for statistics registry implementations.
  */
@@ -76,6 +106,9 @@ struct IStatsRegistry {
             c(key, GetStat(key));
         });
     }
+
+    virtual std::shared_ptr<TOperatorStat> RegisterOperatorStat(const TString& operatorId = "") = 0;
+    virtual const std::vector<std::shared_ptr<TOperatorStat>>& GetOperatorStats() = 0;
 };
 
 using IStatsRegistryPtr = TAutoPtr<IStatsRegistry>;

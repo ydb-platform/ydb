@@ -65,6 +65,7 @@ struct TTaskRunnerStatsBase {
     THashMap<ui32, THashMap<ui64, IDqOutputChannel::TPtr>> OutputChannels; // DstStageId => {ChannelId => Channel}
 
     TVector<TMkqlStat> MkqlStats;
+    std::vector<NKikimr::NMiniKQL::TOperatorStat> OperatorStats;
 
     TTaskRunnerStatsBase() = default;
     TTaskRunnerStatsBase(TTaskRunnerStatsBase&&) = default;

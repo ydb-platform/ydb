@@ -261,6 +261,8 @@ private:
 
 // Class which represents single table data stored in buckets
 class TTable {
+    TJoinInputStat& Stat_;
+
     ui64 NumberOfKeyIntColumns = 0; // Key int columns always first and padded to sizeof(ui64).
     ui64 NumberOfKeyStringColumns = 0; // String key columns go after key int columns
     ui64 NumberOfKeyIColumns = 0; // Number of interface - provided key columns
@@ -404,7 +406,7 @@ public:
     void Clear();
 
     // Creates new table with key columns and data columns
-    TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
+    TTable(TJoinInputStat& stat, ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
             ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
             ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, 
             ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
@@ -413,7 +415,7 @@ public:
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns,
     // stringsSizes - sizes of strings columns.  Indexes of null-value columns
     // in the form of bit array should be first values of intColumns.
-    EAddTupleResult AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue * iColumns = nullptr, const TTable &other = {});
+    EAddTupleResult AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue * iColumns, const TTable &other);
     
     ~TTable();
 

@@ -4,6 +4,7 @@
 #include "json_proto_conversion.h"
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
+#include "ydb/public/sdk/cpp/client/iam/common/iam.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/cgiparam/cgiparam.h>
@@ -462,7 +463,6 @@ namespace NKikimr::NHttpProxy {
 
         public:
             void Bootstrap(const TActorContext& ctx) {
-                PoolId = ctx.SelfID.PoolID();
                 StartTime = ctx.Now();
                 try {
                     HttpContext.RequestBodyToProto(&Request);
@@ -559,9 +559,24 @@ namespace NKikimr::NHttpProxy {
                         .Requester = ctx.SelfID
                     };
 
-                    AppData(ctx.ActorSystem())->SqsAuthFactory->RegisterAuthActor(
-                        *ctx.ActorSystem(),
-                        std::move(data));
+                    TString token = "";
+
+                    auto& config = AppData()->SqsConfig;
+                    if (config.HasAuthConfig()) {
+                        const auto& authConfig = config.GetAuthConfig();
+                        if (authConfig.LocalAuthConfig_case() == NKikimrConfig::TSqsConfig::TYdbAuthConfig::kJwt) {
+                            const auto& jwt = authConfig.GetJwt();
+                            NYdb::TIamJwtFilename params = {.JwtFilename = jwt.GetJwtFile()};
+                            if (jwt.HasIamEndpoint()) {
+                                if (TString endpoint = jwt.GetIamEndpoint(); !endpoint.empty()) {
+                                    params.Endpoint = std::move(endpoint);
+                                }
+                            }
+                            token =  NYdb::CreateIamJwtFileCredentialsProviderFactory(std::move(params))->CreateProvider()->GetAuthInfo();
+                        }
+                    }
+
+                    ctx.RegisterWithSameMailbox(new NSQS::THttpProxyAuthRequestProxy(std::move(data), token, data.Requester));
                 }
 
                 ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());

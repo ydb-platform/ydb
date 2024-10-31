@@ -574,7 +574,7 @@ namespace NKikimr::NHttpProxy {
                         }
                     }
 
-                    ctx.RegisterWithSameMailbox(new NSQS::THttpProxyAuthRequestProxy(std::move(data), token, data.Requester));
+                    ctx.RegisterWithSameMailbox(new NSQS::THttpProxyAuthRequestProxy(std::move(data), token, ctx.SelfID));
                 }
 
                 ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());

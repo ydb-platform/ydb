@@ -48,7 +48,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
 
 ui64 TPortionInfo::GetMetadataMemorySize() const {
     return sizeof(TPortionInfo) + Records.size() * (sizeof(TColumnRecord) + 8) + Indexes.size() * sizeof(TIndexChunk) +
-           BlobIds.size() * sizeof(TUnifiedBlobId) - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
+           - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
 }
 
 ui64 TPortionInfo::GetTxVolume() const {
@@ -63,9 +63,6 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
-    for (auto&& i : BlobIds) {
-        *proto.AddBlobIds() = i.SerializeToProto();
-    }
 
     *proto.MutableMeta() = Meta.SerializeToProto();
 }
@@ -74,13 +71,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     PathId = proto.GetPathId();
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
-    for (auto&& i : proto.GetBlobIds()) {
-        auto blobId = TUnifiedBlobId::BuildFromProto(i);
-        if (!blobId) {
-            return blobId;
-        }
-        BlobIds.emplace_back(blobId.DetachResult());
-    }
     {
         auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
         if (!parse) {

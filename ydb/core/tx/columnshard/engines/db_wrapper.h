@@ -30,6 +30,13 @@ class IDbWrapper {
 public:
     virtual ~IDbWrapper() = default;
 
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const = 0;
+    const IBlobGroupSelector& GetDsGroupSelectorVerified() const {
+        const auto* result = GetDsGroupSelector();
+        AFL_VERIFY(result);
+        return *result;
+    }
+
     virtual void Insert(const TInsertedData& data) = 0;
     virtual void Commit(const TCommittedData& data) = 0;
     virtual void Abort(const TInsertedData& data) = 0;
@@ -88,6 +95,10 @@ public:
     bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override;
 
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override;
+
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return DsGroupSelector;
+    }
 
 private:
     NTable::TDatabase& Database;

@@ -51,18 +51,18 @@ public:
         return Chunk;
     }
 
-    TChunkAddress(const ui64 pathId, const ui64 portionId, const ui32 columnId, const ui16 chunk)
+    TFullChunkAddress(const ui64 pathId, const ui64 portionId, const ui32 columnId, const ui16 chunk)
         : PathId(pathId)
         , PortionId(portionId)
         , ColumnId(columnId)
         , Chunk(chunk) {
     }
 
-    bool operator<(const TChunkAddress& address) const {
+    bool operator<(const TFullChunkAddress& address) const {
         return std::tie(PathId, PortionId, ColumnId, Chunk) < std::tie(address.PathId, address.PortionId, address.ColumnId, address.Chunk);
     }
 
-    bool operator==(const TChunkAddress& address) const {
+    bool operator==(const TFullChunkAddress& address) const {
         return std::tie(PathId, PortionId, ColumnId, Chunk) == std::tie(address.PathId, address.PortionId, address.ColumnId, address.Chunk);
     }
 
@@ -80,7 +80,7 @@ struct ::THash<NKikimr::NOlap::TChunkAddress> {
 
 template <>
 struct ::THash<NKikimr::NOlap::TFullChunkAddress> {
-    inline ui64 operator()(const NKikimr::NOlap::TChunkAddress& a) const {
-        return CombineHashes(CombineHashes(((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx(), a.PathId), a.PortionId);
+    inline ui64 operator()(const NKikimr::NOlap::TFullChunkAddress& a) const {
+        return CombineHashes(CombineHashes(((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx(), a.GetPathId()), a.GetPortionId());
     }
 };

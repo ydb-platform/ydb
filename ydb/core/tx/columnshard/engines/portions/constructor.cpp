@@ -95,7 +95,7 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
             ++itBlobIdx;
         }
         AFL_VERIFY(itRecord == Records.end());
-        AFL_VERIFY(itBlobIdx == BlobIdxs.end());
+        AFL_VERIFY(itBlobIdx == MetaConstructor.BlobIdxs.end());
     } else {
         for (auto&& i : Records) {
             AFL_VERIFY(i.BlobRange.IsValid());
@@ -125,8 +125,8 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
 }
 
 void TPortionInfoConstructor::LoadRecord(const TColumnChunkLoadContextV1& loadContext) {
-    AFL_VERIFY(loadContext.GetBlobRange().GetBlobIdxVerified() < MetaConstructor.GetBlobIds().size());
-    TColumnRecord rec(loadContext.GetBlobRange().GetBlobIdxVerified(), loadContext);
+    AFL_VERIFY(loadContext.GetBlobRange().GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
+    TColumnRecord rec(loadContext);
     Records.push_back(std::move(rec));
 }
 

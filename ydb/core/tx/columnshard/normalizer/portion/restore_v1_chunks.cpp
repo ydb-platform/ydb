@@ -33,7 +33,7 @@ public:
         return ChunksInfo;
     }
 
-    TPatchItemAddV1(const TPortionLoadContext& portionInfo, THashMap<TFullChunkAddress, TColumnChunkLoadContext>&& chunksInfo)
+    TPatchItemAddV1(const TPortionLoadContext& portionInfo, std::map<TFullChunkAddress, TColumnChunkLoadContext>&& chunksInfo)
         : PortionInfo(portionInfo)
         , ChunksInfo(std::move(chunksInfo)) {
         for (auto&& i : ChunksInfo) {
@@ -57,11 +57,13 @@ public:
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
+        using IndexPortions = NColumnShard::Schema::IndexPortions;
+        using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
         for (auto&& i : Patches) {
             auto metaProto = i.GetPortionInfo().GetMetaProto();
             AFL_VERIFY(!metaProto.GetBlobIds().size());
             for (auto&& b : i.GetBlobIds()) {
-                *metaProto.AddBlobId() = b.SerializeBinary();
+                *metaProto.AddBlobIds() = b.SerializeBinary();
             }
             db.Table<IndexPortions>()
                 .Key(i.GetPortionInfo().GetPathId(), i.GetPortionInfo().GetPortionId())
@@ -90,7 +92,7 @@ private:
 
 public:
     const TColumnChunkLoadContextV1& GetChunkInfo() const {
-        return ChunksInfo;
+        return ChunkInfo;
     }
 
     TPatchItemRemoveV1(const TColumnChunkLoadContextV1& chunkInfo)
@@ -103,12 +105,13 @@ private:
     std::vector<TPatchItemRemoveV1> Patches;
 
 public:
-    TChanges(std::vector<TPatchItemRemoveV1>&& patches)
+    TChangesRemoveV1(std::vector<TPatchItemRemoveV1>&& patches)
         : Patches(std::move(patches)) {
     }
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
+        using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
         for (auto&& i : Patches) {
             db.Table<IndexColumnsV1>()
                 .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
@@ -125,7 +128,7 @@ public:
 };
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
-    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -137,10 +140,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    THashMap<ui64, TPortionInfoConstructor> portions0;
+    THashMap<ui64, TPortionLoadContext> portions0;
     THashSet<ui64> existPortions0;
     THashMap<ui64, std::map<TFullChunkAddress, TColumnChunkLoadContext>> columns0;
-    THashMap<TFullChunkAddress, TColumnChunkLoadContext> columns1Remove;
+    THashMap<TFullChunkAddress, TColumnChunkLoadContextV1> columns1Remove;
 
     {
         auto rowset = db.Table<Schema::IndexPortions>().Select();

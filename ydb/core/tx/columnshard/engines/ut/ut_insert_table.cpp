@@ -16,6 +16,10 @@ namespace {
 
 class TTestInsertTableDB : public IDbWrapper {
 public:
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return nullptr;
+    }
+
     void Insert(const TInsertedData&) override {
     }
     void Commit(const TCommittedData&) override {

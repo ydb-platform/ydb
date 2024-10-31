@@ -1,5 +1,7 @@
 #pragma once
+#include "common.h"
 #include "meta.h"
+
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -45,14 +47,15 @@ private:
     bool NeedBlobIdxsSort = false;
 
     friend class TPortionInfoConstructor;
-    void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount, const std::optional<NArrow::TMinMaxSpecialKeys>& snapshotKeys, const TIndexInfo& indexInfo);
+    void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount,
+        const std::optional<NArrow::TMinMaxSpecialKeys>& snapshotKeys, const TIndexInfo& indexInfo);
 
 public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(MetaConstructor.GetBlobId(linkRange.GetBlobIdxVerified()));
+        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
     }
 
     ui32 GetBlobIdsCount() const {
@@ -74,6 +77,15 @@ public:
         }
         AFL_VERIFY(false);
         return TBlobRange();
+    }
+
+    void ReorderBlobs() {
+        if (NeedBlobIdxsSort) {
+            auto pred = [](const TAddressBlobId& l, const TAddressBlobId& r) {
+                return l.GetAddress() < r.GetAddress();
+            };
+            std::sort(BlobIdxs.begin(), BlobIdxs.end(), pred);
+        }
     }
 
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
@@ -112,7 +124,6 @@ public:
 
     [[nodiscard]] bool LoadMetadata(
         const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
-
 };
 
-}
+}   // namespace NKikimr::NOlap

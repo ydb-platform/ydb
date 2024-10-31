@@ -253,6 +253,10 @@ public:
         return result;
     }
 
+    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
+        return MetaConstructor.RegisterBlobId(blobId);
+    }
+
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return MetaConstructor.RestoreBlobRange(linkRange);
     }
@@ -297,12 +301,7 @@ public:
             std::sort(Indexes.begin(), Indexes.end(), pred);
             CheckChunksOrder(Indexes);
         }
-        if (NeedBlobIdxsSort) {
-            auto pred = [](const TAddressBlobId& l, const TAddressBlobId& r) {
-                return l.GetAddress() < r.GetAddress();
-            };
-            std::sort(BlobIdxs.begin(), BlobIdxs.end(), pred);
-        }
+        MetaConstructor.ReorderBlobs();
     }
 
     void FullValidation() const {
@@ -310,7 +309,8 @@ public:
         CheckChunksOrder(Records);
         CheckChunksOrder(Indexes);
         if (MetaConstructor.BlobIdxs.size()) {
-            AFL_VERIFY(MetaConstructor.BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
+            AFL_VERIFY(MetaConstructor.BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", MetaConstructor.BlobIdxs.size())(
+                                                                               "records", Records.size())(
                                                                "indexes", Indexes.size());
         } else {
             std::set<ui32> blobIdxs;
@@ -377,21 +377,6 @@ public:
         auto info = Constructors[pathId].emplace(portionId, std::move(constructor));
         AFL_VERIFY(info.second);
         return &info.first->second;
-    }
-
-    TPortionInfoConstructor* MergeConstructor(TPortionInfoConstructor&& constructor) {
-        const ui64 pathId = constructor.GetPathId();
-        const ui64 portionId = constructor.GetPortionIdVerified();
-        auto itPathId = Constructors.find(pathId);
-        if (itPathId == Constructors.end()) {
-            return AddConstructorVerified(std::move(constructor));
-        }
-        auto itPortionId = itPathId->second.find(portionId);
-        if (itPortionId == itPathId->second.end()) {
-            return AddConstructorVerified(std::move(constructor));
-        }
-        itPortionId->second.Merge(std::move(constructor));
-        return &itPortionId->second;
     }
 };
 

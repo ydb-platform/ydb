@@ -1,4 +1,4 @@
-bl#pragma once
+#pragma once
 #include "column_record.h"
 #include "common.h"
 #include "index_chunk.h"
@@ -94,7 +94,7 @@ private:
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
         AFL_VERIFY(MinSnapshotDeprecated.Valid());
-        AFL_VERIFY(BlobIds.size());
+        Meta.FullValidation();
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
@@ -110,7 +110,7 @@ public:
     }
 
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return BlobIds;
+        return Meta.GetBlobIds();
     }
 
     ui32 GetCompactionLevel() const {
@@ -223,12 +223,11 @@ public:
     }
 
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < BlobIds.size());
-        return BlobIds[linkId];
+        return Meta.GetBlobId(linkId);
     }
 
     ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
+        return Meta.GetBlobIdsCount();
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;

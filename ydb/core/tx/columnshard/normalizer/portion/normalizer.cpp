@@ -96,7 +96,7 @@ TConclusionStatus TPortionsNormalizerBase::InitPortions(
     if (!wrapper.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo =
                 portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
-            AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
+            AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
             const ui64 portionId = portion.GetPortionIdVerified();
             AFL_VERIFY(constructors.emplace(portionId, std::move(portion)).second);
         })) {
@@ -109,7 +109,7 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions) {
     using namespace NColumnShard;
     auto columnsFilter = GetColumnsFilter(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema());
-    auto rowset = db.Table<Schema::IndexColumns>().Select();
+    auto rowset = db.Table<Schema::IndexColumnsV1>().Select();
     if (!rowset.IsReady()) {
         return TConclusionStatus::Fail("Not ready");
     }
@@ -123,20 +123,16 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
             return;
         }
         auto it = portions.find(portion.GetPortionIdVerified());
-        if (it == portions.end()) {
-            const ui64 portionId = portion.GetPortionIdVerified();
-            it = portions.emplace(portionId, std::move(portion)).first;
-        } else {
-            it->second.Merge(std::move(portion));
-        }
+        AFL_VERIFY(it == portions.end());
+        const ui64 portionId = portion.GetPortionIdVerified();
+        it = portions.emplace(portionId, std::move(portion)).first;
         it->second.LoadRecord(loadContext);
     };
 
     while (!rowset.EndOfSet()) {
-        TPortionInfoConstructor portion(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::Portion>());
-        Y_ABORT_UNLESS(rowset.GetValue<Schema::IndexColumnsV1::Index>() == 0);
+        TPortionInfoConstructor portion(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
 
-        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset, &DsGroupSelector);
+        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
         initPortion(std::move(portion), chunkLoadContext);
 
         if (!rowset.Next()) {

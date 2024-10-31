@@ -2,6 +2,7 @@
 #include "db_wrapper.h"
 #include "portions/constructor.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
@@ -45,6 +46,7 @@ bool TDbWrapper::Load(TInsertTableAccessor& insertTable,
 
 void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) {
     NIceDb::TNiceDb db(Database);
+    using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
     auto rowProto = row.GetMeta().SerializeToProto();
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     if (AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage()) {
@@ -52,7 +54,8 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
             .Key(portion.GetPathId(), portion.GetPortionId(), row.ColumnId, row.Chunk)
             .Update(NIceDb::TUpdate<IndexColumnsV1::BlobIdx>(row.GetBlobRange().GetBlobIdxVerified()),
                 NIceDb::TUpdate<IndexColumnsV1::Metadata>(rowProto.SerializeAsString()),
-                NIceDb::TUpdate<IndexColumnsV1::Offset>(row.BlobRange.Offset), NIceDb::TUpdate<IndexColumnsV1::Size>(row.BlobRange.Size));
+                NIceDb::TUpdate<IndexColumnsV1::Offset>(row.BlobRange.Offset),
+                NIceDb::TUpdate<IndexColumnsV1::Size>(row.BlobRange.Size));
     }
     if (AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
         if (row.GetChunkIdx() == 0 && row.GetColumnId() == firstPKColumnId) {
@@ -109,7 +112,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
 
 bool TDbWrapper::LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) {
     NIceDb::TNiceDb db(Database);
-    using IndexColumns = NColumnShard::Schema::IndexColumns;
+    using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
     auto rowset = db.Table<IndexColumnsV1>().Prefix(0).Select();
     if (!rowset.IsReady()) {
         return false;

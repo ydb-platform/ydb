@@ -41,7 +41,7 @@ public:
 
     virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) = 0;
     virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
-    virtual bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) = 0;
+    virtual bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) = 0;
 
     virtual void WritePortion(const NOlap::TPortionInfo& portion) = 0;
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) = 0;
@@ -78,7 +78,7 @@ public:
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) override;
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) override;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) override;

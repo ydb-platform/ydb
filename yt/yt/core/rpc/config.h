@@ -132,7 +132,7 @@ public:
     std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
     TTimeHistogramConfigPtr TimeHistogram;
-    THashMap<std::string, TMethodConfigPtr> Methods;
+    THashMap<TString, TMethodConfigPtr> Methods;
     std::optional<int> AuthenticationQueueSizeLimit;
     std::optional<TDuration> PendingPayloadsTimeout;
     std::optional<bool> Pooled;

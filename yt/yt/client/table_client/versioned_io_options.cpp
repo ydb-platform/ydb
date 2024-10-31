@@ -4,6 +4,8 @@
 
 namespace NYT::NTableClient {
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TVersionedReadOptions::Register(TRegistrar registrar)
@@ -22,7 +24,7 @@ void ToProto(
     NProto::TVersionedReadOptions* protoOptions,
     const TVersionedReadOptions& options)
 {
-    protoOptions->set_read_mode(static_cast<i32>(options.ReadMode));
+    protoOptions->set_read_mode(ToProto(options.ReadMode));
 }
 
 void FromProto(
@@ -36,7 +38,7 @@ void ToProto(
     NProto::TVersionedWriteOptions* protoOptions,
     const NTableClient::TVersionedWriteOptions& options)
 {
-    protoOptions->set_write_mode(static_cast<i32>(options.WriteMode));
+    protoOptions->set_write_mode(ToProto(options.WriteMode));
 }
 
 void FromProto(

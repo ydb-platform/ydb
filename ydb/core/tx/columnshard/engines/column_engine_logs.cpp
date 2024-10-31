@@ -203,7 +203,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
             if (portionInfo->CheckForCleanup()) {
-                AddCleanupPortion(*portionInfo);
+                AddCleanupPortion(portionInfo);
             }
         }
     }
@@ -259,7 +259,8 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         for (auto&& [granuleId, pathConstructors] : constructors) {
             auto g = GetGranulePtrVerified(granuleId);
             for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false));
+                auto portion = *constructor.Build(false).GetPortionInfoPtr();
+                g->UpsertPortionOnLoad(std::move(portion));
             }
         }
     }
@@ -395,7 +396,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(*info);
+            changes->PortionsToDrop.push_back(TPortionDataAccessor(info));
             ++portionsFromDrop;
         }
     }
@@ -413,14 +414,14 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++i;
                 continue;
             }
-            AFL_VERIFY(it->second[i].CheckForCleanup(snapshot))("p_snapshot", it->second[i].GetRemoveSnapshotOptional())("snapshot", snapshot);
-            if (txSize + it->second[i].GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
-                txSize += it->second[i].GetTxVolume();
+            AFL_VERIFY(it->second[i]->CheckForCleanup(snapshot))("p_snapshot", it->second[i]->GetRemoveSnapshotOptional())("snapshot", snapshot);
+            if (txSize + it->second[i]->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+                txSize += it->second[i]->GetTxVolume();
             } else {
                 limitExceeded = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(std::move(it->second[i]));
+            changes->PortionsToDrop.push_back(TPortionDataAccessor(it->second[i]));
             if (i + 1 < it->second.size()) {
                 it->second[i] = std::move(it->second.back());
             }

@@ -185,8 +185,8 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     for (const auto& [name, value] : traceContext->GetTags()) {
         auto* protoTag = proto->add_tags();
 
-        protoTag->set_key(ToProto<TProtobufString>(name));
-        protoTag->set_v_str(ToProto<TProtobufString>(value));
+        protoTag->set_key(ToProto(name));
+        protoTag->set_v_str(ToProto(value));
     }
 
     for (const auto& logEntry : traceContext->GetLogEntries()) {

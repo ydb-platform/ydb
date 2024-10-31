@@ -238,7 +238,7 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
                 FromString(str.Head(len), precision, std::min(s, p)):
                 FromString(str.Head(len), std::min(p - exp, int(MaxPrecision)), std::max(s, 0));
 
-            if (IsNan(r)) {
+            if (IsError(r) || IsNan(r)) {
                 return Err();
             }
 

@@ -58,6 +58,7 @@ class TestTpch10(TpchSuiteBase):
         'lineitem': 59986052,
     }
     scale: int = 10
+    check_canonical: bool = True
 
 
 class TestTpch100(TpchSuiteBase):
@@ -65,11 +66,13 @@ class TestTpch100(TpchSuiteBase):
         'lineitem': 600037902,
     }
     scale: int = 100
+    check_canonical: bool = True
     timeout = max(TpchSuiteBase.timeout, 300.)
 
 
 class TestTpch1000(TpchSuiteBase):
     scale: int = 1000
+    check_canonical: bool = True
     timeout = max(TpchSuiteBase.timeout, 1000.)
     query_settings = {
         9: LoadSuiteBase.QuerySettings(timeout=max(TpchSuiteBase.timeout, 3600.)),
@@ -78,4 +81,5 @@ class TestTpch1000(TpchSuiteBase):
 
 class TestTpch10000(TpchSuiteBase):
     scale: int = 10000
+    check_canonical: bool = True
     timeout = max(TpchSuiteBase.timeout, 3600.)

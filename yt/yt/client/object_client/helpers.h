@@ -8,6 +8,8 @@
 
 #include <yt/yt/client/ypath/public.h>
 
+#include <yt/yt/client/hydra/public.h>
+
 #include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NObjectClient {
@@ -97,6 +99,9 @@ TCellTag CellTagFromId(TObjectId id);
 
 //! Extracts the counter component from #id.
 ui64 CounterFromId(TObjectId id);
+
+//! Extracts Hydra revision from #id.
+NHydra::TRevision RevisionFromId(TObjectId id);
 
 //! Extracts the entropy component from #id.
 ui32 EntropyFromId(TObjectId id);

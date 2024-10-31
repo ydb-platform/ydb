@@ -92,7 +92,7 @@ private:
                 req->RequireServerFeature(ETimestampProviderFeature::AlienClocks);
             }
 
-            req->set_clock_cluster_tag(ToProto<int>(clockClusterTag));
+            req->set_clock_cluster_tag(ToProto(clockClusterTag));
         }
 
         return req->Invoke().Apply(

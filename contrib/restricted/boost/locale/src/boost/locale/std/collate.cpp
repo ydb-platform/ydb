@@ -90,10 +90,12 @@ namespace boost { namespace locale { namespace impl_std {
 
             case char_facet_t::wchar_f: return std::locale(in, new std::collate_byname<wchar_t>(locale_name));
 
+#ifdef __cpp_char8_t
+            case char_facet_t::char8_f: break; // std-facet not available (yet)
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
             case char_facet_t::char16_f: return std::locale(in, new std::collate_byname<char16_t>(locale_name));
 #endif
-
 #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
             case char_facet_t::char32_f: return std::locale(in, new std::collate_byname<char32_t>(locale_name));
 #endif

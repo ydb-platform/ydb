@@ -623,6 +623,7 @@ private:
     static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);
     void RemovePendingRequests(TMessageQueue& requests);
     void RemoveMessagesToQueue(TMessageQueue& requests);
+    static TString GetConsumerDeletedMessage(TStringBuf consumerName);
 
 private:
     ui64 TabletID;

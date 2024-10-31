@@ -37,6 +37,10 @@ class TTestDbWrapper : public IDbWrapper {
 private:
     std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
 public:
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return nullptr;
+    }
+
     struct TIndex {
         THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Columns; // pathId -> portions
         THashMap<ui32, ui64> Counters;

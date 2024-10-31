@@ -6,10 +6,10 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/testing/gmock_in_unittest
     library/cpp/regex/pcre
     library/cpp/getopt/small
     ydb/public/lib/ydb_cli/commands/topic_workload
-    library/cpp/testing/gmock_in_unittest
 )
 
 END()

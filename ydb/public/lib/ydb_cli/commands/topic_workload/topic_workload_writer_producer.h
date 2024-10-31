@@ -20,7 +20,7 @@ namespace NYdb {
                     );
             TTopicWorkloadWriterProducer(TTopicWorkloadWriterProducer&& other) = default;
 
-            ~TTopicWorkloadWriterProducer();
+            ~TTopicWorkloadWriterProducer() = default;
 
             void Close();
             

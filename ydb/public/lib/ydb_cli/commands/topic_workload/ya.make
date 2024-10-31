@@ -33,6 +33,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_types/operation
     ydb/public/sdk/cpp/client/ydb_types/status
     library/cpp/unified_agent_client
+    library/cpp/histogram/hdr
 )
 
 END()

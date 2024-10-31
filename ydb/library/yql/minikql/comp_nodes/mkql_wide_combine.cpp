@@ -261,6 +261,16 @@ public:
         CleanupCurrentContext();
     }
 
+    bool TasteItWithStateLogging() {
+        const ui64 initialCapacity = States.GetCapacity();
+        const bool isNew = TasteIt();
+        const ui64 currentCapacity = States.GetCapacity();
+
+        YQL_LOG_IF(DEBUG, initialCapacity != currentCapacity) << (const void *)this << " Growing states capacity from " << initialCapacity << " to " << currentCapacity;
+
+        return isNew;
+    }
+
     bool TasteIt() {
         Y_ABORT_UNLESS(!ExtractIt);
         bool isNew = false;
@@ -450,7 +460,7 @@ public:
 
     ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
-            bool isNew = InMemoryProcessingState.TasteIt();
+            bool isNew = InMemoryProcessingState.TasteItWithStateLogging();
             Throat = InMemoryProcessingState.Throat;
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }

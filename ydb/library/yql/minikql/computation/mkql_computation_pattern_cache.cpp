@@ -77,7 +77,7 @@ public:
 
         const auto& entry = it->second.Entry;
 
-        Y_ENSURE(entry->Pattern->IsCompiled());
+        Y_ASSERT(entry->Pattern->IsCompiled());
 
         if (it->second.LinkedInCompiledPatternLRUList()) {
             return;

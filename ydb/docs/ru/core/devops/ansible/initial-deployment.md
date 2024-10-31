@@ -210,6 +210,14 @@ all:
 1. Роль `ydb-static` отвечает за подготовку и запуск статических нод {{ ydb-short-name }}, включая проверку необходимых переменных и секретов, форматирование и подготовку дисков, создание и запуск `systemd unit` для узла хранения, а также инициализацию хранилища и управление доступом к базе данных. Ознакомиться с `systemd unit` сторадж ноды можно по [ссылке](https://github.com/ydb-platform/ydb-ansible/blob/3b61d8c947d94ad4b89e8460f26391041a47b00e/roles/ydbd_static/templates/ydbd-storage.service).
 1. Роль `ydb-dynamic` настраивает и управляет динамическими узлами {{ ydb-short-name }}, включая проверку необходимых переменных, создание конфигурационных файлов и `systemd unit` файлов для каждого динамического узла, запуск этих узлов, получение токена для доступа к {{ ydb-short-name }}, создание базы данных в {{ ydb-short-name }}. Шаблон файла `systemd unit` динамической ноды находится по [ссылке](https://github.com/ydb-platform/ydb-ansible/blob/3b61d8c947d94ad4b89e8460f26391041a47b00e/roles/ydbd_static/templates/ydbd-storage.service).
 
+{% cut "Подробное пошаговое описание установки {{ ydb-short-name }}" %}
+
+{% include [ansible-install-steps](./_includes/ansible-install-steps.md) %}
+
+{% endcut %}
+
+## Описание портов кластера {{ ydb-short-name }}
+
 После развёртывания кластера {{ ydb-short-name }}, каждый сервер по умолчанию будет принимать соединения на следующих портах:
 
 {% cut "Порты статического узла" %}
@@ -238,12 +246,6 @@ all:
   || `ydbd-database-a` | 8766  | HTTPS-порты для [встроенного интерфейса](../../reference/embedded-ui/index.md), отображения [метрик](../../devops/manual/monitoring.md) и других вспомогательных команд. ||
   || `ydbd-database-b` | 8767  | ^ ||
   |#
-
-{% endcut %}
-
-{% cut "Подробное пошаговое описание установки {{ ydb-short-name }}" %}
-
-{% include [ansible-install-steps](./_includes/ansible-install-steps.md) %}
 
 {% endcut %}
 

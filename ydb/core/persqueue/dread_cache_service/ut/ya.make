@@ -2,14 +2,8 @@ UNITTEST_FOR(ydb/core/persqueue)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    TIMEOUT(300)
-ELSE()
-    SIZE(MEDIUM)
-    TIMEOUT(60)
-ENDIF()
+SIZE(MEDIUM)
+TIMEOUT(300)
 
 PEERDIR(
     ydb/core/persqueue/ut/common

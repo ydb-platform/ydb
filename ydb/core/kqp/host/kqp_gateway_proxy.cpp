@@ -1201,14 +1201,18 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            TString error;
             std::pair<TString, TString> pathPair;
-            if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(pathPair.first);
+            tx.SetWorkingDir(GetDatabase());
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterBackupCollection);
 
             auto& op = *tx.MutableAlterBackupCollection();
@@ -1244,14 +1248,18 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            TString error;
             std::pair<TString, TString> pathPair;
-            if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(pathPair.first);
+            tx.SetWorkingDir(GetDatabase());
             if (settings.Cascade) {
                 return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
             } else {

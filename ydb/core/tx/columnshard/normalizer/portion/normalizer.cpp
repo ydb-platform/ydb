@@ -115,25 +115,18 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     }
 
     TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
-    auto initPortion = [&](TPortionInfoConstructor&& portion, const TColumnChunkLoadContextV1& loadContext) {
-        auto currentSchema = schema.GetSchema(portion);
-        portion.SetSchemaVersion(currentSchema->GetVersion());
-
+    auto initPortion = [&](const TColumnChunkLoadContextV1& loadContext) {
         if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
             return;
         }
-        auto it = portions.find(portion.GetPortionIdVerified());
-        AFL_VERIFY(it == portions.end());
-        const ui64 portionId = portion.GetPortionIdVerified();
-        it = portions.emplace(portionId, std::move(portion)).first;
+        auto it = portions.find(loadContext.GetPortionId());
+        AFL_VERIFY(it != portions.end());
         it->second.LoadRecord(loadContext);
     };
 
     while (!rowset.EndOfSet()) {
-        TPortionInfoConstructor portion(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
-
         NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
-        initPortion(std::move(portion), chunkLoadContext);
+        initPortion(chunkLoadContext);
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("Not ready");

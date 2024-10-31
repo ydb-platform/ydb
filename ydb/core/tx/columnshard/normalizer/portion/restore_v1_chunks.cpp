@@ -154,10 +154,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
             existPortions0.emplace(portion.GetPortionId());
-            if (portion.GetMetaProto().GetBlobIds().size()) {
-                continue;
+            if (!portion.GetMetaProto().GetBlobIds().size()) {
+                AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
             }
-            AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -173,10 +172,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContext chunk(rowset, &DsGroupSelector);
-            if (!portions0.contains(chunk.GetPortionId())) {
-                continue;
+            if (portions0.contains(chunk.GetPortionId())) {
+                AFL_VERIFY(columns0[chunk.GetPortionId()].emplace(chunk.GetFullChunkAddress(), chunk).second);
             }
-            AFL_VERIFY(columns0[chunk.GetPortionId()].emplace(chunk.GetFullChunkAddress(), chunk).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

@@ -78,7 +78,7 @@ public:
         return *InsertWriteId;
     }
 
-    TPortionInfoConstructor(const TPortionInfo& portion, const bool withBlobs, const bool withMetadata)
+    TPortionInfoConstructor(const TPortionInfo& portion, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
@@ -88,7 +88,7 @@ public:
         , CommitSnapshot(portion.GetCommitSnapshotOptional())
         , InsertWriteId(portion.GetInsertWriteIdOptional()) {
         if (withMetadata) {
-            MetaConstructor = TPortionMetaConstructor(portion.Meta, withBlobs);
+            MetaConstructor = TPortionMetaConstructor(portion.Meta, withMetadataBlobs);
         }
         if (withBlobs) {
             AFL_VERIFY(withMetadata);

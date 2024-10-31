@@ -50,7 +50,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
         result.TierName = *TierName;
     }
     AFL_VERIFY(BlobIds.size());
-    result.BlobIds = std::move(BlobIds);
+    result.BlobIds = BlobIds;
     result.BlobIds.shrink_to_fit();
     result.CompactionLevel = *TValidator::CheckNotNull(CompactionLevel);
     result.DeletionsCount = *TValidator::CheckNotNull(DeletionsCount);
@@ -66,10 +66,7 @@ TPortionMeta TPortionMetaConstructor::Build() {
 }
 
 bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
-    if (!!Produced) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
-        return true;
-    }
+    AFL_VERIFY(!Produced)("produced", Produced);
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
     }

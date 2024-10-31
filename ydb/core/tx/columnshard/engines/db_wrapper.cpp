@@ -113,7 +113,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
 bool TDbWrapper::LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
-    auto rowset = db.Table<IndexColumnsV1>().Prefix(0).Select();
+    auto rowset = db.Table<IndexColumnsV1>().Select();
     if (!rowset.IsReady()) {
         return false;
     }

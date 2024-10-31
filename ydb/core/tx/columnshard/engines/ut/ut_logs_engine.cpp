@@ -105,7 +105,7 @@ public:
     }
     virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
-            callback(NOlap::TPortionInfoConstructor(i.second, false, true), i.second.GetMeta().SerializeToProto());
+            callback(NOlap::TPortionInfoConstructor(i.second, false, false, false), i.second.GetMeta().SerializeToProto());
         }
         return true;
     }
@@ -125,7 +125,7 @@ public:
         }
         auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, false, true)).first;
+            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, false, true, true)).first;
         } else {
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortionId() == it->second.GetPortionIdVerified());
         }

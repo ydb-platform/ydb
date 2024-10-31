@@ -57,8 +57,6 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
         ReorderChunks();
     }
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", GetPortionIdVerified());
-    FullValidation();
-
     if (MetaConstructor.BlobIdxs.size()) {
         auto itRecord = Records.begin();
         auto itIndex = Indexes.begin();
@@ -98,14 +96,15 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
         AFL_VERIFY(itBlobIdx == MetaConstructor.BlobIdxs.end());
     } else {
         for (auto&& i : Records) {
-            AFL_VERIFY(i.BlobRange.IsValid());
+            AFL_VERIFY(i.BlobRange.GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
         }
         for (auto&& i : Indexes) {
             if (auto* blobId = i.GetBlobRangeOptional()) {
-                AFL_VERIFY(blobId->IsValid());
+                AFL_VERIFY(blobId->GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
             }
         }
     }
+    FullValidation();
 
     result->Indexes = std::move(Indexes);
     result->Indexes.shrink_to_fit();

@@ -447,6 +447,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
             newTask->set_result_limit(task.Internal.result_limit());
             *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
+            *newTask->mutable_execution_deadline() = task.Internal.execution_deadline();
             *newTask->mutable_request_started_at() = task.Query.meta().started_at();
 
             newTask->set_restart_count(task.RetryCount);

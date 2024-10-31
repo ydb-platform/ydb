@@ -108,7 +108,7 @@ message GetTaskResult {
         uint64 result_limit = 26;
 
         FederatedQuery.Limits limits = 27;
-        google.protobuf.Duration execution_limit = 29;
+        google.protobuf.Duration execution_limit = 29; // deprecated: use execution_deadline
         google.protobuf.Timestamp request_started_at = 30;
         repeated CompressedData dq_graph_compressed = 31;
         uint32 restart_count = 32;
@@ -120,6 +120,8 @@ message GetTaskResult {
         NFq.NConfig.TYdbStorageConfig compute_connection = 37;
         google.protobuf.Duration result_ttl = 38;
         map<string, Ydb.TypedValue> parameters = 39;
+
+        google.protobuf.Timestamp execution_deadline = 40;
     }
     repeated Task tasks = 1;
 }

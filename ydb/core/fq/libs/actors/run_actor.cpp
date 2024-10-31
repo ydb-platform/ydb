@@ -527,10 +527,9 @@ private:
     }
 
     bool TimeLimitExceeded() {
-        if (Params.ExecutionTtl != TDuration::Zero()) {
+        if (Params.ExecutionDeadline != TInstant::Zero()) {
             auto currentTime = TInstant::Now();
-            auto startedAt = Params.RequestStartedAt ? Params.RequestStartedAt : currentTime;
-            auto deadline = startedAt  + Params.ExecutionTtl;
+            auto deadline = Params.ExecutionDeadline;
 
             if (currentTime >= deadline) {
                 AbortByExecutionTimeout();

@@ -66,7 +66,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         }
     }
     auto queryType = request.content().type();
-    ui64 executionLimitMills = GetExecutionLimitMills(queryType, event.Quotas);
+    auto executionLimitMills = TDuration::MilliSeconds(GetExecutionLimitMills(queryType, event.Quotas));
+    auto executionDeadline = GetExecutionDeadline(request.content().limits(), executionLimitMills);
     const TString scope = event.Scope;
     TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_CREATE_QUERY, RTC_CREATE_QUERY);
     requestCounters.IncInFly();
@@ -204,7 +205,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         queryInternal.set_state_load_mode(FederatedQuery::StateLoadMode::EMPTY);
         queryInternal.mutable_disposition()->CopyFrom(request.disposition());
         queryInternal.set_result_limit(resultLimit);
-        *queryInternal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
+        *queryInternal.mutable_execution_ttl() = NProtoInterop::CastToProto(executionLimitMills);
+        *queryInternal.mutable_execution_deadline() = NProtoInterop::CastToProto(executionDeadline);
 
         if (request.execute_mode() != FederatedQuery::SAVE) {
             // TODO: move to run actor priority selection
@@ -777,7 +779,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         return;
     }
 
-    ui64 executionLimitMills = GetExecutionLimitMills(request.content().type(), event.Quotas);
+    auto executionLimitMills = TDuration::MilliSeconds(GetExecutionLimitMills(request.content().type(), event.Quotas));
+    auto executionDeadline = GetExecutionDeadline(request.content().limits(), executionLimitMills);
 
     const TString idempotencyKey = request.idempotency_key();
 
@@ -834,7 +837,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             commonCounters->ParseProtobufError->Inc();
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
-        *internal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
+        *internal.mutable_execution_ttl() = NProtoInterop::CastToProto(executionLimitMills);
+        *internal.mutable_execution_deadline() = NProtoInterop::CastToProto(executionDeadline);
 
         const TString resultId = request.execute_mode() == FederatedQuery::SAVE ? parser.ColumnParser(RESULT_ID_COLUMN_NAME).GetOptionalString().GetOrElse("") : "";
 
@@ -1865,6 +1869,44 @@ ui64 TYdbControlPlaneStorageActor::GetExecutionLimitMills(
         return 0;
     }
     return execTtlIt->second.Limit.Value * 60 * 1000;
+}
+
+TInstant TYdbControlPlaneStorageActor::GetExecutionDeadline(
+        const FederatedQuery::Limits& userLimits,
+        const TDuration& systemLimit) {
+    
+    auto now = TInstant::Now();
+
+    auto userExecutionDeadline = now;
+    auto systemExecutionDeadline = now + systemLimit;
+
+    switch (userLimits.timeout_case()) {
+        case FederatedQuery::Limits::TimeoutCase::kExecutionDeadline: {
+            auto deadline = NProtoInterop::CastFromProto(userLimits.execution_deadline());
+            if (!deadline) {
+                break;
+            }
+            if (deadline > now) {
+                userExecutionDeadline = deadline;
+            }
+
+            break;
+        }
+        case FederatedQuery::Limits::TimeoutCase::kExecutionTimeout: {
+            userExecutionDeadline += NProtoInterop::CastFromProto(userLimits.execution_timeout());
+            break;
+        }
+        default:
+            break;
+    }
+
+    auto executionDeadline = std::min(userExecutionDeadline, systemExecutionDeadline);
+    if (systemExecutionDeadline - now == TDuration::Zero()) {
+        executionDeadline = userExecutionDeadline;
+    } else if (userExecutionDeadline - now == TDuration::Zero()) {
+        executionDeadline = systemExecutionDeadline;
+    }
+    return executionDeadline;
 }
 
 } // NFq

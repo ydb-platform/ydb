@@ -742,9 +742,9 @@
             "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output4.txt"
         },
         {
-            "checksum": "eb2d8b435e428e956f1bafb75ba6af84",
-            "size": 916,
-            "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output4.yqlrun.txt.attr"
+            "checksum": "98d916f86f56d14e04ab1219419c27f3",
+            "size": 945,
+            "uri": "https://{canondata_backend}/1923547/079ed525adfefb739e07ac45dcf5e817b56cc8a3/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output4.yqlrun.txt.attr"
         },
         {
             "checksum": "94fde3f913511b2af79a70f97849f2c3",
@@ -752,9 +752,9 @@
             "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output1.txt"
         },
         {
-            "checksum": "7944c7beb28ff0a6907041f5b0a2af1b",
-            "size": 1087,
-            "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output1.yqlrun.txt.attr"
+            "checksum": "5d11a5046b0adaf24dbb4cdc4f8f3c30",
+            "size": 1116,
+            "uri": "https://{canondata_backend}/1923547/079ed525adfefb739e07ac45dcf5e817b56cc8a3/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output1.yqlrun.txt.attr"
         },
         {
             "checksum": "51d987b4ca321d62e67eab49cc8d6622",
@@ -762,9 +762,9 @@
             "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output2.txt"
         },
         {
-            "checksum": "caae862df12a053afc8ba3d160f1ea4a",
-            "size": 1090,
-            "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output2.yqlrun.txt.attr"
+            "checksum": "d1d5b0d63b6432f84d60d73ee01480f2",
+            "size": 1119,
+            "uri": "https://{canondata_backend}/1923547/079ed525adfefb739e07ac45dcf5e817b56cc8a3/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output2.yqlrun.txt.attr"
         },
         {
             "checksum": "a0ea00435e4da70c27100575ce1b1708",
@@ -772,9 +772,9 @@
             "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output3.txt"
         },
         {
-            "checksum": "7944c7beb28ff0a6907041f5b0a2af1b",
-            "size": 1087,
-            "uri": "https://{canondata_backend}/1936947/e09226cb0878d9882f65262a57b6b08cedb2f071/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output3.yqlrun.txt.attr"
+            "checksum": "5d11a5046b0adaf24dbb4cdc4f8f3c30",
+            "size": 1116,
+            "uri": "https://{canondata_backend}/1923547/079ed525adfefb739e07ac45dcf5e817b56cc8a3/resource.tar.gz#test.test_column_group-hint-disable-Results_/Output3.yqlrun.txt.attr"
         }
     ],
     "test.test[column_group-many_inserts--Debug]": [
@@ -798,9 +798,9 @@
             "uri": "https://{canondata_backend}/1903885/d42df107858b9345ba042b91c20d00a7ded84888/resource.tar.gz#test.test_column_group-many_inserts--Results_/Output.txt"
         },
         {
-            "checksum": "685987a135166ca30afe0a22810c35c3",
-            "size": 1078,
-            "uri": "https://{canondata_backend}/1903885/d42df107858b9345ba042b91c20d00a7ded84888/resource.tar.gz#test.test_column_group-many_inserts--Results_/Output.yqlrun.txt.attr"
+            "checksum": "42cd02950a5b1d0c1ec5e61755e52913",
+            "size": 1107,
+            "uri": "https://{canondata_backend}/1923547/079ed525adfefb739e07ac45dcf5e817b56cc8a3/resource.tar.gz#test.test_column_group-many_inserts--Results_/Output.yqlrun.txt.attr"
         }
     ],
     "test.test[column_order-winfunc-default.txt-Debug]": [

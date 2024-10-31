@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/crypto/crypto.h>
+#include <ydb/core/blobstorage/crypto/aes128.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/datetime/cputimer.h>
 #include <util/generic/buffer.h>
@@ -163,14 +164,83 @@ Y_UNIT_TEST_SUITE(TBlobStorageCrypto) {
         }
     }
 
+    Y_UNIT_TEST(PerfTestStreamCypherAES128) {
+        constexpr size_t BUF_SIZE = 256 << 10;
+        constexpr size_t BUF_ALIGN = 32;
+        constexpr size_t REPETITIONS = 16;
 
-void Test(const ui8* a, const ui8* b, size_t size) {
-    for (ui32 i = 0; i < size; ++i) {
-        UNIT_ASSERT_EQUAL_C(a[i], b[i],
-            " a[" << i << "]# " << Hex(a[i], HF_FULL) << " != "
-            " b[" << i << "]# " << Hex(b[i], HF_FULL));
+        auto testCase = {std::make_pair(0,0), {4, 0}, {8, 0}, {0, 4}, {0, 8}, {4, 8}, {8, 8}};
+        for (auto s : testCase) {
+            size_t inShift = s.first;
+            size_t outShift = s.second;
+            const size_t size = BUF_SIZE;
+
+            Cout << "size# " << HumanReadableSize(size, SF_BYTES);
+            Cout << " inShift# " << LeftPad(inShift, 2);
+            Cout << " outShift# " << LeftPad(outShift, 2) << Endl;
+
+            TVector<TDuration> encTimes;
+            TVector<TDuration> decTimes;
+            encTimes.reserve(REPETITIONS);
+            decTimes.reserve(REPETITIONS);
+
+            for (ui32 i = 0; i < REPETITIONS; ++i) {
+                AES128 cypher1;
+                
+                TAlignedBuf inBuf(BUF_SIZE, BUF_ALIGN);
+                TAlignedBuf outBuf(BUF_SIZE, BUF_ALIGN);
+
+                ui8 *in = inBuf.Data() + inShift;
+                ui8 *out = outBuf.Data() + outShift;
+                for (ui32 i = 0; i < size; ++i) {
+                    inBuf.Data()[i] = (ui8)i;
+                }
+                std::vector<ui8> key(16, 123);
+                std::vector<ui8> iv(16, 100);
+
+                cypher1.SetKeyAndIV(key, iv);
+
+                size_t realLen = size - inShift;
+
+                TSimpleTimer timer;
+                size_t ctSz = cypher1.Encrypt(in, out, realLen);
+                encTimes.push_back(timer.Get());
+
+                TAlignedBuf decBuf(BUF_SIZE * 2, BUF_ALIGN);
+                ui8* dec = decBuf.Data();
+
+                timer.Reset();
+                cypher1.Decrypt(out, dec, ctSz);
+                decTimes.push_back(timer.Get());
+
+                UNIT_ASSERT_ARRAYS_EQUAL(dec, in, ctSz);
+            }
+            {   
+                Cout << "Encryption: " << Endl;
+                TDuration min_time = *std::min_element(encTimes.begin(), encTimes.end());
+                Cout << "   max_speed# " << HumanReadableSize(size / min_time.SecondsFloat(), SF_QUANTITY) << "/s";
+                TDuration avg_time = std::accumulate(encTimes.begin(), encTimes.end(), TDuration()) / encTimes.size();
+                Cout << "   avg_speed# " << HumanReadableSize(size / avg_time.SecondsFloat(), SF_QUANTITY) << "/s";
+                Cout << Endl;
+            }
+            {
+                Cout << "Decryption: " << Endl;
+                TDuration min_time = *std::min_element(decTimes.begin(), decTimes.end());
+                Cout << "   max_speed# " << HumanReadableSize(size / min_time.SecondsFloat(), SF_QUANTITY) << "/s";
+                TDuration avg_time = std::accumulate(decTimes.begin(), decTimes.end(), TDuration()) / decTimes.size();
+                Cout << "   avg_speed# " << HumanReadableSize(size / avg_time.SecondsFloat(), SF_QUANTITY) << "/s";
+                Cout << Endl;
+            }
+        }
     }
-}
+
+    void Test(const ui8* a, const ui8* b, size_t size) {
+        for (ui32 i = 0; i < size; ++i) {
+            UNIT_ASSERT_EQUAL_C(a[i], b[i],
+                " a[" << i << "]# " << Hex(a[i], HF_FULL) << " != "
+                " b[" << i << "]# " << Hex(b[i], HF_FULL));
+        }
+    }
 
     Y_UNIT_TEST(UnalignedTestStreamCypher) {
         constexpr size_t BUF_ALIGN = 8;

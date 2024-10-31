@@ -38,7 +38,7 @@ private:
     std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
 public:
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
-        return nullptr;
+        return &Default<TFakeGroupSelector>();
     }
 
     struct TIndex {

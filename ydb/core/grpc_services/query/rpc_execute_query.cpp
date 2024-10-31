@@ -12,6 +12,8 @@
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
+
 
 namespace NKikimr::NGRpcService {
 
@@ -205,7 +207,9 @@ public:
 
     TExecuteQueryRPC(TEvExecuteQueryRequest* request, ui64 inflightLimitBytes)
         : Request_(request)
-        , FlowControl_(inflightLimitBytes) {}
+        , FlowControl_(inflightLimitBytes)
+        , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
+                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {}
 
     void Bootstrap(const TActorContext &ctx) {
         this->Become(&TExecuteQueryRPC::StateWork);
@@ -298,7 +302,7 @@ private:
             settings,
             req->pool_id());
 
-        if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release())) {
+        if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
             ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, std::move(issues));
@@ -460,6 +464,7 @@ private:
     void ReplySerializedAndFinishStream(Ydb::StatusIds::StatusCode status, TString&& buf) {
         const auto finishStreamFlag = NYdbGrpc::IRequestContextBase::EStreamCtrl::FINISH;
         Request_->SendSerializedResult(std::move(buf), status, finishStreamFlag);
+        NWilson::EndSpanWithStatus(Span_, status);
         this->PassAway();
     }
 
@@ -498,6 +503,7 @@ private:
         } else {
             Request_->FinishStream(status);
         }
+        NWilson::EndSpanWithStatus(Span_, status);
         this->PassAway();
     }
 
@@ -524,6 +530,8 @@ private:
     NKikimrKqp::EQueryAction QueryAction;
     TRpcFlowControlState FlowControl_;
     TMap<ui64, TProducerState> StreamChannels_;
+    
+    NWilson::TSpan Span_;
 };
 
 } // namespace

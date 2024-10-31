@@ -1226,18 +1226,25 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
 
 void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->GetCookie();
-    Y_ABORT_UNLESS(ReadInfo.contains(cookie));
-
     auto it = ReadInfo.find(cookie);
-    Y_ABORT_UNLESS(it != ReadInfo.end());
+
+    // If there is no such cookie, then read was canceled.
+    // For example, it can be after consumer deletion
+    if (it == ReadInfo.end()) {
+        return;
+    }
 
     TReadInfo info = std::move(it->second);
     ReadInfo.erase(it);
 
-    //make readinfo class
-    auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
+    auto* userInfo = UsersInfoStorage->GetIfExists(info.User);
+    if (!userInfo) {
+        ReplyError(ctx, info.Destination,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(info.User));
+        OnReadRequestFinished(info.Destination, 0, info.User, ctx);
+    }
+
     TReadAnswer answer(info.FormAnswer(
-        ctx, *ev->Get(), EndOffset, Partition, &userInfo,
+        ctx, *ev->Get(), EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode()
     ));
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
@@ -2422,6 +2429,20 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             }
 
             UsersInfoStorage->Remove(user, ctx);
+
+            // Finish all ongoing reads
+            std::unordered_set<ui64> readCookies;
+            for (auto& [cookie, info] : ReadInfo) {
+                if (info.User == user) {
+                    readCookies.insert(cookie);
+                    ReplyError(ctx, info.Destination,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(user));
+                    OnReadRequestFinished(info.Destination, 0, user, ctx);
+                }
+            }
+            for (ui64 cookie : readCookies) {
+                ReadInfo.erase(cookie);
+            }
+
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
         }
     }

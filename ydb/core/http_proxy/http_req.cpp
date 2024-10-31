@@ -554,9 +554,7 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = HttpContext.FolderId,
-                        .RequestFormat = NSQS::TAuthActorData::Json,
-                        .Requester = ctx.SelfID
+                        .FolderID = HttpContext.FolderId
                     };
 
                     TString token = "";

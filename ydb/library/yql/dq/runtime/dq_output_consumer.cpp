@@ -346,9 +346,6 @@ public:
                 blockTypes.emplace_back(blockType->GetItemType());
             }
         }
-        ui64 maxBlockLen = CalcMaxBlockLength(blockTypes.begin(), blockTypes.end(), helper);
-        YQL_ENSURE(maxBlockLen > 0);
-        MakeBuilders(maxBlockLen);
 
         TBlockTypeHelper blockHelper;
         for (auto& column : KeyColumns_) {
@@ -520,7 +517,6 @@ private:
                 Builders_.emplace_back();
             }
         }
-        MaxOutputBlockLen_ = maxBlockLen;
     }
 
 private:
@@ -538,7 +534,6 @@ private:
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
 
-    ui64 MaxOutputBlockLen_ = 0;
     mutable bool IsWaitingFlag_ = false;
 };
 

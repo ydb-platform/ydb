@@ -333,22 +333,25 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TString createQuery = R"(
             CREATE TABLE foo (
                 timestamp	Timestamp NOT NULL,
-                resource_type	Utf8,
-                resource_id	Utf8,
+                resource_type	Utf8 NOT NULL,
+                resource_id	Utf8 NOT NULL,
+                stream_name Utf8 NOT NULL,
                 partition	Uint32 NOT NULL,
                 offset	Uint64 NOT NULL,
                 index	Uint32 NOT NULL,
-                primary key (timestamp, partition, offset, index)
+                message Utf8,
+                primary key (timestamp, resource_type, resource_id, stream_name, partition, offset, index)
             )
             PARTITION BY HASH (timestamp, partition, offset, index)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
         )";
 
         auto res = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT(res.GetStatus() == EStatus::SUCCESS);
 
         auto r = session.ExecuteDataQuery(R"(
-            REPLACE INTO `/Root/foo` (timestamp, resource_type, resource_id, partition, offset, index) VALUES
-                ("1999-10-10:10:10:10", "A", "A", 1, 1, 1)
+            REPLACE INTO `/Root/foo` (timestamp, resource_type, resource_id, partition, offset, index, message) VALUES
+                ("1999-10-10:10:10:10", "A", "A", "A", 1, 1, 1, "M")
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         TString query = R"(
@@ -365,7 +368,7 @@ $until = (CurrentUtcDatetime());
 
 SELECT timestamp 
 FROM (
-    SELECT timestamp, resource_type
+    SELECT timestamp, resource_type, resource_id, stream_name, partition, offset, index
     FROM `/Root/foo`
     WHERE (`timestamp`) >= $since
 		and (`timestamp`) < $until
@@ -374,6 +377,8 @@ FROM (
 WHERE 
 `resource_type` IN $resourceTypes
 	and (`timestamp` > $param0)
+ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `stream_name` DESC, `partition` DESC, `offset` DESC, `index` DESC
+LIMIT 1;
         ;
         )";
 

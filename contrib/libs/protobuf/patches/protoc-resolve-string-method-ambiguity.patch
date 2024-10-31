@@ -1,0 +1,26 @@
+commit 3bc481cb6e0013371bdc01ae0aef7d85dc9abe1a (HEAD)
+author: vadim-xd
+date: 2024-10-28T13:19:23+03:00
+
+    Resolve ambiguity for repeated string methods
+
+--- a/src/google/protobuf/compiler/cpp/field_generators/string_field.cc	(192810303a994f7cbd6bf596a3d56393bfefee6c)
++++ b/src/google/protobuf/compiler/cpp/field_generators/string_field.cc	(3bc481cb6e0013371bdc01ae0aef7d85dc9abe1a)
+@@ -782,12 +782,18 @@ void RepeatedString::GenerateAccessorDeclarations(io::Printer* p) const {
+     $DEPRECATED$ void $set_name$(int index, const char* value);
+     $DEPRECATED$ void $set_name$(int index, const $byte$* value, std::size_t size);
+     $DEPRECATED$ void $set_name$(int index, absl::string_view value);
++    $DEPRECATED$ void $set_name$(int index, std::string&& value) {
++      return $set_name$(index, TProtoStringType(std::move(value)));
++    }
+     $DEPRECATED$ TProtoStringType* $add_name$();
+     $DEPRECATED$ void $add_name$(const TProtoStringType& value);
+     $DEPRECATED$ void $add_name$(TProtoStringType&& value);
+     $DEPRECATED$ void $add_name$(const char* value);
+     $DEPRECATED$ void $add_name$(const $byte$* value, std::size_t size);
+     $DEPRECATED$ void $add_name$(absl::string_view value);
++    $DEPRECATED$ void $add_name$(std::string&& value) {
++      return $add_name$(TProtoStringType(std::move(value)));
++    }
+     $DEPRECATED$ const $pb$::RepeatedPtrField<TProtoStringType>& $name$() const;
+     $DEPRECATED$ $pb$::RepeatedPtrField<TProtoStringType>* $mutable_name$();

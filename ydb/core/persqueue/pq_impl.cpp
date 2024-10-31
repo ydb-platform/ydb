@@ -2172,8 +2172,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
     }
 
     if (req.HasWriteId()) {
-        PQ_LOG_D("Tablet " << TabletID() <<
-                 " Write in transaction." <<
+        PQ_LOG_D("Write in transaction." <<
                  " Partition: " << req.GetPartition() <<
                  ", WriteId: " << req.GetWriteId() <<
                  ", NeedSupportivePartition: " << req.GetNeedSupportivePartition());

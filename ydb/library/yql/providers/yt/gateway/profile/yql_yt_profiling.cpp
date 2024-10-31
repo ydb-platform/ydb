@@ -148,6 +148,14 @@ public:
         return Slave_->GetWriteTable(sessionId, cluster, table, tmpFolder);
     }
 
+    TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
+        return Slave_->DownloadTables(std::move(options));
+    }
+
+    TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
+        return Slave_->UploadTable(std::move(options));
+    }
+
     NThreading::TFuture<TRunResult> GetTableStat(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
         return Slave_->GetTableStat(node, ctx, std::move(options));
     }

@@ -6,6 +6,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/buffer.h>
 #include <util/generic/intrlist.h>
+#include <ydb/library/security/util.h>
 #include "http_config.h"
 
 // TODO(xenoxeno): hide in implementation
@@ -208,40 +209,74 @@ protected:
 public:
     TString GetObfuscatedData() const {
         THeaders headers(HeaderType::Headers);
-        TStringBuf authorization(headers["Authorization"]);
-        TStringBuf cookie(headers["Cookie"]);
-        TStringBuf set_cookie(headers["Set-Cookie"]);
-        TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-        TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
+        TStringBuf authorizationHeader(headers["Authorization"]);
+        TStringBuf cookieHeader(headers["Cookie"]);
+        TStringBuf setCookieHeader(headers["Set-Cookie"]);
+        TStringBuf xYdbAuthTicketHeader(headers["x-ydb-auth-ticket"]);
+        TStringBuf xYacloudSubjecttokenHeader(headers["x-yacloud-subjecttoken"]);
         TString data(GetRawData());
-        if (!authorization.empty()) {
-            auto pos = data.find(authorization);
+        if (!authorizationHeader.empty()) {
+            auto pos = data.find(authorizationHeader);
             if (pos != TString::npos) {
-                data.replace(pos, authorization.size(), TString("<obfuscated>"));
+                data.replace(pos, authorizationHeader.size(), TString("<obfuscated>"));
             }
         }
-        if (!cookie.empty()) {
-            auto pos = data.find(cookie);
+        if (!cookieHeader.empty()) {
+            Cerr << "iiii cookieHeader: " << cookieHeader << Endl;
+            TString obfuscated = TString(cookieHeader);
+            NHttp::TCookies cookies(headers.Get("Cookie"));
+            for (auto& [name, value] : cookies.Cookies) {
+                Cerr << "i old value: " << value << Endl;
+                TString obfuscatedValue = NKikimr::MaskTicket(value);
+                auto posValue = obfuscated.find(value);
+                if (posValue != TString::npos) {
+                    Cerr << "i found!" << Endl;
+                    obfuscated.replace(posValue, value.size(), obfuscatedValue);
+                }
+                Cerr << "i new value: " << value << Endl;
+            }
+            Cerr << "iiii obfuscated: " << obfuscated << Endl;
+            auto pos = data.find(cookieHeader);
             if (pos != TString::npos) {
-                data.replace(pos, cookie.size(), TString("<obfuscated>"));
+                data.replace(pos, cookieHeader.size(), obfuscated);
             }
         }
-        if (!set_cookie.empty()) {
-            auto pos = data.find(set_cookie);
-            if (pos != TString::npos) {
-                data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+        if (!setCookieHeader.empty()) {
+            Cerr << "iiii setCookieHeader: " << setCookieHeader << Endl;
+            TStringBuf setCookieParser(setCookieHeader);
+            TStringBuf name = setCookieParser.NextTok('=');
+            TStringBuf value = setCookieParser.NextTok(';');
+            Cerr << "iiii name: " << name << Endl;
+            if (!name.empty()) {
+                TString obfuscatedValue = NKikimr::MaskTicket(value);
+                TString obfuscated = TString(setCookieHeader);
+                Cerr << "i old header: " << obfuscated << Endl;
+                Cerr << "i old value: " << value << Endl;
+                Cerr << "i new value: " << obfuscatedValue << Endl;
+                auto posValue = obfuscated.find(value);
+                if (posValue != TString::npos) {
+                    Cerr << "i found!" << Endl;
+                    obfuscated.replace(posValue, value.size(), obfuscatedValue);
+                    Cerr << "i new header: " << obfuscated << Endl;
+                }
+                Cerr << "iiii obfuscated: " << obfuscated << Endl;
+                auto pos = data.find(setCookieHeader);
+                if (pos != TString::npos) {
+                    Cerr << "iiii found!" << Endl;
+                    data.replace(pos, setCookieHeader.size(), obfuscated);
+                }
             }
         }
-        if (!x_ydb_auth_ticket.empty()) {
-            auto pos = data.find(x_ydb_auth_ticket);
+        if (!xYdbAuthTicketHeader.empty()) {
+            auto pos = data.find(xYdbAuthTicketHeader);
             if (pos != TString::npos) {
-                data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+                data.replace(pos, xYdbAuthTicketHeader.size(), TString("<obfuscated>"));
             }
         }
-        if (!x_yacloud_subjecttoken.empty()) {
-            auto pos = data.find(x_yacloud_subjecttoken);
+        if (!xYacloudSubjecttokenHeader.empty()) {
+            auto pos = data.find(xYacloudSubjecttokenHeader);
             if (pos != TString::npos) {
-                data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
+                data.replace(pos, xYacloudSubjecttokenHeader.size(), TString("<obfuscated>"));
             }
         }
         return data;

@@ -11,7 +11,7 @@
         - **IC pool - CPU by host** chart
         - **IO pool - CPU by host** chart
 
-1. Analyze changes in the user load that might have caused the CPU bottleneck. See the following charts on the **DB overview** in Grafana:
+1. If the spike is in the user pool, analyze changes in the user load that might have caused the CPU bottleneck. See the following charts on the **DB overview** dashboard in Grafana:
 
     - **Requests** chart
 
@@ -19,6 +19,6 @@
 
     - **Response size** chart
 
-    Also, see all of the charts in the **Operations** section of the **DataShard** dashboard. These charts show the number of rows processed per query.
+    Also, see all of the charts in the **Operations** section of the **DataShard** dashboard.
 
-1. Contact your DBA and inquire about {{ ydb-short-name }} backups.
+2. If the spike is in the batch pool, check if there are any backups running.

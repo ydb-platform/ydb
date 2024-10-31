@@ -1,6 +1,6 @@
 # Network issues
 
-Network performance issues, such as limited bandwidth, packet loss, and connection instability, can severely impact database performance by slowing query response times, causing incomplete data transfers, and leading to increased load on the database server. These issues can result in timeouts, errors, and data inconsistencies.
+Network performance issues, such as limited bandwidth, packet loss, and connection instability, can severely impact database performance by slowing query response times and leading to retriable errors like timeouts.
 
 ## Diagnostics
 
@@ -9,4 +9,4 @@ Network performance issues, such as limited bandwidth, packet loss, and connecti
 
 ## Recommendations
 
-Contact the support team of your data center.
+Contact the responsible party for the network infrastructure the {{ ydb-short-name }} cluster uses. If you are part of a larger organization, this could be an in-house network operations team. Otherwise, contact the cloud service or hosting provider's support service.

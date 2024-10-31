@@ -1,23 +1,24 @@
 # Excessive tablet splits and merges
 
-{% note warning %}
+{% if oss == true and backend_name == "YDB" %}
 
-Tablet splitting and merging is supported only for row-oriented tables.
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
-{% endnote %}
+{% endif %}
 
+Each [row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables) partition in {{ ydb-short-name }} is processed by a [data shard](../../../../concepts/glossary.md#data-shard) tablet. {{ ydb-short-name }} supports automatic splitting and merging of data shards which allows it to seamlessly adapt to changes in workloads. However, these operations are not free and might have a short-term negative impact on query latencies.
 
-Each table partition in {{ ydb-short-name }} is processed by a [data shard](../../../../concepts/glossary.md#data-shard) tablet. When {{ ydb-short-name }} splits a partition in a row-oriented table, two new partitions replace the original partition to cover the range of primary keys. So two data shards are now processing the range of primary keys that were previously processed by only one data shard, adding more computing resources for the table.
+When {{ ydb-short-name }} splits a partition, it replaces the original partition with two new partitions covering the same range of primary keys. Now, two data shards process the range of primary keys that was previously handled by a single data shard, thereby adding more computing resources for the table.
 
-By default, {{ ydb-short-name }} splits a table partition when it reaches the size of 2GB. But it's recommended to also enable partitioning by load, so that {{ ydb-short-name }} splits overloaded partitions even if they are smaller than 2 GBs.
+By default, {{ ydb-short-name }} splits a table partition when it reaches 2 GB in size. However, it's recommended to also enable partitioning by load, allowing {{ ydb-short-name }} to split overloaded partitions even if they are smaller than 2 GB.
 
-It takes a [scheme shard](../../../../concepts/glossary.md#scheme-shard) approximately 15 seconds to determine if a data shard needs splitting. By default, the CPU usage threshold for splitting a data shard is 50%.
+A [scheme shard](../../../../concepts/glossary.md#scheme-shard) takes approximately 15 seconds to assess whether a data shard requires splitting. By default, the CPU usage threshold for splitting a data shard is set at 50%.
 
-When {{ ydb-short-name }} merges adjacent partitions in a row-oriented table, they are replaced with a single partition that covers their range of primary keys. The corresponding data shards are also merged into one data shard to process the new partition.
+When {{ ydb-short-name }} merges adjacent partitions in a row-oriented table, they are replaced with a single partition that covers their range of primary keys. TThe corresponding data shards are also consolidated into a single data shard to manage the new partition.
 
-Data shards must have existed for at least 10 minutes before they can be merged. Besides, the shard's CPU usage over the last hour must not exceed 35%.
+For merging to occur, data shards must have existed for at least 10 minutes, and their CPU usage over the last hour must not exceed 35%.
 
-When you configure [table partitioning](../../../../concepts/datamodel/table.md#partitioning), you can also set the limits for the [minimum](../../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) and [maximum number of partitions](../../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count). If the difference between the minimum and maximum values exceeds 20% and the load on the table varies greatly over time, [Hive](../../../../concepts/glossary.md#hive) may start splitting overloaded tables and then merging them back under low load.
+When configuring [table partitioning](../../../../concepts/datamodel/table.md#partitioning), you can also set limits for the [minimum](../../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) and [maximum number of partitions](../../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count). If the difference between the minimum and maximum limits exceeds 20% and the table load varies significantly over time, [Hive](../../../../concepts/glossary.md#hive) may start splitting overloaded tables and then merging them back during periods of low load.
 
 ## Diagnostics
 

@@ -16,8 +16,7 @@ You can also use the **Healthcheck** in [Embedded UI](../../../../reference/embe
 
 - **Network issues**
 
-    <!-- The include is added to allow partial overrides in overlays  -->
-    {% include notitle [network issues](./_includes/network.md) %}
+    Refer to [{#T}](network.md).
 
 ## Recommendations
 

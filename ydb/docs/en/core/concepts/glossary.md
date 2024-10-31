@@ -255,6 +255,20 @@ The **actor system interconnect** or **interconnect** is the [cluster's](#cluste
 
 A **Local** is an [actor service](#actor-service) running on each [node](#node). It directly manages the [tablets](#tablet) on its node and interacts with [Hive](#hive). It registers with Hive and receives commands to launch tablets.
 
+#### Actor system pool {#actor-system-pool}
+
+The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Thread_pool) used to run [actors](#actor). Each [node](#node) operates multiple pools to coarsely separate resources between different types of activities. A typical set of pools includes:
+
+- **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
+
+- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [KQP](#kqp).
+
+- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [KQP](#kqp) background operations like backups, data compaction, and garbage collection.
+
+- **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
+
+- **IC**: A pool for [interconnect](#actor-system-interconnect), responsible for system calls related to data transfers across the network, data serialization, message splitting and merging.
+
 ### Tablet implementation {#tablet-implementation}
 
 A [**tablet**](#tablet) is an [actor](#actor) with a persistent state. It includes a set of data for which this tablet is responsible and a finite state machine through which the tablet's data (or state) changes. The tablet is a fault-tolerant entity because tablet data is stored in a [Distributed storage](#distributed-storage) that survives disk and node failures. The tablet is automatically restarted on another [node](#node) if the previous one is down or overloaded. The data in the tablet changes in a consistent manner because the system infrastructure ensures that there is no more than one [tablet leader](#tablet-leader) through which changes to the tablet data are carried out.
@@ -558,7 +572,7 @@ MiniKQL is a low-level language. The system's end users only see queries in the 
 
 #### KQP {#kqp}
 
-**KQP** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**KQP** or **Query Processor** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
 
 ### Global schema {#global-schema}
 

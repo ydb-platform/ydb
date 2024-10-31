@@ -1,6 +1,6 @@
 # I/O bandwidth
 
-A high rate of read/write operations can overwhelm the disk subsystem, resulting in increased latencies in data access. When the system cannot read or write data quickly enough, queries that depend on disk access will experience delays.
+A high rate of read and write operations can overwhelm the disk subsystem, leading to increased data access latencies. When the system cannot read or write data quickly enough, queries that rely on disk access will experience delays.
 
 ## Diagnostics
 
@@ -11,5 +11,5 @@ A high rate of read/write operations can overwhelm the disk subsystem, resulting
 
 Add more [storage groups](../../../../concepts/glossary.md#storage-group) to the database.
 
-In case of high microburst values, you can also try to balance the load across storage groups.
+In cases of high microburst rates, balancing the load across storage groups might help.
 

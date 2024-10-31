@@ -25,15 +25,15 @@ Autobalancing occurs in the following cases:
     - $MaxUsage$ is the maximum hardware resource usage among all of the nodes.
     - $MinUsage$ is the minimum hardware resource usage among all of the nodes.
 
-    To distribute the load, {{ ydb-short-name }} takes into account the amount of hardware resources availables to each node. The scatter value might have differred greatly across the nodes under low loads, so minimum value for this formula is never below `30%`.
+    To distribute the load, {{ ydb-short-name }} considers the hardware resources available to each node. Under low loads, the scatter value may vary significantly across nodes; however, the minimum value for this formula is set to never fall below 30%.
 
 - **Overloaded nodes (CPU and memory usage)**
 
-    Hive starts the autobalancing procesure when the highest load on a node exceeds `90%`, while the lowest load on a node is below `70%`.
+    Hive starts the autobalancing procesure when the highest load on a node exceeds 90%, while the lowest load on a node is below 70%.
 
 - **Uneven distribution of database objects**
 
-    {{ ydb-short-name }} uses the **ObjectImbalance** metric to monitor the distribution of tablets that use the **[counter](*counter)** resource across {{ ydb-short-name }} nodes. When {{ ydb-short-name }} nodes restart, these tablets might fail to distribute evenly, and Hive will start the autobalancing procedure.
+    {{ ydb-short-name }} uses the **ObjectImbalance** metric to monitor the distribution of tablets utilizing the **[counter](*counter)** resource across {{ ydb-short-name }} nodes. When {{ ydb-short-name }} nodes restart, these tablets may not distribute evenly, prompting Hive to initiate the autobalancing procedure.
 
 
 ## Diagnostics
@@ -43,7 +43,7 @@ Autobalancing occurs in the following cases:
 
 ## Recommendations
 
-Adjust Hive balancer values:
+Adjust Hive balancer settings:
 
 1. Open [Embedded UI](../../../../reference/embedded-ui/index.md).
 
@@ -55,7 +55,7 @@ Adjust Hive balancer values:
 
 1. Click **Settings**.
 
-1. To reduce the chances of balancing, increase the following Hive balancer thresholds:
+1. To reduce the likelihood of overly frequent balancing, increase the following Hive balancer thresholds:
 
     #|
     || Parameter | Description | Default value ||
@@ -81,11 +81,11 @@ Adjust Hive balancer values:
 
     {% note info %}
 
-    These parameters use relative values. The `1` value stands for `100%` and disables balancing. If the total value of the hardware resource can exceed 100%, adjust the ratio accordingly.
+    These parameters use relative values, where 1.0 represents 100% and effectively disables balancing. If the total hardware resource value can exceed 100%, adjust the ratio accordingly.
 
     {% endnote %}
 
 
 
-[*counter]: Virtual resource that is used for balanncing tablets, which do not have other hardware resource metrics (CPU, memory, network), and for tablets of column-based tables. If a tablet has this resource, its value always equals to `1`.
+[*counter]: A virtual resource is used for balancing tablets that lack other hardware resource metrics (such as CPU, memory, or network) and for column shards. If a tablet uses this resource, its value is always set to 1.
 

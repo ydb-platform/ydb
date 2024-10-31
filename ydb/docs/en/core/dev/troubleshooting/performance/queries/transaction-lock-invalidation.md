@@ -16,7 +16,7 @@ The YDB SDK provides a built-in mechanism for handling temporary failures. For m
 
 ## Recommendations
 
-The longer a transaction lasts, the higher the likelihood of encountering a *transaction locks invalidated* error.
+The longer a transaction lasts, the higher the likelihood of encountering a **transaction locks invalidated** error.
 
 If possible, avoid interactive transactions. For example, try to avoid the following pattern:
 

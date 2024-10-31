@@ -4,9 +4,9 @@
 
     ![](../_assets/disk-time-available--disk-cost.png)
 
-    This chart shows the estimated total bandwith capacity of the storage system in conventional units (green) and the total usage cost (blue). When the total usage cost exceeds the total bandwidth capacity, the storage system of {{ ydb-short-name }} gets overloaded, which results in higher latencies.
+    This chart shows the estimated total bandwidth capacity of the storage system in conventional units (green) and the total usage cost (blue). When the total usage cost exceeds the total bandwidth capacity, the {{ ydb-short-name }} storage system becomes overloaded, leading to increased latencies.
 
-1. On the **Total burst duration** chart, check for any spikes of the load on the storage system. This chart shows microbursts of the load on the storage system, in microseconds.
+1. On the **Total burst duration** chart, check for any load spikes on the storage system. This chart displays microbursts of load on the storage system, measured in microseconds.
 
     ![](../_assets/microbursts.png)
 

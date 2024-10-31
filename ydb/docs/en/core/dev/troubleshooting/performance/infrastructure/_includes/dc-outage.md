@@ -6,11 +6,6 @@ To determine if one of the data centers of the {{ ydb-short-name }} cluster is n
 
     ![](../_assets/cluster-nodes.png)
 
-    If all of the nodes in one of the DCs (data centers) are not available, this data center is most likely offline.
+    If all of the nodes in one of the data centers (DC) are not available, this data center is most likely offline.
 
-    {% note info %}
-
-    Also analyze the **Rack** column to check if {{ ydb-short-name }} nodes are not available in one or several racks in a DC. This might indicate that these racks are offline.
-
-    {% endnote %}
-
+    If not, review the **Rack** column to check if all {{ ydb-short-name }} nodes are unavailable in one or more server racks. This could indicate that these racks are offline, which could be treated as a partial data center outage.

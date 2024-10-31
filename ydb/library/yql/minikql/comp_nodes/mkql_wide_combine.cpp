@@ -285,10 +285,10 @@ public:
             States.CheckGrow();
         } catch (TMemoryLimitExceededException) {
             YQL_LOG(INFO) << "State failed to grow";
-            if (IsOutOfMemory < AllowOutOfMemory) {
-                IsOutOfMemory = true;
-            } else {
+            if (IsOutOfMemory || !AllowOutOfMemory) {
                 throw;
+            } else {
+                IsOutOfMemory = true;
             }
         }
     }

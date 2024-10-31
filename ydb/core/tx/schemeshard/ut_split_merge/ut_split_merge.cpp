@@ -200,10 +200,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                                 MinPartitionsCount: 100
                                 MaxPartitionsCount: 100
                                 SizeToSplit: 1
-                                FastSplitSettings {
-                                    SizeThreshold: 10
-                                    RowCountThreshold: 10
-                                }
                             }
                         }
                     )");

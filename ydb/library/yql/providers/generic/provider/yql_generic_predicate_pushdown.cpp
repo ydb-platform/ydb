@@ -67,6 +67,7 @@ namespace NYql {
             if (auto member = expression.Maybe<TCoMember>()) {
                 return SerializeMember(member.Cast(), proto, arg, err);
             }
+
             // data
             MATCH_ATOM(Int8, INT8, int32, i8);
             MATCH_ATOM(Uint8, UINT8, uint32, ui8);
@@ -141,19 +142,19 @@ namespace NYql {
 
         bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
             auto* dstProto = proto->mutable_in();
-            const TExprBase& collection1 = sqlIn.Collection();
+            const TExprBase& expr = sqlIn.Collection();
             const TExprBase& lookup = sqlIn.Lookup();
 
             auto* expressionProto = dstProto->mutable_value();
             SerializeExpression(lookup, expressionProto, arg, err);
 
             TExprNode::TPtr collection;
-            if (collection1.Ref().IsList()) {
-                collection = collection1.Ptr();
-            } else if (auto maybeAsList = collection1.Maybe<TCoAsList>()) {
+            if (expr.Ref().IsList()) {
+                collection = expr.Ptr();
+            } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
                 collection = maybeAsList.Cast().Ptr();
             } else {
-                err << "unknown operation: " << collection1.Ref().Content();
+                err << "unknown operation: " << expr.Ref().Content();
                 return false;
             }
 
@@ -164,7 +165,6 @@ namespace NYql {
             }
             return true;
         }
-
 
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
             auto* dstProto = proto->mutable_conjunction();
@@ -393,8 +393,6 @@ namespace NYql {
 
     TString FormatComparison(TPredicate_TComparison comparison) {
         TString operation;
-        auto left = FormatExpression(comparison.left_value());
-        auto right = FormatExpression(comparison.right_value());
 
         switch (comparison.operation()) {
         case TPredicate_TComparison::L:
@@ -419,6 +417,9 @@ namespace NYql {
             throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
         }
 
+        auto left = FormatExpression(comparison.left_value());
+        auto right = FormatExpression(comparison.right_value());
+
         return left + operation + right;
     }
 
@@ -426,13 +427,11 @@ namespace NYql {
         auto value = FormatExpression(in.value());
         TString list;
         for (const auto& expr : in.set()) {
-            auto v = FormatExpression(expr);
             if (!list.empty()) {
                 list += ",";
             }
-            list += v;
+            list += FormatExpression(expr);
         }
-
         return value + " IN (" + list + ")";
     }
 

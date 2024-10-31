@@ -1,5 +1,6 @@
-#include "alter/abstract/object.h"
-#include "alter/abstract/update.h"
+#include <ydb/core/tx/schemeshard/olap/operations/alter/common/object.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/object.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/update.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -43,12 +44,12 @@ public:
         TPath path = TPath::Init(pathId, context.SS);
         TString pathString = path.PathString();
 
-        std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);
-        TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
-        std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
+        std::shared_ptr<NOperations::ISSEntity> originalEntity = TColumnTableEntity::GetEntityVerified(context, path);
+        NOperations::TUpdateRestoreContext urContext(originalEntity.get(), &context, OperationId);
+        std::shared_ptr<NOperations::ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
         TSimpleErrorCollector errors;
-        TEntityInitializationContext iContext(&context);
+        NOperations::TEntityInitializationContext iContext(&context);
 
         txState->ClearShardsInProgress();
         auto seqNo = context.SS->StartRound(*txState);
@@ -114,11 +115,11 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, objPath);
-        TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
-        std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
+        std::shared_ptr<NOperations::ISSEntity> originalEntity = TColumnTableEntity::GetEntityVerified(context, objPath);
+        NOperations::TUpdateRestoreContext urContext(originalEntity.get(), &context, OperationId);
+        std::shared_ptr<NOperations::ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
-        TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
+        NOperations::TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
         update->Finish(fContext).Validate();
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -305,13 +306,13 @@ public:
         }
 
         TProposeErrorCollector errors(*result);
-        TEntityInitializationContext iContext(&context);
-        std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, path);
+        NOperations::TEntityInitializationContext iContext(&context);
+        std::shared_ptr<NOperations::ISSEntity> originalEntity = TColumnTableEntity::GetEntityVerified(context, path);
 
-        std::shared_ptr<ISSEntityUpdate> update;
+        std::shared_ptr<NOperations::ISSEntityUpdate> update;
         {
-            TUpdateInitializationContext uContext(&*originalEntity, &context, &Transaction, (ui64)OperationId.GetTxId());
-            TConclusion<std::shared_ptr<ISSEntityUpdate>> conclusion = originalEntity->CreateUpdate(uContext);
+            NOperations::TUpdateInitializationContext uContext(&*originalEntity, &context, &Transaction, OperationId);
+            TConclusion<std::shared_ptr<NOperations::ISSEntityUpdate>> conclusion = originalEntity->CreateUpdate(uContext);
             if (conclusion.IsFail()) {
                 errors.AddError(conclusion.GetErrorMessage());
                 return result;
@@ -347,7 +348,7 @@ public:
             context.SS->PersistLastTxId(db, path.Base());
 
             {
-                TUpdateStartContext startContext(&path, &context, &db);
+                NOperations::TUpdateStartContext startContext(&path, &context, &db);
                 auto status = update->Start(startContext);
                 if (status.IsFail()) {
                     errors.AddError(status.GetErrorMessage());
@@ -362,7 +363,7 @@ public:
         } else {
             {
                 {
-                    TUpdateStartContext startContext(&path, &context, &db);
+                    NOperations::TUpdateStartContext startContext(&path, &context, &db);
                     auto status = update->Start(startContext);
                     if (status.IsFail()) {
                         errors.AddError(status.GetErrorMessage());
@@ -370,7 +371,7 @@ public:
                     }
                 }
                 {
-                    TUpdateFinishContext fContext(&path, &context, &db, {});
+                    NOperations::TUpdateFinishContext fContext(&path, &context, &db, {});
                     auto status = update->Finish(fContext);
                     if (status.IsFail()) {
                         errors.AddError(status.GetErrorMessage());

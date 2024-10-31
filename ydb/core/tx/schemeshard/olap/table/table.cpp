@@ -1,5 +1,5 @@
 #include "table.h"
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/object.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/object.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/standalone/object.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/object.h>
 #include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
@@ -25,8 +25,8 @@ TColumnTableInfo::TPtr TColumnTableInfo::BuildTableWithAlter(const TColumnTableI
     return alterData;
 }
 
-TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> TColumnTableInfo::BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const {
-    std::shared_ptr<NOlap::NAlter::ISSEntity> result;
+TConclusion<std::shared_ptr<NOperations::ISSEntity>> TColumnTableInfo::BuildEntity(const TPathId& pathId, const NOperations::TEntityInitializationContext& iContext) const {
+    std::shared_ptr<NOperations::ISSEntity> result;
     if (IsStandalone()) {
         result = std::make_shared<NOlap::NAlter::TStandaloneTable>(pathId);
     } else {

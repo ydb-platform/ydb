@@ -242,6 +242,13 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP RESOURCE POOL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         return "ALTER RESOURCE POOL";
+    // metadata object
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+        return "CREATE OBJECT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject:
+        return "DROP OBJECT";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterMetadataObject:
+        return "ALTER OBJECT";
     // incremental backup
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:
@@ -555,6 +562,13 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterResourcePool:
         result.emplace_back(tx.GetCreateResourcePool().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateMetadataObject:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterMetadataObject:
+        result.emplace_back(tx.GetCreateMetadataObject().GetName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropMetadataObject:
+        result.emplace_back(tx.GetDrop().GetName());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup:
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable:

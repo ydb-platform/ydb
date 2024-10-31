@@ -712,7 +712,7 @@ void TPDisk::ProcessLogWriteQueue() {
         TVector<TLogWrite*> logWrites;
         TVector<TLogWrite*> commits;
         size_t batchSizeBytes = 0;
-        while (JointLogWrites.size() && logWrites.size() < 50 && batchSizeBytes < (size_t)ForsetiOpPieceSizeCached) {
+        while (JointLogWrites.size()) {
             auto *log = static_cast<TLogWrite*>(JointLogWrites.front());
             JointLogWrites.pop();
 
@@ -720,6 +720,9 @@ void TPDisk::ProcessLogWriteQueue() {
             batchSizeBytes += log->Data.Size();
             if (log->Signature.HasCommitRecord()) {
                 commits.push_back(log);
+            }
+            if (UseNoopSchedulerCached && batchSizeBytes >= (size_t)ForsetiOpPieceSizeCached) {
+                break;
             }
         }
         LWTRACK(PDiskProcessLogWriteQueue, UpdateCycleOrbit, PCtx->PDiskId, JointLogWrites.size(), logWrites.size(), commits.size());

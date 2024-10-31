@@ -81,7 +81,7 @@ void TTopicWorkloadWriterWorker::WaitTillNextMessageExpectedCreateTimeAndContinu
 void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
     Sleep(TDuration::Seconds((float) Params.WarmupSec * Params.WriterIdx / Params.ProducerThreadCount));
 
-    TInstant commitTime = TInstant::Now() + TDuration::MilliSeconds(Params.CommitPeriodMs);
+    TInstant commitTime = TInstant::Now() + TDuration::MilliSeconds(Params.CommitIntervalMs);
 
     StartTimestamp = Now();
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "WriterIdx: "
@@ -115,7 +115,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
         if (writingAllowed && !WaitForCommitTx)
         {
-            TInstant createTimestamp = Params.BytesPerSec == 0 ? now : GetExpectedCurrMessageCreationTimestamp();
+            TInstant createTimestamp = GetCreateTimestampForNextMessage(); 
             BytesWritten += Params.MessageSize;
 
             std::optional<NYdb::NTable::TTransaction> transaction = {};
@@ -267,7 +267,7 @@ void TTopicWorkloadWriterWorker::TryCommitTx(TInstant& commitTime)
 
     TryCommitTableChanges();
 
-    commitTime += TDuration::MilliSeconds(Params.CommitPeriodMs);
+    commitTime += TDuration::MilliSeconds(Params.CommitIntervalMs);
 
     WaitForCommitTx = false;
 }
@@ -285,4 +285,12 @@ void TTopicWorkloadWriterWorker::TryCommitTableChanges()
     Params.StatsCollector->AddWriterSelectEvent(Params.WriterIdx, {execTimes.SelectTime.MilliSeconds()});
     Params.StatsCollector->AddWriterUpsertEvent(Params.WriterIdx, {execTimes.UpsertTime.MilliSeconds()});
     Params.StatsCollector->AddWriterCommitTxEvent(Params.WriterIdx, {execTimes.CommitTime.MilliSeconds()});
+}
+
+TInstant TTopicWorkloadWriterWorker::GetCreateTimestampForNextMessage() {
+    if (Params.UseCpuTimestamp || Params.BytesPerSec == 0) {
+        return TInstant::Now();
+    } else {
+        return GetExpectedCurrMessageCreationTimestamp();
+    }    
 }

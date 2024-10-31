@@ -59,24 +59,26 @@ public:
     ui32 UpUtilizationPercent = 90;
     ui32 DownUtilizationPercent = 30;
     ui32 ProducerThreadCount = 0;
-    ui32 ProducersPerThread = 0;
+    ui32 ProducersPerThread = 1;
     ui32 ConsumerThreadCount = 0;
     ui32 ConsumerCount = 0;
     bool Direct = false;
     TString ConsumerPrefix;
-    size_t MessageSize;
-    size_t MessageRate;
-    size_t ByteRate;
+    size_t MessageSizeBytes;
+    size_t MessagesPerSec;
+    size_t BytesPerSec;
     ui32 Codec;
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
-    size_t CommitPeriod = 100;
+    size_t CommitPeriodSeconds = 1;
+    size_t TxCommitIntervalMs = 0;
     size_t CommitMessages = 1'000'000;
     bool OnlyTopicInTx = false;
     bool OnlyTableInTx = false;
     bool UseTableSelect = true;
     bool ReadWithoutConsumer = false;
+    bool UseCpuTimestamp = false;
 
 protected:
     void CreateTopic(const TString& database,

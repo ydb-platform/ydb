@@ -75,7 +75,7 @@ bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {
         if (InitSeqNo.HasException()) {
             try {
                 InitSeqNo.GetValue();
-            } catch (yexception e) {
+            } catch (const yexception& e) {
                 WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR, TStringBuilder()
                     << "Producer " << ProducerId_
                     << " in writer " << Params_.WriterIdx
@@ -168,8 +168,6 @@ void TTopicWorkloadWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSess
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
         << "Producer " << ProducerId_
         << ": got close event: " << event.DebugString());
-    //! Session is closed, stop any work with it.
-    *Params_.ErrorFlag = 1;
 }
 
 bool TTopicWorkloadWriterProducer::ContinuationTokenDefined() {

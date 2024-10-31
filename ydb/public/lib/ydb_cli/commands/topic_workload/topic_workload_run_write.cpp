@@ -51,15 +51,26 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
                                "in 100 ms commit interval only 10 messages will fit. All those 10 messages will be written by 10 different producers to 10 different partitions in the same transaction).")
         .DefaultValue(1)
         .StoreResult(&Scenario.ProducersPerThread);
+    config.Opts->AddLongOption("use-cpu-timestamp", "If specified, worload will use cpu current timestamp as message create ts to measure latency."
+                                                        " If not specified, will be used expected creation timestamp: e.g. "
+                                                        "if we have 100 messages per second rate, then first message is expected at 0ms of first second, second after 10ms elapsed,"
+                                                        " third after 20ms elapsed, 10th after 100ms elapsed and so on. "
+                                                        "This way 101 message is expected to be generated not earlier"
+                                                        " then 1 second and 10 ms after test start has passed."
+                                                        )
+        .DefaultValue(false)
+        .Optional()
+        .Hidden()
+        .StoreTrue(&Scenario.UseCpuTimestamp);
     config.Opts->AddLongOption('m', "message-size", "Message size.")
         .DefaultValue(10_KB)
-        .StoreMappedResultT<TString>(&Scenario.MessageSize, &TCommandWorkloadTopicParams::StrToBytes);
+        .StoreMappedResultT<TString>(&Scenario.MessageSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("message-rate", "Total message rate for all producer threads (messages per second). Exclusive with --byte-rate.")
         .DefaultValue(0)
-        .StoreResult(&Scenario.MessageRate);
+        .StoreResult(&Scenario.MessagesPerSec);
     config.Opts->AddLongOption("byte-rate", "Total message rate for all producer threads (bytes per second). Exclusive with --message-rate.")
         .DefaultValue(0)
-        .StoreMappedResultT<TString>(&Scenario.ByteRate, &TCommandWorkloadTopicParams::StrToBytes);
+        .StoreMappedResultT<TString>(&Scenario.BytesPerSec, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", InitAllowedCodecs()))
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
@@ -74,9 +85,12 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Optional()
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
-    config.Opts->AddLongOption("commit-period", "Waiting time between commit in milliseconds.")
-        .DefaultValue(100)
-        .StoreResult(&Scenario.CommitPeriod);
+    config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. If both options are specified, tx-commit-intervall-ms will be used. Waiting time between commit in seconds.")
+        .DefaultValue(1)
+        .StoreResult(&Scenario.CommitPeriodSeconds);
+    config.Opts->AddLongOption("tx-commit-interval-ms", "Intervall of transaction commit in milliseconds.")
+        .DefaultValue(0)
+        .StoreResult(&Scenario.TxCommitIntervalMs);
     config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);

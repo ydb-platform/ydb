@@ -230,7 +230,7 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .UseTableSelect = UseTableSelect && !OnlyTopicInTx,
                 .UseTableUpsert = !OnlyTopicInTx,
                 .ReadWithoutConsumer = ReadWithoutConsumer,
-                .CommitPeriod = CommitPeriod,
+                .CommitPeriodMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion,
                 .CommitMessages = CommitMessages
             };
 
@@ -269,8 +269,8 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .GeneratedMessages = generatedMessages,
             .Database = database,
             .TopicName = TopicName,
-            .BytesPerSec = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
-            .MessageSize = MessageSize,
+            .BytesPerSec = MessagesPerSec != 0 ? MessagesPerSec * MessageSizeBytes : BytesPerSec,
+            .MessageSize = MessageSizeBytes,
             .ProducerThreadCount = ProducerThreadCount,
             .ProducersPerThread = ProducersPerThread,
             .WriterIdx = writerIdx,
@@ -280,8 +280,9 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .Codec = Codec,
             .UseTransactions = UseTransactions,
             .UseAutoPartitioning = useAutoPartitioning,
-            .CommitPeriodMs = CommitPeriod,
-            .CommitMessages = CommitMessages
+            .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
+            .CommitMessages = CommitMessages,
+            .UseCpuTimestamp = UseCpuTimestamp
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::RetryableWriterLoop(writerParams); }));

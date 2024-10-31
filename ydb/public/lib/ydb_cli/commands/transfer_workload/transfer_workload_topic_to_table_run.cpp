@@ -69,13 +69,13 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
         .StoreResult(&Scenario.ConsumerCount);
     config.Opts->AddLongOption('m', "message-size", "Message size.")
         .DefaultValue(10_KB)
-        .StoreMappedResultT<TString>(&Scenario.MessageSize, &TCommandWorkloadTopicParams::StrToBytes);
+        .StoreMappedResultT<TString>(&Scenario.MessageSizeBytes, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("message-rate", "Total message rate for all producer threads (messages per second). Exclusive with --byte-rate.")
         .DefaultValue(0)
-        .StoreResult(&Scenario.MessageRate);
+        .StoreResult(&Scenario.MessagesPerSec);
     config.Opts->AddLongOption("byte-rate", "Total message rate for all producer threads (bytes per second). Exclusive with --message-rate.")
         .DefaultValue(0)
-        .StoreMappedResultT<TString>(&Scenario.ByteRate, &TCommandWorkloadTopicParams::StrToBytes);
+        .StoreMappedResultT<TString>(&Scenario.BytesPerSec, &TCommandWorkloadTopicParams::StrToBytes);
     config.Opts->AddLongOption("codec", PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", InitAllowedCodecs()))
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
@@ -83,9 +83,9 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
-    config.Opts->AddLongOption("commit-period", "Waiting time between commit in milliseconds.")
-        .DefaultValue(10'000)
-        .StoreResult(&Scenario.CommitPeriod);
+    config.Opts->AddLongOption("commit-period", "Waiting time between commit in seconds.")
+        .DefaultValue(10)
+        .StoreResult(&Scenario.CommitPeriodSeconds);
     config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);

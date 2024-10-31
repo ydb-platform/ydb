@@ -7,55 +7,49 @@
 #include <library/cpp/unified_agent_client/clock.h>
 #include <util/generic/string.h>
 
-namespace NYdb {
-    namespace NConsoleClient {
-        class TTopicWorkloadWriterProducer {
-        public:
-            TTopicWorkloadWriterProducer(
-                    const TTopicWorkloadWriterParams& params,
-                    std::shared_ptr<NYdb::NConsoleClient::TTopicWorkloadStatsCollector> statsCollector,
-                    const TString& producerId,
-                    const ui64 partitionId,
-                    const NUnifiedAgent::TClock& clock
-                    );
-            TTopicWorkloadWriterProducer(TTopicWorkloadWriterProducer&& other) = default;
+namespace NYdb::NConsoleClient {
+    class TTopicWorkloadWriterProducer {
+    public:
+        TTopicWorkloadWriterProducer(
+                const TTopicWorkloadWriterParams& params,
+                std::shared_ptr<NYdb::NConsoleClient::TTopicWorkloadStatsCollector> statsCollector,
+                const TString& producerId,
+                const ui64 partitionId,
+                const NUnifiedAgent::TClock& clock
+                );
+        void Close();
+        
+        void SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession);
+        
+        bool WaitForInitSeqNo();
 
-            ~TTopicWorkloadWriterProducer() = default;
+        void WaitForContinuationToken(const TDuration& timeout);
 
-            void Close();
-            
-            void SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession);
-            
-            bool WaitForInitSeqNo();
+        void Send(const TInstant& createTimestamp,
+                    std::optional<NYdb::NTable::TTransaction> transaction);
 
-            void WaitForContinuationToken(const TDuration& timeout);
+        bool ContinuationTokenDefined();
 
-            void Send(const TInstant& createTimestamp,
-                      std::optional<NYdb::NTable::TTransaction> transaction);
+        ui64 GetCurrentMessageId();
 
-            bool ContinuationTokenDefined();
+        ui64 GetPartitionId();
 
-            ui64 GetCurrentMessageId();
+        size_t InflightMessagesCnt();
 
-            ui64 GetPartitionId();
+        void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
 
-            size_t InflightMessagesCnt();
+        void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event);
+    private:
+        TString GetGeneratedMessage() const;
 
-            void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
-
-            void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event);
-        private:
-            TString GetGeneratedMessage() const;
-
-            std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession_;
-            ui64 MessageId_ = 0;
-            const TString ProducerId_;
-            const ui64 PartitionId_;
-            TMaybe<NTopic::TContinuationToken> ContinuationToken_ = {};
-            THashMap<ui64, TInstant> InflightMessagesCreateTs_;
-            NYdb::NConsoleClient::TTopicWorkloadWriterParams Params_;
-            std::shared_ptr<NYdb::NConsoleClient::TTopicWorkloadStatsCollector> StatsCollector_;
-            const NUnifiedAgent::TClock Clock_;
-        };
-    } // namespace NConsoleClient
-} // namespace NYdb
+        std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession_;
+        ui64 MessageId_ = 0;
+        const TString ProducerId_;
+        const ui64 PartitionId_;
+        TMaybe<NTopic::TContinuationToken> ContinuationToken_ = {};
+        THashMap<ui64, TInstant> InflightMessagesCreateTs_;
+        NYdb::NConsoleClient::TTopicWorkloadWriterParams Params_;
+        std::shared_ptr<NYdb::NConsoleClient::TTopicWorkloadStatsCollector> StatsCollector_;
+        const NUnifiedAgent::TClock Clock_;
+    };
+} // namespace NYdb::NConsoleClient

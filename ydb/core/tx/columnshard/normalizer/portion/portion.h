@@ -14,7 +14,7 @@ namespace NKikimr::NOlap {
 class TPortionsNormalizer : public TPortionsNormalizerBase {
 public:
     static TString GetClassNameStatic() {
-        return ::ToString(ENormalizerSequentialId::PortionsMetadata);
+        return "PortionsMetadata";
     }
 
 private:
@@ -26,7 +26,7 @@ public:
 
 public:
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return ENormalizerSequentialId::PortionsMetadata;
+        return std::nullopt;
     }
 
     virtual TString GetClassName() const override {

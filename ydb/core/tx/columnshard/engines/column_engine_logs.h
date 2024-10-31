@@ -192,14 +192,14 @@ public:
 
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
-        auto exPortion = *portion;
+        auto exPortion = portion->MakeCopy();
         AFL_VERIFY(portion);
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
         UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
     }
 
-    void AppendPortion(const TPortionInfo& portionInfo);
+    void AppendPortion(const TPortionInfo::TPtr& portionInfo);
 
 private:
     TVersionedIndex VersionedIndex;

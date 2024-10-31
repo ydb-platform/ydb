@@ -9,21 +9,16 @@
 
 namespace NKikimr::NOlap {
 
-void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("path_id", GetPathId());
-    auto it = Portions.find(info.GetPortionId());
-    AFL_VERIFY(info.GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.DebugString())("path_id", GetPathId());
+void TGranuleMeta::AppendPortion(const TPortionInfo::TPtr& info) {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
+    auto it = Portions.find(info->GetPortionId());
+    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
 
-    AFL_VERIFY(info.ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info.DebugString());
+    AFL_VERIFY(info->ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info->DebugString());
 
-    if (it == Portions.end()) {
-        OnBeforeChangePortion(nullptr);
-        auto portionNew = std::make_shared<TPortionInfo>(info);
-        it = Portions.emplace(portionNew->GetPortionId(), portionNew).first;
-    } else {
-        OnBeforeChangePortion(it->second);
-        it->second = std::make_shared<TPortionInfo>(info);
-    }
+    AFL_VERIFY(it == Portions.end());
+    OnBeforeChangePortion(nullptr);
+    it = Portions.emplace(info->GetPortionId(), info).first;
     OnAfterChangePortion(it->second, nullptr);
 }
 
@@ -138,17 +133,14 @@ TGranuleMeta::TGranuleMeta(
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
 
-std::shared_ptr<TPortionInfo> TGranuleMeta::UpsertPortionOnLoad(TPortionInfo&& portion) {
-    if (portion.HasInsertWriteId() && !portion.HasCommitSnapshot()) {
-        const TInsertWriteId insertWriteId = portion.GetInsertWriteIdVerified();
-        auto emplaceInfo = InsertedPortions.emplace(insertWriteId, std::make_shared<TPortionInfo>(std::move(portion)));
-        AFL_VERIFY(emplaceInfo.second);
-        return emplaceInfo.first->second;
+void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion) {
+    if (portion->HasInsertWriteId() && !portion->HasCommitSnapshot()) {
+        const TInsertWriteId insertWriteId = portion->GetInsertWriteIdVerified();
+        AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portion).second);
+        AFL_VERIFY(!Portions.contains(portion->GetPortionId()));
     } else {
-        auto portionId = portion.GetPortionId();
-        auto emplaceInfo = Portions.emplace(portionId, std::make_shared<TPortionInfo>(std::move(portion)));
-        AFL_VERIFY(emplaceInfo.second);
-        return emplaceInfo.first->second;
+        auto portionId = portion->GetPortionId();
+        AFL_VERIFY(Portions.emplace(portionId, portion).second);
     }
 }
 
@@ -182,7 +174,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
-    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*it->second);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(it->second);
     InsertedPortions.erase(it);
 }
 
@@ -195,7 +187,7 @@ void TGranuleMeta::CommitImmediateOnExecute(
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {
-    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(*portion);
+    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(portion);
 }
 
 }   // namespace NKikimr::NOlap

@@ -276,9 +276,10 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-    void LoadRecord(const TIndexInfo& indexInfo, const TColumnChunkLoadContext& loadContext);
+    void LoadRecord(const TColumnChunkLoadContext& loadContext);
 
     ui32 GetRecordsCount() const {
+        AFL_VERIFY(Records.size());
         ui32 result = 0;
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {

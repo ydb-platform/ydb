@@ -53,9 +53,9 @@ namespace NYdb {
 
             void Close();
 
-            TTopicWorkloadWriterProducer CreateProducer(ui64 partitionId);
+            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId);
 
-            void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(TTopicWorkloadWriterProducer& producer);
+            void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(std::shared_ptr<TTopicWorkloadWriterProducer> producer);
 
             void Process(TInstant endTime);
 
@@ -72,7 +72,7 @@ namespace NYdb {
             std::optional<TTransactionSupport> TxSupport;
             TInstant StartTimestamp;
 
-            std::vector<TTopicWorkloadWriterProducer> Producers;
+            std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>> Producers;
             ui64 ProducerIndex;
 
             std::shared_ptr<std::atomic<bool>> Closed;

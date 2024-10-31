@@ -20,13 +20,6 @@ TTopicWorkloadWriterProducer::TTopicWorkloadWriterProducer(
               TStringBuilder() << "Created Producer with id " << ProducerId_ << " for partition " << PartitionId_);
 }
 
-TTopicWorkloadWriterProducer::~TTopicWorkloadWriterProducer() {
-    if (WriteSession_)
-        WriteSession_->Close(TDuration::Zero());
-    WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
-              TStringBuilder() << "Destructor for producer  " << ProducerId_ << " was called");
-}
-
 void TTopicWorkloadWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession) {
     WriteSession_ = writeSession;
 }
@@ -46,9 +39,7 @@ void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
         writeMessage.Tx(transaction.value());
     }
 
-    WriteSession_->Write(std::move(ContinuationToken_.GetRef()), std::move(writeMessage));
-
-    ContinuationToken_.Clear();
+    WriteSession_->Write(std::move(*ContinuationToken_), std::move(writeMessage));
 
     WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
               TStringBuilder() << "Sent message with id " << MessageId_
@@ -135,7 +126,7 @@ void TTopicWorkloadWriterProducer::WaitForContinuationToken(const TDuration& tim
                               << " for partition " << PartitionId_
                               << ": Got new ContinuationToken token");
         } else {
-            throw std::runtime_error("Unexpected event type in WaitForContinuationToken");
+            ythrow yexception() << "Unexpected event type in WaitForContinuationToken";
         }
     }
 }
@@ -182,7 +173,7 @@ void TTopicWorkloadWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSess
 }
 
 bool TTopicWorkloadWriterProducer::ContinuationTokenDefined() {
-    return ContinuationToken_.Defined();
+    return !!ContinuationToken_;
 }
 
 ui64 TTopicWorkloadWriterProducer::GetCurrentMessageId() {

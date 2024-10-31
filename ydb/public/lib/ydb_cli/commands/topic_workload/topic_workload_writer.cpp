@@ -12,7 +12,7 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
     , StatsCollector(Params.StatsCollector)
 
 {
-    Producers = std::vector<TTopicWorkloadWriterProducer>();
+    Producers = std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>>();
     Producers.reserve(Params.ProducersPerThread);
 
     for (ui32 i = 0; i < Params.ProducersPerThread; ++i) {
@@ -20,7 +20,7 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
         // and they need to load different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
         
-        Producers.push_back(std::move(CreateProducer(partitionId)));
+        Producers.emplace_back(std::move(CreateProducer(partitionId)));
     }
 
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
@@ -30,16 +30,16 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
 
 TTopicWorkloadWriterWorker::~TTopicWorkloadWriterWorker()
 {
-    for (auto& producer: Producers) {
-        producer.Close();
+    for (std::shared_ptr<TTopicWorkloadWriterProducer> producer : Producers) {
+        producer->Close();
     }
 }
 
 void TTopicWorkloadWriterWorker::Close()
 {
     Closed->store(true);
-    for (auto& producer: Producers) {
-        producer.Close();
+    for (auto producer: Producers) {
+        producer->Close();
     }
 }
 
@@ -66,14 +66,15 @@ TInstant TTopicWorkloadWriterWorker::GetExpectedCurrMessageCreationTimestamp() c
     return StartTimestamp + TDuration::Seconds((double) BytesWritten / Params.BytesPerSec * Params.ProducerThreadCount);
 }
 
-void TTopicWorkloadWriterWorker::WaitTillNextMessageExpectedCreateTimeAndContinuationToken(TTopicWorkloadWriterProducer& producer) {
+void TTopicWorkloadWriterWorker::WaitTillNextMessageExpectedCreateTimeAndContinuationToken(
+                            std::shared_ptr<TTopicWorkloadWriterProducer> producer) {
     auto now = Now();
     TDuration timeToNextMessage = Params.BytesPerSec == 0 ? TDuration::Zero() :
                                   GetExpectedCurrMessageCreationTimestamp() - now;
 
-    if (timeToNextMessage > TDuration::Zero() || !producer.ContinuationTokenDefined())
+    if (timeToNextMessage > TDuration::Zero() || !producer->ContinuationTokenDefined())
     {
-        producer.WaitForContinuationToken(timeToNextMessage);
+        producer->WaitForContinuationToken(timeToNextMessage);
     }
 }
 
@@ -93,11 +94,11 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
         if (now > endTime)
             break;
 
-        auto& producer = Producers[ProducerIndex % Params.ProducersPerThread];
+        auto producer = Producers[ProducerIndex % Params.ProducersPerThread];
 
         WaitTillNextMessageExpectedCreateTimeAndContinuationToken(producer);
 
-        bool writingAllowed = producer.ContinuationTokenDefined();
+        bool writingAllowed = producer->ContinuationTokenDefined();
 
         if (Params.BytesPerSec != 0)
         {
@@ -125,7 +126,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
                 transaction = *TxSupport->Transaction;
             }
 
-            producer.Send(createTimestamp, transaction);
+            producer->Send(createTimestamp, transaction);
 
             if (TxSupport) {
                 TxSupport->AppendRow("");
@@ -135,9 +136,9 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
             ProducerIndex++;
 
             WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder()
-                    << "Written message " << producer.GetCurrentMessageId() - 1
+                    << "Written message " << producer->GetCurrentMessageId() - 1
                     << " in writer " << Params.WriterIdx
-                    << " For partition " << producer.GetPartitionId()
+                    << " For partition " << producer->GetPartitionId()
                     << " message create ts " << createTimestamp
                     << " delta from now " << (Params.BytesPerSec == 0 ? TDuration() : now - createTimestamp));
         }
@@ -152,20 +153,20 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
     }
 }
 
-TTopicWorkloadWriterProducer TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
+std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
     auto clock = NUnifiedAgent::TClock();
     if (!clock.Configured()) {
         clock.Configure(); 
     }
     auto producerId = TGUID::CreateTimebased().AsGuidString();
 
-    auto producer = TTopicWorkloadWriterProducer(
+    auto producer = std::make_shared<TTopicWorkloadWriterProducer>(TTopicWorkloadWriterProducer(
             Params,
             StatsCollector,
             producerId,
             partitionId,
             std::move(clock)
-    );
+    ));
 
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
@@ -174,9 +175,9 @@ TTopicWorkloadWriterProducer TTopicWorkloadWriterWorker::CreateProducer(ui64 par
 
     NYdb::NTopic::TWriteSessionSettings::TEventHandlers eventHandlers;
     eventHandlers.AcksHandler(
-            std::bind(&TTopicWorkloadWriterProducer::HandleAckEvent, &producer, std::placeholders::_1));
+            std::bind(&TTopicWorkloadWriterProducer::HandleAckEvent, producer, std::placeholders::_1));
     eventHandlers.SessionClosedHandler(
-            std::bind(&TTopicWorkloadWriterProducer::HandleSessionClosed, &producer, std::placeholders::_1));
+            std::bind(&TTopicWorkloadWriterProducer::HandleSessionClosed, producer, std::placeholders::_1));
     settings.EventHandlers(eventHandlers);
 
     if (Params.UseAutoPartitioning) {
@@ -187,7 +188,7 @@ TTopicWorkloadWriterProducer TTopicWorkloadWriterWorker::CreateProducer(ui64 par
 
     settings.DirectWriteToPartition(Params.Direct);
 
-    producer.SetWriteSession(NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings));
+    producer->SetWriteSession(NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings));
 
     return producer;
 }
@@ -195,8 +196,8 @@ TTopicWorkloadWriterProducer TTopicWorkloadWriterWorker::CreateProducer(ui64 par
 size_t TTopicWorkloadWriterWorker::InflightMessagesSize() {
     size_t total = 0;
 
-    for (auto& producer: Producers) {
-        total += producer.InflightMessagesCnt();
+    for (auto producer: Producers) {
+        total += producer->InflightMessagesCnt();
     }
 
     return total;
@@ -229,7 +230,7 @@ void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params, 
     WRITE_LOG(writer.Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Writer started " << Now().ToStringUpToSeconds());
 
     for (auto& producer : writer.Producers) {
-        if (!producer.WaitForInitSeqNo())
+        if (!producer->WaitForInitSeqNo())
             return;
     }
 

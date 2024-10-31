@@ -122,7 +122,7 @@ static bool IsDirectReadCmd(const auto& cmd) {
 }
 
 
-TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData) {
+TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg, const NKikimrPQ::TPartitions& partitionsData, const TPartitionGraph& graph, ui32 partitionId) {
     TEvPQ::TMessageGroupsPtr explicitMessageGroups = std::make_shared<TEvPQ::TMessageGroups>();
 
     for (const auto& mg : bootstrapCfg.GetExplicitMessageGroups()) {
@@ -134,10 +134,16 @@ TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrap
         (*explicitMessageGroups)[mg.GetId()] = {0, std::move(keyRange)};
     }
 
-    for (const auto& p : partitionsData.GetPartition()) {
-        for (const auto& g : p.GetMessageGroup()) {
-            auto& group = (*explicitMessageGroups)[g.GetId()];
-            group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+    if (graph) {
+        auto* node = graph.GetPartition(partitionId);
+        Y_VERIFY_S(node, "Partition " << partitionId << " not found. Known partitions " << graph.DebugString());
+        for (const auto& p : partitionsData.GetPartition()) {
+            if (node->IsParent(p.GetPartitionId())) {
+                for (const auto& g : p.GetMessageGroup()) {
+                    auto& group = (*explicitMessageGroups)[g.GetId()];
+                    group.SeqNo = std::max(group.SeqNo, g.GetSeqNo());
+                }
+            }
         }
     }
 
@@ -712,9 +718,6 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 
     ApplyNewConfig(NewConfig, ctx);
     ClearNewConfig();
-
-    auto explicitMessageGroups = CreateExplicitMessageGroups(BootstrapConfigTx ? *BootstrapConfigTx : NKikimrPQ::TBootstrapConfig(),
-                                                         PartitionsDataConfigTx ? *PartitionsDataConfigTx : NKikimrPQ::TPartitions());
 
     for (auto& p : Partitions) { //change config for already created partitions
         if (p.first.IsSupportivePartition()) {
@@ -1844,14 +1847,15 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
     write->SetValue(str);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
 
-    auto explicitMessageGroups = CreateExplicitMessageGroups(bootstrapCfg, partitionsData);
-
-    TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
-    for (const auto& [id, mg] : *explicitMessageGroups) {
-        sourceIdWriter.RegisterSourceId(id, mg.SeqNo, 0, ctx.Now(), std::move(mg.KeyRange), false);
-    }
-
+    auto graph = MakePartitionGraph(cfg);
     for (const auto& partition : cfg.GetPartitions()) {
+        auto explicitMessageGroups = CreateExplicitMessageGroups(bootstrapCfg, partitionsData, graph, partition.GetPartitionId());
+
+        TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
+        for (const auto& [id, mg] : *explicitMessageGroups) {
+            sourceIdWriter.RegisterSourceId(id, mg.SeqNo, 0, ctx.Now(), std::move(mg.KeyRange), false);
+        }
+
         sourceIdWriter.FillRequest(request, TPartitionId(partition.GetPartitionId()));
     }
 }
@@ -4153,8 +4157,9 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 {
     PQ_LOG_T("Commit tx " << tx.TxId);
 
-    auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData);
+    auto graph = MakePartitionGraph(tx.TabletConfig);
     for (ui32 partitionId : tx.Partitions) {
+        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId);
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
 
         auto p = Partitions.find(TPartitionId(partitionId));
@@ -4602,13 +4607,14 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData);
+    auto graph = MakePartitionGraph(tx.TabletConfig);
 
     for (auto& [partitionId, partition] : Partitions) {
         if (partitionId.IsSupportivePartition()) {
             continue;
         }
 
+        auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId.OriginalPartitionId);
         auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(tx.Step, tx.TxId);
 
         event->TopicConverter = tx.TopicConverter;

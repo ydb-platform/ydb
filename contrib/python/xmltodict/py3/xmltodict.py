@@ -14,7 +14,7 @@ if tuple(map(int, platform.python_version_tuple()[:2])) < (3, 7):
 from inspect import isgenerator
 
 __author__ = 'Martin Blech'
-__version__ = '0.14.0'
+__version__ = "0.14.2"
 __license__ = 'MIT'
 
 
@@ -123,7 +123,7 @@ class _DictSAXHandler:
                     else self.cdata_separator.join(self.data))
             item = self.item
             self.item, self.data = self.stack.pop()
-            if self.strip_whitespace and data and item:
+            if self.strip_whitespace and data:
                 data = data.strip() or None
             if data and self.force_cdata and item is None:
                 item = self.dict_constructor()

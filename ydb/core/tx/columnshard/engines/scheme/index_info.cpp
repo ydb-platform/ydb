@@ -124,7 +124,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
     if (!Schema) {
         AFL_VERIFY(!SchemaWithSpecials);
         InitializeCaches(operators, columns, nullptr);
-        Precalculate()
+        Precalculate();
     }
 }
 

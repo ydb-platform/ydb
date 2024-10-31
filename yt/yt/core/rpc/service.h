@@ -82,6 +82,9 @@ struct IServiceContext
     //! Returns time between request execution start and the moment of reply or cancellation (if it already happened).
     virtual std::optional<TDuration> GetExecutionDuration() const = 0;
 
+    //! Substract given throttle duration time from request execution time.
+    virtual void RecordThrottling(TDuration throttleDuration) = 0;
+
     //! Returns trace context associated with request.
     virtual NTracing::TTraceContextPtr GetTraceContext() const = 0;
 

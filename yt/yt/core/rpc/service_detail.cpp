@@ -587,6 +587,14 @@ public:
         return ExecutionTime_;
     }
 
+    void RecordThrottling(TDuration throttleDuration) override
+    {
+        ThrottlingTime_ = ThrottlingTime_ ? *ThrottlingTime_ + throttleDuration : throttleDuration;
+        if (ExecutionTime_) {
+            *ExecutionTime_ -= throttleDuration;
+        }
+    }
+
     TTraceContextPtr GetTraceContext() const override
     {
         return TraceContext_;
@@ -711,6 +719,7 @@ private:
     std::optional<TInstant> RunInstant_;
     std::optional<TInstant> ReplyInstant_;
     std::optional<TInstant> CancelInstant_;
+    std::optional<TDuration> ThrottlingTime_;
 
     std::optional<TDuration> ExecutionTime_;
     std::optional<TDuration> TotalTime_;
@@ -1018,6 +1027,9 @@ private:
 
         ReplyInstant_ = NProfiling::GetInstant();
         ExecutionTime_ = RunInstant_ ? *ReplyInstant_ - *RunInstant_ : TDuration();
+        if (RunInstant_ && ThrottlingTime_) {
+            *ExecutionTime_ -= *ThrottlingTime_;
+        }
         TotalTime_ = *ReplyInstant_ - ArriveInstant_;
 
         MethodPerformanceCounters_->ExecutionTimeCounter.Record(*ExecutionTime_);

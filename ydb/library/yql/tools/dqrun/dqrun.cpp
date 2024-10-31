@@ -776,6 +776,10 @@ int RunMain(int argc, const char* argv[])
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
+    if (!isatty(STDERR_FILENO)) {
+        runOptions.NoColorize = true;
+    }
+
     if (memLimit > 0) {
 #ifdef __unix__
         struct rlimit rl;

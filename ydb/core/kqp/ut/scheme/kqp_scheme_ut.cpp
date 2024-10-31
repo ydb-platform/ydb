@@ -8746,9 +8746,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
         csController->WaitIndexation(TDuration::Seconds(5));
     }
-}
 
-Y_UNIT_TEST_SUITE(KqpOlapColumnFamilies) {
     Y_UNIT_TEST(CreateWithoutColumnFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -9654,7 +9652,7 @@ Y_UNIT_TEST_SUITE(KqpOlapColumnFamilies) {
         }
     }
 
-    Y_UNIT_TEST(AlterColumnFamilyForPrimaryKey) {
+    Y_UNIT_TEST(SetNotDefaultColumnFamilyForPrimaryKey) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));

@@ -209,7 +209,7 @@ TWriteSessionMock* ChoosePartition(NPersQueue::TTestServer& server,
     TWriteSessionMock* mock = new TWriteSessionMock();
 
     auto chooser = NPQ::CreatePartitionChooser(config, true);
-    auto graph = std::make_shared<NPQ::TPartitionGraph>(NPQ::MakePartitionGraph(config));
+    auto graph = NPQ::MakeSharedPartitionGraph(config);
 
     NActors::TActorId parentId = server.GetRuntime()->Register(mock);
     server.GetRuntime()->Register(NKikimr::NPQ::CreatePartitionChooserActor<NTabletPipe::NTest::TPipeMock>(parentId,

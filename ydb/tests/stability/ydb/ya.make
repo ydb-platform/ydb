@@ -22,6 +22,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/wardens
 )
 
 END()

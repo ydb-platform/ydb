@@ -41,6 +41,7 @@
 "postgis_lib_version",
 "st_interiorringn",
 "st_collectionhomogenize",
+"st_makeline",
 
 //dbeaver
 "pg_get_expr",

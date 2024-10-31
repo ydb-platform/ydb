@@ -776,7 +776,7 @@ int RunMain(int argc, const char* argv[])
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
-    if (!isatty(STDERR_FILENO)) {
+    if (!isatty(STDERR_FILENO) || !errFile.empty()) {
         runOptions.NoColorize = true;
     }
 

@@ -1,12 +1,12 @@
 #pragma once
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
-#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
 class TVersionedIndex;
-}
+} // namespace NKikimr::NOlap
 
 namespace NKikimr::NIceDb {
 class TNiceDb;
@@ -22,6 +22,7 @@ private:
     THashMap<ui64, NEvents::TPathIdData> PreviousSelected;
     THashMap<ui64, NEvents::TPathIdData> Selected;
     THashMap<TTabletId, TTaskForTablet> Links;
+    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> SchemeHistory;
     YDB_READONLY(ui64, StartPathId, 0);
     YDB_READONLY(ui64, StartPortionId, 0);
     YDB_READONLY(ui64, PackIdx, 0);
@@ -29,6 +30,11 @@ private:
     TTransferContext TransferContext;
     std::optional<ui64> NextPathId = 0;
     std::optional<ui64> NextPortionId = 0;
+
+    // Begin/End of the next slice of SchemeHistory
+    ui64 NextSchemaBegin = 0;
+    ui64 NextSchemaEnd = 0;
+
     THashSet<TTabletId> LinksModifiedTablets;
     ui64 AckReceivedForPackIdx = 0;
     std::set<ui64> PathIds;
@@ -38,6 +44,8 @@ private:
     void BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic SerializeDynamicToProto() const;
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic SerializeStaticToProto() const;
+
+    bool NextSchemas();
 
 public:
     bool IsAckDataReceived() const {
@@ -87,6 +95,10 @@ public:
         return PreviousSelected;
     }
 
+    TArrayRef<const NKikimrTxColumnShard::TSchemaPresetVersionInfo> GetSelectedSchemas() const {
+        return TArrayRef<const NKikimrTxColumnShard::TSchemaPresetVersionInfo>(SchemeHistory.data() + NextSchemaBegin, NextSchemaEnd - NextSchemaBegin);
+    }
+
     const THashMap<ui64, NEvents::TPathIdData>& GetSelected() const {
         return Selected;
     }
@@ -98,17 +110,17 @@ public:
     bool Next(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
 
     bool IsValid() {
-        return Selected.size();
+        return NextSchemaBegin < SchemeHistory.size() || Selected.size();
     }
 
     TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext);
 
     void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
-    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions,
-        const TVersionedIndex& index);
+    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, THashMap<ui64, std::vector<TPortionDataAccessor>> portions,
+        std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemeHistory, const TVersionedIndex& index);
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
         const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

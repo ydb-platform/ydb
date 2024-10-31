@@ -59,7 +59,31 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
     std::swap(Selected, result);
 }
 
+bool TSourceCursor::NextSchemas() {
+    NextSchemaBegin = NextSchemaEnd;
+
+    if (NextSchemaEnd == SchemeHistory.size()) {
+        return false;
+    }
+
+    i32 columnsToSend = 0;
+    const i32 maxColumnsToSend = 10000;
+
+    // limit the count of schemas to send based on their size in columns
+    // maxColumnsToSend is pretty random value, so I don't care if columnsToSend would be greater then this value
+    for (; NextSchemaEnd < SchemeHistory.size() && columnsToSend < maxColumnsToSend; ++NextSchemaEnd) {
+        columnsToSend += SchemeHistory[NextSchemaEnd].GetSchema().ColumnsSize();
+    }
+
+    ++PackIdx;
+
+    return true;
+}
+
 bool TSourceCursor::Next(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
+    if (NextSchemas()) {
+        return true;
+    }
     PreviousSelected = std::move(Selected);
     LinksModifiedTablets.clear();
     Selected.clear();
@@ -83,6 +107,8 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic TSourceCursor
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic result;
     result.SetStartPathId(StartPathId);
     result.SetStartPortionId(StartPortionId);
+    result.SetNextSchemaBegin(NextSchemaBegin);
+    result.SetNextSchemaEnd(NextSchemaEnd);
     if (NextPathId) {
         result.SetNextPathId(*NextPathId);
     }
@@ -104,6 +130,10 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor:
         pathHash->SetPathId(i.first);
         pathHash->SetHash(i.second);
     }
+
+    for (auto&& i : SchemeHistory) {
+        *result.AddSchemeHistory() = i;
+    }
     return result;
 }
 
@@ -112,6 +142,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     StartPathId = proto.GetStartPathId();
     StartPortionId = proto.GetStartPortionId();
     PackIdx = proto.GetPackIdx();
+    NextSchemaBegin = proto.GetNextSchemaBegin();
+    NextSchemaEnd = proto.GetNextSchemaEnd();
     if (!PackIdx) {
         return TConclusionStatus::Fail("Incorrect proto cursor PackIdx value: " + proto.DebugString());
     }
@@ -132,6 +164,7 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     for (auto&& i : protoStatic.GetPathHashes()) {
         PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
     }
+    SchemeHistory = std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>{ protoStatic.GetSchemeHistory().begin(), protoStatic.GetSchemeHistory().end() };
     if (PathPortionHashes.empty()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty static cursor");
     } else {
@@ -158,7 +191,8 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions, const TVersionedIndex& index) {
+    THashMap<ui64, std::vector<TPortionDataAccessor>> portions, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemeHistory, const TVersionedIndex& index) {
+    SchemeHistory = std::move(schemeHistory);
     AFL_VERIFY(!IsStartedFlag);
     std::map<ui64, std::map<ui32, TPortionDataAccessor>> local;
     NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
@@ -185,6 +219,9 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
         AFL_VERIFY(!StartPortionId);
         NextPathId = std::nullopt;
         NextPortionId = std::nullopt;
+        // we don't need to send scheme history if we don't have data
+        // this also invalidates cursor in this case
+        SchemeHistory.clear();
         return true;
     } else if (!StartPathId) {
         AFL_VERIFY(PortionsForSend.begin()->second.size());
@@ -197,4 +234,4 @@ bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManag
     IsStartedFlag = true;
     return true;
 }
-}   // namespace NKikimr::NOlap::NDataSharing
+} // namespace NKikimr::NOlap::NDataSharing

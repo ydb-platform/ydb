@@ -104,6 +104,10 @@ public:
         return Snapshots.empty();
     }
 
+    bool HasSnapshot(TSnapshot snapshot) const {
+        return Snapshots.count(snapshot);
+    }
+
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {
         return PrimaryKey;
     }

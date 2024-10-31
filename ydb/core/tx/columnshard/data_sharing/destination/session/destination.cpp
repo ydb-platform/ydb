@@ -69,13 +69,13 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
-    const THashMap<ui64, NEvents::TPathIdData>& data, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
+    THashMap<ui64, NEvents::TPathIdData> data, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
     const std::shared_ptr<TDestinationSession>& selfPtr) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
         return result;
     }
-    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, data, sourceTabletId));
+    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, std::move(data), std::move(schemas), sourceTabletId));
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(
@@ -160,7 +160,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
     return TConclusionStatus::Success();
 }
 
-bool TDestinationSession::DoStart(
+void TDestinationSession::DoStart(
     const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) {
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
@@ -172,7 +172,6 @@ bool TDestinationSession::DoStart(
     }
     std::swap(CurrentBlobIds, local);
     SendCurrentCursorAck(shard, {});
-    return true;
 }
 
 bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionDataAccessor& portion) {
@@ -194,4 +193,4 @@ bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, con
     return newCounter;
 }
 
-}   // namespace NKikimr::NOlap::NDataSharing
+} // namespace NKikimr::NOlap::NDataSharing

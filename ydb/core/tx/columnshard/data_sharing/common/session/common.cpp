@@ -12,7 +12,7 @@ TString TCommonSession::DebugString() const {
     return TStringBuilder() << "{id=" << SessionId << ";context=" << TransferContext.DebugString() << ";state=" << State << ";}";
 }
 
-bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
+void TCommonSession::Start(NColumnShard::TColumnShard& shard) {
     const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("info", Info);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", "Start");
     AFL_VERIFY(State == EState::Prepared);
@@ -25,19 +25,20 @@ bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
         const auto& g = index.GetGranuleVerified(i);
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
             if (shard.GetDataLocksManager()->IsLocked(*p.second, { "sharing_session:" + GetSessionId() })) {
-                return false;
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("failed to start cursor", "portion is locked");
+                return;
             }
             portionsByPath[i].emplace_back(p.second);
         }
     }
 
     if (shard.GetStoragesManager()->GetSharedBlobsManager()->HasExternalModifications()) {
-        return false;
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("failed to start cursor", "has external modifications");
+        return;
     }
 
-    AFL_VERIFY(DoStart(shard, portionsByPath));
+    DoStart(shard, portionsByPath);
     State = EState::InProgress;
-    return true;
 }
 
 void TCommonSession::PrepareToStart(const NColumnShard::TColumnShard& shard) {

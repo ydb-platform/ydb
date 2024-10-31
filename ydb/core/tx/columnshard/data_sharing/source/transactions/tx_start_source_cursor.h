@@ -10,14 +10,14 @@ private:
     using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
 
     TSourceSession* Session;
-    THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>> Portions;
+    THashMap<ui64, std::vector<TPortionDataAccessor>> Portions;
 
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
 
 public:
-    TTxStartSourceCursor(TSourceSession* session, NColumnShard::TColumnShard* self, THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>> portions, const TString& info)
+    TTxStartSourceCursor(TSourceSession* session, NColumnShard::TColumnShard* self, THashMap<ui64, std::vector<TPortionDataAccessor>> portions, const TString& info)
         : TBase(self, info)
         , Session(session)
         , Portions(std::move(portions)) {

@@ -19,7 +19,7 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
             info.GetSinceStep(), info.GetSinceTxId());
 
         if (!index.GetVersionedIndex().HasSnapshot(version)) {
-            index.RegisterSchemaVersion(version, info.GetSchema());
+            index.RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(info));
         }
     }
 

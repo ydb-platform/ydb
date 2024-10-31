@@ -754,8 +754,8 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     auto* read = readEvent->Get();
     const TString& user = read->ClientId;
     auto userInfo = UsersInfoStorage->GetIfExists(user);
-    if(!userInfo) {
-        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder() << "cannot finish read request. Consumer " << read->ClientId << " is gone from partition");
+    if (!userInfo) {
+        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(read->ClientId));
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
         OnReadRequestFinished(read->Cookie, 0, user, ctx);
         return;
@@ -1035,6 +1035,10 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
                                                                      lastOffset, std::move(blobs)));
 
     ctx.Send(BlobCache, request.Release());
+}
+
+TString TPartition::GetConsumerDeletedMessage(TStringBuf consumerName) {
+    return TStringBuilder() << "cannot finish read request. Consumer " << consumerName << " is gone from partition";
 }
 
 } // namespace NKikimr::NPQ

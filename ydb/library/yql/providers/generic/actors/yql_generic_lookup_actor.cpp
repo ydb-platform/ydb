@@ -414,7 +414,7 @@ namespace NYql::NDq {
             select.mutable_from()->Settable(LookupSource.table());
 
             NConnector::NApi::TPredicate_TDisjunction disjunction;
-            auto addClause = [&disjunction, KeyType=this->KeyType](ui32 columns, auto&& getter) {
+            auto addClause = [&disjunction, KeyType = this->KeyType](ui32 columns, auto&& getter) {
                 NConnector::NApi::TPredicate_TConjunction conjunction;
                 for (ui32 c = 0; c != columns; ++c) {
                     NConnector::NApi::TPredicate_TComparison eq;
@@ -428,12 +428,16 @@ namespace NYql::NDq {
                 *disjunction.mutable_operands()->Add()->mutable_conjunction() = conjunction;
             };
             for (const auto& [k, _] : *Request) {
-                addClause(KeyType->GetMembersCount(), [&k=k](auto c) { return k.GetElement(c); });
+                addClause(KeyType->GetMembersCount(), [&k = k](auto c) {
+                    return k.GetElement(c);
+                });
             }
-            auto &k = Request->begin()->first;
+            auto& k = Request->begin()->first; // Request is never empty
             // Pad query with dummy clauses to improve caching
             for (ui32 nRequests = Request->size(); !IsPowerOf2(nRequests) && nRequests < MaxKeysInRequest; ++nRequests) {
-                addClause(KeyType->GetMembersCount(), [&k=k](auto c) { return k.GetElement(c); });
+                addClause(KeyType->GetMembersCount(), [&k = k](auto c) {
+                    return k.GetElement(c);
+                });
             }
             *select.mutable_where()->mutable_filter_typed()->mutable_disjunction() = disjunction;
             return {};

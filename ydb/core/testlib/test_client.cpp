@@ -2179,7 +2179,6 @@ namespace Tests {
 
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> request(new NMsgBusProxy::TBusBlobStorageConfigRequest());
         request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
-        request->Record.SetDomain(Domain);
 
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
@@ -2194,7 +2193,6 @@ namespace Tests {
 
     NKikimrBlobStorage::TDefineStoragePool TClient::DescribeStoragePool(const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> readRequest(new NMsgBusProxy::TBusBlobStorageConfigRequest());
-        readRequest->Record.SetDomain(Domain);
         auto readParam = readRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
         readParam->SetBoxId(TServerSettings::BOX_ID);
         readParam->AddName(name);
@@ -2222,7 +2220,6 @@ namespace Tests {
         auto storagePool = DescribeStoragePool(name);
 
         TAutoPtr<NMsgBusProxy::TBusBlobStorageConfigRequest> deleteRequest(new NMsgBusProxy::TBusBlobStorageConfigRequest());
-        deleteRequest->Record.SetDomain(Domain);
         auto deleteParam = deleteRequest->Record.MutableRequest()->AddCommand()->MutableDeleteStoragePool();
         deleteParam->SetBoxId(TServerSettings::BOX_ID);
         deleteParam->SetStoragePoolId(storagePool.GetStoragePoolId());

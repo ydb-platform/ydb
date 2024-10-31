@@ -219,6 +219,8 @@ jobs:
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Style check
+      uses: ./.github/actions/style
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya
       with:

@@ -227,7 +227,7 @@ public:
                     } else if (name == SharedReading) {
                         sharedReading = FromString<bool>(Value(setting));
                     } else if (name == ReconnectPeriod) {
-                        srcDesc.SetConsumerName(TString(Value(setting)));
+                        srcDesc.SetReconnectPeriod(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {

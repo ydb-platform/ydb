@@ -162,6 +162,14 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         AFL_VERIFY(!VersionedIndex.IsEmpty());
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
             *schema.GetDiff(), VersionedIndex.GetLastSchema()->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+        auto indexInfoOptionalCopy = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
+        LOG_S_CRIT("Checking schema with diff");
+        if (!indexInfoOptional->Equal(*indexInfoOptionalCopy)) {
+            fprintf(stderr, "Schema: %s\n", schema.GetSchemaVerified().DebugString().c_str());
+            fprintf(stderr, "Diff: %s\n", schema.GetDiff()->DebugString().c_str());
+            AFL_VERIFY(false);
+        }
+
     } else {
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }

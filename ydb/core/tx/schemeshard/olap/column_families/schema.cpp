@@ -92,35 +92,35 @@ bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTabl
     THashSet<ui32> usedColumnFamilies;
     for (const auto& familyProto : opSchema.GetColumnFamilies()) {
         if (familyProto.GetName().Empty()) {
-            errors.AddError("Column family can't have an empty name");
+            errors.AddError("column family can't have an empty name");
             return false;
         }
 
         const TString& columnFamilyName = familyProto.GetName();
         auto* family = GetByName(columnFamilyName);
         if (!family) {
-            errors.AddError("Column family '" + columnFamilyName + "' does not match schema preset");
+            errors.AddError("column family '" + columnFamilyName + "' does not match schema preset");
             return false;
         }
 
         if (familyProto.HasId() && familyProto.GetId() != family->GetId()) {
-            errors.AddError("Column family '" + columnFamilyName + "' has id " + familyProto.GetId() + " that does not match schema preset");
+            errors.AddError("column family '" + columnFamilyName + "' has id " + familyProto.GetId() + " that does not match schema preset");
             return false;
         }
 
         if (!usedColumnFamilies.insert(family->GetId()).second) {
-            errors.AddError("Column family '" + columnFamilyName + "' is specified multiple times");
+            errors.AddError("column family '" + columnFamilyName + "' is specified multiple times");
             return false;
         }
 
         if (familyProto.GetId() < lastColumnFamilyId) {
-            errors.AddError("Column family order does not match schema preset");
+            errors.AddError("column family order does not match schema preset");
             return false;
         }
         lastColumnFamilyId = familyProto.GetId();
 
         if (!familyProto.HasColumnCodec()) {
-            errors.AddError("Missing column codec for column family '" + columnFamilyName + "'");
+            errors.AddError("missing column codec for column family '" + columnFamilyName + "'");
             return false;
         }
 
@@ -131,18 +131,18 @@ bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTabl
         }
         NArrow::NSerialization::TSerializerContainer serializer;
         if (!serializer.DeserializeFromProto(serializerProto.GetResult())) {
-            errors.AddError(TStringBuilder() << "Can't deserialize column family `" << columnFamilyName << "`  from proto ");
+            errors.AddError(TStringBuilder() << "can't deserialize column family `" << columnFamilyName << "`  from proto ");
             return false;
         }
         if (!family->GetSerializerContainer().IsEqualTo(serializer)) {
-            errors.AddError(TStringBuilder() << "Compression from column family '" << columnFamilyName << "` is not matching schema preset");
+            errors.AddError(TStringBuilder() << "compression from column family '" << columnFamilyName << "` is not matching schema preset");
             return false;
         }
     }
 
     for (const auto& [_, family] : ColumnFamilies) {
         if (!usedColumnFamilies.contains(family.GetId())) {
-            errors.AddError("Specified schema is missing some schema preset column families");
+            errors.AddError("specified schema is missing some schema preset column families");
             return false;
         }
     }

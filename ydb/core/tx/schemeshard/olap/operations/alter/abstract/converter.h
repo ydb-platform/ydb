@@ -79,7 +79,8 @@ private:
         }
         if (dsColumn.HasFamilyName()) {
             olapColumn.SetColumnFamilyName(dsColumn.GetFamilyName());
-        } else if (dsColumn.HasFamily()) {
+        } 
+        if (dsColumn.HasFamily()) {
             olapColumn.SetColumnFamilyId(dsColumn.GetFamily());
         }
         return TConclusionStatus::Success();

@@ -49,7 +49,7 @@ NKikimr::TConclusion<NKikimrSchemeOp::TFamilyDescription> ConvertSerializerConta
     const NArrow::NSerialization::TSerializerContainer& serializer) {
     NKikimrSchemeOp::TFamilyDescription result;
     if (serializer->GetClassName().Empty()) {
-        return NKikimr::TConclusionStatus::Fail("Convert TSerializerContainer to TFamilyDescription: field `ClassName` is empty");
+        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: field `ClassName` is empty");
     }
     if (serializer.GetClassName() == NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()) {
         std::shared_ptr<NArrow::NSerialization::TNativeSerializer> nativeSerializer =
@@ -60,14 +60,14 @@ NKikimr::TConclusion<NKikimrSchemeOp::TFamilyDescription> ConvertSerializerConta
             result.SetColumnCodecLevel(level.value());
         }
     } else {
-        return NKikimr::TConclusionStatus::Fail("Convert TSerializerContainer to TFamilyDescription: Unknow value in field `ClassName`");
+        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: Unknow value in field `ClassName`");
     }
     return result;
 }
 
 bool TOlapColumnFamlilyDiff::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& diffColumnFamily, IErrorCollector& errors) {
     if (!diffColumnFamily.HasName()) {
-        errors.AddError("Column family: empty field name");
+        errors.AddError("column family: empty field name");
         return false;
     }
 
@@ -83,7 +83,7 @@ bool TOlapColumnFamlilyDiff::ParseFromRequest(const NKikimrSchemeOp::TFamilyDesc
 
 bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& columnFamily, IErrorCollector& errors) {
     if (!columnFamily.HasName()) {
-        errors.AddError("Column family: empty field Name");
+        errors.AddError("column family: empty field Name");
         return false;
     }
 
@@ -155,7 +155,7 @@ bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema&
     for (auto&& family : tableSchema.GetColumnFamilies()) {
         auto familyName = family.GetName();
         if (!familyNames.emplace(familyName).second) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << familyName << "'");
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "duplicate column family '" << familyName << "'");
             return false;
         }
         TOlapColumnFamlilyAdd columnFamily;
@@ -174,7 +174,7 @@ bool TOlapColumnFamiliesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSc
     for (auto&& family : alterRequest.GetAddColumnFamily()) {
         auto familyName = family.GetName();
         if (!addColumnFamilies.emplace(familyName).second) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate column family '" << familyName << "'");
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "duplicate column family '" << familyName << "'");
             return false;
         }
         TOlapColumnFamlilyAdd columnFamily({});

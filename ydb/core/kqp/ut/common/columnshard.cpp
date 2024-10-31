@@ -271,7 +271,7 @@ namespace NKqp {
             str << NScheme::GetTypeName(TypeInfo.GetTypeId());
         }
         if (!ColumnFamilyName.Empty()) {
-        str << " FAMILY " << ColumnFamilyName;
+            str << " FAMILY " << ColumnFamilyName;
         }
         if (!NullableFlag) {
             str << " NOT NULL";
@@ -291,7 +291,7 @@ namespace NKqp {
             TVector<TString> families;
             families.reserve(ColumnFamilies.size());
             for (const auto& family : ColumnFamilies) {
-            families.push_back(family.BuildQuery());
+                families.push_back(family.BuildQuery());
             }
             str << ", " << JoinStrings(families, ", ");
         }

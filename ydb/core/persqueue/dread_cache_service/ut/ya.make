@@ -3,7 +3,6 @@ UNITTEST_FOR(ydb/core/persqueue)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-TIMEOUT(300)
 
 PEERDIR(
     ydb/core/persqueue/ut/common

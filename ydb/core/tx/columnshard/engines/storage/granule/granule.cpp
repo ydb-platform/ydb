@@ -20,7 +20,7 @@ void TGranuleMeta::AppendPortion(const TPortionInfo::TPtr& info) {
     AFL_VERIFY(it == Portions.end());
     OnBeforeChangePortion(nullptr);
     it = Portions.emplace(info->GetPortionId(), info).first;
-    auto schemaVersionOpt = info.GetSchemaVersionOptional();
+    auto schemaVersionOpt = info->GetSchemaVersionOptional();
     if (schemaVersionOpt.has_value()) {
         VersionCounters->VersionAddRef(*schemaVersionOpt);
     }
@@ -145,7 +145,7 @@ TGranuleMeta::TGranuleMeta(
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion) {
-    auto schemaVersionOpt = portion.GetSchemaVersionOptional();
+    auto schemaVersionOpt = portion->GetSchemaVersionOptional();
     if (schemaVersionOpt.has_value()) {
         VersionCounters->VersionAddRef(*schemaVersionOpt);
     }

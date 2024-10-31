@@ -251,7 +251,7 @@ void TProducerSet::Collect(IRegistryImplPtr profiler, IInvokerPtr invoker)
     }
 }
 
-void TProducerSet::Profile(const TProfiler& profiler)
+void TProducerSet::Profile(const TWeakProfiler& profiler)
 {
     SelfProfiler_ = profiler;
     ProducerCollectDuration_ = profiler.Timer("/producer_collect_duration");

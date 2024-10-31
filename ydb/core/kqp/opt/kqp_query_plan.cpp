@@ -720,15 +720,17 @@ private:
             }
         }
         for (const auto& child : node->Children()) {
-            std::shared_ptr<TOptimizerStatistics> result;
             if (child->IsLambda()) {
-                auto lambda = TExprBase(child).Cast<TCoLambda>();
-                result = FindWrapStats(lambda.Body().Ptr(), dataSourceNode);
+                // support wide lambda as well
+                for (size_t bodyIndex = 1; bodyIndex < child->ChildrenSize(); ++bodyIndex) {
+                    if (auto result = FindWrapStats(child->ChildPtr(bodyIndex), dataSourceNode)) {
+                        return result;
+                    }
+                }
             } else {
-                result = FindWrapStats(child, dataSourceNode);
-            }
-            if (result) {
-                return result;
+                if (auto result = FindWrapStats(child, dataSourceNode)) {
+                    return result;
+                }
             }
         }
         return nullptr;
@@ -1444,7 +1446,13 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
+        auto joinAlgo = "(Grace)";
+        for (size_t i=0; i<join.Flags().Size(); i++) {
+            if (join.Flags().Item(i).StringValue() == "Broadcast") {
+                joinAlgo = "(MapJoin)";
+            }
+        }
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -1460,7 +1468,13 @@ private:
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
-        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
+        auto joinAlgo = "(Grace)";
+        for (size_t i=0; i<join.Flags().Size(); i++) {
+            if (join.Flags().Item(i).StringValue() == "Broadcast") {
+                joinAlgo = "(MapJoin)";
+            }
+        }
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join " << joinAlgo;
 
         TOperator op;
         op.Properties["Name"] = name;

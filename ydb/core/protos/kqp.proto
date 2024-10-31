@@ -121,12 +121,12 @@ message TQueryRequest {
 }
 
 message TKqpPathIdProto {
-    optional uint32 OwnerId = 1;
-    optional uint32 TableId = 2;
+    optional uint64 OwnerId = 1;
+    optional uint64 TableId = 2;
 }
 
 message TVectorIndexKmeansTreeDescription {
-    optional Ydb.Table.VectorIndexSettings Settings = 1;
+    optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
 message TIndexDescriptionProto {
@@ -164,6 +164,7 @@ message TKqpColumnMetadataProto {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
+    optional TKqpPathIdProto DefaultFromSequencePathId = 12;
 };
 
 message TKqpTableMetadataProto {

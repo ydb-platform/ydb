@@ -58,6 +58,9 @@ struct TTopPartitionsExtractorMap :
         insert({S::InFlightTxCount::ColumnId, [] (const E& entry) {
             return TCell::Make<ui32>(entry.GetInfo().GetInFlightTxCount());
         }});
+        insert({S::FollowerId::ColumnId, [] (const E& entry) {
+            return TCell::Make<ui32>(entry.GetInfo().GetFollowerId());
+        }});        
     }
 };
 

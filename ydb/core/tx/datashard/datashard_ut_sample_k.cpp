@@ -97,8 +97,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                 rec.AddColumns("value");
                 rec.AddColumns("key");
 
-                rec.SetSnapshotTxId(snapshot.TxId);
-                rec.SetSnapshotStep(snapshot.Step);
+                if (snapshot.TxId) {
+                    rec.SetSnapshotTxId(snapshot.TxId);
+                    rec.SetSnapshotStep(snapshot.Step);
+                }
 
                 rec.SetMaxProbability(std::numeric_limits<uint64_t>::max());
                 rec.SetSeed(seed);
@@ -180,6 +182,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
                                      "value = 40, key = 4\n"
                                      "value = 10, key = 1\n");
         }
+        snapshot = {};
         seed = 111;
         {
             k = 1;

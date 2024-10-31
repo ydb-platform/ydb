@@ -9,7 +9,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <yt/yt/core/service_discovery/public.h>
 
@@ -27,7 +27,7 @@ public:
     ~TConnection();
 
     NRpc::IChannelPtr CreateChannel(bool sticky);
-    NRpc::IChannelPtr CreateChannelByAddress(const std::string& address);
+    NRpc::IChannelPtr CreateChannelByAddress(const TString& address);
 
     const TConnectionConfigPtr& GetConfig();
 

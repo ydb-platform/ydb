@@ -531,5 +531,8 @@ struct WhiteboardResponse<TEvWhiteboard::TEvNodeStateRequest> {
     using Type = TEvWhiteboard::TEvNodeStateResponse;
 };
 
+template<typename TResponseType>
+::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields();
+
 } // NNodeWhiteboard
 } // NKikimr

@@ -93,7 +93,7 @@ void TStockpileDynamicConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.BaseClassParameter("thread_count", &TThis::ThreadCount)
         .Optional()
-        .GreaterThan(0);
+        .GreaterThanOrEqual(0);
     registrar.BaseClassParameter("strategy", &TThis::Strategy)
         .Optional();
     registrar.BaseClassParameter("period", &TThis::Period)
@@ -186,6 +186,8 @@ void TSingletonsDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("tracing_transport", &TThis::TracingTransport)
         .Optional();
     registrar.Parameter("tcmalloc", &TThis::TCMalloc)
+        .Optional();
+    registrar.Parameter("stockpile", &TThis::Stockpile)
         .Optional();
     registrar.Parameter("protobuf_interop", &TThis::ProtobufInterop)
         .DefaultNew();

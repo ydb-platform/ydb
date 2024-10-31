@@ -47,6 +47,8 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
 
     TTestProxy proxy(this->CreateChannel());
 
+    MaybeInitLatch();
+
     constexpr auto size = 4_MB - 1_KB;
     constexpr auto numberOfLoops = 10;
     for (int i = 0; i < numberOfLoops; ++i) {
@@ -80,11 +82,16 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     }
 
     auto memoryUsageBefore = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
-    EXPECT_LE(memoryUsageBefore, numberOfLoops * 2048_KB);
+    EXPECT_LE(memoryUsageBefore, numberOfLoops * 2048_KB)
+        << "InitialUsage: " << initialMemoryUsage << std::endl;
+
+    ReleaseLatchedCalls();
 
     for (const auto& rsp : responses) {
         WaitFor(rsp).ValueOrThrow();
     }
+
+    ResetLatch();
 
     auto memoryUsageAfter = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
     auto deltaMemoryUsage = memoryUsageAfter - initialMemoryUsage - memoryUsageBefore;

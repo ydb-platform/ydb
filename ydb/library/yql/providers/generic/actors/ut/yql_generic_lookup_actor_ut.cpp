@@ -182,6 +182,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             connectorMock,
             std::make_shared<NYql::NTestCreds::TSecuredServiceAccountCredentialsFactory>(),
             edge,
+            nullptr,
             alloc,
             keyTypeHelper,
             std::move(lookupSourceSettings),

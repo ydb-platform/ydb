@@ -28,10 +28,8 @@ public:
         anchor->Registered = true;
     }
 
-    virtual void UpdateAnchor(TLoggingAnchor* anchor) override
-    {
-        anchor->Enabled = true;
-    }
+    virtual void UpdateAnchor(TLoggingAnchor* /*anchor*/) override
+    { }
 
     virtual void Enqueue(TLogEvent&& event) override
     {

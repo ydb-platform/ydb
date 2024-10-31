@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 }
             } while (!testCtx.GetPDisk()->CommonLogger->OnFirstSectorInChunk());
         }
-        // expect log chunks list looks like 1 -> 2 -> ... -> 6 (empty)
+        // expect log chunks list looks like 1 -> 2 -> ... -> 9 (empty)
 
         testCtx.RestartPDiskSync(); // writes NonceJump
         UNIT_ASSERT_C(testCtx.GetPDisk()->CommonLogger->SectorIdx == 1, "To reproduce bug nonce jump record"
@@ -332,9 +332,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
             UNIT_ASSERT_C(pdisk->LogChunks.size() == 9, pdisk->LogChunks.size());
             intensiveVDisk.CutLogAllButOne();
-            // 1 -> 2 -> 6
+            // 1 -> 2 -> 3 -> 4 -> 5 -> 9
             pdisk->PDiskThread.StopSync();
-            while (pdisk->LogChunks.size() != 6) {
+            while (pdisk->LogChunks.size() != 6 || pdisk->IsLogChunksReleaseInflight) {
                 pdisk->Update();
             }
         }
@@ -343,13 +343,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         moderateVDisk.Init();
         {
             // initiate log splicing, expect transition to be
-            // 1 -> 2 -> ... -> 6
+            // 1 -> 2 -> 3 -> 4 -> 5 -> 9
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
             UNIT_ASSERT(pdisk->LogChunks.size() == 6);
             moderateVDisk.CutLogAllButOne();
-            // 1 -> 2 -> 6
+            // 1 -> 9
             pdisk->PDiskThread.StopSync();
-            while (pdisk->LogChunks.size() != 2) {
+            while (pdisk->LogChunks.size() != 2 || pdisk->IsLogChunksReleaseInflight) {
                 pdisk->Update();
             }
         }
@@ -991,14 +991,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ui32 logBuffSize = 250;
         ui32 chunkBuffSize = 128_KB;
 
-        for (ui32 testCase = 0; testCase < 8; testCase++) {
-            Cerr << "restart# " << bool(testCase & 4) << " start with noop scheduler# " << bool(testCase & 1)
-                << " end with noop scheduler# " << bool(testCase & 2) << Endl;
-            testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
-                pdisk->UseNoopSchedulerHDD = testCase & 1;
-                pdisk->UseNoopSchedulerSSD = testCase & 1;
-            });
-
+        for (ui32 testCase = 0; testCase < 2; testCase++) {
             vdisk.InitFull();
             for (ui32 i = 0; i < 100; ++i) {
                 testCtx.Send(new NPDisk::TEvLog(
@@ -1013,16 +1006,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     chunk, 0, chunkBuffSize, 0, nullptr));
             }
 
-            if (testCase & 4) {
+            if (testCase & 1) {
                 Cerr << "restart" << Endl;
                 testCtx.RestartPDiskSync();
             }
-
-            testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
-                pdisk->UseNoopSchedulerHDD = testCase & 2;
-                pdisk->UseNoopSchedulerSSD = testCase & 2;
-            });
-
 
             for (ui32 i = 0; i < 100; ++i) {
                 auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();

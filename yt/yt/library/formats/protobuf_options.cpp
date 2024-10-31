@@ -1,6 +1,6 @@
 #include "protobuf_options.h"
 
-#include <util/generic/variant.h>
+#include <variant>
 
 namespace NYT::NFormats {
 

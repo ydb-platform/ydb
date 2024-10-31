@@ -446,6 +446,9 @@ public:
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
             if (checks) {
+                if (parentPathStr.StartsWith(JoinPath({parentPath.GetDomainPathString(), ".backups/collections"}))) {
+                    schema.SetSystemColumnNamesAllowed(true);
+                }
                 if (parentPath.Base()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath();
                     // Not build index impl tables can be created only as part of create index

@@ -23,6 +23,19 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTesting;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+template <bool>
+class TProfiler;
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TCounter
 {
 public:
@@ -35,7 +48,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
     ICounterImplPtr Counter_;
@@ -51,7 +65,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
     ITimeCounterImplPtr Counter_;
@@ -67,7 +82,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
     IGaugeImplPtr Gauge_;
@@ -83,7 +99,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
     ITimeGaugeImplPtr Gauge_;
@@ -99,7 +116,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
     ISummaryImplPtr Summary_;
 };
@@ -114,7 +132,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
     ITimerImplPtr Timer_;
 };
@@ -152,7 +171,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
 
     IHistogramImplPtr Histogram_;
 };
@@ -167,7 +187,8 @@ public:
     explicit operator bool() const;
 
 private:
-    friend class TProfiler;
+    template <bool>
+    friend class NDetail::TProfiler;
     friend struct TTesting;
 
     IHistogramImplPtr Histogram_;
@@ -225,9 +246,43 @@ void FormatValue(TStringBuilderBase* builder, const TSensorOptions& options, TSt
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! TProfiler stores common settings of profiling counters.
-class TProfiler
+namespace NDetail {
+
+template <bool UseWeakPtr>
+class TRegistryHolderBase
 {
+public:
+    explicit TRegistryHolderBase(const IRegistryImplPtr& impl = nullptr);
+
+    const IRegistryImplPtr& GetRegistry() const;
+
+private:
+    IRegistryImplPtr Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+class TRegistryHolderBase<true>
+{
+public:
+    explicit TRegistryHolderBase(const IRegistryImplPtr& impl = nullptr);
+
+    IRegistryImplPtr GetRegistry() const;
+
+private:
+    TWeakPtr<IRegistryImpl> Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <bool UseWeakPtr>
+class TProfiler
+    : private TRegistryHolderBase<UseWeakPtr>
+{
+private:
+    using TBase = TRegistryHolderBase<UseWeakPtr>;
+
 public:
     //! Default constructor creates null registry. Every method of null registry is no-op.
     /*!
@@ -409,18 +464,24 @@ public:
         const std::string& prefix,
         const ISensorProducerPtr& producer) const;
 
-    const IRegistryImplPtr& GetRegistry() const;
+    using TBase::GetRegistry;
 
 private:
-    friend struct TTesting;
+    friend struct ::NYT::NProfiling::TTesting;
 
     bool Enabled_ = false;
     std::string Prefix_;
     std::string Namespace_;
     TTagSet Tags_;
     TSensorOptions Options_;
-    IRegistryImplPtr Impl_;
 };
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TProfiler = NDetail::TProfiler</*UseWeakPtr*/false>;
+using TWeakProfiler = NDetail::TProfiler</*UseWeakPtr*/true>;
 
 using TRegistry = TProfiler;
 

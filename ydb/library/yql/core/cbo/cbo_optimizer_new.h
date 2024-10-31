@@ -31,11 +31,11 @@ enum EOptimizerNodeKind: ui32
 */
 struct IBaseOptimizerNode {
     EOptimizerNodeKind Kind;
-    std::shared_ptr<TOptimizerStatistics> Stats;
+    TOptimizerStatistics Stats;
 
     IBaseOptimizerNode(EOptimizerNodeKind k) : Kind(k) {}
-    IBaseOptimizerNode(EOptimizerNodeKind k, std::shared_ptr<TOptimizerStatistics> s) :
-        Kind(k), Stats(s) {}
+    IBaseOptimizerNode(EOptimizerNodeKind k, TOptimizerStatistics s) :
+        Kind(k), Stats(std::move(s)) {}
 
     virtual TVector<TString> Labels()=0;
     virtual void Print(std::stringstream& stream, int ntabs=0)=0;
@@ -254,8 +254,8 @@ struct TRelOptimizerNode : public IBaseOptimizerNode {
     // Temporary solution to check if a LookupJoin is possible in KQP
     //void* Expr;
 
-    TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats) :
-        IBaseOptimizerNode(RelNodeType, stats), Label(label) { }
+    TRelOptimizerNode(TString label, TOptimizerStatistics stats) :
+        IBaseOptimizerNode(RelNodeType, std::move(stats)), Label(label) { }
     //TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) :
     //    IBaseOptimizerNode(RelNodeType, stats), Label(label), Expr(expr) { }
     virtual ~TRelOptimizerNode() {}

@@ -233,15 +233,17 @@ class TestPqRowDispatcher(TestYdsBase):
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
+        large_string = "abcdefghjkl1234567890+abcdefghjkl1234567890"
         data = [
-            '{"time": 101, "data": {"key": "value"}, "event": "event1"}',
-            '{"time": 102, "data": ["key1", "key2"], "event": "event2"}',
+            '{"time": 101, "data": {"key": "value", "second_key":"' + large_string + '"}, "event": "event1"}',
+            '{"time": 102, "data": ["key1", "key2", "' + large_string + '"], "event": "event2"}',
+            '{"time": 103, "data": ["' + large_string + '"], "event": "event3"}',
         ]
 
         self.write_stream(data)
         expected = [
-            '{"key": "value"}',
-            '["key1", "key2"]'
+            '{"key": "value", "second_key":"' + large_string + '"}',
+            '["key1", "key2", "' + large_string + '"]'
         ]
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 
@@ -297,17 +299,17 @@ class TestPqRowDispatcher(TestYdsBase):
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String NOT NULL))
-                WHERE data IS NULL;'''
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, `data@data` String, event String NOT NULL))
+                WHERE `data@data` IS NULL;'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"time": 101, "event": "event1"}',
-            '{"time": 102, "data": null, "event": "event2"}',
-            '{"time": 103, "data": "", "event": "event2"}',
-            '{"time": 104, "data": "null", "event": "event2"}',
+            '{"time": 102, "data@data": null, "event": "event2"}',
+            '{"time": 103, "data@data": "", "event": "event2"}',
+            '{"time": 104, "data@data": "null", "event": "event2"}',
         ]
 
         self.write_stream(data)

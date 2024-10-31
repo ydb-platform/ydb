@@ -190,42 +190,6 @@ bool HasNonTrivialAny(const TEquiJoinLinkSettings& linkSettings, const TMapJoinS
     return hints.contains("any") && !unique;
 }
 
-ui64 CalcInMemorySize(const TJoinLabels& labels, const TYtJoinNodeOp& op,
-    TExprContext& ctx, const TMapJoinSettings& settings, bool isLeft, bool needPayload, ui64 size, bool mapJoinUseFlow)
-{
-    const TJoinLabel& label = labels.Inputs[isLeft ? 0 : 1];
-
-    const ui64 rows = isLeft ? settings.LeftRows : settings.RightRows;
-
-    if (op.JoinKind->IsAtom("Cross")) {
-        if (mapJoinUseFlow) {
-            return size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
-        } else {
-            ui64 avgOtherSideWeight = (isLeft ? settings.RightSize : settings.LeftSize) / (isLeft ? settings.RightRows : settings.LeftRows);
-
-            ui64 rowFactor = (1 + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
-            rowFactor += (1 + label.InputType->GetSize() + labels.Inputs[isLeft ? 1 : 0].InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Map with added left side
-            rowFactor += avgOtherSideWeight; // Average added left side for each row after Map
-
-            return 2 * size + rows * rowFactor;
-        }
-    }
-
-    const bool isUniqueKey = IsEffectivelyUnique(op.LinkSettings, settings, isLeft);
-
-    bool many = needPayload && !isUniqueKey;
-
-    auto inputKeyType = BuildJoinKeyType(label, *(isLeft ? op.LeftLabel : op.RightLabel));
-    auto keyType = AsDictKeyType(inputKeyType, ctx);
-    const TTypeAnnotationNode* payloadType = needPayload ? label.InputType : (const TTypeAnnotationNode*)ctx.MakeType<TVoidExprType>();
-
-    double sizeFactor = 1.;
-    ui64 rowFactor = 0;
-    CalcToDictFactors(keyType, payloadType, EDictType::Hashed, many, true, sizeFactor, rowFactor);
-
-    return size * sizeFactor + rows * rowFactor;
-}
-
 IGraphTransformer::TStatus TryEstimateDataSizeChecked(TVector<ui64>& result, TYtSection& inputSection, const TString& cluster,
     const TVector<TYtPathInfo::TPtr>& paths, const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx)
 {
@@ -267,28 +231,40 @@ IGraphTransformer::TStatus TryEstimateDataSizeChecked(TVector<ui64>& result, TYt
     return status;
 }
 
-
 TStatus UpdateInMemorySizeSetting(TMapJoinSettings& settings, TYtSection& inputSection, const TJoinLabels& labels,
     const TYtJoinNodeOp& op, TExprContext& ctx, bool isLeft,
     const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
     const TVector<TYtPathInfo::TPtr>& tables, bool mapJoinUseFlow)
 {
-    ui64 size = isLeft ? settings.LeftSize : settings.RightSize;
-    const bool needPayload = op.JoinKind->IsAtom("Inner") || op.JoinKind->IsAtom(isLeft ? "Right" : "Left");
-
-    if (!needPayload && !op.JoinKind->IsAtom("Cross")) {
-        if (joinKeyList.size() < itemType->GetSize()) {
-            TVector<ui64> dataSizes;
-            auto status = TryEstimateDataSizeChecked(dataSizes, inputSection, cluster, tables, joinKeyList, *state, ctx);
-            if (status.Level != TStatus::Ok) {
-                return status;
-            }
-            size = Accumulate(dataSizes.begin(), dataSizes.end(), 0ull, [](ui64 sum, ui64 v) { return sum + v; });;
-        }
+    ui64 size = 0;
+    auto status = CalculateJoinLeafSize(size, settings, inputSection, op, ctx, isLeft, itemType, joinKeyList, state, cluster, tables);
+    if (status != TStatus::Ok) {
+        return status;
     }
 
-    (isLeft ? settings.LeftMemSize : settings.RightMemSize) =
-        CalcInMemorySize(labels, op, ctx, settings, isLeft, needPayload, size, mapJoinUseFlow);
+    const ui64 rows = isLeft ? settings.LeftRows : settings.RightRows;
+    const auto& label = labels.Inputs[isLeft ? 0 : 1];
+    const bool needPayload = op.JoinKind->IsAtom("Inner") || op.JoinKind->IsAtom(isLeft ? "Right" : "Left");
+
+    ui64 result = 0;
+    if (op.JoinKind->IsAtom("Cross")) {
+        if (mapJoinUseFlow) {
+            result = size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
+        } else {
+            ui64 avgOtherSideWeight = (isLeft ? settings.RightSize : settings.LeftSize) / (isLeft ? settings.RightRows : settings.LeftRows);
+
+            ui64 rowFactor = (1 + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
+            rowFactor += (1 + label.InputType->GetSize() + labels.Inputs[isLeft ? 1 : 0].InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Map with added left side
+            rowFactor += avgOtherSideWeight; // Average added left side for each row after Map
+
+            result = 2 * size + rows * rowFactor;
+        }
+    } else {
+        result = CalcInMemorySizeNoCrossJoin(labels.Inputs[isLeft ? 0 : 1], op,
+         settings, isLeft, ctx, needPayload, size);
+    }
+
+    (isLeft ? settings.LeftMemSize : settings.RightMemSize) = result;
     return TStatus::Ok;
 }
 
@@ -2790,24 +2766,6 @@ bool RewriteYtEmptyJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
     return true;
 }
 
-struct TJoinSideStats {
-    TString TableNames;
-    bool HasUniqueKeys = false;
-    bool IsDynamic = false;
-    bool NeedsRemap = false;
-
-    TVector<TString> SortedKeys;
-
-    ui64 RowsCount = 0;
-    ui64 Size = 0;
-};
-
-enum class ESizeStatCollectMode {
-    NoSize,
-    RawSize,
-    ColumnarSize,
-};
-
 TStatus CollectJoinSideStats(ESizeStatCollectMode sizeMode, TJoinSideStats& stats, TYtSection& inputSection,
     const TYtState& state, const TString& cluster,
     const TVector<TYtPathInfo::TPtr>& tableInfo, const THashSet<TString>& joinKeys,
@@ -2904,72 +2862,6 @@ TStatus CollectPathsAndLabels(TVector<TYtPathInfo::TPtr>& tables, TJoinLabels& l
     for (auto path: leaf.Section.Paths()) {
         auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
         tables.push_back(pathInfo);
-    }
-
-    return TStatus::Ok;
-}
-
-IGraphTransformer::TStatus CollectPathsAndLabelsReady(
-    bool& ready, TVector<TYtPathInfo::TPtr>& tables, TJoinLabels& labels,
-    const TStructExprType*& itemType, const TStructExprType*& itemTypeBeforePremap,
-    const TYtJoinNodeLeaf& leaf, TExprContext& ctx)
-{
-    ready = false;
-    TStatus result = CollectPathsAndLabels(tables, labels, itemType, itemTypeBeforePremap, leaf, ctx);
-    if (result != TStatus::Ok) {
-        return result;
-    }
-
-    ready = AllOf(tables, [](const auto& pathInfo) { return bool(pathInfo->Table->Stat); });
-    return TStatus::Ok;
-}
-
-TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSettings& mapSettings,
-    TJoinSideStats& leftStats, TJoinSideStats& rightStats,
-    bool leftTablesReady, const TVector<TYtPathInfo::TPtr>& leftTables, const THashSet<TString>& leftJoinKeys,
-    bool rightTablesReady, const TVector<TYtPathInfo::TPtr>& rightTables, const THashSet<TString>& rightJoinKeys,
-    TYtJoinNodeLeaf* leftLeaf, TYtJoinNodeLeaf* rightLeaf, const TYtState& state, bool isCross,
-    TString cluster, TExprContext& ctx)
-{
-    mapSettings = {};
-    leftStats = {};
-    rightStats = {};
-
-    if (leftLeaf) {
-        auto premap = GetPremapLambda(*leftLeaf);
-        auto joinSideStatus = CollectJoinSideStats(leftTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, leftStats, leftLeaf->Section, state, cluster,
-                                                   leftTables, leftJoinKeys, isCross, premap, ctx);
-        if (joinSideStatus.Level != TStatus::Ok) {
-            return joinSideStatus;
-        }
-
-        if (leftTablesReady) {
-            mapSettings.LeftRows = leftStats.RowsCount;
-            mapSettings.LeftSize = leftStats.Size;
-            mapSettings.LeftCount = leftTables.size();
-            mapSettings.LeftUnique = leftStats.HasUniqueKeys && mapSettings.LeftCount == 1;
-        }
-    }
-
-    if (rightLeaf) {
-        auto premap = GetPremapLambda(*rightLeaf);
-        auto joinSideStatus = CollectJoinSideStats(rightTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, rightStats, rightLeaf->Section, state, cluster,
-                                                   rightTables, rightJoinKeys, isCross, premap, ctx);
-        if (joinSideStatus.Level != TStatus::Ok) {
-            return joinSideStatus;
-        }
-
-        if (rightTablesReady) {
-            mapSettings.RightRows = rightStats.RowsCount;
-            mapSettings.RightSize = rightStats.Size;
-            mapSettings.RightCount = rightTables.size();
-            mapSettings.RightUnique = rightStats.HasUniqueKeys && mapSettings.RightCount == 1;
-        }
-    }
-
-    if (sizeMode == ESizeStatCollectMode::RawSize) {
-        mapSettings.LeftMemSize = mapSettings.LeftSize;
-        mapSettings.RightMemSize = mapSettings.RightSize;
     }
 
     return TStatus::Ok;
@@ -3142,11 +3034,13 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
                 DoSwap(mapSettings.LeftSize, mapSettings.RightSize);
                 DoSwap(mapSettings.LeftMemSize, mapSettings.RightMemSize);
                 DoSwap(mapSettings.LeftUnique, mapSettings.RightUnique);
-                YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the right table, use content of the left one";
+                YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the right table, use content of the left one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
+
                 return RewriteYtMapJoin(equiJoin, labels, true, op, rightLeaf, leftLeaf, ctx, mapSettings, false, state) ?
                        TStatus::Ok : TStatus::Error;
             } else {
-                YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the left table, use content of the right one";
+                YQL_CLOG(INFO, ProviderYt) << "Selected LookupJoin: filter over the left table, use content of the right one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
+
                 return RewriteYtMapJoin(equiJoin, labels, true, op, leftLeaf, rightLeaf, ctx, mapSettings, false, state) ?
                        TStatus::Ok : TStatus::Error;
             }
@@ -3359,7 +3253,8 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
 
         YQL_CLOG(INFO, ProviderYt) << "Selected OrderedJoin over the " << (swapTables ? "left" : "right")
             << " table as primary, will use join reduce: " << useJoinReduce << ", will try other primary: " << tryFirstAsPrimary
-            << ", will use join reduce for other primary: " << useJoinReduceForSecond;
+            << ", will use join reduce for other primary: " << useJoinReduceForSecond
+            << ", " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
 
         bool skipped = false;
         if (!RewriteYtMergeJoin(equiJoin, labels, op,
@@ -3471,11 +3366,11 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
                     DoSwap(mapSettings.LeftSize, mapSettings.RightSize);
                     DoSwap(mapSettings.LeftMemSize, mapSettings.RightMemSize);
                     DoSwap(mapSettings.LeftUnique, mapSettings.RightUnique);
-                    YQL_CLOG(INFO, ProviderYt) << "Selected MapJoin: map over the right table, use content of the left one";
+                    YQL_CLOG(INFO, ProviderYt) << "Selected MapJoin: map over the right table, use content of the left one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
                     return RewriteYtMapJoin(equiJoin, labels, false, op, rightLeaf, leftLeaf, ctx, mapSettings, allowShardLeft, state) ?
                            TStatus::Ok : TStatus::Error;
                 } else {
-                    YQL_CLOG(INFO, ProviderYt) << "Selected MapJoin: map over the left table, use content of the right one";
+                    YQL_CLOG(INFO, ProviderYt) << "Selected MapJoin: map over the left table, use content of the right one, " << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
                     return RewriteYtMapJoin(equiJoin, labels, false, op, leftLeaf, rightLeaf, ctx, mapSettings, allowShardRight, state) ?
                            TStatus::Ok : TStatus::Error;
                 }
@@ -3484,7 +3379,8 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     }
 
     if (leftTablesReady && rightTablesReady) {
-        YQL_CLOG(INFO, ProviderYt) << "Selected CommonJoin";
+        YQL_CLOG(INFO, ProviderYt) << "Selected CommonJoin," << (op.LinkSettings.JoinAlgo != EJoinAlgoType::Undefined ? ToString(op.LinkSettings.JoinAlgo).c_str() : "no") << " cbo algo";
+
         return RewriteYtCommonJoin(equiJoin, labels, op, leftLeaf, rightLeaf, state, ctx, leftStats.HasUniqueKeys,
                                    rightStats.HasUniqueKeys, mapSettings.LeftSize, mapSettings.RightSize) ?
                TStatus::Ok : TStatus::Error;
@@ -4605,6 +4501,114 @@ EStarRewriteStatus RewriteYtEquiJoinStar(TYtEquiJoin equiJoin, TYtJoinNodeOp& op
 
 } // namespace
 
+ui64 CalcInMemorySizeNoCrossJoin(const TJoinLabel& label, const TYtJoinNodeOp& op, const TMapJoinSettings& settings, bool isLeft, TExprContext& ctx, bool needPayload, ui64 size)
+{
+    const auto& keys = *(isLeft ? op.LeftLabel : op.RightLabel);
+    const ui64 rows = isLeft ? settings.LeftRows : settings.RightRows;
+
+    const bool isUniqueKey = IsEffectivelyUnique(op.LinkSettings, settings, isLeft);
+
+    bool many = needPayload && !isUniqueKey;
+
+    auto inputKeyType = BuildJoinKeyType(label, keys);
+    auto keyType = AsDictKeyType(inputKeyType, ctx);
+    const TTypeAnnotationNode* payloadType = needPayload ? label.InputType : (const TTypeAnnotationNode*)ctx.MakeType<TVoidExprType>();
+
+    double sizeFactor = 1.;
+    ui64 rowFactor = 0;
+    CalcToDictFactors(keyType, payloadType, EDictType::Hashed, many, true, sizeFactor, rowFactor);
+
+    return size * sizeFactor + rows * rowFactor;
+}
+
+TStatus CollectStatsAndMapJoinSettings(ESizeStatCollectMode sizeMode, TMapJoinSettings& mapSettings,
+    TJoinSideStats& leftStats, TJoinSideStats& rightStats,
+    bool leftTablesReady, const TVector<TYtPathInfo::TPtr>& leftTables, const THashSet<TString>& leftJoinKeys,
+    bool rightTablesReady, const TVector<TYtPathInfo::TPtr>& rightTables, const THashSet<TString>& rightJoinKeys,
+    TYtJoinNodeLeaf* leftLeaf, TYtJoinNodeLeaf* rightLeaf, const TYtState& state, bool isCross,
+    TString cluster, TExprContext& ctx)
+{
+    mapSettings = {};
+    leftStats = {};
+    rightStats = {};
+
+    if (leftLeaf) {
+        auto premap = GetPremapLambda(*leftLeaf);
+        auto joinSideStatus = CollectJoinSideStats(leftTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, leftStats, leftLeaf->Section, state, cluster,
+                                                   leftTables, leftJoinKeys, isCross, premap, ctx);
+        if (joinSideStatus.Level != TStatus::Ok) {
+            return joinSideStatus;
+        }
+
+        if (leftTablesReady) {
+            mapSettings.LeftRows = leftStats.RowsCount;
+            mapSettings.LeftSize = leftStats.Size;
+            mapSettings.LeftCount = leftTables.size();
+            mapSettings.LeftUnique = leftStats.HasUniqueKeys && mapSettings.LeftCount == 1;
+        }
+    }
+
+    if (rightLeaf) {
+        auto premap = GetPremapLambda(*rightLeaf);
+        auto joinSideStatus = CollectJoinSideStats(rightTablesReady ? sizeMode : ESizeStatCollectMode::NoSize, rightStats, rightLeaf->Section, state, cluster,
+                                                   rightTables, rightJoinKeys, isCross, premap, ctx);
+        if (joinSideStatus.Level != TStatus::Ok) {
+            return joinSideStatus;
+        }
+
+        if (rightTablesReady) {
+            mapSettings.RightRows = rightStats.RowsCount;
+            mapSettings.RightSize = rightStats.Size;
+            mapSettings.RightCount = rightTables.size();
+            mapSettings.RightUnique = rightStats.HasUniqueKeys && mapSettings.RightCount == 1;
+        }
+    }
+
+    if (sizeMode == ESizeStatCollectMode::RawSize) {
+        mapSettings.LeftMemSize = mapSettings.LeftSize;
+        mapSettings.RightMemSize = mapSettings.RightSize;
+    }
+
+    return TStatus::Ok;
+}
+
+TStatus CalculateJoinLeafSize(ui64& result, TMapJoinSettings& settings, TYtSection& inputSection,
+    const TYtJoinNodeOp& op, TExprContext& ctx, bool isLeft,
+    const TStructExprType* itemType, const TVector<TString>& joinKeyList, const TYtState::TPtr& state, const TString& cluster,
+    const TVector<TYtPathInfo::TPtr>& tables)
+{
+    result = isLeft ? settings.LeftSize : settings.RightSize;
+    const bool needPayload = op.JoinKind->IsAtom("Inner") || op.JoinKind->IsAtom(isLeft ? "Right" : "Left");
+
+    if (!needPayload && !op.JoinKind->IsAtom("Cross")) {
+        if (joinKeyList.size() < itemType->GetSize()) {
+            TVector<ui64> dataSizes;
+            auto status = TryEstimateDataSizeChecked(dataSizes, inputSection, cluster, tables, joinKeyList, *state, ctx);
+            if (status.Level != TStatus::Ok) {
+                return status;
+            }
+            result = Accumulate(dataSizes.begin(), dataSizes.end(), 0ull, [](ui64 sum, ui64 v) { return sum + v; });;
+        }
+    }
+
+    return TStatus::Ok;
+}
+
+IGraphTransformer::TStatus CollectPathsAndLabelsReady(
+    bool& ready, TVector<TYtPathInfo::TPtr>& tables, TJoinLabels& labels,
+    const TStructExprType*& itemType, const TStructExprType*& itemTypeBeforePremap,
+    const TYtJoinNodeLeaf& leaf, TExprContext& ctx)
+{
+    ready = false;
+    TStatus result = CollectPathsAndLabels(tables, labels, itemType, itemTypeBeforePremap, leaf, ctx);
+    if (result != TStatus::Ok) {
+        return result;
+    }
+
+    ready = AllOf(tables, [](const auto& pathInfo) { return bool(pathInfo->Table->Stat); });
+    return TStatus::Ok;
+}
+
 TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx) {
     TVector<TYtJoinNodeLeaf::TPtr> leaves;
     TMaybeNode<TExprBase> world;
@@ -4696,64 +4700,65 @@ IGraphTransformer::TStatus CollectCboStatsLeaf(
     TExprContext& ctx) {
 
     const TMaybe<ui64> maxChunkCountExtendedStats = state->Configuration->ExtendedStatsMaxChunkCount.Get();
-    if (!maxChunkCountExtendedStats) {
-        return TStatus::Ok;
-    }
-
-    TVector<TString> keyList;
-    auto columnsPos = relJoinColumns.find(JoinLeafLabel(leaf.Label));
-    if (columnsPos != relJoinColumns.end()) {
-        keyList.assign(columnsPos->second.begin(), columnsPos->second.end());
-    }
-    TVector<IYtGateway::TPathStatReq> pathStatReqs;
-
-    ui64 sectionChunkCount = 0;
-    TVector<TString> requestedColumnList;
-    for (auto path: leaf.Section.Paths()) {
-        auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
-        sectionChunkCount += pathInfo->Table->Stat->ChunkCount;
-
-        auto ytPath = BuildYtPathForStatRequest(cluster, *pathInfo, keyList, *state, ctx);
-
-        if (!ytPath) {
-            return IGraphTransformer::TStatus::Error;
+    TVector<TYtPathInfo::TPtr> tables;
+    if (maxChunkCountExtendedStats) {
+        TVector<TString> requestedColumnList;
+        auto columnsPos = relJoinColumns.find(JoinLeafLabel(leaf.Label));
+        if (columnsPos != relJoinColumns.end()) {
+            requestedColumnList.assign(columnsPos->second.begin(), columnsPos->second.end());
         }
 
-        pathStatReqs.push_back(
-            IYtGateway::TPathStatReq()
-                .Path(*ytPath)
-                .IsTemp(pathInfo->Table->IsTemp)
-                .IsAnonymous(pathInfo->Table->IsAnonymous)
-                .Epoch(pathInfo->Table->Epoch.GetOrElse(0)));
+        THashSet<TString> memSizeColumns(requestedColumnList.begin(), requestedColumnList.end());
+        TVector<IYtGateway::TPathStatReq> pathStatReqs;
 
-        std::copy(ytPath->Columns_->Parts_.begin(), ytPath->Columns_->Parts_.end(), std::back_inserter(requestedColumnList));
+        ui64 sectionChunkCount = 0;
+        for (auto path: leaf.Section.Paths()) {
+            auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
+            tables.push_back(pathInfo);
+            sectionChunkCount += pathInfo->Table->Stat->ChunkCount;
+
+            if (pathInfo->HasColumns()) {
+                NYT::TRichYPath path;
+                pathInfo->FillRichYPath(path);
+                std::copy(path.Columns_->Parts_.begin(), path.Columns_->Parts_.end(), std::inserter(memSizeColumns, memSizeColumns.end()));
+            }
+
+            auto ytPath = BuildYtPathForStatRequest(cluster, *pathInfo, requestedColumnList, *state, ctx);
+
+            if (!ytPath) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            pathStatReqs.push_back(
+                IYtGateway::TPathStatReq()
+                    .Path(*ytPath)
+                    .IsTemp(pathInfo->Table->IsTemp)
+                    .IsAnonymous(pathInfo->Table->IsAnonymous)
+                    .Epoch(pathInfo->Table->Epoch.GetOrElse(0)));
+        }
+
+        if (!pathStatReqs.empty() && (*maxChunkCountExtendedStats == 0 || sectionChunkCount <= *maxChunkCountExtendedStats)) {
+            IYtGateway::TPathStatOptions pathStatOptions =
+                IYtGateway::TPathStatOptions(state->SessionId)
+                    .Cluster(cluster)
+                    .Paths(pathStatReqs)
+                    .Config(state->Configuration->Snapshot())
+                    .Extended(true);
+
+            IYtGateway::TPathStatResult pathStats = state->Gateway->TryPathStat(std::move(pathStatOptions));
+
+            if (!pathStats.Success()) {
+                leaf.Section = Build<TYtSection>(ctx, leaf.Section.Ref().Pos())
+                    .InitFrom(leaf.Section)
+                    .Settings(NYql::AddSettingAsColumnList(leaf.Section.Settings().Ref(), EYtSettingType::StatColumns, requestedColumnList, ctx))
+                    .Done();
+                return TStatus::Repeat;
+            }
+        }
     }
 
-    if ((*maxChunkCountExtendedStats != 0 && sectionChunkCount > *maxChunkCountExtendedStats)
-        || !pathStatReqs) {
-        return TStatus::Ok;
-    }
-
-    IYtGateway::TPathStatOptions pathStatOptions =
-        IYtGateway::TPathStatOptions(state->SessionId)
-            .Cluster(cluster)
-            .Paths(pathStatReqs)
-            .Config(state->Configuration->Snapshot())
-            .Extended(true);
-
-    IYtGateway::TPathStatResult pathStats = state->Gateway->TryPathStat(std::move(pathStatOptions));
-
-    if (pathStats.Success()) {
-        return TStatus::Ok;
-    }
-    std::sort(requestedColumnList.begin(), requestedColumnList.end());
-    requestedColumnList.erase(std::unique(requestedColumnList.begin(), requestedColumnList.end()),
-        requestedColumnList.end());
-    leaf.Section = Build<TYtSection>(ctx, leaf.Section.Ref().Pos())
-        .InitFrom(leaf.Section)
-        .Settings(NYql::AddSettingAsColumnList(leaf.Section.Settings().Ref(), EYtSettingType::StatColumns, requestedColumnList, ctx))
-        .Done();
-    return TStatus::Repeat;
+    TVector<ui64> dataSize;
+    return TryEstimateDataSizeChecked(dataSize, leaf.Section, cluster, tables, {}, *state, ctx);
 }
 
 void AddJoinColumns(THashMap<TString, THashSet<TString>>& relJoinColumns, const TYtJoinNodeOp& op) {

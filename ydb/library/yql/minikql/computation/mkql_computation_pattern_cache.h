@@ -131,7 +131,7 @@ public:
 
     void EmplacePattern(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
 
-    void NotifyPatternCompiled(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
+    void NotifyPatternCompiled(const TString& serializedProgram);
 
     size_t GetSize() const;
 

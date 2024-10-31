@@ -89,6 +89,18 @@ struct TGetJobStderrOptions
     std::optional<i64> Offset;
 };
 
+struct TGetJobTraceOptions
+    : public TTimeoutOptions
+    , public TMasterReadOptions
+{
+    std::optional<NJobTrackerClient::TJobId> JobId;
+    std::optional<NScheduler::TJobTraceId> TraceId;
+    std::optional<i64> FromTime;
+    std::optional<i64> ToTime;
+    std::optional<i64> FromEventIndex;
+    std::optional<i64> ToEventIndex;
+};
+
 struct TGetJobFailContextOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
@@ -346,6 +358,18 @@ struct TJob
 
 void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey);
 
+struct TJobTraceEvent
+{
+    NJobTrackerClient::TOperationId OperationId;
+    NJobTrackerClient::TJobId JobId;
+    NScheduler::TJobTraceId TraceId;
+    i64 EventIndex;
+    TString Event;
+    TInstant EventTime;
+};
+
+void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer);
+
 struct TListJobsStatistics
 {
     TEnumIndexedArray<NJobTrackerClient::EJobState, i64> StateCounts;
@@ -442,6 +466,10 @@ struct IOperationClient
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options = {}) = 0;
+
+    virtual TFuture<std::vector<TJobTraceEvent>> GetJobTrace(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TGetJobTraceOptions& options = {}) = 0;
 
     virtual TFuture<TSharedRef> GetJobFailContext(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,

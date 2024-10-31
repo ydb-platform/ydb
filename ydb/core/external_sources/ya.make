@@ -34,4 +34,5 @@ RECURSE_FOR_TESTS(
 
 RECURSE(
     hive_metastore
+    object_storage
 )

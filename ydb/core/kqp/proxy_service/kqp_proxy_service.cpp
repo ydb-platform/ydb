@@ -1420,9 +1420,9 @@ private:
         }
 
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
-        response->Record.GetRef().SetYdbStatus(ydbStatus);
+        response->Record.SetYdbStatus(ydbStatus);
 
-        NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
+        NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
         return Send(SelfId(), response.release(), 0, requestId);
     }
 
@@ -1646,8 +1646,8 @@ private:
         switch (requestType) {
             case EDelayedRequestType::QueryRequest: {
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
-                response->Record.GetRef().SetYdbStatus(status);
-                NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
+                response->Record.SetYdbStatus(status);
+                NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
                 Send(requestEvent->Sender, std::move(response), 0, requestEvent->Cookie);
                 break;
             }

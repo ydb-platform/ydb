@@ -31,9 +31,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
         typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
-        auto ytState = MakeIntrusive<TYtState>();
+        auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
         ytState->Gateway = ytGateway;
-        ytState->Types = typeAnnotationContext.Get();
 
         InitializeYtGateway(ytGateway, ytState);
         typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
@@ -440,6 +439,28 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
+    }
+
+    Y_UNIT_TEST(ExtractSortedTuple) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('a (String '4)) '('b (String 'c)) '('c (String 'x)))
+                (AsStruct '('a (String '1)) '('b (String 'd)) '('c (String 'y)))
+                (AsStruct '('a (String '3)) '('b (String 'b)) '('c (String 'z)))
+            ))
+            (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b)))))
+            (let map (OrderedFlatMap sorted (lambda '(item) (OptionalIf (== (Member item 'a) (String '1)) (AddMember item 'x '((Member item 'a) (Member item 'b)))))))
+            (let extract (ExtractMembers map '('x)))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) extract '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(a,x/0[asc];b,x/1[asc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "Sorted(x[asc])");
     }
 
     Y_UNIT_TEST(TopSort) {

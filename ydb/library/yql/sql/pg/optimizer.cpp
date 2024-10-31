@@ -462,8 +462,8 @@ struct TPgOptimizerImpl
         }
         auto& rel = Rels[relId - 1];
 
-        rel.Rows = leaf->Stats->Nrows;
-        rel.TotalCost = leaf->Stats->Cost;
+        rel.Rows = leaf->Stats.Nrows;
+        rel.TotalCost = leaf->Stats.Cost;
 
         int leafIndex = relId - 1;
         if (leafIndex >= static_cast<int>(Leafs.size())) {

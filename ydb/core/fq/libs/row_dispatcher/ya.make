@@ -16,7 +16,6 @@ PEERDIR(
     contrib/libs/simdjson
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
-    ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
@@ -31,9 +30,15 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table
 )
 
+CFLAGS(
+    -Wno-assume
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(purecalc_no_pg_wrapper)
 
 IF(NOT EXPORT_CMAKE)
     RECURSE_FOR_TESTS(

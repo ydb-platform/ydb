@@ -42,7 +42,7 @@ namespace boost { namespace locale {
                     insize = 1;
                     outsize = sizeof(obuf);
                     call_iconv(d, nullptr, nullptr, nullptr, nullptr);
-                    size_t res = call_iconv(d, ibuf, &insize, reinterpret_cast<char*>(obuf), &outsize);
+                    const size_t res = call_iconv(d, ibuf, &insize, reinterpret_cast<char*>(obuf), &outsize);
 
                     // Now if this single byte starts a sequence we add incomplete
                     // to know to ask that we need two bytes, otherwise it may only be illegal
@@ -118,15 +118,14 @@ namespace boost { namespace locale {
             const utf::code_point inbuf[2] = {cp, 0};
             size_t insize = sizeof(inbuf);
             char outseq[3] = {0};
-            size_t outsize = 3;
+            size_t outsize = sizeof(outseq);
 
             call_iconv(from_utf_, reinterpret_cast<const char*>(inbuf), &insize, outseq, &outsize);
 
-            if(insize != 0 || outsize > 1)
+            if(insize != 0 || outsize == sizeof(outseq))
                 return illegal;
-            const size_t len = 2 - outsize;
-            const size_t reminder = end - begin;
-            if(reminder < len)
+            const size_t len = sizeof(outseq) - outsize - 1; // Skip trailing NULL
+            if(static_cast<std::ptrdiff_t>(len) > end - begin)
                 return incomplete;
             for(unsigned i = 0; i < len; i++)
                 *begin++ = outseq[i];

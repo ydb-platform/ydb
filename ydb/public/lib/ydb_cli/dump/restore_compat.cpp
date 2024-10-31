@@ -46,23 +46,23 @@ public:
         Begin();
     }
 
-    bool Fits(const TString& line) const override {
+    EStatus Check(const NPrivate::TLine& line) const override {
         if (RowsPerRequest > 0 && (Rows + 1) > RowsPerRequest) {
-            return Rows == 0;
+            return Rows == 0 ? OK : FULL;
         }
 
         if (BytesPerRequest > 0 && (Bytes + RecordSize(line)) > BytesPerRequest) {
-            return Bytes == 0;
+            return Bytes == 0 ? OK : FULL;
         }
 
         if (RequestUnitsPerRequest > 0 && CalcRequestUnits(RequestUnitsX2 + RecordRequestUnitsX2(line)) > RequestUnitsPerRequest) {
-            return RequestUnitsX2 == 0;
+            return RequestUnitsX2 == 0 ? OK : FULL;
         }
 
-        return true;
+        return OK;
     }
 
-    void Feed(TString&& line) override {
+    void Feed(NPrivate::TLine&& line) override {
         AddLine(line);
 
         ++Rows;
@@ -90,7 +90,7 @@ public:
         return false;
     }
 
-    TString GetData(bool) override {
+    NPrivate::TBatch GetData(bool) override {
         Rows = 0;
         Bytes = 0;
         RequestUnitsX2 = 0;
@@ -133,7 +133,7 @@ public:
         Uploader = MakeHolder<TUploader>(opts, TableClient, Accumulator->GetQueryString());
     }
 
-    bool Push(TString&&) override {
+    bool Push(NPrivate::TBatch&&) override {
         bool ok;
 
         if (UseBulkUpsert) {

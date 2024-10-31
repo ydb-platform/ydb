@@ -249,7 +249,6 @@ def do(args):
             for vslot in candidate_vslots:
                 pdisk_id = common.get_pdisk_id(vslot.VSlotId)
                 pdisks[pdisk_id]["CandidateVSlots"].append(vslot)
-            print({pdisk: (len(info["CandidateVSlots"]), info["FreeSpaceRatio"]) for pdisk, info in pdisks.items()})
             vslots_ordered_groups_to_reassign = [info["CandidateVSlots"] for _, info in sorted(list(pdisks.items()), key=lambda x: x[1]["FreeSpaceRatio"])]
 
         for vslots in vslots_ordered_groups_to_reassign:

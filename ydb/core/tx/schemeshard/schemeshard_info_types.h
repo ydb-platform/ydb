@@ -14,6 +14,7 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -199,7 +200,7 @@ struct TPartitionConfigMerger {
         );
 
     static bool VerifyCompactionPolicy(
-        const NKikimrSchemeOp::TCompactionPolicy& policy,
+        const NKikimrCompaction::TCompactionPolicy& policy,
         TString& err);
 
     static bool VerifyCommandOnFrozenTable(
@@ -2991,12 +2992,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
         ui32 K = 4;
         ui32 Levels = 5;
-        
+
         // progress
         enum EState : ui32 {
             Sample = 0,
             // Recompute,
-            // Reshuffle,
+            Reshuffle,
             // Local,
         };
         ui32 Level = 0;
@@ -3007,7 +3008,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         EState State = Sample;
 
         ui32 ChildBegin = 1;  // included
-    
+
         static ui32 BinPow(ui32 k, ui32 l) {
             ui32 r = 1;
             while (l != 0) {
@@ -3027,7 +3028,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return Parent < ParentEnd;
         }
         bool NeedsAnotherState() const {
-            return false;
+            return State == Sample /*|| State == Recompute*/;
         }
 
         bool NextState() {
@@ -3074,6 +3075,22 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                     return NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING;
                 }
             }
+        }
+
+        TString WriteTo(bool needsBuildTable = false) const {
+            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+            TString name = PostingTable;
+            if (needsBuildTable || NeedsAnotherLevel()) {
+                name += Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+            }
+            return name;
+        }
+        TString ReadFrom() const {
+            Y_ASSERT(Level != 0);
+            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+            TString name = PostingTable;
+            name += Level % 2 == 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            return name;
         }
     };
     TKMeans KMeans;
@@ -3149,7 +3166,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     THashSet<TShardIdx> InProgressShards;
 
-    size_t DoneShardsSize = 0;
+    std::vector<TShardIdx> DoneShards;
 
     TBillingStats Processed;
     TBillingStats Billed;
@@ -3282,7 +3299,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
-        // TODO load indexInfo->ImplTableDescriptions
+        // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
+        if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
+            NKikimrSchemeOp::TIndexCreationConfig creationConfig;
+            Y_ABORT_UNLESS(creationConfig.ParseFromString(row.template GetValue<Schema::IndexBuild::CreationConfig>()));
+
+            auto& descriptions = *creationConfig.MutableIndexImplTableDescriptions();
+            indexInfo->ImplTableDescriptions.reserve(descriptions.size());
+            for (auto& description : descriptions) {
+                indexInfo->ImplTableDescriptions.emplace_back(std::move(description));
+            }
+
+            switch (creationConfig.GetSpecializedIndexDescriptionCase()) {
+                case NKikimrSchemeOp::TIndexCreationConfig::kVectorIndexKmeansTreeDescription:
+                    indexInfo->SpecializedIndexDescription = std::move(*creationConfig.MutableVectorIndexKmeansTreeDescription());
+                    break;
+                case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
+                    /* do nothing */
+                    break;
+            }
+        }
 
         indexInfo->State = TIndexBuildInfo::EState(
             row.template GetValue<Schema::IndexBuild::State>());
@@ -3448,7 +3484,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
         if (Shards) {
             float totalShards = Shards.size();
-            return 100.0 * DoneShardsSize / totalShards;
+            return 100.0 * DoneShards.size() / totalShards;
         }
         // No shards - no progress
         return 0.0;
@@ -3593,7 +3629,7 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     o << ", UnlockTxDone: " << info.UnlockTxDone;
 
     o << ", ToUploadShards: " << info.ToUploadShards.size();
-    o << ", DoneShards: " << info.DoneShardsSize;
+    o << ", DoneShards: " << info.DoneShards.size();
 
     for (const auto& x: info.InProgressShards) {
         o << ", ShardsInProgress: " << x;

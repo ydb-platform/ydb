@@ -76,6 +76,14 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    codecs
+    config
+    events
+    partition_key_range
+    writer
+)
+
 RECURSE_FOR_TESTS(
     ut
     dread_cache_service/ut

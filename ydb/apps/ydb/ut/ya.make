@@ -1,7 +1,13 @@
 UNITTEST()
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    TIMEOUT(2400)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 DEPENDS(
     ydb/apps/ydb

@@ -11,7 +11,13 @@ namespace NKikimr::NOlap {
 NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
+    portionMeta.SetCompactionLevel(CompactionLevel);
     portionMeta.SetDeletionsCount(DeletionsCount);
+    portionMeta.SetRecordsCount(TValidator::CheckNotNull(RecordsCount));
+    portionMeta.SetColumnRawBytes(TValidator::CheckNotNull(ColumnRawBytes));
+    portionMeta.SetColumnBlobBytes(TValidator::CheckNotNull(ColumnBlobBytes));
+    portionMeta.SetIndexRawBytes(IndexRawBytes);
+    portionMeta.SetIndexBlobBytes(IndexBlobBytes);
     switch (Produced) {
         case TPortionMeta::EProduced::UNSPECIFIED:
             Y_ABORT_UNLESS(false);

@@ -1,6 +1,6 @@
 PROGRAM(ydbd)
 
-IF (NOT SANITIZER_TYPE AND NOT PROFILE_MEMORY_ALLOCATIONS)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
+IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
     NO_EXPORT_DYNAMIC_SYMBOLS()
 ENDIF()
 
@@ -68,26 +68,6 @@ PEERDIR(
     ydb/library/yql/udfs/common/yson2
     ydb/library/yql/udfs/logs/dsv
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
-)
-
-#
-# DON'T ALLOW NEW DEPENDENCIES WITHOUT EXPLICIT APPROVE FROM  kikimr-dev@ or fomichev@
-#
-CHECK_DEPENDENT_DIRS(
-    ALLOW_ONLY
-    PEERDIRS
-    build
-    certs
-    contrib
-    library
-    tools/archiver
-    tools/enum_parser/enum_parser
-    tools/enum_parser/enum_serialization_runtime
-    tools/rescompressor
-    tools/rorescompiler
-    util
-    ydb
-    yt
 )
 
 YQL_LAST_ABI_VERSION()

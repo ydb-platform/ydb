@@ -74,6 +74,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
         DataSinkNames.insert(TKiAnalyzeTable::CallableName());
+        DataSinkNames.insert(TKiCreateBackupCollection::CallableName());
+        DataSinkNames.insert(TKiAlterBackupCollection::CallableName());
+        DataSinkNames.insert(TKiDropBackupCollection::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -120,7 +123,10 @@ struct TKikimrData {
             TYdbOperation::AlterGroup |
             TYdbOperation::DropGroup |
             TYdbOperation::RenameGroup |
-            TYdbOperation::ModifyPermission;
+            TYdbOperation::ModifyPermission |
+            TYdbOperation::CreateBackupCollection |
+            TYdbOperation::AlterBackupCollection |
+            TYdbOperation::DropBackupCollection;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -432,6 +438,10 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
+    } else if (tagName == "backupCollection") {
+        KeyType = Type::BackupCollection;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
+        ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;
@@ -831,7 +841,7 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
 
-Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::string_view distance) {
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance) {
     if (distance == "cosine")
         return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
     else if (distance == "manhattan")
@@ -842,7 +852,7 @@ Ydb::Table::VectorIndexSettings_Distance VectorIndexSettingsParseDistance(std::s
         YQL_ENSURE(false, "Wrong index setting distance: " << distance);
 };
 
-Ydb::Table::VectorIndexSettings_Similarity VectorIndexSettingsParseSimilarity(std::string_view similarity) {
+Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity) {
     if (similarity == "cosine")
         return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
     else if (similarity == "inner_product")

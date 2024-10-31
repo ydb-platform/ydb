@@ -3,10 +3,6 @@
 namespace NKikimr::NSchemeShard {
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
-        if (tableSchema.HasEngine()) {
-            Engine = tableSchema.GetEngine();
-        }
-
         if (!Columns.Parse(tableSchema, errors, allowNullKeys)) {
             return false;
         }

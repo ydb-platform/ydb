@@ -27,6 +27,7 @@ class TJsonQuery : public TViewerPipeClient {
     TString Stats;
     TString Syntax;
     TString QueryId;
+    TString ResourcePool;
     TString TransactionMode;
     bool IsBase64Encode = true;
     int LimitRows = 10000;
@@ -95,6 +96,9 @@ public:
         if (params.Has("limit_rows")) {
             LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, 100000);
         }
+        if (params.Has("resource_pool")) {
+            ResourcePool = params.Get("resource_pool");
+        }
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     }
 
@@ -132,6 +136,9 @@ public:
             }
             if (requestData.Has("limit_rows")) {
                 LimitRows = std::clamp<int>(requestData["limit_rows"].GetIntegerRobust(), 1, 100000);
+            }
+            if (requestData.Has("resource_pool")) {
+                ResourcePool = requestData["resource_pool"].GetStringRobust();
             }
         }
         return success;
@@ -276,6 +283,9 @@ public:
         }
         if (Event->Get()->UserToken) {
             event->Record.SetUserToken(Event->Get()->UserToken);
+        }
+        if (ResourcePool) {
+            request.SetPoolId(ResourcePool);
         }
         request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
         if (Action == "execute-script") {
@@ -495,17 +505,17 @@ private:
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         NJson::TJsonValue jsonResponse;
         jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
-        if (ev->Get()->Record.GetRef().GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
-            MakeOkReply(jsonResponse, QueryResponse->Record.GetRef());
+            MakeOkReply(jsonResponse, QueryResponse->Record);
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }
         } else {
             QueryResponse.Error("QueryError");
             NYql::TIssues issues;
-            NYql::IssuesFromMessage(ev->Get()->Record.GetRef().GetResponse().GetQueryIssues(), issues);
-            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetRef().GetYdbStatus()), std::move(issues)));
+            NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), std::move(issues)));
         }
 
         TStringStream stream;
@@ -867,6 +877,11 @@ public:
                 description: return ui64 as number to avoid 56-bit js rounding
                 type: boolean
                 required: false
+              - name: resource_pool
+                in: query
+                description: resource pool in which the query will be executed
+                type: string
+                required: false 
             requestBody:
                 description: Executes SQL query
                 required: false

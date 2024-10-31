@@ -589,7 +589,7 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     if (LastDbStatsUpdateTime + gDbStatsReportInterval > now)
         return;
 
-    if (State != TShardState::Ready)
+    if (State != TShardState::Ready && State != TShardState::Readonly)
         return;
 
     LastDbStatsUpdateTime = now;

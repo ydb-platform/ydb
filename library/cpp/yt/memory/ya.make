@@ -2,6 +2,10 @@ LIBRARY()
 
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
+IF (YT_DISABLE_REF_COUNTED_TRACKING)
+    CXXFLAGS(-DYT_DISABLE_REF_COUNTED_TRACKING)
+ENDIF()
+
 SRCS(
     allocation_tags_hooks.cpp
     blob.cpp

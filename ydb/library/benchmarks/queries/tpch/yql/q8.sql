@@ -16,7 +16,7 @@ join
 on
     p.p_partkey = l.l_partkey
 where
-    p.p_type = 'ECONOMY PLATED COPPER'
+    p.p_type = 'ECONOMY ANODIZED STEEL'
 );
 $join2 = (
 select
@@ -94,13 +94,13 @@ join
 on
     r.r_regionkey = j.n_regionkey
 where
-    r.r_name = 'AFRICA'
+    r.r_name = 'AMERICA'
 );
 
 select
     o_year,
     sum(case
-        when nation = 'MOZAMBIQUE' then volume
+        when nation = 'BRAZIL' then volume
         else $z0_12
     end) / sum(volume) as mkt_share
 from

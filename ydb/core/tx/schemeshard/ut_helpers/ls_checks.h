@@ -102,6 +102,10 @@ namespace NLs {
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
+    // Checks if the serialized representation of an expected boundary is a prefix of the actual one.
+    // Similar to PartitionKeys check, but does not require you to pass split boundaries in a serialized form.
+    template <typename T>
+    TCheckFunc SplitBoundaries(TVector<T>&& expectedBoundaries);
     TCheckFunc FollowerCount(ui32 count);
     TCheckFunc CrossDataCenterFollowerCount(ui32 count);
     TCheckFunc AllowFollowerPromotion(bool val);
@@ -141,9 +145,8 @@ namespace NLs {
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
-    
-    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Distance dist,
-                                      Ydb::Table::VectorIndexSettings_Similarity similarity,
+
+    TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
                                       Ydb::Table::VectorIndexSettings_VectorType vectorType,
                                       ui32 vectorDimension
                                   );

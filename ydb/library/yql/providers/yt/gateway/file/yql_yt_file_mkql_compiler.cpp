@@ -625,8 +625,15 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 ctx.ProgramBuilder.ToFlow(values) : ctx.ProgramBuilder.Iterator(values, {});
             values = ApplyPathRangesAndSampling(values, itemType, ytMap.Input().Ref(), ctx);
 
-            if (ETypeAnnotationKind::Multi == GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn()).GetKind())
+            auto& lambdaInputType = GetSeqItemType(*ytMap.Mapper().Args().Arg(0).Ref().GetTypeAnn());
+
+            if (lambdaInputType.GetKind() == ETypeAnnotationKind::Multi) {
                 values = ExpandFlow(values, ctx);
+            }
+
+            if (IsWideBlockType(lambdaInputType)) {
+                values = ctx.ProgramBuilder.WideToBlocks(values);
+            }
 
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
             values = NCommon::MkqlBuildExpr(ytMap.Mapper().Body().Ref(), innerCtx);

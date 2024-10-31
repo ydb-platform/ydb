@@ -650,10 +650,12 @@ TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {
     return jsonValue.GetStringRobust();
 }
 
-TResultSetPrinter::TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted)
+TResultSetPrinter::TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted, IOutputStream& output, size_t maxWidth)
     : Format(format)
     , IsInterrupted(isInterrupted)
     , ParquetPrinter(std::make_unique<TResultSetParquetPrinter>(""))
+    , Output(output)
+    , MaxWidth(maxWidth)
 {}
 
 TResultSetPrinter::~TResultSetPrinter() {
@@ -677,13 +679,13 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
         PrintJsonArray(resultSet, EBinaryStringEncoding::Unicode);
         break;
     case EDataFormat::JsonUnicode:
-        FormatResultSetJson(resultSet, &Cout, EBinaryStringEncoding::Unicode);
+        FormatResultSetJson(resultSet, &Output, EBinaryStringEncoding::Unicode);
         break;
     case EDataFormat::JsonBase64Array:
         PrintJsonArray(resultSet, EBinaryStringEncoding::Base64);
         break;
     case EDataFormat::JsonBase64:
-        FormatResultSetJson(resultSet, &Cout, EBinaryStringEncoding::Base64);
+        FormatResultSetJson(resultSet, &Output, EBinaryStringEncoding::Base64);
         break;
     case EDataFormat::Csv:
         PrintCsv(resultSet, ",");
@@ -714,7 +716,7 @@ void TResultSetPrinter::BeginResultSet() {
     switch (Format) {
     case EDataFormat::JsonUnicodeArray:
     case EDataFormat::JsonBase64Array:
-        Cout << '[';
+        Output << '[';
         break;
     default:
         break;
@@ -725,7 +727,7 @@ void TResultSetPrinter::EndResultSet() {
     switch (Format) {
     case EDataFormat::JsonUnicodeArray:
     case EDataFormat::JsonBase64Array:
-        Cout << ']' << Endl;
+        Output << ']' << Endl;
         break;
     case EDataFormat::Parquet:
         ParquetPrinter->Reset();
@@ -739,7 +741,7 @@ void TResultSetPrinter::EndLineBeforeNextResult() {
     switch (Format) {
     case EDataFormat::JsonUnicodeArray:
     case EDataFormat::JsonBase64Array:
-        Cout << ',' << Endl;
+        Output << ',' << Endl;
         break;
     default:
         break;
@@ -755,6 +757,7 @@ void TResultSetPrinter::PrintPretty(const TResultSet& resultSet) {
     }
 
     TPrettyTableConfig tableConfig;
+    tableConfig.MaxWidth(MaxWidth);
     if (!FirstPart) {
         tableConfig.WithoutHeader();
     }
@@ -767,7 +770,7 @@ void TResultSetPrinter::PrintPretty(const TResultSet& resultSet) {
         }
     }
 
-    Cout << table;
+    Output << table;
 }
 
 void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStringEncoding encoding) {
@@ -782,7 +785,7 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
         if (firstRow) {
             firstRow = false;
         }
-        NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &Cout);
+        NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &Output);
         FormatResultRowJson(parser, columns, writer, encoding);
     }
 }
@@ -792,12 +795,12 @@ void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim)
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         for (ui32 i = 0; i < columns.size(); ++i) {
-            Cout << FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode);
+            Output << FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode);
             if (i < columns.size() - 1) {
-                Cout << delim;
+                Output << delim;
             }
         }
-        Cout << Endl;
+        Output << Endl;
     }
 }
 

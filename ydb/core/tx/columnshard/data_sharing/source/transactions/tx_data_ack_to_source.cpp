@@ -1,5 +1,7 @@
 #include "tx_data_ack_to_source.h"
+
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -31,4 +33,4 @@ void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
     Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

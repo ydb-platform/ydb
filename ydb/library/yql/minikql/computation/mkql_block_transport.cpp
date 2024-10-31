@@ -4,7 +4,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/public/udf/arrow/memory_pool.h>
-#include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/rope/rope_over_buffer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NKikimr::NMiniKQL {

@@ -16,6 +16,13 @@ private:
     NArrow::TFirstLastSpecialKeys ReplaceKeyEdges; // first and last PK rows
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
+    YDB_READONLY(ui32, CompactionLevel, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY(ui64, ColumnRawBytes, 0);
+    YDB_READONLY(ui32, ColumnBlobBytes, 0);
+    YDB_READONLY(ui32, IndexRawBytes, 0);
+    YDB_READONLY(ui32, IndexBlobBytes, 0);
+
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
@@ -31,6 +38,14 @@ private:
     TSnapshot RecordSnapshotMax;
 
 public:
+    const NArrow::TFirstLastSpecialKeys& GetFirstLastPK() const {
+        return ReplaceKeyEdges;
+    }
+
+    void ResetCompactionLevel(const ui32 level) {
+        CompactionLevel = level;
+    }
+
     using EProduced = NPortion::EProduced;
 
     NArrow::TReplaceKey IndexKeyStart;

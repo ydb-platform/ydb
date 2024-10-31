@@ -32,6 +32,10 @@ enum ESimpleCounters {
     COUNTER_DELAYED_PROPOSE_QUEUE_SIZE = 22                        [(CounterOpts) = {Name: "DelayedProposeQueueSize"}];
     COUNTER_WAITING_TX_QUEUE_SIZE = 23                             [(CounterOpts) = {Name: "WaitingTxQueueSize"}];
     COUNTER_CHANGE_QUEUE_RESERVED_CAPACITY = 24                    [(CounterOpts) = {Name: "ChangeQueueReservedCapacity"}];
+    COUNTER_VOLATILE_TX_INFLIGHT = 25                              [(CounterOpts) = {Name: "VolatileTxInFlight"}];
+    COUNTER_VOLATILE_TX_WAITING_COUNT = 26                         [(CounterOpts) = {Name: "VolatileTxWaitingCount"}];
+    COUNTER_VOLATILE_TX_COMMITTED_COUNT = 27                       [(CounterOpts) = {Name: "VolatileTxCommittedCount"}];
+    COUNTER_VOLATILE_TX_ABORTING_COUNT = 28                        [(CounterOpts) = {Name: "VolatileTxAbortingCount"}];
 }
 
 enum ECumulativeCounters {
@@ -405,7 +409,37 @@ enum EPercentileCounters {
 
     COUNTER_WRITE_EXEC_LATENCY = 21 [(CounterOpts) = {
         Name: "WriteExecLatency"
-    }];    
+    }];
+
+    COUNTER_VOLATILE_TX_WAIT_LATENCY_MS = 22 [(CounterOpts) = {
+        Name: "VolatileTxWaitLatencyMs"
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+    }];
+
+    COUNTER_VOLATILE_TX_TOTAL_LATENCY_MS = 23 [(CounterOpts) = {
+        Name: "VolatileTxTotalLatencyMs"
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+    }];
 }
 
 enum ETxTypes {

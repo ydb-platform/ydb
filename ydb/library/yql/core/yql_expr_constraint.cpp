@@ -688,10 +688,10 @@ private:
     TStatus ExtractMembersWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         const auto outItemType = GetSeqItemType(*input->GetTypeAnn()).Cast<TStructExprType>();
         const auto filter = [outItemType](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && outItemType->FindItem(path.front()); };
-        FilterFromHead<TSortedConstraintNode>(input, filter, ctx);
-        FilterFromHead<TChoppedConstraintNode>(input, filter, ctx);
-        FilterFromHead<TUniqueConstraintNode>(input, filter, ctx);
-        FilterFromHead<TDistinctConstraintNode>(input, filter, ctx);
+        FilterFromHead<TSortedConstraintNode, true>(input, filter, ctx);
+        FilterFromHead<TChoppedConstraintNode, true>(input, filter, ctx);
+        FilterFromHead<TUniqueConstraintNode, true>(input, filter, ctx);
+        FilterFromHead<TDistinctConstraintNode, true>(input, filter, ctx);
         FilterFromHead<TPartOfSortedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filter, ctx);
@@ -2943,7 +2943,7 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
         }
-        
+
         return TStatus::Ok;
     }
 

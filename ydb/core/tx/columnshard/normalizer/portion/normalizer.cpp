@@ -1,12 +1,14 @@
 #include "normalizer.h"
 
-#include <ydb/core/tx/columnshard/tables_manager.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
+#include <ydb/core/tx/columnshard/tables_manager.h>
 
 namespace NKikimr::NOlap {
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
+    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     auto initRes = DoInitImpl(controller, txc);
 
     if (initRes.IsFail()) {
@@ -36,6 +38,12 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
     THashMap<ui64, TPortionInfoConstructor> portions;
     auto schemas = std::make_shared<THashMap<ui64, ISnapshotSchema::TPtr>>();
     {
+        auto conclusion = InitPortions(tablesManager, db, portions);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    {
         auto conclusion = InitColumns(tablesManager, db, portions);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -52,19 +60,18 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         (*schemas)[p.GetPortionIdVerified()] = schema.GetSchema(p);
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> package;
-    package.reserve(100);
+    std::vector<TPortionDataAccessor> package;
 
     ui64 brokenPortioncCount = 0;
     for (auto&& portionConstructor : portions) {
-        auto portionInfo = std::make_shared<TPortionInfo>(portionConstructor.second.Build(false));
-        if (CheckPortion(tablesManager,  *portionInfo)) {
+        auto portionInfo = portionConstructor.second.Build(false);
+        if (CheckPortion(tablesManager, portionInfo)) {
             continue;
         }
         ++brokenPortioncCount;
         package.emplace_back(portionInfo);
         if (package.size() == 1000) {
-            std::vector<std::shared_ptr<TPortionInfo>> local;
+            std::vector<TPortionDataAccessor> local;
             local.swap(package);
             auto task = BuildTask(std::move(local), schemas);
             if (!!task) {
@@ -81,6 +88,21 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
     }
     ACFL_INFO("normalizer", "TPortionsNormalizer")("message", TStringBuilder() << brokenPortioncCount << " portions found");
     return tasks;
+}
+
+TConclusionStatus TPortionsNormalizerBase::InitPortions(
+    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& constructors) {
+    TDbWrapper wrapper(db.GetDatabase(), nullptr);
+    if (!wrapper.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+            const TIndexInfo& indexInfo =
+                portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
+            AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
+            const ui64 portionId = portion.GetPortionIdVerified();
+            AFL_VERIFY(constructors.emplace(portionId, std::move(portion)).second);
+        })) {
+        return TConclusionStatus::Fail("repeated read db");
+    }
+    return TConclusionStatus::Success();
 }
 
 TConclusionStatus TPortionsNormalizerBase::InitColumns(
@@ -107,7 +129,7 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
         } else {
             it->second.Merge(std::move(portion));
         }
-        it->second.LoadRecord(currentSchema->GetIndexInfo(), loadContext);
+        it->second.LoadRecord(loadContext);
     };
 
     while (!rowset.EndOfSet()) {
@@ -149,4 +171,4 @@ TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THas
     return TConclusionStatus::Success();
 }
 
-}
+}   // namespace NKikimr::NOlap

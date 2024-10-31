@@ -81,6 +81,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     THashMap<TPartitionKey, TActorId, TPartitionKeyHash> PartitionLocations;
     TCoordinatorMetrics Metrics;
     ui64 LocationRandomCounter = 0;
+    THashSet<TActorId> InterconnectSessions;
 
 public:
     TActorCoordinator(
@@ -116,6 +117,7 @@ private:
     void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     NActors::TActorId GetAndUpdateLocation(const TPartitionKey& key);
+    void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -165,11 +167,24 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal
     RowDispatchers.emplace(actorId, RowDispatcherInfo{true, isLocal});
 }
 
+void TActorCoordinator::UpdateInterconnectSessions(const NActors::TActorId& interconnectSession) {
+    if (!interconnectSession) {
+        return;
+    }
+    auto sessionsIt = InterconnectSessions.find(interconnectSession);
+    if (sessionsIt != InterconnectSessions.end()) {
+        return;
+    }
+    Send(interconnectSession, new NActors::TEvents::TEvSubscribe, IEventHandle::FlagTrackDelivery);
+    InterconnectSessions.insert(interconnectSession);
+}
+
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvPing received, " << ev->Sender);
+    UpdateInterconnectSessions(ev->InterconnectSession);
     AddRowDispatcher(ev->Sender, false);
     LOG_ROW_DISPATCHER_TRACE("Send TEvPong to " << ev->Sender);
-    Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+    Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery);
 }
 
 void TActorCoordinator::PrintInternalState() {
@@ -247,6 +262,7 @@ NActors::TActorId TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& k
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev) {
     const auto source =  ev->Get()->Record.GetSource();
+    UpdateInterconnectSessions(ev->InterconnectSession);
 
     TStringStream str;
     str << "TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath() << ", partIds: ";
@@ -281,7 +297,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     }
     
     LOG_ROW_DISPATCHER_DEBUG("Send TEvCoordinatorResult to " << ev->Sender);
-    Send(ev->Sender, response.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ev->Cookie);
+    Send(ev->Sender, response.release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     PrintInternalState();
 }
 

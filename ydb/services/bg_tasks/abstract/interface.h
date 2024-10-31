@@ -163,6 +163,12 @@ public:
         return result;
     }
 
+    template <class T>
+    std::shared_ptr<T> GetObjectPtrOptionalAs() const {
+        auto result = std::dynamic_pointer_cast<T>(Object);
+        return result;
+    }
+
     const IInterface& GetObjectVerified() const {
         AFL_VERIFY(Object);
         return *Object;

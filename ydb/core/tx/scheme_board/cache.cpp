@@ -231,6 +231,7 @@ namespace {
             entry.Columns.clear();
             entry.NotNullColumns.clear();
             entry.Indexes.clear();
+            entry.Sequences.clear();
             entry.CdcStreams.clear();
             entry.RTMRVolumeInfo.Drop();
             entry.KesusInfo.Drop();
@@ -742,6 +743,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             KeyColumnTypes.clear();
             NotNullColumns.clear();
             Indexes.clear();
+            Sequences.clear();
             CdcStreams.clear();
             Partitioning = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
@@ -805,6 +807,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Indexes.reserve(tableDesc.TableIndexesSize());
             for (const auto& index : tableDesc.GetTableIndexes()) {
                 Indexes.push_back(index);
+            }
+
+            Sequences.reserve(tableDesc.SequencesSize());
+            for (const auto& sequence : tableDesc.GetSequences()) {
+                Sequences.push_back(sequence);
             }
 
             CdcStreams.reserve(tableDesc.CdcStreamsSize());
@@ -993,7 +1000,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             if (::NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED != pqConfig.GetPartitionStrategy().GetPartitionStrategyType()) {
                 partitioning.reserve(pqDesc.GetPartitions().size());
                 for (const auto& partition : pqDesc.GetPartitions()) {
-                    partitioning.emplace_back(partition.GetPartitionId());
+                    if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
+                        partitioning.emplace_back(partition.GetPartitionId());
+                    }
                 }
 
                 return;
@@ -1250,7 +1259,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columns.BeginObject()
                         .WriteKey("Id").WriteULongLong(column.Id)
                         .WriteKey("Name").WriteString(column.Name)
-                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId()) // TODO: support pg types
+                        .WriteKey("Type").WriteULongLong(column.PType.GetTypeId())
+                        .WriteKey("TypeName").WriteString(NScheme::TypeName(column.PType, column.PTypeMod))
                         .WriteKey("KeyOrder").WriteInt(column.KeyOrder)
                     .EndObject();
                 }
@@ -1897,6 +1907,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
+            entry.Sequences = Sequences;
             entry.DomainDescription = DomainDescription;
             entry.RTMRVolumeInfo = RtmrVolumeInfo;
             entry.KesusInfo = KesusInfo;
@@ -2165,6 +2176,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
+        TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
 
         TIntrusivePtr<TNavigate::TDirEntryInfo> Self;

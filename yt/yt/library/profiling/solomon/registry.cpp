@@ -207,9 +207,9 @@ void TSolomonRegistry::RegisterFuncCounter(
     const TRefCountedPtr& owner,
     std::function<i64()> reader)
 {
-    DoRegister([this, name, tags, options = std::move(options), owner, reader] {
+    DoRegister([this, name, tags, options = std::move(options), weakOwner = MakeWeak(owner), reader] {
         auto set = FindSet(name, options);
-        set->AddCounter(New<TCounterState>(owner, reader, Tags_.Encode(tags), tags));
+        set->AddCounter(New<TCounterState>(std::move(weakOwner), reader, Tags_.Encode(tags), tags));
     });
 }
 
@@ -220,9 +220,9 @@ void TSolomonRegistry::RegisterFuncGauge(
     const TRefCountedPtr& owner,
     std::function<double()> reader)
 {
-    DoRegister([this, name, tags, options = std::move(options), owner, reader] {
+    DoRegister([this, name, tags, options = std::move(options), reader, weakOwner = MakeWeak(owner)] {
         auto set = FindSet(name, options);
-        set->AddGauge(New<TGaugeState>(owner, reader, Tags_.Encode(tags), tags));
+        set->AddGauge(New<TGaugeState>(std::move(weakOwner), reader, Tags_.Encode(tags), tags));
     });
 }
 
@@ -232,8 +232,8 @@ void TSolomonRegistry::RegisterProducer(
     TSensorOptions options,
     const ISensorProducerPtr& producer)
 {
-    DoRegister([this, prefix, tags, options = std::move(options), producer] {
-        Producers_.AddProducer(New<TProducerState>(prefix, tags, options, producer));
+    DoRegister([this, prefix, tags, options = std::move(options), weakProducer = MakeWeak(producer)] {
+        Producers_.AddProducer(New<TProducerState>(prefix, tags, options, std::move(weakProducer)));
     });
 }
 
@@ -294,7 +294,7 @@ int TSolomonRegistry::IndexOf(i64 iteration) const
     return iteration % GetWindowSize();
 }
 
-void TSolomonRegistry::Profile(const TProfiler& profiler)
+void TSolomonRegistry::Profile(const TWeakProfiler& profiler)
 {
     SelfProfiler_ = profiler.WithPrefix("/solomon_registry");
 
@@ -308,7 +308,7 @@ void TSolomonRegistry::Profile(const TProfiler& profiler)
     RegistrationCount_ = SelfProfiler_.Counter("/registration_count");
 }
 
-const TProfiler& TSolomonRegistry::GetSelfProfiler() const
+const TWeakProfiler& TSolomonRegistry::GetSelfProfiler() const
 {
     return SelfProfiler_;
 }
@@ -534,7 +534,7 @@ NProto::TSensorDump TSolomonRegistry::DumpSensors(std::vector<TTagId> extraTags)
         }
 
         auto* cube = dump.add_cubes();
-        cube->set_name(ToProto<TProtobufString>(name));
+        cube->set_name(ToProto(name));
 
         set.DumpCube(cube, extraTags);
     }

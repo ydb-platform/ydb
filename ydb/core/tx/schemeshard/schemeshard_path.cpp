@@ -1549,6 +1549,8 @@ bool TPath::IsCommonSensePath() const {
         bool ok = (*item)->IsDirectory() || (*item)->IsDomainRoot();
         // Temporarily olap stores are treated like directories
         ok = ok || (*item)->IsOlapStore();
+        // Temporarily backup collections are treated like directories
+        ok = ok || (*item)->IsBackupCollection();
         if (!ok) {
             return false;
         }
@@ -1571,8 +1573,12 @@ bool TPath::AtLocalSchemeShardPath() const {
     return !(*it)->IsMigrated();
 }
 
-bool TPath::IsInsideTableIndexPath() const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
     // expected /<root>/.../<table>/<table_index>/<private_tables>
     if (Depth() < 3) {
@@ -1632,8 +1638,15 @@ bool TPath::IsInsideCdcStreamPath() const {
     return true;
 }
 
-bool TPath::IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type) const {
-    Y_ABORT_UNLESS(IsResolved());
+bool TPath::IsTableIndex(
+    const TMaybe<NKikimrSchemeOp::EIndexType>& type,
+    bool failOnUnresolved) const
+{
+    if (failOnUnresolved) {
+        Y_ABORT_UNLESS(IsResolved());
+    } else if (!IsResolved()) {
+        return false;
+    }
 
     if (!Base()->IsTableIndex()) {
         return false;

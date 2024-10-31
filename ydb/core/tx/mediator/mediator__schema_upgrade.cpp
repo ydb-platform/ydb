@@ -6,19 +6,19 @@ namespace NTxMediator {
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
 
-struct TTxMediator::TTxUpgrade : public TTransactionBase<TTxMediator> {
+struct TTxMediator::TTxUpgrade: public TTransactionBase<TTxMediator> {
     bool UpgradeFail;
 
-    TTxUpgrade(TSelf *mediator)
+    TTxUpgrade(TSelf* mediator)
         : TBase(mediator)
-        , UpgradeFail(false)
-    {}
+        , UpgradeFail(false) {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
-
 
         auto row = db.Table<Schema::State>().Key(Schema::State::DatabaseVersion).Select<Schema::State::StateValue>();
         if (!row.IsReady()) {
@@ -26,7 +26,9 @@ struct TTxMediator::TTxUpgrade : public TTransactionBase<TTxMediator> {
         }
 
         if (!row.IsValid()) {
-            db.Table<Schema::State>().Key(Schema::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::StateValue>(Schema::CurrentVersion));
+            db.Table<Schema::State>()
+                .Key(Schema::State::DatabaseVersion)
+                .Update(NIceDb::TUpdate<Schema::State::StateValue>(Schema::CurrentVersion));
             return true;
         }
 
@@ -45,7 +47,7 @@ struct TTxMediator::TTxUpgrade : public TTransactionBase<TTxMediator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         if (UpgradeFail) {
             Self->Become(&TSelf::StateBroken);
             ctx.Send(Self->Tablet(), new TEvents::TEvPoisonPill);
@@ -60,5 +62,5 @@ ITransaction* TTxMediator::CreateTxUpgrade() {
     return new TTxUpgrade(this);
 }
 
-}
-}
+} // namespace NTxMediator
+} // namespace NKikimr

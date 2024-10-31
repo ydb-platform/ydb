@@ -2,11 +2,13 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata)
+TColumnShardScanIterator::TColumnShardScanIterator(
+    const std::shared_ptr<TReadContext>& context,
+    const TReadMetadata::TConstPtr& readMetadata
+)
     : Context(context)
     , ReadMetadata(readMetadata)
-    , ReadyResults(context->GetCounters())
-{
+    , ReadyResults(context->GetCounters()) {
     IndexedData = readMetadata->BuildReader(Context);
     Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 }
@@ -41,7 +43,8 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "limit_reached_on_scan")("limit", Context->GetReadMetadata()->Limit)("ready", ItemsRead);
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_SCAN)
+        ("event", "limit_reached_on_scan")("limit", Context->GetReadMetadata()->Limit)("ready", ItemsRead);
         IndexedData->Abort("records count limit exhausted");
     }
 }
@@ -59,4 +62,4 @@ void TColumnShardScanIterator::Apply(const std::shared_ptr<IApplyAction>& task) 
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

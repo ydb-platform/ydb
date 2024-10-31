@@ -36,4 +36,4 @@ void ITask::DoOnCannotExecute(const TString& reason) {
     AFL_VERIFY(false)("problem", "cannot execute conveyor task")("reason", reason);
 }
 
-}
+} // namespace NKikimr::NConveyor

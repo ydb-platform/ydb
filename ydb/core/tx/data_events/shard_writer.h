@@ -26,8 +26,7 @@ public:
     TWriteIdForShard(const ui64 shardId, const ui64 writeId, const ui32 writePartId)
         : ShardId(shardId)
         , WriteId(writeId)
-        , WritePartId(writePartId) {
-    }
+        , WritePartId(writePartId) {}
 };
 
 class TCSUploadCounters: public NColumnShard::TCommonCountersOwner {
@@ -50,17 +49,19 @@ public:
         : TBase("CSUpload")
         , RequestsCount(TBase::GetDeriviative("Requests"))
         , CSReplyDuration(TBase::GetHistogram("Replies/Shard/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
-        , SucceedFullReplyDuration(TBase::GetHistogram("Replies/Success/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
-        , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
+        , SucceedFullReplyDuration(
+              TBase::GetHistogram("Replies/Success/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10))
+          )
+        , FailedFullReplyDuration(
+              TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10))
+          )
         , BytesDistribution(TBase::GetHistogram("Requests/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024)))
         , RowsDistribution(TBase::GetHistogram("Requests/Rows", NMonitoring::ExponentialHistogram(15, 2, 16)))
         , RowsCount(TBase::GetDeriviative("Rows"))
         , BytesCount(TBase::GetDeriviative("Bytes"))
         , FailsCount(TBase::GetDeriviative("Fails"))
         , GlobalTimeoutCount(TBase::GetDeriviative("GlobalTimeouts"))
-        , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
-    {
-    }
+        , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts")) {}
 
     void OnGlobalTimeout() const {
         GlobalTimeoutCount->Inc();
@@ -142,15 +143,21 @@ public:
             Ydb::StatusIds::StatusCode Status;
             const NYql::TIssues Issues;
 
-            explicit TEvShardsWriteResult(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const NYql::TIssues& issues = {})
+            explicit TEvShardsWriteResult(
+                Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
+                const NYql::TIssues& issues = {}
+            )
                 : Status(status)
-                , Issues(issues) {
-            }
+                , Issues(issues) {}
         };
     };
 
-    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
-        const bool immediateWrite);
+    TWritersController(
+        const ui32 writesCount,
+        const NActors::TActorIdentity& longTxActorId,
+        const NLongTxService::TLongTxId& longTxId,
+        const bool immediateWrite
+    );
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };
@@ -181,8 +188,13 @@ private:
         return TDuration::MilliSeconds(OverloadedDelayMs);
     }
     void SendToTablet(THolder<IEventBase> event) {
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
-            ActorSpan.GetTraceId());
+        Send(
+            LeaderPipeCache,
+            new TEvPipeCache::TEvForward(event.Release(), ShardId, true),
+            IEventHandle::FlagTrackDelivery,
+            0,
+            ActorSpan.GetTraceId()
+        );
     }
     virtual void PassAway() override {
         Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
@@ -190,9 +202,19 @@ private:
     }
 
 public:
-    TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
-        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const EModificationType mType, const bool immediateWrite, const std::optional<TDuration> timeout = std::nullopt);
+    TShardWriter(
+        const ui64 shardId,
+        const ui64 tableId,
+        const ui64 schemaVersion,
+        const TString& dedupId,
+        const IShardInfo::TPtr& data,
+        const NWilson::TProfileSpan& parentSpan,
+        TWritersController::TPtr externalController,
+        const ui32 writePartIdx,
+        const EModificationType mType,
+        const bool immediateWrite,
+        const std::optional<TDuration> timeout = std::nullopt
+    );
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {

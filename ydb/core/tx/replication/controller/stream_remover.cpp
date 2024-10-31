@@ -18,8 +18,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
     STATEFN(StateRequestPermission) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAllowDropStream, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -30,11 +30,15 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
 
     void DropStream() {
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-        case TReplication::ETargetKind::IndexTable:
-            Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendDropChangefeeds(StreamName)));
-            break;
+            case TReplication::ETargetKind::Table:
+            case TReplication::ETargetKind::IndexTable:
+                Send(
+                    YdbProxy,
+                    new TEvYdbProxy::TEvAlterTableRequest(
+                        SrcPath, NYdb::NTable::TAlterTableSettings().AppendDropChangefeeds(StreamName)
+                    )
+                );
+                break;
         }
 
         Become(&TThis::StateWork);
@@ -44,8 +48,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DropStream);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -77,13 +81,14 @@ public:
     }
 
     explicit TStreamRemover(
-            const TActorId& parent,
-            const TActorId& proxy,
-            ui64 rid,
-            ui64 tid,
-            TReplication::ETargetKind kind,
-            const TString& srcPath,
-            const TString& streamName)
+        const TActorId& parent,
+        const TActorId& proxy,
+        ui64 rid,
+        ui64 tid,
+        TReplication::ETargetKind kind,
+        const TString& srcPath,
+        const TString& streamName
+    )
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -91,18 +96,14 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , StreamName(streamName)
-        , LogPrefix("StreamRemover", ReplicationId, TargetId)
-    {
-    }
+        , LogPrefix("StreamRemover", ReplicationId, TargetId) {}
 
     void Bootstrap() {
         RequestPermission();
     }
 
     STATEFN(StateBase) {
-        switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
+        switch (ev->GetTypeRewrite()) { sFunc(TEvents::TEvPoison, PassAway); }
     }
 
 private:
@@ -120,14 +121,27 @@ private:
 IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
+    return CreateStreamRemover(
+        ctx.SelfID,
+        replication->GetYdbProxy(),
+        replication->GetId(),
+        target->GetId(),
+        target->GetKind(),
+        target->GetSrcPath(),
+        target->GetStreamName()
+    );
 }
 
-IActor* CreateStreamRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& streamName)
-{
+IActor* CreateStreamRemover(
+    const TActorId& parent,
+    const TActorId& proxy,
+    ui64 rid,
+    ui64 tid,
+    TReplication::ETargetKind kind,
+    const TString& srcPath,
+    const TString& streamName
+) {
     return new TStreamRemover(parent, proxy, rid, tid, kind, srcPath, streamName);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

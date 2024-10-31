@@ -7,16 +7,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDirectOpUnit : public TExecutionUnit {
+class TDirectOpUnit: public TExecutionUnit {
 public:
     TDirectOpUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::DirectOp, true, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::DirectOp, true, self, pipeline) {}
 
-    ~TDirectOpUnit()
-    {
-    }
+    ~TDirectOpUnit() {}
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
         return !op->HasRuntimeConflicts() && !op->HasWaitingForGlobalTxIdFlag();
@@ -50,9 +46,7 @@ public:
             Y_VERIFY_S(op->IsImmediate(),
                 "Unexpected TNeedGlobalTxId exception for a non-immediate operation with TxId# " << op->GetTxId());
 
-            ctx.Send(MakeTxProxyID(),
-                new TEvTxUserProxy::TEvAllocateTxId(),
-                0, op->GetTxId());
+            ctx.Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId(), 0, op->GetTxId());
             op->SetWaitingForGlobalTxIdFlag();
 
             if (txc.DB.HasChanges()) {
@@ -94,5 +88,5 @@ THolder<TExecutionUnit> CreateDirectOpUnit(TDataShard& self, TPipeline& pipeline
     return THolder(new TDirectOpUnit(self, pipeline));
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

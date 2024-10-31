@@ -12,15 +12,15 @@ namespace NKikimr {
 namespace NDataShard {
 
 TDirectTxErase::TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
-    : Ev(ev)
-{
-}
+    : Ev(ev) {}
 
 TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
-        TDataShard* self, const TExecuteParams& params,
-        const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error)
-{
+    TDataShard* self,
+    const TExecuteParams& params,
+    const NKikimrTxDataShard::TEvEraseRowsRequest& request,
+    NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status,
+    TString& error
+) {
     const ui64 tableId = request.GetTableId();
     const TTableId fullTableId(self->GetPathOwnerId(), tableId);
     const ui64 localTableId = self->GetLocalTableId(fullTableId);
@@ -33,21 +33,20 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     const TUserTable& tableInfo = *self->GetUserTables().at(tableId);
     Y_ABORT_UNLESS(tableInfo.LocalTid == localTableId);
 
-    if (request.GetSchemaVersion() && tableInfo.GetTableSchemaVersion()
-        && request.GetSchemaVersion() != tableInfo.GetTableSchemaVersion()) {
-
+    if (request.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() &&
+        request.GetSchemaVersion() != tableInfo.GetTableSchemaVersion()) {
         status = NKikimrTxDataShard::TEvEraseRowsResponse::SCHEME_ERROR;
         error = TStringBuilder() << "Schema version mismatch"
-            << ": got " << request.GetSchemaVersion()
-            << ", expected " << tableInfo.GetTableSchemaVersion();
+                                 << ": got " << request.GetSchemaVersion() << ", expected "
+                                 << tableInfo.GetTableSchemaVersion();
         return EStatus::Error;
     }
 
     if (request.KeyColumnIdsSize() != tableInfo.KeyColumnIds.size()) {
         status = NKikimrTxDataShard::TEvEraseRowsResponse::SCHEME_ERROR;
         error = TStringBuilder() << "Key column count mismatch"
-            << ": got " << request.KeyColumnIdsSize()
-            << ", expected " << tableInfo.KeyColumnIds.size();
+                                 << ": got " << request.KeyColumnIdsSize() << ", expected "
+                                 << tableInfo.KeyColumnIds.size();
         return EStatus::Error;
     }
 
@@ -71,14 +70,23 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         engineHostCounters.emplace();
-        userDb.emplace(*self, params.Txc->DB, params.GlobalTxId, params.ReadVersion, params.WriteVersion, *engineHostCounters, TAppData::TimeProvider->Now());
+        userDb.emplace(
+            *self,
+            params.Txc->DB,
+            params.GlobalTxId,
+            params.ReadVersion,
+            params.WriteVersion,
+            *engineHostCounters,
+            TAppData::TimeProvider->Now()
+        );
         groupProvider.emplace(*self, params.Txc->DB);
-        params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo));
+        params.Tx->ChangeCollector.Reset(
+            CreateChangeCollector(*self, *userDb, *groupProvider, params.Txc->DB, tableInfo)
+        );
     }
 
-    const bool breakWriteConflicts = (
-        self->SysLocksTable().HasWriteLocks(fullTableId) ||
-        self->GetVolatileTxManager().GetTxMap());
+    const bool breakWriteConflicts =
+        (self->SysLocksTable().HasWriteLocks(fullTableId) || self->GetVolatileTxManager().GetTxMap());
 
     absl::flat_hash_set<ui64> volatileDependencies;
 
@@ -95,8 +103,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         if (keyCells.GetCells().size() != tableInfo.KeyColumnTypes.size()) {
             status = NKikimrTxDataShard::TEvEraseRowsResponse::SCHEME_ERROR;
             error = TStringBuilder() << "Cell count doesn't match row scheme"
-                    << ": got " << keyCells.GetCells().size()
-                    << ", expected " << tableInfo.KeyColumnTypes.size();
+                                     << ": got " << keyCells.GetCells().size() << ", expected "
+                                     << tableInfo.KeyColumnTypes.size();
             return EStatus::Error;
         }
 
@@ -119,8 +127,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         if (keyBytes > NLimits::MaxWriteKeySize) {
             status = NKikimrTxDataShard::TEvEraseRowsResponse::BAD_REQUEST;
             error = TStringBuilder() << "Key is too big"
-                << ": actual " << keyBytes << " bytes"
-                << ", limit " << NLimits::MaxWriteKeySize << " bytes";
+                                     << ": actual " << keyBytes << " bytes"
+                                     << ", limit " << NLimits::MaxWriteKeySize << " bytes";
             return EStatus::Error;
         }
 
@@ -133,16 +141,16 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             const auto ready = userDb->SelectRow(fullTableId, key, condition->Tags(), row);
 
             switch (ready) {
-            case NTable::EReady::Page:
-                pageFault = true;
-                break;
-            case NTable::EReady::Gone:
-                continue;
-            case NTable::EReady::Data:
-                if (!condition->Check(row)) {
+                case NTable::EReady::Page:
+                    pageFault = true;
+                    break;
+                case NTable::EReady::Gone:
                     continue;
-                }
-                break;
+                case NTable::EReady::Data:
+                    if (!condition->Check(row)) {
+                        continue;
+                    }
+                    break;
             }
         }
 
@@ -158,11 +166,15 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
                     throw TNeedGlobalTxId();
                 }
 
-                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId)) {
+                if (!collector->OnUpdateTx(
+                        fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId
+                    )) {
                     pageFault = true;
                 }
             } else {
-                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion)) {
+                if (!collector->OnUpdate(
+                        fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion
+                    )) {
                     pageFault = true;
                 }
             }
@@ -179,7 +191,9 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
                 throw TNeedGlobalTxId();
             }
             params.Txc->DB.UpdateTx(localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId);
-            self->GetConflictsCache().GetTableCache(localTableId).AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
+            self->GetConflictsCache()
+                .GetTableCache(localTableId)
+                .AddUncommittedWrite(keyCells.GetCells(), params.GlobalTxId, params.Txc->DB);
             if (!commitAdded && userDb) {
                 // Make sure we see our own changes on further iterations
                 userDb->AddCommitTxId(fullTableId, params.GlobalTxId, params.WriteVersion);
@@ -187,7 +201,9 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             }
         } else {
             params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion);
-            self->GetConflictsCache().GetTableCache(localTableId).RemoveUncommittedWrites(keyCells.GetCells(), params.Txc->DB);
+            self->GetConflictsCache()
+                .GetTableCache(localTableId)
+                .RemoveUncommittedWrites(keyCells.GetCells(), params.Txc->DB);
         }
     }
 
@@ -209,13 +225,14 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         self->GetVolatileTxManager().PersistAddVolatileTx(
             params.GlobalTxId,
             params.WriteVersion,
-            /* commitTxIds */ { params.GlobalTxId },
+            /* commitTxIds */ {params.GlobalTxId},
             volatileDependencies,
-            /* participants */ { },
+            /* participants */ {},
             groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
             /* ordered */ false,
             /* arbiter */ false,
-            *params.Txc);
+            *params.Txc
+        );
         // Note: transaction is already committed, no additional waiting needed
     }
 
@@ -223,41 +240,48 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     return EStatus::Success;
 }
 
-bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error)
-{
+bool TDirectTxErase::CheckRequest(
+    TDataShard* self,
+    const NKikimrTxDataShard::TEvEraseRowsRequest& request,
+    NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status,
+    TString& error
+) {
     const auto result = CheckedExecute(self, TExecuteParams::ForCheck(), request, status, error);
     switch (result) {
-    case EStatus::Success:
-        return true;
-    case EStatus::Error:
-        return false;
-    case EStatus::PageFault:
-        Y_ABORT("Unexpected");
+        case EStatus::Success:
+            return true;
+        case EStatus::Error:
+            return false;
+        case EStatus::PageFault:
+            Y_ABORT("Unexpected");
     }
 }
 
-bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies)
-{
+bool TDirectTxErase::Execute(
+    TDataShard* self,
+    TTransactionContext& txc,
+    const TRowVersion& readVersion,
+    const TRowVersion& writeVersion,
+    ui64 globalTxId,
+    absl::flat_hash_set<ui64>& volatileReadDependencies
+) {
     const auto& record = Ev->Get()->Record;
 
     Result = MakeHolder<TEvDataShard::TEvEraseRowsResponse>();
     Result->Record.SetTabletID(self->TabletID());
 
-    const auto params = TExecuteParams::ForExecute(this, &txc, readVersion, writeVersion,
-        globalTxId, &volatileReadDependencies);
+    const auto params =
+        TExecuteParams::ForExecute(this, &txc, readVersion, writeVersion, globalTxId, &volatileReadDependencies);
     NKikimrTxDataShard::TEvEraseRowsResponse::EStatus status;
     TString error;
 
     const auto result = CheckedExecute(self, params, record, status, error);
     switch (result) {
-    case EStatus::Success:
-    case EStatus::Error:
-        break;
-    case EStatus::PageFault:
-        return false;
+        case EStatus::Success:
+        case EStatus::Error:
+            break;
+        case EStatus::PageFault:
+            return false;
     }
 
     Result->Record.SetStatus(status);
@@ -296,5 +320,5 @@ TVector<IDataShardChangeCollector::TChange> TDirectTxErase::GetCollectedChanges(
     return changes;
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

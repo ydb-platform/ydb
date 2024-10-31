@@ -17,7 +17,9 @@ using namespace NActors;
 using namespace NExportScan;
 using namespace NTable;
 
-class TExportScan: private NActors::IActorCallback, public NTable::IScan {
+class TExportScan
+    : private NActors::IActorCallback
+    , public NTable::IScan {
     enum EStateBits {
         ES_REGISTERED = 0, // Actor is registered
         ES_INITIALIZED, // Seek(...) was called
@@ -30,8 +32,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
 
     struct TStats: public IBuffer::TStats {
         TStats()
-            : IBuffer::TStats()
-        {
+            : IBuffer::TStats() {
             auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "store_to_yt");
 
             MonRows = counters->GetCounter("Rows", true);
@@ -54,12 +55,9 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
         }
 
         TString ToString() const {
-            return TStringBuilder()
-                << "Stats { "
-                    << " Rows: " << Rows
-                    << " BytesRead: " << BytesRead
-                    << " BytesSent: " << BytesSent
-                << " }";
+            return TStringBuilder() << "Stats { "
+                                    << " Rows: " << Rows << " BytesRead: " << BytesRead << " BytesSent: " << BytesSent
+                                    << " }";
         }
 
     private:
@@ -154,22 +152,20 @@ public:
     }
 
     explicit TExportScan(std::function<IActor*()>&& createUploaderFn, IBuffer::TPtr buffer)
-        : IActorCallback(static_cast<TReceiveFunc>(&TExportScan::StateWork), NKikimrServices::TActivity::EXPORT_SCAN_ACTOR)
+        : IActorCallback(
+              static_cast<TReceiveFunc>(&TExportScan::StateWork),
+              NKikimrServices::TActivity::EXPORT_SCAN_ACTOR
+          )
         , CreateUploaderFn(std::move(createUploaderFn))
         , Buffer(std::move(buffer))
         , Stats(new TStats)
         , Driver(nullptr)
-        , Success(false)
-    {
-    }
+        , Success(false) {}
 
     void Describe(IOutputStream& o) const noexcept override {
         o << "ExportScan { "
-              << "Uploader: " << Uploader
-              << Stats->ToString() << " "
-              << "Success: " << Success
-              << "Error: " << Error
-          << " }";
+          << "Uploader: " << Uploader << Stats->ToString() << " "
+          << "Success: " << Success << "Error: " << Error << " }";
     }
 
     IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
@@ -266,5 +262,5 @@ NTable::IScan* CreateExportScan(IBuffer::TPtr buffer, std::function<IActor*()>&&
     return new TExportScan(std::move(createUploaderFn), std::move(buffer));
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

@@ -14,15 +14,13 @@ namespace {
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateLock TPropose"
-            << " opId# " << OperationId << " ";
+        return TStringBuilder() << "TCreateLock TPropose"
+                                << " opId# " << OperationId << " ";
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -61,36 +59,32 @@ class TCreateLock: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-            return NextState();
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+                return NextState();
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
 public:
     explicit TCreateLock(TOperationId id, const TTxTransaction& tx)
-        : TSubOperation(id, tx)
-    {
-    }
+        : TSubOperation(id, tx) {}
 
     explicit TCreateLock(TOperationId id, TTxState::ETxState state)
-        : TSubOperation(id, state)
-    {
-    }
+        : TSubOperation(id, state) {}
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -100,7 +94,9 @@ public:
             << ": opId# " << OperationId
             << ", path# " << workingDir << "/" << op.GetName());
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         if (!Transaction.HasLockConfig()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "no locking config present");
@@ -110,8 +106,7 @@ public:
         const auto parentPath = TPath::Resolve(workingDir, context.SS);
         {
             const auto checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -132,8 +127,7 @@ public:
         const auto tablePath = parentPath.Child(op.GetName());
         {
             const auto checks = tablePath.Check();
-            checks
-                .IsAtLocalSchemeShard()
+            checks.IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
@@ -159,9 +153,12 @@ public:
         result->SetPathId(pathId.LocalPathId);
 
         if (tablePath.LockedBy() == OperationId.GetTxId()) {
-            result->SetError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "path checks failed"
-                << ", path already locked by this operation"
-                << ", path: " << tablePath.PathString());
+            result->SetError(
+                NKikimrScheme::StatusAlreadyExists,
+                TStringBuilder() << "path checks failed"
+                                 << ", path already locked by this operation"
+                                 << ", path: " << tablePath.PathString()
+            );
             return result;
         }
 
@@ -228,4 +225,4 @@ ISubOperation::TPtr CreateLock(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateLock>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

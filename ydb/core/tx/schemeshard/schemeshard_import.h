@@ -38,9 +38,7 @@ struct TEvImport {
         TEvCreateImportRequest() = default;
 
         explicit TEvCreateImportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const NKikimrImport::TCreateImportRequest& request
+            const ui64 txId, const TString& dbName, const NKikimrImport::TCreateImportRequest& request
         ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
@@ -70,27 +68,20 @@ struct TEvImport {
         }
     };
 
-    DECLARE_EVENT_CLASS(EvGetImportResponse) {
-    };
+    DECLARE_EVENT_CLASS(EvGetImportResponse) {};
 
     DECLARE_EVENT_CLASS(EvCancelImportRequest) {
         TEvCancelImportRequest() = default;
 
         explicit TEvCancelImportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const NKikimrImport::TCancelImportRequest& request
+            const ui64 txId, const TString& dbName, const NKikimrImport::TCancelImportRequest& request
         ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->CopyFrom(request);
         }
 
-        explicit TEvCancelImportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const ui64 importId
-        ) {
+        explicit TEvCancelImportRequest(const ui64 txId, const TString& dbName, const ui64 importId) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->SetId(importId);
@@ -109,20 +100,14 @@ struct TEvImport {
         TEvForgetImportRequest() = default;
 
         explicit TEvForgetImportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const NKikimrImport::TForgetImportRequest& request
+            const ui64 txId, const TString& dbName, const NKikimrImport::TForgetImportRequest& request
         ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->CopyFrom(request);
         }
 
-        explicit TEvForgetImportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const ui64 importId
-        ) {
+        explicit TEvForgetImportRequest(const ui64 txId, const TString& dbName, const ui64 importId) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->SetId(importId);
@@ -146,10 +131,7 @@ struct TEvImport {
         }
 
         explicit TEvListImportsRequest(
-            const TString& dbName,
-            const ui64 pageSize,
-            const TString& pageToken,
-            const TString& kind
+            const TString& dbName, const ui64 pageSize, const TString& pageToken, const TString& kind
         ) {
             Record.SetDatabaseName(dbName);
 
@@ -160,12 +142,11 @@ struct TEvImport {
         }
     };
 
-    DECLARE_EVENT_CLASS(EvListImportsResponse) {
-    };
+    DECLARE_EVENT_CLASS(EvListImportsResponse) {};
 
 #undef DECLARE_EVENT_CLASS
 
 }; // TEvImport
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

@@ -15,8 +15,7 @@ public:
     TTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev)
         : OperationId(ev->Get()->Record.GetTxId(), 0)
         , TargetOperationId(ev->Get()->Record.GetTargetTxId(), 0)
-        , Sender(ev->Sender)
-    {
+        , Sender(ev->Sender) {
         const auto& record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasTxId());
         Y_ABORT_UNLESS(record.HasTargetTxId());
@@ -36,8 +35,12 @@ public:
             << ": opId# " << OperationId
             << ", target opId# " << TargetOperationId);
 
-        auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
-        auto result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId()));
+        auto proposeResult = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
+        auto result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(
+            ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId())
+        );
 
         auto found = context.SS->FindTx(TargetOperationId);
         if (!found) {
@@ -88,7 +91,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -96,4 +99,4 @@ ISubOperation::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev) {
     return new TTxCancelTx(ev);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

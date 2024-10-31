@@ -9,22 +9,24 @@ private:
     using TBase = ISSEntity;
     YDB_READONLY_DEF(TColumnTableInfo::TPtr, TableInfo);
     virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) = 0;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const = 0;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context
+    ) const = 0;
+
 protected:
-    TConclusion<std::shared_ptr<ISSEntityUpdate>> DoRestoreUpdate(const TUpdateRestoreContext& ssContext) const override;
+    TConclusion<std::shared_ptr<ISSEntityUpdate>> DoRestoreUpdate(const TUpdateRestoreContext& ssContext
+    ) const override;
     virtual TConclusionStatus DoInitialize(const TEntityInitializationContext& context) override final;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context) const override final;;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context
+    ) const override final;
+    ;
 
     TColumnTableEntity(const TPathId& pathId, const TColumnTableInfo::TPtr& tabletInfo)
         : TBase(pathId)
-        , TableInfo(tabletInfo) {
-    }
+        , TableInfo(tabletInfo) {}
 
 public:
-
     TColumnTableEntity(const TPathId& pathId)
-        : TBase(pathId) {
-    }
+        : TBase(pathId) {}
 
     const TColumnTableInfo& GetTableInfoVerified() const {
         AFL_VERIFY(!!TableInfo);
@@ -42,4 +44,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

@@ -5,7 +5,7 @@
 namespace NKikimr {
 
 namespace NIceDb {
-    class TNiceDb;
+class TNiceDb;
 }
 
 namespace NReplication::NController {
@@ -19,7 +19,7 @@ public:
 };
 
 class TSysParams {
-    enum class ESysParam: ui32 {
+    enum class ESysParam : ui32 {
         NextReplicationId = 1,
     };
 
@@ -36,5 +36,5 @@ private:
 
 }; // TSysParams
 
-} // NReplication::NController
-} // NKikimr
+} // namespace NReplication::NController
+} // namespace NKikimr

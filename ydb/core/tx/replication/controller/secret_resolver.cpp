@@ -27,12 +27,12 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             << ": entry# " << entry.ToString());
 
         switch (entry.Status) {
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-            break;
-        default:
-            LOG_W("Unexpected status"
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                break;
+            default:
+                LOG_W("Unexpected status"
                 << ": entry# " << entry.ToString());
-            return Schedule(RetryInterval, new TEvents::TEvWakeup);
+                return Schedule(RetryInterval, new TEvents::TEvWakeup);
         }
 
         if (!entry.SecurityObject) {
@@ -40,8 +40,10 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         }
 
         SecretId = NMetadata::NSecret::TSecretId(entry.SecurityObject->GetOwnerSID(), SecretName);
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-            new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
+        Send(
+            NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+            new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher())
+        );
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -71,9 +73,7 @@ public:
         , ReplicationId(rid)
         , PathId(pathId)
         , SecretName(secretName)
-        , LogPrefix("SecretResolver", ReplicationId)
-    {
-    }
+        , LogPrefix("SecretResolver", ReplicationId) {}
 
     void Bootstrap() {
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
@@ -117,4 +117,4 @@ IActor* CreateSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pa
     return new TSecretResolver(parent, rid, pathId, secretName);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

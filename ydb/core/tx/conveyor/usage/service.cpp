@@ -1,5 +1,3 @@
 #include "service.h"
 
-namespace NKikimr::NConveyor {
-
-}
+namespace NKikimr::NConveyor {}

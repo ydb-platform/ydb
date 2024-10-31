@@ -24,8 +24,7 @@ private:
 
 public:
     using TPtr = std::shared_ptr<IDataContainer>;
-    virtual ~IDataContainer() {
-    }
+    virtual ~IDataContainer() {}
     virtual TConclusion<std::shared_ptr<arrow::RecordBatch>> ExtractBatch() = 0;
     virtual ui64 GetSchemaVersion() const = 0;
     virtual ui64 GetSize() const = 0;
@@ -80,12 +79,16 @@ public:
         }
     }
 
-    TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion)
+    TWriteMeta(
+        const ui64 writeId,
+        const ui64 tableId,
+        const NActors::TActorId& source,
+        const std::optional<ui32> granuleShardingVersion
+    )
         : WriteId(writeId)
         , TableId(tableId)
         , Source(source)
-        , GranuleShardingVersion(granuleShardingVersion) {
-    }
+        , GranuleShardingVersion(granuleShardingVersion) {}
 };
 
 class TWriteData {
@@ -98,8 +101,13 @@ private:
     YDB_READONLY(bool, WritePortions, false);
 
 public:
-    TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
-        const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction, const bool writePortions);
+    TWriteData(
+        const TWriteMeta& writeMeta,
+        IDataContainer::TPtr data,
+        const std::shared_ptr<arrow::Schema>& primaryKeySchema,
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction,
+        const bool writePortions
+    );
 
     const NArrow::TSchemaSubset& GetSchemaSubsetVerified() const {
         AFL_VERIFY(SchemaSubset);

@@ -16,7 +16,9 @@
 
 namespace NKikimr::NOlap::NReader {
 
-class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter {
+class TColumnShardScan
+    : public TActorBootstrapped<TColumnShardScan>
+    , NArrow::IRowWriter {
 private:
     TActorId ResourceSubscribeActorId;
     TActorId ReadCoordinatorActorId;
@@ -31,18 +33,34 @@ public:
 public:
     virtual void PassAway() override;
 
-    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId,
-        ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange,
-        NKikimrDataEvents::EDataFormat dataFormat, const NColumnShard::TScanCounters& scanCountersPool);
+    TColumnShardScan(
+        const TActorId& columnShardActorId,
+        const TActorId& scanComputeActorId,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const TComputeShardingPolicy& computeShardingPolicy,
+        ui32 scanId,
+        ui64 txId,
+        ui32 scanGen,
+        ui64 requestCookie,
+        ui64 tabletId,
+        TDuration timeout,
+        const TReadMetadataBase::TConstPtr& readMetadataRange,
+        NKikimrDataEvents::EDataFormat dataFormat,
+        const NColumnShard::TScanCounters& scanCountersPool
+    );
 
     void Bootstrap(const TActorContext& ctx);
 
 private:
     STATEFN(StateScan) {
         auto g = Stats->MakeGuard("processing");
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
+        TLogContextGuard gLogging(
+            NActors::TLogContextBuilder::
+                Build(NKikimrServices::
+                          TX_COLUMNSHARD_SCAN)("SelfId", SelfId())("TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)(
+                    "ScanGen", ScanGen
+                )
+        );
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
@@ -82,8 +100,7 @@ private:
 
     public:
         TScanStatsOwner(const TReadStats& stats)
-            : Stats(stats) {
-        }
+            : Stats(stats) {}
 
         virtual THashMap<TString, ui64> GetMetrics() const override {
             THashMap<TString, ui64> result;
@@ -148,10 +165,12 @@ private:
         NMonitoring::THistogramPtr ByteDurationsCounter;
 
     public:
-        TBlobStats(const NMonitoring::THistogramPtr blobDurationsCounter, const NMonitoring::THistogramPtr byteDurationsCounter)
+        TBlobStats(
+            const NMonitoring::THistogramPtr blobDurationsCounter,
+            const NMonitoring::THistogramPtr byteDurationsCounter
+        )
             : BlobDurationsCounter(blobDurationsCounter)
-            , ByteDurationsCounter(byteDurationsCounter) {
-        }
+            , ByteDurationsCounter(byteDurationsCounter) {}
         void Received(const TBlobRange& br, const TDuration d) {
             ReadingDurationSum += d;
             ReadingDurationMax = Max(ReadingDurationMax, d);

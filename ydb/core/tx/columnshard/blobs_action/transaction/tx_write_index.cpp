@@ -9,12 +9,16 @@ namespace NKikimr::NColumnShard {
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto changes = Ev->Get()->IndexChanges;
     TMemoryProfileGuard mpg("TTxWriteIndex::Execute::" + changes->TypeString());
-    TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
+    TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
+            "external_task_id", changes->GetTaskIdentifier()
+        );
     Y_ABORT_UNLESS(Self->InsertTable);
     Y_ABORT_UNLESS(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 
-    ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", changes->DebugString());
+    ACFL_DEBUG("event", "TTxWriteIndex::Execute")
+    ("change_type", changes->TypeString())("details", changes->DebugString());
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
         NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
         Y_ABORT_UNLESS(Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot() <= snapshot);
@@ -23,7 +27,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, snapshot));
         LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
-        NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
+        NOlap::TWriteIndexContext context(
+            &txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot
+        );
         changes->WriteIndexOnExecute(Self, context);
 
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
@@ -50,17 +56,27 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 void TTxWriteIndex::Complete(const TActorContext& ctx) {
     CompleteReady = true;
     auto changes = Ev->Get()->IndexChanges;
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
-        "task_id", changes->GetTaskIdentifier()));
+    TLogContextGuard gLogging(
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
+            "task_id", changes->GetTaskIdentifier()
+        )
+    );
     TMemoryProfileGuard mpg("TTxWriteIndex::Complete::" + changes->TypeString());
-    ACFL_DEBUG("event", "TTxWriteIndex::Complete")("change_type", changes->TypeString())("details", changes->DebugString());
+    ACFL_DEBUG("event", "TTxWriteIndex::Complete")
+    ("change_type", changes->TypeString())("details", changes->DebugString());
 
     const ui64 blobsWritten = changes->GetBlobsAction().GetWritingBlobsCount();
     const ui64 bytesWritten = changes->GetBlobsAction().GetWritingTotalSize();
 
     if (!Ev->Get()->IndexChanges->IsAborted()) {
         NOlap::TWriteIndexCompleteContext context(
-            ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
+            ctx,
+            blobsWritten,
+            bytesWritten,
+            Ev->Get()->Duration,
+            Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(),
+            CurrentSnapshot
+        );
         Ev->Get()->IndexChanges->WriteIndexOnComplete(Self, context);
     }
 
@@ -98,4 +114,4 @@ void TTxWriteIndex::Describe(IOutputStream& out) const noexcept {
     }
 }
 
-}
+} // namespace NKikimr::NColumnShard

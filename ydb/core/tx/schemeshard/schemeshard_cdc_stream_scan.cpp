@@ -6,9 +6,7 @@
 
 #include <util/generic/deque.h>
 
-#if defined LOG_D || \
-    defined LOG_W || \
-    defined LOG_E
+#if defined LOG_D || defined LOG_W || defined LOG_E
 #error log macro redefinition
 #endif
 
@@ -27,11 +25,13 @@ public:
         return NKikimrServices::TActivity::SCHEMESHARD_CDC_STREAM_SCAN_FINALIZER;
     }
 
-    explicit TCdcStreamScanFinalizer(const TActorId& ssActorId, THolder<TEvSchemeShard::TEvModifySchemeTransaction>&& req)
+    explicit TCdcStreamScanFinalizer(
+        const TActorId& ssActorId,
+        THolder<TEvSchemeShard::TEvModifySchemeTransaction>&& req
+    )
         : SSActorId(ssActorId)
         , Request(std::move(req)) // template without txId
-    {
-    }
+    {}
 
     void Bootstrap() {
         AllocateTxId();
@@ -40,8 +40,7 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle)
-            sFunc(TEvents::TEvPoison, PassAway);
+            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle) sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
@@ -68,7 +67,9 @@ struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchem
     struct {
         TPathId StreamPathId;
         TTabletId TabletId;
-        explicit operator bool() const { return StreamPathId && TabletId; }
+        explicit operator bool() const {
+            return StreamPathId && TabletId;
+        }
     } PipeRetry;
 
     // side effects
@@ -80,21 +81,15 @@ struct TSchemeShard::TCdcStreamScan::TTxProgress: public TTransactionBase<TSchem
 public:
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvRunCdcStreamScan::TPtr& ev)
         : TBase(self)
-        , RunCdcStreamScan(ev)
-    {
-    }
+        , RunCdcStreamScan(ev) {}
 
     explicit TTxProgress(TSelf* self, TEvDataShard::TEvCdcStreamScanResponse::TPtr& ev)
         : TBase(self)
-        , CdcStreamScanResponse(ev)
-    {
-    }
+        , CdcStreamScanResponse(ev) {}
 
     explicit TTxProgress(TSelf* self, const TPathId& streamPathId, TTabletId tabletId)
         : TBase(self)
-        , PipeRetry({streamPathId, tabletId})
-    {
-    }
+        , PipeRetry({streamPathId, tabletId}) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CDC_STREAM_SCAN_PROGRESS;
@@ -264,36 +259,36 @@ private:
         }
 
         switch (record.GetStatus()) {
-        case NKikimrTxDataShard::TEvCdcStreamScanResponse::ACCEPTED:
-        case NKikimrTxDataShard::TEvCdcStreamScanResponse::IN_PROGRESS:
-            break;
+            case NKikimrTxDataShard::TEvCdcStreamScanResponse::ACCEPTED:
+            case NKikimrTxDataShard::TEvCdcStreamScanResponse::IN_PROGRESS:
+                break;
 
-        case NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE:
-            status.Status = record.GetStatus();
-            streamInfo->DoneShards.insert(shardIdx);
-            streamInfo->InProgressShards.erase(shardIdx);
-            Self->CdcStreamScanPipes.Close(streamPathId, tabletId, ctx);
-            StreamToProgress = streamPathId;
-            Bill(streamPathId, shardIdx, TRUCalculator::ReadTable(record.GetStats().GetBytesProcessed()), ctx);
-            break;
+            case NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE:
+                status.Status = record.GetStatus();
+                streamInfo->DoneShards.insert(shardIdx);
+                streamInfo->InProgressShards.erase(shardIdx);
+                Self->CdcStreamScanPipes.Close(streamPathId, tabletId, ctx);
+                StreamToProgress = streamPathId;
+                Bill(streamPathId, shardIdx, TRUCalculator::ReadTable(record.GetStats().GetBytesProcessed()), ctx);
+                break;
 
-        case NKikimrTxDataShard::TEvCdcStreamScanResponse::OVERLOADED:
-        case NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED:
-            streamInfo->PendingShards.insert(shardIdx);
-            streamInfo->InProgressShards.erase(shardIdx);
-            Self->CdcStreamScanPipes.Close(streamPathId, tabletId, ctx);
-            StreamToProgress = streamPathId;
-            break;
+            case NKikimrTxDataShard::TEvCdcStreamScanResponse::OVERLOADED:
+            case NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED:
+                streamInfo->PendingShards.insert(shardIdx);
+                streamInfo->InProgressShards.erase(shardIdx);
+                Self->CdcStreamScanPipes.Close(streamPathId, tabletId, ctx);
+                StreamToProgress = streamPathId;
+                break;
 
-        case NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST:
-        case NKikimrTxDataShard::TEvCdcStreamScanResponse::SCHEME_ERROR:
-            Y_ABORT("unreachable");
+            case NKikimrTxDataShard::TEvCdcStreamScanResponse::BAD_REQUEST:
+            case NKikimrTxDataShard::TEvCdcStreamScanResponse::SCHEME_ERROR:
+                Y_ABORT("unreachable");
 
-        default:
-            LOG_E("Unexpected response status"
+            default:
+                LOG_E("Unexpected response status"
                 << ": status# " << static_cast<int>(record.GetStatus())
                 << ", error# " << record.GetErrorDescription());
-            return true;
+                return true;
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -395,16 +390,16 @@ private:
 
         const auto now = ctx.Now();
         const TString id = TStringBuilder() << "cdc_stream_scan"
-            << "-" << pathId.OwnerId << "-" << pathId.LocalPathId
-            << "-" << shardIdx.GetOwnerId() << "-" << shardIdx.GetLocalId();
+                                            << "-" << pathId.OwnerId << "-" << pathId.LocalPathId << "-"
+                                            << shardIdx.GetOwnerId() << "-" << shardIdx.GetLocalId();
         const TString billRecord = TBillRecord()
-            .Id(id)
-            .CloudId(attrs.at("cloud_id"))
-            .FolderId(attrs.at("folder_id"))
-            .ResourceId(attrs.at("database_id"))
-            .SourceWt(now)
-            .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
-            .ToString();
+                                       .Id(id)
+                                       .CloudId(attrs.at("cloud_id"))
+                                       .FolderId(attrs.at("folder_id"))
+                                       .ResourceId(attrs.at("database_id"))
+                                       .SourceWt(now)
+                                       .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
+                                       .ToString();
 
         LOG_N("Make a bill"
             << ": streamPathId# " << pathId
@@ -439,20 +434,25 @@ void TSchemeShard::ResumeCdcStreamScans(const TVector<TPathId>& ids, const TActo
     }
 }
 
-void TSchemeShard::PersistCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId,
-        const TShardIdx& shardIdx, const TCdcStreamInfo::TShardStatus& status)
-{
+void TSchemeShard::PersistCdcStreamScanShardStatus(
+    NIceDb::TNiceDb& db,
+    const TPathId& streamPathId,
+    const TShardIdx& shardIdx,
+    const TCdcStreamInfo::TShardStatus& status
+) {
     db.Table<Schema::CdcStreamScanShardStatus>()
         .Key(streamPathId.OwnerId, streamPathId.LocalPathId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
-        .Update(
-            NIceDb::TUpdate<Schema::CdcStreamScanShardStatus::Status>(status.Status)
-        );
+        .Update(NIceDb::TUpdate<Schema::CdcStreamScanShardStatus::Status>(status.Status));
 }
 
-void TSchemeShard::RemoveCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx) {
+void TSchemeShard::RemoveCdcStreamScanShardStatus(
+    NIceDb::TNiceDb& db,
+    const TPathId& streamPathId,
+    const TShardIdx& shardIdx
+) {
     db.Table<Schema::CdcStreamScanShardStatus>()
         .Key(streamPathId.OwnerId, streamPathId.LocalPathId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
         .Delete();
 }
 
-}
+} // namespace NKikimr::NSchemeShard

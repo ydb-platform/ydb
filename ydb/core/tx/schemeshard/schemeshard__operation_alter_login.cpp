@@ -21,25 +21,31 @@ public:
         } else if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {
             result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Wrong working dir");
         } else {
-            const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig = context.SS->GetDomainsConfig().GetSecurityConfig();
+            const NKikimrConfig::TDomainsConfig::TSecurityConfig& securityConfig =
+                context.SS->GetDomainsConfig().GetSecurityConfig();
             const NKikimrSchemeOp::TAlterLogin& alterLogin = Transaction.GetAlterLogin();
             switch (alterLogin.GetAlterCase()) {
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
                     auto response = context.SS->LoginProvider.CreateUser(
-                        {.User = createUser.GetUser(), .Password = createUser.GetPassword()});
+                        {.User = createUser.GetUser(), .Password = createUser.GetPassword()}
+                    );
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[createUser.GetUser()];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>()
+                            .Key(sid.Name)
+                            .Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
                         if (securityConfig.HasAllUsersGroup()) {
                             auto response = context.SS->LoginProvider.AddGroupMembership({
                                 .Group = securityConfig.GetAllUsersGroup(),
                                 .Member = createUser.GetUser(),
                             });
                             if (!response.Error) {
-                                db.Table<Schema::LoginSidMembers>().Key(securityConfig.GetAllUsersGroup(), createUser.GetUser()).Update();
+                                db.Table<Schema::LoginSidMembers>()
+                                    .Key(securityConfig.GetAllUsersGroup(), createUser.GetUser())
+                                    .Update();
                             }
                         }
                         result->SetStatus(NKikimrScheme::StatusSuccess);
@@ -48,12 +54,16 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
-                    auto response = context.SS->LoginProvider.ModifyUser({.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword()});
+                    auto response = context.SS->LoginProvider.ModifyUser(
+                        {.User = modifyUser.GetUser(), .Password = modifyUser.GetPassword()}
+                    );
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
-                        db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
+                        db.Table<Schema::LoginSids>()
+                            .Key(sid.Name)
+                            .Update<Schema::LoginSids::SidType, Schema::LoginSids::SidHash>(sid.Type, sid.Hash);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                     }
                     break;
@@ -61,10 +71,8 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kRemoveUser: {
                     const auto& removeUser = alterLogin.GetRemoveUser();
                     const TString& user = removeUser.GetUser();
-                    auto response = context.SS->LoginProvider.RemoveUser({
-                        .User = user,
-                        .MissingOk = removeUser.GetMissingOk()
-                    });
+                    auto response =
+                        context.SS->LoginProvider.RemoveUser({.User = user, .MissingOk = removeUser.GetMissingOk()});
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -91,14 +99,15 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership: {
                     const auto& addGroupMembership = alterLogin.GetAddGroupMembership();
-                    auto response = context.SS->LoginProvider.AddGroupMembership({
-                        .Group = addGroupMembership.GetGroup(),
-                        .Member = addGroupMembership.GetMember()
-                        });
+                    auto response = context.SS->LoginProvider.AddGroupMembership(
+                        {.Group = addGroupMembership.GetGroup(), .Member = addGroupMembership.GetMember()}
+                    );
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        db.Table<Schema::LoginSidMembers>().Key(addGroupMembership.GetGroup(), addGroupMembership.GetMember()).Update();
+                        db.Table<Schema::LoginSidMembers>()
+                            .Key(addGroupMembership.GetGroup(), addGroupMembership.GetMember())
+                            .Update();
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                         if (response.Notice) {
                             result->AddNotice(response.Notice);
@@ -108,14 +117,15 @@ public:
                 }
                 case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership: {
                     const auto& removeGroupMembership = alterLogin.GetRemoveGroupMembership();
-                    auto response = context.SS->LoginProvider.RemoveGroupMembership({
-                        .Group = removeGroupMembership.GetGroup(),
-                        .Member = removeGroupMembership.GetMember()
-                        });
+                    auto response = context.SS->LoginProvider.RemoveGroupMembership(
+                        {.Group = removeGroupMembership.GetGroup(), .Member = removeGroupMembership.GetMember()}
+                    );
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
-                        db.Table<Schema::LoginSidMembers>().Key(removeGroupMembership.GetGroup(), removeGroupMembership.GetMember()).Delete();
+                        db.Table<Schema::LoginSidMembers>()
+                            .Key(removeGroupMembership.GetGroup(), removeGroupMembership.GetMember())
+                            .Delete();
                         result->SetStatus(NKikimrScheme::StatusSuccess);
                         if (response.Warning) {
                             result->AddWarning(response.Warning);
@@ -127,10 +137,7 @@ public:
                     const auto& renameGroup = alterLogin.GetRenameGroup();
                     const TString& group = renameGroup.GetGroup();
                     const TString& newName = renameGroup.GetNewName();
-                    auto response = context.SS->LoginProvider.RenameGroup({
-                        .Group = group,
-                        .NewName = newName
-                    });
+                    auto response = context.SS->LoginProvider.RenameGroup({.Group = group, .NewName = newName});
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -146,10 +153,9 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kRemoveGroup: {
                     const auto& removeGroup = alterLogin.GetRemoveGroup();
                     const TString& group = removeGroup.GetGroup();
-                    auto response = context.SS->LoginProvider.RemoveGroup({
-                        .Group = group,
-                        .MissingOk = removeGroup.GetMissingOk()
-                    });
+                    auto response =
+                        context.SS->LoginProvider.RemoveGroup({.Group = group, .MissingOk = removeGroup.GetMissingOk()}
+                        );
                     if (response.Error) {
                         result->SetStatus(NKikimrScheme::StatusPreconditionFailed, response.Error);
                     } else {
@@ -194,7 +200,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -207,4 +213,4 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) 
     return MakeSubOperation<TAlterLogin>(id);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

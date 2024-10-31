@@ -7,4 +7,4 @@ TString TColumnPortionResult::DebugString() const {
     return TStringBuilder() << "chunks=" << Chunks.size() << ";";
 }
 
-}
+} // namespace NKikimr::NOlap::NCompaction

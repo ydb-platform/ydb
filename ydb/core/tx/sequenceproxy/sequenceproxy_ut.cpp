@@ -16,61 +16,54 @@ namespace NSequenceProxy {
 using namespace NSequenceShard;
 
 Y_UNIT_TEST_SUITE(SequenceProxy) {
-
     namespace {
 
-        TTenantTestConfig::TTenantPoolConfig MakeDefaultTenantPoolConfig() {
-            TTenantTestConfig::TTenantPoolConfig res = {
-                // Static slots {tenant, {cpu, memory, network}}
-                {
-                    { {DOMAIN1_NAME, {1, 1, 1}} },
-                },
+    TTenantTestConfig::TTenantPoolConfig MakeDefaultTenantPoolConfig() {
+        TTenantTestConfig::TTenantPoolConfig res = {                // Static slots {tenant, {cpu, memory, network}}
+                                                    {
+                                                        {{DOMAIN1_NAME, {1, 1, 1}}},
+                                                    },
                 // NodeType
-                "storage"
-            };
-            return res;
-        }
+                                                    "storage"
+        };
+        return res;
+    }
 
-        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard) {
-            TTenantTestConfig res = {
-                // Domains {name, schemeshard {{ subdomain_names }}}
-                {{{DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()}}},
+    TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard) {
+        TTenantTestConfig res = {                // Domains {name, schemeshard {{ subdomain_names }}}
+                                 {{{DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()}}},
                 // HiveId
-                HIVE_ID,
+                                 HIVE_ID,
                 // FakeTenantSlotBroker
-                true,
+                                 true,
                 // FakeSchemeShard
-                fakeSchemeShard,
+                                 fakeSchemeShard,
                 // CreateConsole
-                false,
+                                 false,
                 // Nodes {tenant_pool_config}
-                {{
+                                 {{
                     // Node0
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
+                                     {MakeDefaultTenantPoolConfig()},
                     // Node1
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
-                }},
+                                     {MakeDefaultTenantPoolConfig()},
+                                 }},
                 // DataCenterCount
-                1
-            };
-            return res;
-        }
+                                 1
+        };
+        return res;
+    }
 
-        void StartSchemeCache(TTestActorRuntime& runtime, const TString& root = DOMAIN1_NAME) {
-            for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-                auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
-                cacheConfig->Roots.emplace_back(1, SCHEME_SHARD1_ID, root);
-                cacheConfig->Counters = new ::NMonitoring::TDynamicCounters();
+    void StartSchemeCache(TTestActorRuntime& runtime, const TString& root = DOMAIN1_NAME) {
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
+            cacheConfig->Roots.emplace_back(1, SCHEME_SHARD1_ID, root);
+            cacheConfig->Counters = new ::NMonitoring::TDynamicCounters();
 
-                IActor* schemeCache = CreateSchemeBoardSchemeCache(cacheConfig.Get());
-                TActorId schemeCacheId = runtime.Register(schemeCache, nodeIndex);
-                runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId, nodeIndex);
-            }
+            IActor* schemeCache = CreateSchemeBoardSchemeCache(cacheConfig.Get());
+            TActorId schemeCacheId = runtime.Register(schemeCache, nodeIndex);
+            runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId, nodeIndex);
         }
+    }
 
 #if 0
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
@@ -80,68 +73,76 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
         }
 #endif
 
-        void CreateSequence(TTestActorRuntime& runtime, const TString& workingDir, const TString& scheme) {
-            auto edge = runtime.AllocateEdgeActor(0);
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-            auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
-            tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-            tx->SetWorkingDir(workingDir);
-            auto* op = tx->MutableSequence();
-            bool parseResult = ::google::protobuf::TextFormat::ParseFromString(scheme, op);
-            UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
-            runtime.Send(new IEventHandle(MakeTxProxyID(), edge, request.Release()));
+    void CreateSequence(TTestActorRuntime& runtime, const TString& workingDir, const TString& scheme) {
+        auto edge = runtime.AllocateEdgeActor(0);
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
+        tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+        tx->SetWorkingDir(workingDir);
+        auto* op = tx->MutableSequence();
+        bool parseResult = ::google::protobuf::TextFormat::ParseFromString(scheme, op);
+        UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
+        runtime.Send(new IEventHandle(MakeTxProxyID(), edge, request.Release()));
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
-            auto* msg = ev->Get();
-            const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
-            Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
+        auto* msg = ev->Get();
+        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
+        Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
-            ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-            notifyReq->Record.SetTxId(msg->Record.GetTxId());
-            runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
-            runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
-        }
+        ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
+        auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        notifyReq->Record.SetTxId(msg->Record.GetTxId());
+        runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
+        runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
+    }
 
-        void DropSequence(TTestActorRuntime& runtime, const TString& workingDir, const TString& name) {
-            auto edge = runtime.AllocateEdgeActor(0);
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-            auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
-            tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
-            tx->SetWorkingDir(workingDir);
-            auto* op = tx->MutableDrop();
-            op->SetName(name);
-            runtime.Send(new IEventHandle(MakeTxProxyID(), edge, request.Release()));
+    void DropSequence(TTestActorRuntime& runtime, const TString& workingDir, const TString& name) {
+        auto edge = runtime.AllocateEdgeActor(0);
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
+        tx->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
+        tx->SetWorkingDir(workingDir);
+        auto* op = tx->MutableDrop();
+        op->SetName(name);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), edge, request.Release()));
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
-            auto* msg = ev->Get();
-            const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
-            Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(edge);
+        auto* msg = ev->Get();
+        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
+        Y_ABORT_UNLESS(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
 
-            ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-            auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-            notifyReq->Record.SetTxId(msg->Record.GetTxId());
-            runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
-            runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
-        }
+        ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
+        auto notifyReq = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
+        notifyReq->Record.SetTxId(msg->Record.GetTxId());
+        runtime.SendToPipe(schemeShardTabletId, edge, notifyReq.Release());
+        runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
+    }
 
-        void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
-            auto request = MakeHolder<TEvSequenceProxy::TEvNextVal>(path);
-            runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
-        }
+    void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
+        auto request = MakeHolder<TEvSequenceProxy::TEvNextVal>(path);
+        runtime.Send(new IEventHandle(MakeSequenceProxyServiceID(), sender, request.Release()));
+    }
 
-        i64 WaitNextValResult(TTestActorRuntime& runtime, const TActorId& sender, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceProxy::TEvNextValResult>(sender);
-            auto* msg = ev->Get();
-            UNIT_ASSERT_VALUES_EQUAL(msg->Status, expectedStatus);
-            return msg->Status == Ydb::StatusIds::SUCCESS ? msg->Value : 0;
-        }
+    i64 WaitNextValResult(
+        TTestActorRuntime& runtime,
+        const TActorId& sender,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS
+    ) {
+        auto ev = runtime.GrabEdgeEventRethrow<TEvSequenceProxy::TEvNextValResult>(sender);
+        auto* msg = ev->Get();
+        UNIT_ASSERT_VALUES_EQUAL(msg->Status, expectedStatus);
+        return msg->Status == Ydb::StatusIds::SUCCESS ? msg->Value : 0;
+    }
 
-        i64 DoNextVal(TTestActorRuntime& runtime, const TString& path, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
-            auto sender = runtime.AllocateEdgeActor(0);
-            SendNextValRequest(runtime, sender, path);
-            return WaitNextValResult(runtime, sender, expectedStatus);
-        }
+    i64 DoNextVal(
+        TTestActorRuntime& runtime,
+        const TString& path,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS
+    ) {
+        auto sender = runtime.AllocateEdgeActor(0);
+        SendNextValRequest(runtime, sender, path);
+        return WaitNextValResult(runtime, sender, expectedStatus);
+    }
 
     } // namespace
 

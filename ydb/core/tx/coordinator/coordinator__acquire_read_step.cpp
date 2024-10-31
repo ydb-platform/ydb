@@ -5,17 +5,18 @@ namespace NFlatTxCoordinator {
 
 static constexpr ui64 MaxAcquireReadStepInFlight = 4;
 
-struct TTxCoordinator::TTxAcquireReadStep : public TTransactionBase<TTxCoordinator> {
+struct TTxCoordinator::TTxAcquireReadStep: public TTransactionBase<TTxCoordinator> {
     TVector<TAcquireReadStepRequest> Requests;
     TMonotonic StartTimeStamp;
     ui64 Step;
 
     TTxAcquireReadStep(TTxCoordinator* self, TMonotonic startTimeStamp)
         : TTransactionBase(self)
-        , StartTimeStamp(startTimeStamp)
-    { }
+        , StartTimeStamp(startTimeStamp) {}
 
-    TTxType GetTxType() const override { return TXTYPE_ACQUIRE_READ_STEP; }
+    TTxType GetTxType() const override {
+        return TXTYPE_ACQUIRE_READ_STEP;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
@@ -85,7 +86,9 @@ void TTxCoordinator::MaybeFlushAcquireReadStep(const TActorContext& ctx) {
     TMonotonic deadline = ctx.Monotonic();
     if (VolatileState.AcquireReadStepInFlight > 0) {
         // We want to spread acquire transactions evenly using the average latency
-        deadline = VolatileState.AcquireReadStepLast + TDuration::MicroSeconds(VolatileState.AcquireReadStepLatencyUs.GetValue() / MaxAcquireReadStepInFlight);
+        deadline =
+            VolatileState.AcquireReadStepLast +
+            TDuration::MicroSeconds(VolatileState.AcquireReadStepLatencyUs.GetValue() / MaxAcquireReadStepInFlight);
     }
 
     VolatileState.AcquireReadStepFlushing = true;

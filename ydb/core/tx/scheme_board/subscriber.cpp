@@ -40,321 +40,308 @@ namespace NSchemeBoard {
 
 namespace {
 
-    template <typename T, typename U>
-    typename std::enable_if_t<!std::is_same_v<T, U>, bool> IsSame(const T&, const U&) {
-        return false;
+template <typename T, typename U>
+typename std::enable_if_t<!std::is_same_v<T, U>, bool> IsSame(const T&, const U&) {
+    return false;
+}
+
+template <typename T, typename U>
+typename std::enable_if_t<std::is_same_v<T, U>, bool> IsSame(const T& t, const U& u) {
+    return t == u;
+}
+
+template <typename TPath>
+bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record) {
+    bool valid = false;
+
+    if (record.HasPath()) {
+        valid = IsSame(path, record.GetPath());
     }
 
-    template <typename T, typename U>
-    typename std::enable_if_t<std::is_same_v<T, U>, bool> IsSame(const T& t, const U& u) {
-        return t == u;
+    if (!valid && (record.HasPathOwnerId() && record.HasLocalPathId())) {
+        valid = IsSame(path, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
     }
 
-    template <typename TPath>
-    bool IsValidNotification(const TPath& path, const NKikimrSchemeBoard::TEvNotify& record) {
-        bool valid = false;
+    return valid;
+}
 
-        if (record.HasPath()) {
-            valid = IsSame(path, record.GetPath());
+struct TPathVersion {
+    TPathId PathId;
+    ui64 Version;
+
+    TPathVersion()
+        : PathId(TPathId())
+        , Version(0) {}
+
+    explicit TPathVersion(const TPathId& pathId, const ui64 version)
+        : PathId(pathId)
+        , Version(version) {}
+
+    static TPathVersion FromNotify(const NKikimrSchemeBoard::TEvNotify& record) {
+        TPathId pathId;
+        if (record.HasPathOwnerId() && record.HasLocalPathId()) {
+            pathId = TPathId(record.GetPathOwnerId(), record.GetLocalPathId());
         }
 
-        if (!valid && (record.HasPathOwnerId() && record.HasLocalPathId())) {
-            valid = IsSame(path, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
-        }
-
-        return valid;
+        return TPathVersion(pathId, record.GetVersion());
     }
 
-    struct TPathVersion {
-        TPathId PathId;
-        ui64 Version;
+    TString ToString() const {
+        TString result;
+        TStringOutput out(result);
+        Out(out);
+        return result;
+    }
 
-        TPathVersion()
-            : PathId(TPathId())
-            , Version(0)
-        {
+    void Out(IOutputStream& o) const {
+        if (!*this) {
+            PathId.Out(o);
+        } else {
+            o << "(PathId: " << PathId.ToString() << ", Version: " << Version << ")";
         }
+    }
 
-        explicit TPathVersion(const TPathId& pathId, const ui64 version)
-            : PathId(pathId)
-            , Version(version)
-        {
-        }
-
-        static TPathVersion FromNotify(const NKikimrSchemeBoard::TEvNotify& record) {
-            TPathId pathId;
-            if (record.HasPathOwnerId() && record.HasLocalPathId()) {
-                pathId = TPathId(record.GetPathOwnerId(), record.GetLocalPathId());
-            }
-
-            return TPathVersion(pathId, record.GetVersion());
-        }
-
-        TString ToString() const {
-            TString result;
-            TStringOutput out(result);
-            Out(out);
-            return result;
-        }
-
-        void Out(IOutputStream& o) const {
-            if (!*this) {
-                PathId.Out(o);
-            } else {
-                o << "(PathId: " << PathId.ToString() << ", Version: " << Version << ")";
-            }
-        }
-
-        bool operator<(const TPathVersion& x) const {
-            return PathId != x.PathId ? PathId < x.PathId : Version < x.Version;
-        }
-        bool operator>(const TPathVersion& x) const {
-            return x < *this;
-        }
-        bool operator<=(const TPathVersion& x) const {
-            return PathId != x.PathId ? PathId < x.PathId : Version <= x.Version;
-        }
-        bool operator>=(const TPathVersion& x) const {
-            return x <= *this;
-        }
-        bool operator==(const TPathVersion& x) const {
-            return PathId == x.PathId && Version == x.Version;
-        }
-        bool operator!=(const TPathVersion& x) const {
-            return PathId != x.PathId || Version != x.Version;
-        }
-        operator bool() const {
-            return bool(PathId);
-        }
-    };
+    bool operator<(const TPathVersion& x) const {
+        return PathId != x.PathId ? PathId < x.PathId : Version < x.Version;
+    }
+    bool operator>(const TPathVersion& x) const {
+        return x < *this;
+    }
+    bool operator<=(const TPathVersion& x) const {
+        return PathId != x.PathId ? PathId < x.PathId : Version <= x.Version;
+    }
+    bool operator>=(const TPathVersion& x) const {
+        return x <= *this;
+    }
+    bool operator==(const TPathVersion& x) const {
+        return PathId == x.PathId && Version == x.Version;
+    }
+    bool operator!=(const TPathVersion& x) const {
+        return PathId != x.PathId || Version != x.Version;
+    }
+    operator bool() const {
+        return bool(PathId);
+    }
+};
 
     // TNotifyResponse isolates changes of how NKikimrSchemeBoard::TEvNotify is filled
     // by previous and recent replica implementation.
     //
     // TNotifyResponse wouldn't be even needed if not for backward compatibility support.
     // Consider removing compatibility support at version stable-25-1.
-    struct TNotifyResponse {
-        NKikimrSchemeBoard::TEvNotify Notify;
-        TPathId SubdomainPathId;
-        TSet<ui64> PathAbandonedTenantsSchemeShards;
-        TMaybe<NKikimrScheme::TEvDescribeSchemeResult> DescribeSchemeResult;
+struct TNotifyResponse {
+    NKikimrSchemeBoard::TEvNotify Notify;
+    TPathId SubdomainPathId;
+    TSet<ui64> PathAbandonedTenantsSchemeShards;
+    TMaybe<NKikimrScheme::TEvDescribeSchemeResult> DescribeSchemeResult;
 
-        static TNotifyResponse FromNotify(NKikimrSchemeBoard::TEvNotify&& record) {
+    static TNotifyResponse FromNotify(NKikimrSchemeBoard::TEvNotify&& record) {
             // PathSubdomainPathId's absence is a marker that input message was sent
             // from the older replica implementation
 
-            if (record.HasPathSubdomainPathId()) {
+        if (record.HasPathSubdomainPathId()) {
                 // Sender implementation is as recent as ours.
                 // Just copy two fields from the notify message (this branch is practically a stub)
 
-                auto subdomainPathId = PathIdFromPathId(record.GetPathSubdomainPathId());
-                auto pathAbandonedTenantsSchemeShards = TSet<ui64>(
-                    record.GetPathAbandonedTenantsSchemeShards().begin(),
-                    record.GetPathAbandonedTenantsSchemeShards().end()
-                );
-                return TNotifyResponse{
-                    .Notify = std::move(record),
-                    .SubdomainPathId = std::move(subdomainPathId),
-                    .PathAbandonedTenantsSchemeShards = std::move(pathAbandonedTenantsSchemeShards),
-                };
+            auto subdomainPathId = PathIdFromPathId(record.GetPathSubdomainPathId());
+            auto pathAbandonedTenantsSchemeShards = TSet<ui64>(
+                record.GetPathAbandonedTenantsSchemeShards().begin(), record.GetPathAbandonedTenantsSchemeShards().end()
+            );
+            return TNotifyResponse{
+                .Notify = std::move(record),
+                .SubdomainPathId = std::move(subdomainPathId),
+                .PathAbandonedTenantsSchemeShards = std::move(pathAbandonedTenantsSchemeShards),
+            };
 
-            } else {
+        } else {
                 // Sender implementation is older then ours.
                 // Extract two essential fields from the payload, hold deserialized proto,
                 // drop original payload to save on memory
 
                 // Move DescribeSchemeResult blob out of the input message.
-                auto data = std::move(*record.MutableDescribeSchemeResultSerialized());
-                record.ClearDescribeSchemeResultSerialized();
+            auto data = std::move(*record.MutableDescribeSchemeResultSerialized());
+            record.ClearDescribeSchemeResultSerialized();
 
                 // it's inconvenient to use arena here
-                auto proto = DeserializeDescribeSchemeResult(data);
+            auto proto = DeserializeDescribeSchemeResult(data);
 
-                return TNotifyResponse{
-                    .Notify = std::move(record),
-                    .SubdomainPathId = NSchemeBoard::GetDomainId(proto),
-                    .PathAbandonedTenantsSchemeShards = NSchemeBoard::GetAbandonedSchemeShardIds(proto),
-                    .DescribeSchemeResult = std::move(proto),
-                };
-            }
+            return TNotifyResponse{
+                .Notify = std::move(record),
+                .SubdomainPathId = NSchemeBoard::GetDomainId(proto),
+                .PathAbandonedTenantsSchemeShards = NSchemeBoard::GetAbandonedSchemeShardIds(proto),
+                .DescribeSchemeResult = std::move(proto),
+            };
         }
+    }
 
-        NKikimrScheme::TEvDescribeSchemeResult GetDescribeSchemeResult() {
-            if (DescribeSchemeResult) {
-                return *DescribeSchemeResult;
-            } else {
+    NKikimrScheme::TEvDescribeSchemeResult GetDescribeSchemeResult() {
+        if (DescribeSchemeResult) {
+            return *DescribeSchemeResult;
+        } else {
                 // it's inconvenient to use arena here
-                return DeserializeDescribeSchemeResult(Notify.GetDescribeSchemeResultSerialized());
-            }
+            return DeserializeDescribeSchemeResult(Notify.GetDescribeSchemeResultSerialized());
         }
-    };
+    }
+};
 
-    struct TState {
-        bool Deleted = false;
-        bool Strong = false;
-        TPathVersion Version;
-        TDomainId DomainId;
-        TSet<ui64> AbandonedSchemeShards;
+struct TState {
+    bool Deleted = false;
+    bool Strong = false;
+    TPathVersion Version;
+    TDomainId DomainId;
+    TSet<ui64> AbandonedSchemeShards;
 
-        TState() = default;
+    TState() = default;
 
-    private:
-        explicit TState(const TPathVersion& version, const TDomainId& domainId, const TSet<ui64>& abandonedSchemeShards)
-            : Deleted(false)
-            , Strong(true)
-            , Version(version)
-            , DomainId(domainId)
-            , AbandonedSchemeShards(abandonedSchemeShards)
-        {
+private:
+    explicit TState(const TPathVersion& version, const TDomainId& domainId, const TSet<ui64>& abandonedSchemeShards)
+        : Deleted(false)
+        , Strong(true)
+        , Version(version)
+        , DomainId(domainId)
+        , AbandonedSchemeShards(abandonedSchemeShards) {}
+
+    explicit TState(bool strong, const TPathVersion& version)
+        : Deleted(true)
+        , Strong(strong)
+        , Version(version) {}
+
+public:
+    static TState FromNotify(const TNotifyResponse& notifyResponse) {
+        const auto& record = notifyResponse.Notify;
+        const TPathVersion& pathVersion = TPathVersion::FromNotify(record);
+        if (!record.GetIsDeletion()) {
+            return TState(pathVersion, notifyResponse.SubdomainPathId, notifyResponse.PathAbandonedTenantsSchemeShards);
+        } else {
+            return TState(record.GetStrong(), pathVersion);
         }
+    }
 
-        explicit TState(bool strong, const TPathVersion& version)
-            : Deleted(true)
-            , Strong(strong)
-            , Version(version)
-        {
+    TString ToString() const {
+        TString result;
+        TStringOutput out(result);
+        Out(out);
+        return result;
+    }
+
+    void Out(IOutputStream& o) const {
+        o << "{"
+          << " Deleted: " << Deleted << " Strong: " << Strong << " Version: " << Version << " DomainId: " << DomainId
+          << " AbandonedSchemeShards: " << "there are " << AbandonedSchemeShards.size() << " elements";
+        if (AbandonedSchemeShards.size() > 0) {
+            o << ", first is " << *AbandonedSchemeShards.begin();
         }
-
-    public:
-        static TState FromNotify(const TNotifyResponse& notifyResponse) {
-            const auto& record = notifyResponse.Notify;
-            const TPathVersion& pathVersion = TPathVersion::FromNotify(record);
-            if (!record.GetIsDeletion()) {
-                return TState(
-                    pathVersion,
-                    notifyResponse.SubdomainPathId,
-                    notifyResponse.PathAbandonedTenantsSchemeShards
-                );
-            } else {
-                return TState(record.GetStrong(), pathVersion);
-            }
+        if (AbandonedSchemeShards.size() > 1) {
+            o << ", last is " << *AbandonedSchemeShards.rbegin();
         }
+        o << " }";
+    }
 
-        TString ToString() const {
-            TString result;
-            TStringOutput out(result);
-            Out(out);
-            return result;
-        }
-
-        void Out(IOutputStream& o) const {
-            o << "{"
-                << " Deleted: " << Deleted
-                << " Strong: " << Strong
-                << " Version: " << Version
-                << " DomainId: " << DomainId
-                << " AbandonedSchemeShards: " << "there are " << AbandonedSchemeShards.size() << " elements";
-            if (AbandonedSchemeShards.size() > 0) {
-                o << ", first is " << *AbandonedSchemeShards.begin();
-            }
-            if (AbandonedSchemeShards.size() > 1) {
-                o << ", last is " << *AbandonedSchemeShards.rbegin();
-            }
-            o << " }";
+    bool LessThan(const TState& other, TString& reason) const {
+        if (!Strong && other.Strong) {
+            reason = "Update to strong state";
+            return true;
         }
 
-        bool LessThan(const TState& other, TString& reason) const {
-            if (!Strong && other.Strong) {
-                reason = "Update to strong state";
-                return true;
-            }
+        if (!other.Version) {
+            reason = "Ignore empty state";
+            return false;
+        }
 
-            if (!other.Version) {
-                reason = "Ignore empty state";
+        if (!Version) {
+            reason = "Update to non-empty state";
+            return true;
+        }
+
+        if (Version.PathId.OwnerId == other.Version.PathId.OwnerId) {
+            if (other.Version <= Version) {
+                reason = "Path was already updated";
                 return false;
             }
 
-            if (!Version) {
-                reason = "Update to non-empty state";
-                return true;
+            reason = "Path was updated to new version";
+            return true;
+        }
+
+        if (!DomainId && Deleted) {
+            if (other.Version <= Version) {
+                reason = "Path was already deleted";
+                return false;
             }
 
-            if (Version.PathId.OwnerId == other.Version.PathId.OwnerId) {
-                if (other.Version <= Version) {
-                    reason = "Path was already updated";
-                    return false;
-                }
-
-                reason = "Path was updated to new version";
-                return true;
-            }
-
-            if (!DomainId && Deleted) {
-                if (other.Version <= Version) {
-                    reason = "Path was already deleted";
-                    return false;
-                }
-
-                reason = "Path was updated to new version";
-                return true;
-            }
+            reason = "Path was updated to new version";
+            return true;
+        }
 
             // it is only because we need to manage undo of upgrade subdomain, finally remove it
 
-            if (Version.PathId == other.DomainId) { // Update from TSS, GSS->TSS
-                if (AbandonedSchemeShards.contains(other.Version.PathId.OwnerId)) { // TSS is ignored, present GSS reverted that TSS
-                    reason = "Update was ignored, GSS implicitly banned that TSS";
-                    return false;
-                }
-
-                reason = "Path was updated as a replacement from TSS, GSS->TSS";
-                return true;
-            }
-
-            if (DomainId == other.Version.PathId) { // Update from GSS, TSS->GSS
-                if (other.AbandonedSchemeShards.contains(Version.PathId.OwnerId)) { // GSS reverts TSS
-                    reason = "Path was updated as a replacement from GSS, GSS implicitly reverts TSS";
-                    return true;
-                }
-
-                reason = "Update was ignored, TSS is preserved";
+        if (Version.PathId == other.DomainId) { // Update from TSS, GSS->TSS
+            if (AbandonedSchemeShards.contains(other.Version.PathId.OwnerId
+                )) { // TSS is ignored, present GSS reverted that TSS
+                reason = "Update was ignored, GSS implicitly banned that TSS";
                 return false;
             }
 
-            if (DomainId == other.DomainId) {
-                if (other.Version <= Version) {
-                    reason = "Path was already updated";
-                    return false;
-                }
+            reason = "Path was updated as a replacement from TSS, GSS->TSS";
+            return true;
+        }
 
-                reason = "Path was updated to new version";
+        if (DomainId == other.Version.PathId) { // Update from GSS, TSS->GSS
+            if (other.AbandonedSchemeShards.contains(Version.PathId.OwnerId)) { // GSS reverts TSS
+                reason = "Path was updated as a replacement from GSS, GSS implicitly reverts TSS";
                 return true;
-            } else  if (DomainId < other.DomainId) {
-                reason = "New domain is detected, it is newer path then we know";
-                return true;
-            } else {
-                reason = "Totally ignore the update";
+            }
+
+            reason = "Update was ignored, TSS is preserved";
+            return false;
+        }
+
+        if (DomainId == other.DomainId) {
+            if (other.Version <= Version) {
+                reason = "Path was already updated";
                 return false;
             }
 
-            Y_FAIL_S("Unknown update"
+            reason = "Path was updated to new version";
+            return true;
+        } else if (DomainId < other.DomainId) {
+            reason = "New domain is detected, it is newer path then we know";
+            return true;
+        } else {
+            reason = "Totally ignore the update";
+            return false;
+        }
+
+        Y_FAIL_S("Unknown update"
                 << ": state# " << *this
                 << ", other state# " << other);
-        }
+    }
 
-        bool LessThan(const TState& other) const {
-            TString unused;
-            return LessThan(other, unused);
-        }
+    bool LessThan(const TState& other) const {
+        TString unused;
+        return LessThan(other, unused);
+    }
+};
 
+struct TEvPrivate {
+    enum EEv {
+        EvReplicaMissing = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvSwitchReplica,
+
+        EvEnd,
     };
 
-    struct TEvPrivate {
-        enum EEv {
-            EvReplicaMissing = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-            EvSwitchReplica,
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"
+    );
 
-            EvEnd,
-        };
-
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
-
-        struct TEvReplicaMissing : public TEventLocal<TEvReplicaMissing, EvReplicaMissing> {
+    struct TEvReplicaMissing: public TEventLocal<TEvReplicaMissing, EvReplicaMissing> {
             // empty
-        };
     };
+};
 
-} // anonymous
+} // namespace
 
 template <typename TPath, typename TDerived>
 class TReplicaSubscriber: public TMonitorableActor<TDerived> {
@@ -437,8 +424,14 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
 
     NJson::TJsonMap MonAttributes() const override {
         return {
-            {"Parent", TMonitorableActor<TDerived>::PrintActorIdAttr(NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR, Parent)},
-            {"Replica", TMonitorableActor<TDerived>::PrintActorIdAttr(NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_ACTOR, Replica)},
+            {"Parent",
+             TMonitorableActor<TDerived>::PrintActorIdAttr(
+                 NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR, Parent
+             )},
+            {"Replica",
+             TMonitorableActor<TDerived>::PrintActorIdAttr(
+                 NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_ACTOR, Replica
+             )},
             {"Path", ToString(Path)},
         };
     }
@@ -453,23 +446,25 @@ public:
     }
 
     explicit TReplicaSubscriber(
-            const TActorId& parent,
-            const TActorId& replica,
-            const TPath& path,
-            const ui64 domainOwnerId)
+        const TActorId& parent,
+        const TActorId& replica,
+        const TPath& path,
+        const ui64 domainOwnerId
+    )
         : Parent(parent)
         , Replica(replica)
         , Path(path)
         , DomainOwnerId(domainOwnerId)
-        , CurrentSyncRequest(0)
-    {
-    }
+        , CurrentSyncRequest(0) {}
 
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        this->Send(Replica, new NInternalEvents::TEvSubscribe(Path, DomainOwnerId),
-            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+        this->Send(
+            Replica,
+            new NInternalEvents::TEvSubscribe(Path, DomainOwnerId),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession
+        );
         this->Become(&TDerived::StateWork);
     }
 
@@ -610,7 +605,10 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
 
     NJson::TJsonMap MonAttributes() const override {
         return {
-            {"Parent", TMonitorableActor<TDerived>::PrintActorIdAttr(NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_ACTOR, Parent)},
+            {"Parent",
+             TMonitorableActor<TDerived>::PrintActorIdAttr(
+                 NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_ACTOR, Parent
+             )},
             {"ReplicaIndex", TStringBuilder() << ReplicaIndex << '/' << TotalReplicas},
             {"Path", ToString(Path)},
         };
@@ -618,7 +616,9 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
 
     void HandleSwitchReplica(STATEFN_SIG) {
         Replica = ev->Sender;
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ReplicaSubscriber, this->SelfId(), nullptr, 0));
+        TActivationContext::Send(
+            new IEventHandle(TEvents::TSystem::Poison, 0, ReplicaSubscriber, this->SelfId(), nullptr, 0)
+        );
     }
 
 public:
@@ -631,12 +631,13 @@ public:
     }
 
     explicit TSubscriberProxy(
-            const TActorId& parent,
-            const ui32 replicaIndex,
-            const ui32 totalReplicas,
-            const TActorId& replica,
-            const TPath& path,
-            const ui64 domainOwnerId)
+        const TActorId& parent,
+        const ui32 replicaIndex,
+        const ui32 totalReplicas,
+        const TActorId& replica,
+        const TPath& path,
+        const ui64 domainOwnerId
+    )
         : Parent(parent)
         , ReplicaIndex(replicaIndex)
         , TotalReplicas(totalReplicas)
@@ -644,14 +645,13 @@ public:
         , Path(path)
         , DomainOwnerId(domainOwnerId)
         , Delay(DefaultDelay)
-        , CurrentSyncRequest(0)
-    {
-    }
+        , CurrentSyncRequest(0) {}
 
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
 
-        ReplicaSubscriber = this->RegisterWithSameMailbox(new TReplicaDerived(this->SelfId(), Replica, Path, DomainOwnerId));
+        ReplicaSubscriber =
+            this->RegisterWithSameMailbox(new TReplicaDerived(this->SelfId(), Replica, Path, DomainOwnerId));
         this->Become(&TDerived::StateWork);
     }
 
@@ -934,13 +934,10 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
 
         const bool partial = !(successes > half);
-        const TString done = TStringBuilder() << "Sync is done"
-            << ": cookie# " << ev->Cookie
-            << ", size# " << size
-            << ", half# " << half
-            << ", successes# " << successes
-            << ", faulires# " << failures
-            << ", partial# " << partial;
+        const TString done = TStringBuilder()
+                             << "Sync is done"
+                             << ": cookie# " << ev->Cookie << ", size# " << size << ", half# " << half
+                             << ", successes# " << successes << ", faulires# " << failures << ", partial# " << partial;
 
         if (!partial) {
             SBS_LOG_D(done);
@@ -972,13 +969,19 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         if (Proxies.empty()) {
             for (size_t i = 0; i < replicas.size(); ++i) {
-                Proxies.emplace_back(this->RegisterWithSameMailbox(new TProxyDerived(this->SelfId(), i, replicas.size(),
-                    replicas[i], Path, DomainOwnerId)), replicas[i]);
+                Proxies.emplace_back(
+                    this->RegisterWithSameMailbox(
+                        new TProxyDerived(this->SelfId(), i, replicas.size(), replicas[i], Path, DomainOwnerId)
+                    ),
+                    replicas[i]
+                );
             }
         } else {
             for (size_t i = 0; i < replicas.size(); ++i) {
                 if (auto& [proxy, replica] = Proxies[i]; replica != replicas[i]) {
-                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvSwitchReplica, 0, proxy, replicas[i], nullptr, 0));
+                    TActivationContext::Send(
+                        new IEventHandle(TEvPrivate::EvSwitchReplica, 0, proxy, replicas[i], nullptr, 0)
+                    );
                     replica = replicas[i];
                 }
             }
@@ -1044,8 +1047,9 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             this->Send(proxy, new TEvents::TEvPoisonPill());
         }
 
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(),
-            this->SelfId(), nullptr, 0));
+        TActivationContext::Send(
+            new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), this->SelfId(), nullptr, 0)
+        );
 
         TMonitorableActor<TDerived>::PassAway();
     }
@@ -1066,17 +1070,12 @@ public:
         return "main"sv;
     }
 
-    explicit TSubscriber(
-            const TActorId& owner,
-            const TPath& path,
-            const ui64 domainOwnerId)
+    explicit TSubscriber(const TActorId& owner, const TPath& path, const ui64 domainOwnerId)
         : Owner(owner)
         , Path(path)
         , DomainOwnerId(domainOwnerId)
         , DelayedSyncRequest(0)
-        , CurrentSyncRequest(0)
-    {
-    }
+        , CurrentSyncRequest(0) {}
 
     void Bootstrap(const TActorContext&) {
         TMonitorableActor<TDerived>::Bootstrap();
@@ -1150,52 +1149,34 @@ public:
     using TBase::TBase;
 };
 
-} // NSchemeBoard
+} // namespace NSchemeBoard
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TString& path
-) {
-    auto *domain = AppData()->DomainsInfo->GetDomain();
+IActor* CreateSchemeBoardSubscriber(const TActorId& owner, const TString& path) {
+    auto* domain = AppData()->DomainsInfo->GetDomain();
     ui64 domainOwnerId = domain->SchemeRoot;
     return CreateSchemeBoardSubscriber(owner, path, domainOwnerId);
 }
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TString& path,
-    const ui64 domainOwnerId
-) {
+IActor* CreateSchemeBoardSubscriber(const TActorId& owner, const TString& path, const ui64 domainOwnerId) {
     return new NSchemeBoard::TSubscriberByPath(owner, path, domainOwnerId);
 }
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TPathId& pathId,
-    const ui64 domainOwnerId
-) {
+IActor* CreateSchemeBoardSubscriber(const TActorId& owner, const TPathId& pathId, const ui64 domainOwnerId) {
     return new NSchemeBoard::TSubscriberByPathId(owner, pathId, domainOwnerId);
 }
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TString& path,
-    const EDeletionPolicy deletionPolicy
-) {
+IActor* CreateSchemeBoardSubscriber(const TActorId& owner, const TString& path, const EDeletionPolicy deletionPolicy) {
     Y_UNUSED(deletionPolicy);
     return new NSchemeBoard::TSubscriberByPath(owner, path, 0);
 }
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TPathId& pathId,
-    const EDeletionPolicy deletionPolicy
-) {
+IActor*
+CreateSchemeBoardSubscriber(const TActorId& owner, const TPathId& pathId, const EDeletionPolicy deletionPolicy) {
     Y_UNUSED(deletionPolicy);
     return new NSchemeBoard::TSubscriberByPathId(owner, pathId, 0);
 }
 
-} // NKikimr
+} // namespace NKikimr
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeBoard::TPathVersion, o, x) {
     return x.Out(o);

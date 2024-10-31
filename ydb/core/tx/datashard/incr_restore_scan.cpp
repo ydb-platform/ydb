@@ -19,34 +19,36 @@ using namespace NTable;
 class TIncrementalRestoreScan
     : public IActorCallback
     , public NTable::IScan
-    , protected TChangeRecordBodySerializer
-{
+    , protected TChangeRecordBodySerializer {
     using TLimits = NStreamScan::TLimits;
     using TBuffer = NStreamScan::TBuffer;
     using TChange = IDataShardChangeCollector::TChange;
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TIncrementalRestoreScan]"
-                << "[" << TxId << "]"
-                << "[" << SourcePathId << "]"
-                << "[" << TargetPathId << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[TIncrementalRestoreScan]"
+                                         << "[" << TxId << "]"
+                                         << "[" << SourcePathId << "]"
+                                         << "[" << TargetPathId << "]" << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
     }
+
 public:
     explicit TIncrementalRestoreScan(
-            TActorId parent,
-            std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
-            const TPathId& sourcePathId,
-            TUserTable::TCPtr table,
-            const TPathId& targetPathId,
-            ui64 txId,
-            NStreamScan::TLimits limits)
-        : IActorCallback(static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork), NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR)
+        TActorId parent,
+        std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
+        const TPathId& sourcePathId,
+        TUserTable::TCPtr table,
+        const TPathId& targetPathId,
+        ui64 txId,
+        NStreamScan::TLimits limits
+    )
+        : IActorCallback(
+              static_cast<TReceiveFunc>(&TIncrementalRestoreScan::StateWork),
+              NKikimrServices::TActivity::INCREMENTAL_RESTORE_SCAN_ACTOR
+          )
         , Parent(parent)
         , ChangeSenderFactory(changeSenderFactory)
         , TxId(txId)
@@ -56,8 +58,7 @@ public:
         , Limits(limits)
         , Columns(table->Columns)
         , KeyColumnTypes(table->KeyColumnTypes)
-        , KeyColumnIds(table->KeyColumnIds)
-    {}
+        , KeyColumnIds(table->KeyColumnIds) {}
 
     static TVector<TTag> InitValueTags(TUserTable::TCPtr table) {
         Y_VERIFY(table->Columns.size() >= 2);
@@ -201,10 +202,7 @@ public:
 
     void Describe(IOutputStream& o) const noexcept override {
         o << "IncrRestoreScan {"
-          << " TxId: " << TxId
-          << " SourcePathId: " << SourcePathId
-          << " TargetPathId: " << TargetPathId
-        << " }";
+          << " TxId: " << TxId << " SourcePathId: " << SourcePathId << " TargetPathId: " << TargetPathId << " }";
     }
 
     EScan Progress() {
@@ -221,14 +219,14 @@ public:
                 Serialize(body, ERowOp::Erase, key, keyTags, {});
             }
             auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::IncrementalRestore)
-                .WithOrder(++Order)
-                .WithGroup(0)
-                .WithPathId(TargetPathId)
-                .WithTableId(SourcePathId)
+                                 .WithOrder(++Order)
+                                 .WithGroup(0)
+                                 .WithPathId(TargetPathId)
+                                 .WithTableId(SourcePathId)
                 // .WithSchemaVersion(ReadVersion) // TODO(use SchemaVersion)
-                .WithBody(body.SerializeAsString())
-                .WithSource(TChangeRecord::ESource::InitialScan)
-                .Build();
+                                 .WithBody(body.SerializeAsString())
+                                 .WithSource(TChangeRecord::ESource::InitialScan)
+                                 .Build();
 
             const auto& record = *recordPtr;
 
@@ -270,22 +268,17 @@ private:
 };
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
-        NActors::TActorId parent,
-        std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
-        const TPathId& sourcePathId,
-        TUserTable::TCPtr table,
-        const TPathId& targetPathId,
-        ui64 txId,
-        NStreamScan::TLimits limits)
-{
+    NActors::TActorId parent,
+    std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
+    const TPathId& sourcePathId,
+    TUserTable::TCPtr table,
+    const TPathId& targetPathId,
+    ui64 txId,
+    NStreamScan::TLimits limits
+) {
     return MakeHolder<TIncrementalRestoreScan>(
-        parent,
-        changeSenderFactory,
-        sourcePathId,
-        table,
-        targetPathId,
-        txId,
-        limits);
+        parent, changeSenderFactory, sourcePathId, table, targetPathId, txId, limits
+    );
 }
 
 } // namespace NKikimr::NDataShard

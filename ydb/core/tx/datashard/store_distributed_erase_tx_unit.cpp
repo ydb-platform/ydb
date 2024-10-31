@@ -5,12 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TStoreDistributedEraseTxUnit : public TExecutionUnit {
+class TStoreDistributedEraseTxUnit: public TExecutionUnit {
 public:
     TStoreDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::StoreDistributedEraseTx, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::StoreDistributedEraseTx, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;

@@ -19,33 +19,31 @@ using namespace NKikimr::NDataShard::NKqpHelpers;
 namespace {
 
     /* sum(value) == 596400 */
-    TString FillTableQuery(bool addPgSuffix = false) {
-        TString suffix = addPgSuffix ? "p" : "";
-        TStringBuilder sql;
-        sql << "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
-        for (int i = 1; i < 100; ++i) {
-            sql << " (" << i << suffix << ", " << i << i << suffix << "),";
-        }
-        sql << " (100500" << suffix << ", 100500" << suffix << ");";
-        return sql;
+TString FillTableQuery(bool addPgSuffix = false) {
+    TString suffix = addPgSuffix ? "p" : "";
+    TStringBuilder sql;
+    sql << "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
+    for (int i = 1; i < 100; ++i) {
+        sql << " (" << i << suffix << ", " << i << i << suffix << "),";
     }
-
-    void EnableLogging(TTestActorRuntime& runtime) {
-        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
-    }
-
+    sql << " (100500" << suffix << ", 100500" << suffix << ");";
+    return sql;
 }
 
+void EnableLogging(TTestActorRuntime& runtime) {
+    runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpScan) {
-
-
     /*
      * Start scan on shard with amount of rows bigger then ScanData capacity (~ 10 ScanData's to
      * complete scan). Event capture filter will pass only first ScanData from one table actor and will
@@ -61,13 +59,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetNodeCount(2).SetAppConfig(appCfg).SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         // EnableLogging(runtime);
@@ -81,15 +76,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
-
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 /*
                  * Trick executor to think that all datashard are located on node 1.
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId] : msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         Cerr.Flush();
                         nodeId = runtime.GetNodeId(0);
@@ -129,8 +123,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     if (scans.contains(ev->Sender)) {
                         if (killedTablets.empty()) { // do only 1 kill per test
-                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl);
+                            runtime.Send(
+                                new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet)
+                            );
+                            Cerr
+                                << (TStringBuilder() << "-- EvScanData from " << ev->Sender
+                                                     << ": hijack event, kill tablet " << ev->Sender << Endl);
                             Cerr.Flush();
                         }
                     } else {
@@ -151,7 +149,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         runtime.SetObserverFunc(captureEvents);
 
         auto streamSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        SendRequest(
+            runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false)
+        );
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
 
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
@@ -165,13 +165,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetNodeCount(2).SetAppConfig(appCfg).SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         EnableLogging(runtime);
@@ -187,15 +184,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
-
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 /*
                  * Trick executor to think that all datashard are located on node 1.
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId] : msg->ShardNodes) {
                         nodeId = firstNodeId;
                     }
                     break;
@@ -208,7 +204,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 case NKqp::TKqpExecuterEvents::EvStreamData: {
                     auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
 
-                    Cerr << (TStringBuilder() << "-- EvStreamData(from: " << ev->Sender << ", to: " << ev->Recipient << "): " << record.AsJSON() << Endl);
+                    Cerr
+                        << (TStringBuilder() << "-- EvStreamData(from: " << ev->Sender << ", to: " << ev->Recipient
+                                             << "): " << record.AsJSON() << Endl);
 
                     Y_ASSERT(record.GetResultSet().rows().size() == 1);
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
@@ -239,7 +237,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         runtime.SetObserverFunc(captureEvents);
 
         auto streamSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        SendRequest(
+            runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false)
+        );
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
 
         UNIT_ASSERT(remoteScanDetected);
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(ScanDuringSplit10) {
-       NKikimrConfig::TAppConfig appCfg;
+        NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
         rm->SetChannelBufferSize(100);
@@ -255,13 +255,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetNodeCount(2).SetAppConfig(appCfg).SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         auto senderSplit = runtime.AllocateEdgeActor();
 
@@ -274,7 +271,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ExecSQL(server, sender, FillTableQuery());
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
-        for (const auto& shard: shards) {
+        for (const auto& shard : shards) {
             Cerr << (TStringBuilder() << "-- shardId=" << shard << Endl);
             Cerr.Flush();
         }
@@ -285,11 +282,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId] : msg->ShardNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
                         Cerr.Flush();
@@ -332,11 +329,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     if (!firstScanActor) {
                         firstScanActor = ev->Sender;
                         AsyncSplitTable(server, senderSplit, "/Root/table-1", tabletId, 10 /* splitKey */);
-                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
+                        Cerr
+                            << (TStringBuilder()
+                                << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
                         Cerr.Flush();
                     } else if (firstScanActor == ev->Sender) {
                         // data from old table scan, drop it
-                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
+                        Cerr
+                            << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
                         Cerr.Flush();
                         return TTestActorRuntime::EEventAction::DROP;
                     } else {
@@ -356,14 +356,16 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         runtime.SetObserverFunc(captureEvents);
 
         auto streamSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        SendRequest(
+            runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false)
+        );
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
 
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
     Y_UNIT_TEST(ScanDuringSplitThenMerge) {
-       NKikimrConfig::TAppConfig appCfg;
+        NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
         rm->SetChannelBufferSize(100);
@@ -371,13 +373,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetNodeCount(2).SetAppConfig(appCfg).SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         auto senderSplit = runtime.AllocateEdgeActor();
 
@@ -390,7 +389,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ExecSQL(server, sender, FillTableQuery());
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
-        for (const auto& shard: shards) {
+        for (const auto& shard : shards) {
             Cerr << (TStringBuilder() << "-- shardId=" << shard << Endl);
             Cerr.Flush();
         }
@@ -403,11 +402,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId] : msg->ShardNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
                         Cerr.Flush();
@@ -451,25 +450,33 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         firstScanActor = ev->Sender;
                         kqpScanActor = ev->Recipient;
                         AsyncSplitTable(server, senderSplit, "/Root/table-1", tabletId, 55 /* splitKey */);
-                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
+                        Cerr
+                            << (TStringBuilder()
+                                << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
                         Cerr.Flush();
                     } else if (firstScanActor == ev->Sender) {
                         // data from old table scan, drop it
-                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
+                        Cerr
+                            << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
                         Cerr.Flush();
                         return TTestActorRuntime::EEventAction::DROP;
                     } else if (!secondScanActor && ev->Recipient == kqpScanActor) {
                         secondScanActor = ev->Sender;
-                        for(auto shard: GetTableShards(server, senderSplit, "/Root/table-1")) {
+                        for (auto shard : GetTableShards(server, senderSplit, "/Root/table-1")) {
                             auto [tables, ownerId] = GetTables(server, shard);
                             CompactTable(runtime, shard, TTableId(ownerId, tables["table-1"].GetPathId()), true);
                         }
-                        AsyncMergeTable(server, senderSplit, "/Root/table-1", GetTableShards(server, senderSplit, "/Root/table-1"));
-                        Cerr << (TStringBuilder() << "-- EvScanData from second old tablet " << ev->Sender << ": pass and merge" << Endl);
+                        AsyncMergeTable(
+                            server, senderSplit, "/Root/table-1", GetTableShards(server, senderSplit, "/Root/table-1")
+                        );
+                        Cerr
+                            << (TStringBuilder()
+                                << "-- EvScanData from second old tablet " << ev->Sender << ": pass and merge" << Endl);
                         // data from new tablet scan, pass it
                         Cerr.Flush();
                     } else if (secondScanActor == ev->Sender) {
-                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
+                        Cerr
+                            << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
                         Cerr.Flush();
                         return TTestActorRuntime::EEventAction::DROP;
                     } else {
@@ -488,14 +495,16 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         runtime.SetObserverFunc(captureEvents);
 
         auto streamSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        SendRequest(
+            runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false)
+        );
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
 
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
     Y_UNIT_TEST(ScanDuringSplit) {
-       NKikimrConfig::TAppConfig appCfg;
+        NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
         rm->SetChannelBufferSize(100);
@@ -503,13 +512,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetNodeCount(2).SetAppConfig(appCfg).SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         auto senderSplit = runtime.AllocateEdgeActor();
 
@@ -522,7 +528,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ExecSQL(server, sender, FillTableQuery());
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
-        for (const auto& shard: shards) {
+        for (const auto& shard : shards) {
             Cerr << (TStringBuilder() << "-- shardId=" << shard << Endl);
             Cerr.Flush();
         }
@@ -533,11 +539,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId] : msg->ShardNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
                         Cerr.Flush();
@@ -580,11 +586,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     if (!firstScanActor) {
                         firstScanActor = ev->Sender;
                         AsyncSplitTable(server, senderSplit, "/Root/table-1", tabletId, 55 /* splitKey */);
-                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
+                        Cerr
+                            << (TStringBuilder()
+                                << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
                         Cerr.Flush();
                     } else if (firstScanActor == ev->Sender) {
                         // data from old table scan, drop it
-                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
+                        Cerr
+                            << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
                         Cerr.Flush();
                         return TTestActorRuntime::EEventAction::DROP;
                     } else {
@@ -604,7 +613,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         runtime.SetObserverFunc(captureEvents);
 
         auto streamSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        SendRequest(
+            runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false)
+        );
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
 
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
@@ -621,13 +632,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetNodeCount(2).SetAppConfig(appCfg).SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         // EnableLogging(runtime);
@@ -642,14 +650,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ui64 result = 0;
         ui64 incomingRangesSize = 0;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 /*
                  * Trick executor to think that all datashard are located on node 1.
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId] : msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime.GetNodeId(0);
                     }
@@ -705,8 +713,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     if (scans.contains(ev->Sender)) {
                         if (killedTablets.empty()) { // do only 1 kill per test
-                            runtime.Send(new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet));
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << ev->Sender << Endl);
+                            runtime.Send(
+                                new IEventHandle(ev->Sender, ev->Sender, new NKqp::TEvKqpCompute::TEvKillScanTablet)
+                            );
+                            Cerr
+                                << (TStringBuilder() << "-- EvScanData from " << ev->Sender
+                                                     << ": hijack event, kill tablet " << ev->Sender << Endl);
                             Cerr.Flush();
                         }
                     } else {
@@ -717,7 +729,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
                         auto scanEvent = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
 
-                        for (auto& item: scanEvent->Rows) {
+                        for (auto& item : scanEvent->Rows) {
                             // Row consists of 'key', 'value'
                             ui32 key = item[0].AsValue<ui32>();
 
@@ -764,13 +776,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(2)
-            .SetAppConfig(appCfg)
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetNodeCount(2).SetAppConfig(appCfg).SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         EnableLogging(runtime);
@@ -793,34 +802,43 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         std::optional<int> result;
         std::optional<Ydb::StatusIds::StatusCode> status;
-        auto streamSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-            Cerr << "... response " << ev->GetTypeRewrite() << " " << ev->GetTypeName() << " " << ev->ToString() << Endl;
-            switch (ev->GetTypeRewrite()) {
-                case NKqp::TEvKqpExecuter::TEvStreamData::EventType: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>();
-                    auto& record = msg->Record;
-                    Y_ASSERT(record.GetResultSet().rows().size() == 1);
-                    Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
-                    result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+        auto streamSender =
+            runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+                Cerr << "... response " << ev->GetTypeRewrite() << " " << ev->GetTypeName() << " " << ev->ToString()
+                     << Endl;
+                switch (ev->GetTypeRewrite()) {
+                    case NKqp::TEvKqpExecuter::TEvStreamData::EventType: {
+                        auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>();
+                        auto& record = msg->Record;
+                        Y_ASSERT(record.GetResultSet().rows().size() == 1);
+                        Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
+                        result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-                    resp->Record.SetEnough(false);
-                    resp->Record.SetSeqNo(record.GetSeqNo());
-                    resp->Record.SetFreeSpace(100);
-                    ctx.Send(ev->Sender, resp.Release());
-                    break;
+                        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                        resp->Record.SetEnough(false);
+                        resp->Record.SetSeqNo(record.GetSeqNo());
+                        resp->Record.SetFreeSpace(100);
+                        ctx.Send(ev->Sender, resp.Release());
+                        break;
+                    }
+                    case NKqp::TEvKqp::TEvQueryResponse::EventType: {
+                        auto* msg = ev->Get<NKqp::TEvKqp::TEvQueryResponse>();
+                        auto& record = msg->Record;
+                        status = record.GetYdbStatus();
+                        break;
+                    }
                 }
-                case NKqp::TEvKqp::TEvQueryResponse::EventType: {
-                    auto* msg = ev->Get<NKqp::TEvKqp::TEvQueryResponse>();
-                    auto& record = msg->Record;
-                    status = record.GetYdbStatus();
-                    break;
-                }
-            }
-        }));
+            }));
 
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
-        waitFor([&]{ return bool(status); }, "request status");
+        SendRequest(
+            runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false)
+        );
+        waitFor(
+            [&] {
+                return bool(status);
+            },
+            "request status"
+        );
 
         UNIT_ASSERT_VALUES_EQUAL(*status, Ydb::StatusIds::SUCCESS);
 
@@ -863,9 +881,16 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         result = {};
         status = {};
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        SendRequest(
+            runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false)
+        );
 
-        waitFor([&]{ return blockedSnapshots.size() > 0; }, "snapshot response");
+        waitFor(
+            [&] {
+                return blockedSnapshots.size() > 0;
+            },
+            "snapshot response"
+        );
 
         // Start a split, surprisingly it will succeed despite blocked events
         auto senderSplit = runtime.AllocateEdgeActor();
@@ -893,7 +918,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
         blockedGets.clear();
 
-        waitFor([&]{ return bool(status); }, "request finish");
+        waitFor(
+            [&] {
+                return bool(status);
+            },
+            "request finish"
+        );
         UNIT_ASSERT_VALUES_EQUAL(*status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(*result, 596400);
@@ -919,23 +949,18 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             .SetFeatureFlags(featureFlags);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-            .Columns({
-                {"key",   "pgint4", true,  false},
-                {"value", "pgint4", false, false}
-            });
+        auto opts = TShardedTableOptions().Columns({{"key", "pgint4", true, false}, {"value", "pgint4", false, false}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         ExecSQL(server, sender, FillTableQuery(true));
 
         ui64 result = 0;
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &ev) -> auto {
-
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvStreamData: {
                     auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
@@ -959,12 +984,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         runtime.SetObserverFunc(captureEvents);
 
         auto streamSender = runtime.AllocateEdgeActor();
-        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(FromPg(value)) FROM `/Root/table-1`;", false));
+        SendRequest(
+            runtime,
+            streamSender,
+            MakeStreamRequest(streamSender, "SELECT sum(FromPg(value)) FROM `/Root/table-1`;", false)
+        );
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
 
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
-
 }
 
 } // namespace NKqp

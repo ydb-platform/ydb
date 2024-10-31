@@ -15,6 +15,7 @@ private:
     virtual void DoOnFinished() const = 0;
     virtual TString DoSerializeToString() const = 0;
     virtual TConclusionStatus DoDeserializeFromString(const TString& data) = 0;
+
 public:
     virtual ~IStatusChannel() = default;
 
@@ -48,23 +49,20 @@ public:
     static TString GetClassNameStatic() {
         return "FAKE";
     }
+
 private:
-    static const inline TFactory::TRegistrator<TFakeStatusChannel> Registrator = TFactory::TRegistrator<TFakeStatusChannel>(GetClassNameStatic());
-    virtual void DoOnFail(const TString& /*errorMessage*/) const override {
-
-    }
-    virtual void DoOnAdded() const override {
-
-    }
-    virtual void DoOnFinished() const override {
-
-    }
+    static const inline TFactory::TRegistrator<TFakeStatusChannel> Registrator =
+        TFactory::TRegistrator<TFakeStatusChannel>(GetClassNameStatic());
+    virtual void DoOnFail(const TString& /*errorMessage*/) const override {}
+    virtual void DoOnAdded() const override {}
+    virtual void DoOnFinished() const override {}
     virtual TString DoSerializeToString() const override {
         return "";
     }
     virtual TConclusionStatus DoDeserializeFromString(const TString& /*data*/) override {
         return TConclusionStatus::Success();
     }
+
 public:
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
@@ -74,6 +72,7 @@ public:
 class TStatusChannelContainer: public NBackgroundTasks::TInterfaceStringContainer<IStatusChannel> {
 private:
     using TBase = NBackgroundTasks::TInterfaceStringContainer<IStatusChannel>;
+
 public:
     using TBase::TBase;
     bool DeserializeFromString(const TString& data) {
@@ -85,4 +84,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

@@ -11,4 +11,4 @@ TString GetUid(const Ydb::Operations::OperationParams& operationParams) {
     return {};
 }
 
-}  // NKikimr::NSchemeShard
+}  // namespace NKikimr::NSchemeShard

@@ -10,14 +10,12 @@ namespace NKikimr::NOlap {
 class TColumnDefaultScalarValue {
 private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, Value);
+
 public:
     TColumnDefaultScalarValue() = default;
 
     TColumnDefaultScalarValue(const std::shared_ptr<arrow::Scalar>& val)
-        : Value(val)
-    {
-
-    }
+        : Value(val) {}
 
     TString DebugString() const;
 
@@ -37,4 +35,4 @@ public:
     TConclusionStatus ParseFromString(const TString& value, const NScheme::TTypeInfo& type);
 };
 
-}
+} // namespace NKikimr::NOlap

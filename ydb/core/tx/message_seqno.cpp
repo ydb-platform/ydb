@@ -28,4 +28,4 @@ TConclusionStatus TMessageSeqNo::DeserializeFromProto(const NKikimrTx::TMessageS
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr

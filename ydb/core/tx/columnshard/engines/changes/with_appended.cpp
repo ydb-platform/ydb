@@ -27,18 +27,24 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
         auto& portionInfo = item.GetPortionResult();
         if (!!self && !self->TablesManager.HasTable(portionInfo.GetPortionInfo().GetPathId(), false)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_inserted_data")("reason", "table_removed")(
-                "path_id", portionInfo.GetPortionInfo().GetPathId());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+            ("event",
+             "skip_inserted_data")("reason", "table_removed")("path_id", portionInfo.GetPortionInfo().GetPathId());
             return true;
         } else {
             return false;
         }
     };
-    AppendedPortions.erase(std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end());
+    AppendedPortions.erase(
+        std::remove_if(AppendedPortions.begin(), AppendedPortions.end(), predRemoveDroppedTable), AppendedPortions.end()
+    );
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         const auto& portionInfo = portionInfoWithBlobs.GetPortionResult().GetPortionInfoPtr();
-        AFL_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second)("portion_info", portionInfo->DebugString(true));
-        portionInfoWithBlobs.GetPortionResult().SaveToDatabase(context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false);
+        AFL_VERIFY(usedPortionIds.emplace(portionInfo->GetPortionId()).second)
+        ("portion_info", portionInfo->DebugString(true));
+        portionInfoWithBlobs.GetPortionResult().SaveToDatabase(
+            context.DBWrapper, schemaPtr->GetIndexInfo().GetPKFirstColumnId(), false
+        );
     }
     for (auto&& [_, i] : PortionsToMove) {
         const auto pred = [&](TPortionInfo& portionCopy) {
@@ -65,7 +71,9 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                     self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
                     break;
                 case NOlap::TPortionMeta::EProduced::SPLIT_COMPACTED:
-                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
+                    self->Counters.GetTabletCounters()->IncCounter(
+                        NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN
+                    );
                     break;
                 case NOlap::TPortionMeta::EProduced::EVICTED:
                     Y_ABORT("Unexpected evicted case");
@@ -76,16 +84,23 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             }
         }
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("portions", sb)("task_id", GetTaskIdentifier());
-        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
+        self->Counters.GetTabletCounters()->IncCounter(
+            NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size()
+        );
 
         for (auto& [_, portionInfo] : PortionsToRemove) {
-            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, portionInfo->GetBlobIdsCount());
+            self->Counters.GetTabletCounters()->IncCounter(
+                NColumnShard::COUNTER_BLOBS_DEACTIVATED, portionInfo->GetBlobIdsCount()
+            );
             for (auto& blobId : portionInfo->GetBlobIds()) {
-                self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
+                self->Counters.GetTabletCounters()->IncCounter(
+                    NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize()
+                );
             }
-            self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo->GetTotalRawBytes());
+            self->Counters.GetTabletCounters()->IncCounter(
+                NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo->GetTotalRawBytes()
+            );
         }
-
     }
     if (PortionsToMove.size()) {
         THashMap<ui32, TSimplePortionsGroupInfo> portionGroups;
@@ -133,7 +148,6 @@ void TChangesWithAppend::DoOnAfterCompile() {
     }
 }
 
-void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
-}
+void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {}
 
 }   // namespace NKikimr::NOlap

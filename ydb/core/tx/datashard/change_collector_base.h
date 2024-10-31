@@ -27,7 +27,8 @@ public:
 public:
     virtual TVersionState GetVersionState() = 0;
     virtual void SetVersionState(const TVersionState& state) = 0;
-    virtual void AddChange(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, const TDataChange& body) = 0;
+    virtual void
+    AddChange(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, const TDataChange& body) = 0;
 
 protected:
     ~IBaseChangeCollectorSink() = default;
@@ -40,14 +41,17 @@ public:
     virtual void OnRestart() = 0;
     virtual bool NeedToReadKeys() const = 0;
 
-    virtual bool Collect(const TTableId& tableId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) = 0;
+    virtual bool Collect(
+        const TTableId& tableId,
+        NTable::ERowOp rop,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TUpdateOp> updates
+    ) = 0;
 };
 
 class TBaseChangeCollector
     : public IBaseChangeCollector
-    , protected TChangeRecordBodySerializer
-{
+    , protected TChangeRecordBodySerializer {
     using TDataChange = NKikimrChangeExchange::TDataChange;
 
 public:
@@ -65,5 +69,5 @@ protected:
 
 }; // TBaseChangeCollector
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

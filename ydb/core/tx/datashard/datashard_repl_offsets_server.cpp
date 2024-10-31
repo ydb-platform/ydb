@@ -5,8 +5,8 @@ namespace NKikimr::NDataShard {
 
 namespace {
     // We will try to split source offsets into 8MB messages even if window is larger
-    constexpr ui64 ResultBytesPerMessage = 8 * 1024 * 1024;
-}
+constexpr ui64 ResultBytesPerMessage = 8 * 1024 * 1024;
+} // namespace
 
 void TReplicationSourceOffsetsServer::Unlink() {
     if (Self) {
@@ -91,8 +91,7 @@ void TReplicationSourceOffsetsServer::ProcessRead(const TReadId& readId, TReadSt
             auto itSplitKey = source.OffsetBySplitKeyId.lower_bound(state.NextSplitKeyId);
             while (itSplitKey != source.OffsetBySplitKeyId.end()) {
                 if (resSize >= ResultBytesPerMessage || resSize >= state.WindowSize - state.InFlightTotal ||
-                    nodeState && resSize >= nodeState->WindowSize - nodeState->InFlightTotal)
-                {
+                    nodeState && resSize >= nodeState->WindowSize - nodeState->InFlightTotal) {
                     // We have to flush current result
                     res->Record.SetResultSize(resSize);
                     auto& entry = state.InFlight.emplace_back();
@@ -246,7 +245,13 @@ void TReplicationSourceOffsetsServer::Handle(TEvDataShard::TEvReplicationSourceO
     }
 }
 
-void TReplicationSourceOffsetsServer::SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie) {
+void TReplicationSourceOffsetsServer::SendViaSession(
+    const TActorId& sessionId,
+    const TActorId& target,
+    IEventBase* event,
+    ui32 flags,
+    ui64 cookie
+) {
     NDataShard::SendViaSession(sessionId, target, SelfId(), event, flags, cookie);
 }
 
@@ -310,10 +315,7 @@ void TDataShard::HandleByReplicationSourceOffsetsServer(STATEFN_SIG) {
         RegisterWithSameMailbox(ReplicationSourceOffsetsServer);
     }
 
-    InvokeOtherActor(
-        *ReplicationSourceOffsetsServer,
-        &TReplicationSourceOffsetsServer::Receive,
-        ev);
+    InvokeOtherActor(*ReplicationSourceOffsetsServer, &TReplicationSourceOffsetsServer::Receive, ev);
 }
 
 } // namespace NKikimr::NDataShard

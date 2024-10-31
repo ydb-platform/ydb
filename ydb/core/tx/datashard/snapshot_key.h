@@ -35,9 +35,9 @@ struct TCommonOps {
     }
 };
 
-} // NPrivate
+} // namespace NPrivate
 
-struct TSnapshotTableKey : public NPrivate::TCommonOps<TSnapshotTableKey> {
+struct TSnapshotTableKey: public NPrivate::TCommonOps<TSnapshotTableKey> {
     ui64 OwnerId = 0;
     ui64 PathId = 0;
 
@@ -45,8 +45,7 @@ struct TSnapshotTableKey : public NPrivate::TCommonOps<TSnapshotTableKey> {
 
     TSnapshotTableKey(ui64 ownerId, ui64 pathId)
         : OwnerId(ownerId)
-        , PathId(pathId)
-    { }
+        , PathId(pathId) {}
 
     auto ToTuple() const {
         return std::make_tuple(OwnerId, PathId);
@@ -57,8 +56,7 @@ struct TSnapshotTableKey : public NPrivate::TCommonOps<TSnapshotTableKey> {
 
 struct TDataSnapshotKey
     : public TSnapshotTableKey
-    , public NPrivate::TCommonOps<TDataSnapshotKey>
-{
+    , public NPrivate::TCommonOps<TDataSnapshotKey> {
     ui64 Step = 0;
     ui64 TxId = 0;
 
@@ -67,12 +65,10 @@ struct TDataSnapshotKey
     TDataSnapshotKey(ui64 ownerId, ui64 pathId, ui64 step, ui64 txId)
         : TSnapshotTableKey(ownerId, pathId)
         , Step(step)
-        , TxId(txId)
-    { }
+        , TxId(txId) {}
 
     TDataSnapshotKey(const TPathId& pathId, ui64 step, ui64 txId)
-        : TDataSnapshotKey(pathId.OwnerId, pathId.LocalPathId, step, txId)
-    { }
+        : TDataSnapshotKey(pathId.OwnerId, pathId.LocalPathId, step, txId) {}
 
     auto ToTuple() const {
         return std::tuple_cat(TSnapshotTableKey::ToTuple(), std::make_tuple(Step, TxId));
@@ -85,20 +81,17 @@ using TSnapshotKey = TDataSnapshotKey;
 
 struct TSchemaSnapshotKey
     : public TSnapshotTableKey
-    , public NPrivate::TCommonOps<TSchemaSnapshotKey>
-{
+    , public NPrivate::TCommonOps<TSchemaSnapshotKey> {
     ui64 Version = 0;
 
     TSchemaSnapshotKey() = default;
 
     TSchemaSnapshotKey(ui64 ownerId, ui64 pathId, ui64 version)
         : TSnapshotTableKey(ownerId, pathId)
-        , Version(version)
-    { }
+        , Version(version) {}
 
     TSchemaSnapshotKey(const TPathId& pathId, ui64 version)
-        : TSchemaSnapshotKey(pathId.OwnerId, pathId.LocalPathId, version)
-    { }
+        : TSchemaSnapshotKey(pathId.OwnerId, pathId.LocalPathId, version) {}
 
     auto ToTuple() const {
         return std::tuple_cat(TSnapshotTableKey::ToTuple(), std::make_tuple(Version));
@@ -107,5 +100,5 @@ struct TSchemaSnapshotKey
     using TCommonOps<TSchemaSnapshotKey>::operator size_t;
 };
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

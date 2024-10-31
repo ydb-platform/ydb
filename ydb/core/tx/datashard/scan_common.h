@@ -80,4 +80,4 @@ using TColumnsTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 
-}
+} // namespace NKikimr::NDataShard

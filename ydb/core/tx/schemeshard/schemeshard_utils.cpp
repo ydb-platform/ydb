@@ -8,17 +8,19 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-void TShardDeleter::Shutdown(const NActors::TActorContext &ctx) {
+void TShardDeleter::Shutdown(const NActors::TActorContext& ctx) {
     for (auto& info : PerHiveDeletions) {
         NTabletPipe::CloseClient(ctx, info.second.PipeToHive);
     }
     PerHiveDeletions.clear();
 }
 
-void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
-                                       const THashSet<TShardIdx> &shardsToDelete,
-                                       const THashMap<NKikimr::NSchemeShard::TShardIdx, NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
-                                       const NActors::TActorContext &ctx) {
+void TShardDeleter::SendDeleteRequests(
+    TTabletId hiveTabletId,
+    const THashSet<TShardIdx>& shardsToDelete,
+    const THashMap<NKikimr::NSchemeShard::TShardIdx, NKikimr::NSchemeShard::TShardInfo>& shardsInfos,
+    const NActors::TActorContext& ctx
+) {
     if (shardsToDelete.empty())
         return;
 
@@ -35,7 +37,9 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
         // !HACK: use shardIdx as  TxId because Hive only replies with TxId
         // TODO: change hive events to get rid of this hack
         // svc@ in progress fixing it
-        TAutoPtr<TEvHive::TEvDeleteTablet> event = new TEvHive::TEvDeleteTablet(shardIdx.GetOwnerId(), ui64(shardIdx.GetLocalId()), ui64(shardIdx.GetLocalId()));
+        TAutoPtr<TEvHive::TEvDeleteTablet> event = new TEvHive::TEvDeleteTablet(
+            shardIdx.GetOwnerId(), ui64(shardIdx.GetLocalId()), ui64(shardIdx.GetLocalId())
+        );
         auto itShard = shardsInfos.find(shardIdx);
         if (itShard != shardsInfos.end()) {
             TTabletId shardTabletId = itShard->second.TabletID;
@@ -53,7 +57,11 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
     }
 }
 
-void TShardDeleter::ResendDeleteRequests(TTabletId hiveTabletId, const THashMap<TShardIdx, TShardInfo>& shardsInfos, const NActors::TActorContext &ctx) {
+void TShardDeleter::ResendDeleteRequests(
+    TTabletId hiveTabletId,
+    const THashMap<TShardIdx, TShardInfo>& shardsInfos,
+    const NActors::TActorContext& ctx
+) {
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "Resending tablet deletion requests from " << MyTabletID << " to " << hiveTabletId);
 
@@ -70,10 +78,12 @@ void TShardDeleter::ResendDeleteRequests(TTabletId hiveTabletId, const THashMap<
     SendDeleteRequests(hiveTabletId, toResend, shardsInfos, ctx);
 }
 
-void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
-                                        const THashMap<TShardIdx, TShardInfo>& shardsInfos,
-                                        TShardIdx shardIdx,
-                                        const NActors::TActorContext &ctx) {
+void TShardDeleter::ResendDeleteRequest(
+    TTabletId hiveTabletId,
+    const THashMap<TShardIdx, TShardInfo>& shardsInfos,
+    TShardIdx shardIdx,
+    const NActors::TActorContext& ctx
+) {
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "Resending tablet deletion request from " << MyTabletID << " to " << hiveTabletId);
 
@@ -95,11 +105,13 @@ void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
     }
 }
 
-void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
-                                          TTabletId hiveToTabletId,
-                                          TShardIdx shardIdx,
-                                          const THashMap<TShardIdx, TShardInfo>& shardsInfos,
-                                          const NActors::TActorContext &ctx) {
+void TShardDeleter::RedirectDeleteRequest(
+    TTabletId hiveFromTabletId,
+    TTabletId hiveToTabletId,
+    TShardIdx shardIdx,
+    const THashMap<TShardIdx, TShardInfo>& shardsInfos,
+    const NActors::TActorContext& ctx
+) {
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "Redirecting tablet deletion requests from " << hiveFromTabletId << " to " << hiveToTabletId);
     auto itFromHive = PerHiveDeletions.find(hiveFromTabletId);
@@ -121,7 +133,7 @@ void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
     ResendDeleteRequest(hiveToTabletId, shardsInfos, shardIdx, ctx);
 }
 
-void TShardDeleter::ShardDeleted(TShardIdx shardIdx, const NActors::TActorContext &ctx) {
+void TShardDeleter::ShardDeleted(TShardIdx shardIdx, const NActors::TActorContext& ctx) {
     if (!ShardHive.contains(shardIdx))
         return;
 
@@ -147,7 +159,7 @@ bool TShardDeleter::Empty() const {
     return PerHiveDeletions.empty();
 }
 
-void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
+void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr& ev, const NActors::TActorContext& ctx) {
     Y_UNUSED(ev);
     TInstant now = AppData(ctx)->TimeProvider->Now();
     TDuration responseTime = now - SelfPingSentTime;
@@ -165,13 +177,16 @@ void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, c
     }
 }
 
-void TSelfPinger::Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const NActors::TActorContext &ctx) {
+void TSelfPinger::Handle(
+    TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr& ev,
+    const NActors::TActorContext& ctx
+) {
     Y_UNUSED(ev);
     SelfPingWakeupScheduled = false;
     DoSelfPing(ctx);
 }
 
-void TSelfPinger::OnAnyEvent(const NActors::TActorContext &ctx) {
+void TSelfPinger::OnAnyEvent(const NActors::TActorContext& ctx) {
     TInstant now = AppData(ctx)->TimeProvider->Now();
     if (SelfPingInFlight) {
         TDuration responseTime = now - SelfPingSentTime;
@@ -183,7 +198,7 @@ void TSelfPinger::OnAnyEvent(const NActors::TActorContext &ctx) {
     }
 }
 
-void TSelfPinger::DoSelfPing(const NActors::TActorContext &ctx) {
+void TSelfPinger::DoSelfPing(const NActors::TActorContext& ctx) {
     if (SelfPingInFlight)
         return;
 
@@ -192,7 +207,7 @@ void TSelfPinger::DoSelfPing(const NActors::TActorContext &ctx) {
     SelfPingInFlight = true;
 }
 
-void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
+void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext& ctx) {
     if (SelfPingWakeupScheduled)
         return;
 
@@ -206,35 +221,35 @@ PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig,
     Throughput = partitions * NPQ::TopicPartitionReserveThroughput(tabletConfig);
 }
 
-}
+} // namespace NSchemeShard
 
 namespace NTableIndex {
 
-TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {
+TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDescr) {
     TTableColumns result;
-    for (auto& column: tableDescr.GetColumns()) {
+    for (auto& column : tableDescr.GetColumns()) {
         result.Columns.insert(column.GetName());
     }
-    for (auto& keyName: tableDescr.GetKeyColumnNames()) {
+    for (auto& keyName : tableDescr.GetKeyColumnNames()) {
         result.Keys.push_back(keyName);
     }
     return result;
 }
 
-TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc) {
+TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc) {
     TIndexColumns result;
-    for (auto& keyName: indexDesc.GetKeyColumnNames()) {
+    for (auto& keyName : indexDesc.GetKeyColumnNames()) {
         result.KeyColumns.push_back(keyName);
     }
-    for (auto& keyName: indexDesc.GetDataColumnNames()) {
+    for (auto& keyName : indexDesc.GetDataColumnNames()) {
         result.DataColumns.push_back(keyName);
     }
     return result;
 }
 
-TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
+TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
     TTableColumns result;
-    for (auto& item: tableInfo->Columns) {
+    for (auto& item : tableInfo->Columns) {
         const auto& column = item.second;
         if (column.IsDropped()) {
             continue;
@@ -243,7 +258,7 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
         result.Columns.insert(item.second.Name);
     }
 
-    for (auto& keyId: tableInfo->KeyColumnIds) {
+    for (auto& keyId : tableInfo->KeyColumnIds) {
         const auto& keyColumn = tableInfo->Columns.at(keyId);
         if (keyColumn.IsDropped()) {
             continue;
@@ -259,9 +274,9 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
 namespace {
 
 NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
-        const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-        const NKikimrSchemeOp::TTableDescription& indexTableDesc)
-{
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+) {
     // KIKIMR-6687
     NKikimrSchemeOp::TPartitionConfig result;
 
@@ -296,10 +311,9 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.ColumnFamiliesSize()) {
         // Indexes don't need column families unless it's the default column family
         for (const auto& family : baseTablePartitionConfig.GetColumnFamilies()) {
-            const bool isDefaultFamily = (
-                (!family.HasId() && !family.HasName()) ||
-                (family.HasId() && family.GetId() == 0) ||
-                (family.HasName() && family.GetName() == "default"));
+            const bool isDefaultFamily =
+                ((!family.HasId() && !family.HasName()) || (family.HasId() && family.GetId() == 0) ||
+                 (family.HasName() && family.GetName() == "default"));
             if (isDefaultFamily) {
                 result.AddColumnFamilies()->CopyFrom(family);
             }
@@ -338,8 +352,8 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
 void SetImplTablePartitionConfig(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    NKikimrSchemeOp::TTableDescription& tableDescription)
-{
+    NKikimrSchemeOp::TTableDescription& tableDescription
+) {
     if (indexTableDesc.HasUniformPartitionsCount()) {
         tableDescription.SetUniformPartitionsCount(indexTableDesc.GetUniformPartitionsCount());
     }
@@ -354,8 +368,8 @@ void SetImplTablePartitionConfig(
 void FillIndexImplTableColumns(
     const auto& baseTableColumns,
     const TTableColumns& implTableColumns,
-    NKikimrSchemeOp::TTableDescription& implTableDesc)
-{
+    NKikimrSchemeOp::TTableDescription& implTableDesc
+) {
     // The function that calls this may have already added some columns
     // and we want to add new columns after those that have already been added
     const auto was = implTableDesc.ColumnsSize();
@@ -368,7 +382,7 @@ void FillIndexImplTableColumns(
     // We want data columns order in index table same as in indexed table,
     // so we use counter to keep this order in the std::sort
     // Counter starts with Max/2 to avoid intersection with key columns counter
-    for (ui32 i = Max<ui32>() / 2; auto& columnIt: baseTableColumns) {
+    for (ui32 i = Max<ui32>() / 2; auto& columnIt : baseTableColumns) {
         NKikimrSchemeOp::TColumnDescription* column = nullptr;
         using TColumn = std::decay_t<decltype(columnIt)>;
         if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>>) {
@@ -399,17 +413,19 @@ void FillIndexImplTableColumns(
         }
     }
 
-    std::sort(implTableDesc.MutableColumns()->begin() + was,
-              implTableDesc.MutableColumns()->end(),
-              [] (auto& left, auto& right) {
-                  return left.GetId() < right.GetId();
-              });
+    std::sort(
+        implTableDesc.MutableColumns()->begin() + was,
+        implTableDesc.MutableColumns()->end(),
+        [](auto& left, auto& right) {
+            return left.GetId() < right.GetId();
+        }
+    );
 
-    for (auto& column: *implTableDesc.MutableColumns()) {
+    for (auto& column : *implTableDesc.MutableColumns()) {
         column.ClearId();
     }
 
-    for (auto& keyName: implTableColumns.Keys) {
+    for (auto& keyName : implTableColumns.Keys) {
         implTableDesc.AddKeyColumnNames(keyName);
     }
 }
@@ -433,8 +449,8 @@ const auto& GetColumns(const NKikimrSchemeOp::TTableDescription& tableDescr) {
 auto CalcImplTableDescImpl(
     const auto& baseTable,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
-{
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+) {
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
     SetImplTablePartitionConfig(GetPartitionConfig(baseTable), indexTableDesc, implTableDesc);
@@ -451,8 +467,8 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix)
-{
+    std::string_view suffix
+) {
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(TString::Join(NTableVectorKmeansTreeIndex::PostingTable, suffix));
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
@@ -470,28 +486,28 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     return implTableDesc;
 }
 
-}
+} // namespace
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
-{
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+) {
     return CalcImplTableDescImpl(baseTableInfo, implTableColumns, indexTableDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
-{
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+) {
     return CalcImplTableDescImpl(baseTableDescr, implTableColumns, indexTableDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
-{
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+) {
     NKikimrSchemeOp::TTableDescription implTableDesc;
 
     implTableDesc.SetName(NTableVectorKmeansTreeIndex::LevelTable);
@@ -530,9 +546,11 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix)
-{
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
+    std::string_view suffix
+) {
+    return CalcVectorKmeansTreePostingImplTableDescImpl(
+        baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix
+    );
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
@@ -540,22 +558,30 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix)
-{
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
+    std::string_view suffix
+) {
+    return CalcVectorKmeansTreePostingImplTableDescImpl(
+        baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix
+    );
 }
 
-bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {
+bool ExtractTypes(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    TColumnTypes& columnTypes,
+    TString& explain
+) {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
     Y_ABORT_UNLESS(typeRegistry);
 
-    for (auto& column: baseTableDescr.GetColumns()) {
+    for (auto& column : baseTableDescr.GetColumns()) {
         auto& columnName = column.GetName();
         auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
 
         NScheme::TTypeInfo typeInfo;
-        if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
-            return false; 
+        if (!GetTypeInfo(
+                typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain
+            )) {
+            return false;
         }
 
         columnTypes[columnName] = typeInfo;
@@ -578,12 +604,12 @@ bool IsCompatibleKeyTypes(
     const TColumnTypes& baseTableColumnTypes,
     const TTableColumns& implTableColumns,
     bool uniformTable,
-    TString& explain)
-{
+    TString& explain
+) {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
     Y_ABORT_UNLESS(typeRegistry);
 
-    for (auto& keyName: implTableColumns.Keys) {
+    for (auto& keyName : implTableColumns.Keys) {
         Y_ABORT_UNLESS(baseTableColumnTypes.contains(keyName));
         auto typeInfo = baseTableColumnTypes.at(keyName);
 
@@ -596,18 +622,20 @@ bool IsCompatibleKeyTypes(
 
         if (uniformTable) {
             switch (typeInfo.GetTypeId()) {
-            case NScheme::NTypeIds::Uint32:
-            case NScheme::NTypeIds::Uint64:
-                break;
-            default:
-                explain += TStringBuilder() << "Column '" << keyName << "' has wrong key type "
-                                            << NScheme::TypeName(typeInfo) << " for being key of table with uniform partitioning";
-                return false;
+                case NScheme::NTypeIds::Uint32:
+                case NScheme::NTypeIds::Uint64:
+                    break;
+                default:
+                    explain += TStringBuilder()
+                               << "Column '" << keyName << "' has wrong key type " << NScheme::TypeName(typeInfo)
+                               << " for being key of table with uniform partitioning";
+                    return false;
             }
         }
 
         if (!NSchemeShard::IsAllowedKeyType(typeInfo)) {
-            explain += TStringBuilder() << "Column '" << keyName << "' has wrong key type " << NScheme::TypeName(typeInfo) << " for being key";
+            explain += TStringBuilder() << "Column '" << keyName << "' has wrong key type "
+                                        << NScheme::TypeName(typeInfo) << " for being key";
             return false;
         }
     }
@@ -615,6 +643,6 @@ bool IsCompatibleKeyTypes(
     return true;
 }
 
-}
+} // namespace NTableIndex
 
-}
+} // namespace NKikimr

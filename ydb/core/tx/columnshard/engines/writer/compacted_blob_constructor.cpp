@@ -8,10 +8,12 @@
 
 namespace NKikimr::NOlap {
 
-TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv)
+TCompactedWriteController::TCompactedWriteController(
+    const TActorId& dstActor,
+    TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv
+)
     : WriteIndexEv(writeEv)
-    , DstActor(dstActor)
-{
+    , DstActor(dstActor) {
     auto& changes = *WriteIndexEv->IndexChanges;
     for (ui32 i = 0; i < changes.GetWritePortionsCount(); ++i) {
         if (!changes.NeedWritePortion(i)) {
@@ -21,21 +23,30 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         Y_ABORT_UNLESS(pInfo);
         TWritePortionInfoWithBlobsResult& portionWithBlobs = *pInfo;
         for (auto&& b : portionWithBlobs.MutableBlobs()) {
-            auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetResultBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())));
+            auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(
+                b.GetResultBlob(), changes.MutableBlobsAction().GetWriting(b.GetOperator()->GetStorageId())
+            ));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());
             WriteVolume += b.GetSize();
         }
     }
 }
 
-void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
-    WriteIndexEv->PutResult = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnCompaction(putResult, GetBlobActions());
+void TCompactedWriteController::DoOnReadyResult(
+    const NActors::TActorContext& ctx,
+    const NColumnShard::TBlobPutResult::TPtr& putResult
+) {
+    WriteIndexEv->PutResult = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnCompaction(
+        putResult, GetBlobActions()
+    );
     ctx.Send(DstActor, WriteIndexEv.Release());
 }
 
 TCompactedWriteController::~TCompactedWriteController() {
     if (WriteIndexEv && WriteIndexEv->IndexChanges) {
-        WriteIndexEv->IndexChanges->AbortEmergency("TCompactedWriteController destructed with WriteIndexEv and WriteIndexEv->IndexChanges");
+        WriteIndexEv->IndexChanges->AbortEmergency(
+            "TCompactedWriteController destructed with WriteIndexEv and WriteIndexEv->IndexChanges"
+        );
     }
 }
 
@@ -47,4 +58,4 @@ void TCompactedWriteController::DoAbort(const TString& reason) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "TCompactedWriteController::DoAbort")("reason", reason);
 }
 
-}
+} // namespace NKikimr::NOlap

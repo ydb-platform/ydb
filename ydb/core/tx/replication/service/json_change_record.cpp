@@ -26,14 +26,16 @@ ui64 TChangeRecord::GetTxId() const {
 }
 
 NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
-    return JsonBody.Has("resolved")
-        ? EKind::CdcHeartbeat
-        : EKind::CdcDataChange;
+    return JsonBody.Has("resolved") ? EKind::CdcHeartbeat : EKind::CdcDataChange;
 }
 
-static bool ParseKey(TVector<TCell>& cells,
-        const NJson::TJsonValue::TArray& key, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
-{
+static bool ParseKey(
+    TVector<TCell>& cells,
+    const NJson::TJsonValue::TArray& key,
+    TLightweightSchema::TCPtr schema,
+    TMemoryPool& pool,
+    TString& error
+) {
     cells.resize(key.size());
 
     Y_ABORT_UNLESS(key.size() == schema->KeyColumns.size());
@@ -46,9 +48,14 @@ static bool ParseKey(TVector<TCell>& cells,
     return true;
 }
 
-static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
-        const NJson::TJsonValue::TMapType& value, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
-{
+static bool ParseValue(
+    TVector<NTable::TTag>& tags,
+    TVector<TCell>& cells,
+    const NJson::TJsonValue::TMapType& value,
+    TLightweightSchema::TCPtr schema,
+    TMemoryPool& pool,
+    TString& error
+) {
     tags.reserve(value.size());
     cells.reserve(value.size());
 
@@ -132,4 +139,4 @@ void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
     return visitor.Visit(*this);
 }
 
-}
+} // namespace NKikimr::NReplication::NService

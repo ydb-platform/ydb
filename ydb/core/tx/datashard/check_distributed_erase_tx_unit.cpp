@@ -10,12 +10,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCheckDistributedEraseTxUnit : public TExecutionUnit {
+class TCheckDistributedEraseTxUnit: public TExecutionUnit {
 public:
     TCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CheckDistributedEraseTx, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::CheckDistributedEraseTx, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -36,11 +34,11 @@ public:
         const auto& eraseTx = tx->GetDistributedEraseTx();
         const auto& request = eraseTx->GetRequest();
 
-        auto buildUnsuccessfulResult = [&](
-                const TString& reason,
-                NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status = NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST,
-                NKikimrTxDataShard::TError::EKind kind = NKikimrTxDataShard::TError::BAD_ARGUMENT) {
-
+        auto buildUnsuccessfulResult = [&](const TString& reason,
+                                           NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status =
+                                               NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST,
+                                           NKikimrTxDataShard::TError::EKind kind =
+                                               NKikimrTxDataShard::TError::BAD_ARGUMENT) {
             BuildResult(op, status)->AddError(kind, reason);
             op->Abort(EExecutionUnitKind::FinishPropose);
             return EExecutionStatus::Executed;
@@ -63,9 +61,9 @@ public:
                 continue;
             }
 
-            return buildUnsuccessfulResult(TStringBuilder() << "Present rows count mismatch"
-                << ": got " << presentRows.Count()
-                << ", expected " << request.KeyColumnsSize()
+            return buildUnsuccessfulResult(
+                TStringBuilder() << "Present rows count mismatch"
+                                 << ": got " << presentRows.Count() << ", expected " << request.KeyColumnsSize()
             );
         }
 
@@ -88,16 +86,18 @@ public:
             }
 
             if (indexCells.GetCells().size() != static_cast<ui32>(eraseTx->GetIndexColumnIds().size())) {
-                return buildUnsuccessfulResult(TStringBuilder() << "Cell count doesn't match row scheme"
-                    << ": got " << indexCells.GetCells().size()
-                    << ", expected " << eraseTx->GetIndexColumnIds().size());
+                return buildUnsuccessfulResult(
+                    TStringBuilder() << "Cell count doesn't match row scheme"
+                                     << ": got " << indexCells.GetCells().size() << ", expected "
+                                     << eraseTx->GetIndexColumnIds().size()
+                );
             }
         }
 
         if (!Pipeline.AssignPlanInterval(op)) {
-            const TString err = TStringBuilder() << "Can't propose"
-                << " tx " << op->GetTxId()
-                << " at blocked shard " << DataShard.TabletID();
+            const TString err = TStringBuilder()
+                                << "Can't propose"
+                                << " tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
 
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
             return buildUnsuccessfulResult(
@@ -116,8 +116,7 @@ public:
         return EExecutionStatus::Executed;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override {}
 };
 
 THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {

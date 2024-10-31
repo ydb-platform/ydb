@@ -17,22 +17,17 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropFileStore::TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TDropFileStore::TPropose"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(
-        TEvPrivate::TEvOperationPlan::TPtr& ev,
-        TOperationContext& context) override
-    {
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
         const auto ssId = context.SS->SelfTabletId();
 
@@ -71,7 +66,7 @@ public:
 
         const auto oldFileStoreSpace = fs->GetFileStoreSpace();
         auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
-        domainDir->ChangeFileStoreSpaceCommit({ }, oldFileStoreSpace);
+        domainDir->ChangeFileStoreSpaceCommit({}, oldFileStoreSpace);
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
             context.SS->PersistRemoveFileStoreInfo(db, pathId);
@@ -117,9 +112,7 @@ class TDropFileStore: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(
-        const TString& owner,
-        TOperationContext& context) override;
+    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override;
 
     void AbortPropose(TOperationContext&) override {
         Y_ABORT("no AbortPropose for TDropFileStore");
@@ -136,33 +129,30 @@ private:
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DeleteParts:
-            return TTxState::Propose;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::DeleteParts:
+                return TTxState::Propose;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::DeleteParts:
+                return MakeHolder<TDeleteParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            default:
+                return nullptr;
         }
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THolder<TProposeResponse> TDropFileStore::Propose(
-    const TString& owner,
-    TOperationContext& context)
-{
+THolder<TProposeResponse> TDropFileStore::Propose(const TString& owner, TOperationContext& context) {
     Y_UNUSED(owner);
 
     const auto ssId = context.SS->SelfTabletId();
@@ -178,19 +168,14 @@ THolder<TProposeResponse> TDropFileStore::Propose(
         << ", opId: " << OperationId
         << ", at schemeshard: " << ssId);
 
-    auto result = MakeHolder<TProposeResponse>(
-        NKikimrScheme::StatusAccepted,
-        ui64(OperationId.GetTxId()),
-        ui64(ssId));
+    auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-    TPath path = operation.HasId()
-        ? TPath::Init(context.SS->MakeLocalId(operation.GetId()), context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path = operation.HasId() ? TPath::Init(context.SS->MakeLocalId(operation.GetId()), context.SS)
+                                   : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
     {
         auto checks = path.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -261,7 +246,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     return result;
 }
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -274,4 +259,4 @@ ISubOperation::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState stat
     return MakeSubOperation<TDropFileStore>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

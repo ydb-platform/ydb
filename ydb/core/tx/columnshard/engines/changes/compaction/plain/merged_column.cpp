@@ -33,4 +33,4 @@ void TMergedColumn::NewPortion() {
     Portions.emplace_back(TColumnPortion(Context, ChunkContext));
 }
 
-}
+} // namespace NKikimr::NOlap::NCompaction

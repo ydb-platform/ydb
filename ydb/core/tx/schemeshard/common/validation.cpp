@@ -8,7 +8,11 @@ extern "C" {
 
 namespace NKikimr::NSchemeShard::NValidation {
 
-bool TTTLValidator::ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& errStr) {
+bool TTTLValidator::ValidateUnit(
+    const NScheme::TTypeInfo columnType,
+    NKikimrSchemeOp::TTTLSettings::EUnit unit,
+    TString& errStr
+) {
     switch (columnType.GetTypeId()) {
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Datetime:
@@ -34,14 +38,17 @@ bool TTTLValidator::ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSch
                 case DATEOID:
                 case TIMESTAMPOID:
                     if (unit != NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) {
-                        errStr = "To enable TTL on date PG type column 'DateTypeColumnModeSettings' should be specified";
+                        errStr =
+                            "To enable TTL on date PG type column 'DateTypeColumnModeSettings' should be specified";
                         return false;
                     }
                     break;
                 case INT4OID:
                 case INT8OID:
                     if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) {
-                        errStr = "To enable TTL on integral PG type column 'ValueSinceUnixEpochModeSettings' should be specified";
+                        errStr =
+                            "To enable TTL on integral PG type column 'ValueSinceUnixEpochModeSettings' should be "
+                            "specified";
                         return false;
                     }
                     break;
@@ -57,4 +64,4 @@ bool TTTLValidator::ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSch
     return true;
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NValidation

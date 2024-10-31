@@ -2,16 +2,14 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
-class TPropose : public TSubOperationState {
+class TPropose: public TSubOperationState {
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(std::move(id))
-    {}
+        : OperationId(std::move(id)) {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
@@ -24,7 +22,7 @@ public:
         const TPathId& pathId = txState->TargetPathId;
         const TPathElement::TPtr pathPtr = context.SS->PathsById.at(pathId);
         const TPathElement::TPtr parentDirPtr = context.SS->PathsById.at(pathPtr->ParentPathId);
-    
+
         NIceDb::TNiceDb db(context.GetDB());
 
         Y_ABORT_UNLESS(!pathPtr->Dropped());
@@ -71,35 +69,38 @@ private:
     const TOperationId OperationId;
 };
 
-class TDropResourcePool : public TSubOperation {
+class TDropResourcePool: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath) {
+    static bool IsDestinationPathValid(
+        const THolder<TProposeResponse>& result,
+        const TOperationContext& context,
+        const TPath& dstPath
+    ) {
         auto checks = dstPath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -119,7 +120,8 @@ class TDropResourcePool : public TSubOperation {
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
-            if (dstPath.IsResolved() && dstPath.Base()->IsResourcePool() && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
+            if (dstPath.IsResolved() && dstPath.Base()->IsResourcePool() &&
+                (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
                 result->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
                 result->SetPathId(dstPath.Base()->PathId.LocalPathId);
             }
@@ -129,7 +131,8 @@ class TDropResourcePool : public TSubOperation {
     }
 
     void CreateTransaction(const TOperationContext& context, const TPathId& resourcePoolPathId) const {
-        TTxState& txState = NResourcePool::CreateTransaction(OperationId, context, resourcePoolPathId, TTxState::TxDropResourcePool);
+        TTxState& txState =
+            NResourcePool::CreateTransaction(OperationId, context, resourcePoolPathId, TTxState::TxDropResourcePool);
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
     }
@@ -166,13 +169,15 @@ public:
         const TString& name = dropDescription.GetName();
         LOG_N("TDropResourcePool Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                   static_cast<ui64>(OperationId.GetTxId()),
-                                                   static_cast<ui64>(context.SS->SelfTabletId()));
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted,
+            static_cast<ui64>(OperationId.GetTxId()),
+            static_cast<ui64>(context.SS->SelfTabletId())
+        );
 
         const TPath& dstPath = dropDescription.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+                                   ? TPath::Init(context.SS->MakeLocalId(dropDescription.GetId()), context.SS)
+                                   : TPath::Resolve(parentPathStr, context.SS).Dive(name);
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath));
         RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
 

@@ -7,11 +7,12 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TIndexBuilder::TTxForget: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvForgetRequest, TEvIndexBuilder::TEvForgetResponse> {
+struct TSchemeShard::TIndexBuilder::TTxForget
+    : public TSchemeShard::TIndexBuilder::
+          TTxSimple<TEvIndexBuilder::TEvForgetRequest, TEvIndexBuilder::TEvForgetResponse> {
 public:
     explicit TTxForget(TSelf* self, TEvIndexBuilder::TEvForgetRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_FORGET_INDEX_BUILD)
-    {}
+        : TTxSimple(self, ev, TXTYPE_FORGET_INDEX_BUILD) {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
@@ -21,8 +22,7 @@ public:
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
-                Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
+                Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
             );
         }
         const TPathId domainPathId = database.GetPathIdForDomain();
@@ -39,7 +39,8 @@ public:
         if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <"
+                                 << record.GetDatabaseName() << ">"
             );
         }
 
@@ -65,4 +66,4 @@ ITransaction* TSchemeShard::CreateTxForget(TEvIndexBuilder::TEvForgetRequest::TP
     return new TIndexBuilder::TTxForget(this, ev);
 }
 
-} // NKikimr::NSchemeShard
+} // namespace NKikimr::NSchemeShard

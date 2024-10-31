@@ -24,7 +24,7 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
     Aws::ShutdownAPI(Options);
 }
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     using TUnderlying = std::function<void(const TVector<TString>&, const TString&, TTestWithReboots&)>;
@@ -53,14 +53,16 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
-        RunS3({
-            R"(
+        RunS3(
+            {
+                R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -69,19 +71,22 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
-        RunS3({
-            R"(
+        RunS3(
+            {
+                R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
                 UniformPartitionsCount: 2
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -90,7 +95,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTable) {
@@ -98,20 +104,22 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     Y_UNIT_TEST(ShouldSucceedOnManyTables) {
-        RunS3({
-            R"(
+        RunS3(
+            {
+                R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-            R"(
+                R"(
                 Name: "Table2"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -124,18 +132,21 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: "table2"
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSingleShardTable) {
-        CancelS3({
-            R"(
+        CancelS3(
+            {
+                R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -144,19 +155,22 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnMultiShardTable) {
-        CancelS3({
-            R"(
+        CancelS3(
+            {
+                R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
                 UniformPartitionsCount: 2
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -165,7 +179,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnSingleTable) {
@@ -173,20 +188,22 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     Y_UNIT_TEST(CancelShouldSucceedOnManyTables) {
-        CancelS3({
-            R"(
+        CancelS3(
+            {
+                R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-            R"(
+                R"(
                 Name: "Table2"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -199,18 +216,21 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: "table2"
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleShardTable) {
-        ForgetS3({
-            R"(
+        ForgetS3(
+            {
+                R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -219,19 +239,22 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnMultiShardTable) {
-        ForgetS3({
-            R"(
+        ForgetS3(
+            {
+                R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Uint32" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
                 UniformPartitionsCount: 2
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -240,7 +263,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: ""
               }
             }
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnSingleTable) {
@@ -248,20 +272,22 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     }
 
     Y_UNIT_TEST(ForgetShouldSucceedOnManyTables) {
-        ForgetS3({
-            R"(
+        ForgetS3(
+            {
+                R"(
                 Name: "Table1"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-            R"(
+                R"(
                 Name: "Table2"
                 Columns { Name: "key" Type: "Utf8" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, R"(
+            },
+            R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -274,6 +300,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 destination_prefix: "table2"
               }
             }
-        )");
+        )"
+        );
     }
 }

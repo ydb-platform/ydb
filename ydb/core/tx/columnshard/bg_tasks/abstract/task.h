@@ -14,6 +14,7 @@ private:
     virtual TConclusionStatus DoDeserializeFromString(const TString& data) = 0;
     virtual TString DoSerializeToString() const = 0;
     virtual std::shared_ptr<ISessionLogic> DoBuildSession() const = 0;
+
 public:
     using TFactory = NObjectFactory::TObjectFactory<ITaskDescription, TString>;
 
@@ -37,6 +38,7 @@ public:
 class TTaskDescriptionContainer: public NBackgroundTasks::TInterfaceStringContainer<ITaskDescription> {
 private:
     using TBase = NBackgroundTasks::TInterfaceStringContainer<ITaskDescription>;
+
 public:
     using TBase::TBase;
 };
@@ -46,13 +48,17 @@ private:
     YDB_READONLY_DEF(TString, Identifier);
     YDB_READONLY_DEF(TStatusChannelContainer, ChannelContainer);
     YDB_READONLY_DEF(TTaskDescriptionContainer, DescriptionContainer);
+
 public:
     TTask() = default;
-    TTask(const TString& identifier, const TStatusChannelContainer& channelContainer, const TTaskDescriptionContainer& descriptionContainer)
+    TTask(
+        const TString& identifier,
+        const TStatusChannelContainer& channelContainer,
+        const TTaskDescriptionContainer& descriptionContainer
+    )
         : Identifier(identifier)
         , ChannelContainer(channelContainer)
-        , DescriptionContainer(descriptionContainer)
-    {
+        , DescriptionContainer(descriptionContainer) {
         AFL_VERIFY(!!Identifier);
         AFL_VERIFY(!!ChannelContainer);
         AFL_VERIFY(!!DescriptionContainer);
@@ -61,4 +67,4 @@ public:
     TConclusionStatus DeserializeFromProto(const NKikimrTxBackgroundProto::TTaskContainer& proto);
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

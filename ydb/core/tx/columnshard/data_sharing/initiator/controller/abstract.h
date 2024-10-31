@@ -15,8 +15,11 @@ protected:
     virtual void DoConfirmSuccess(const TString& sessionId) const = 0;
     virtual void DoFinished(const TString& sessionId) const = 0;
     virtual void DoStatus(const TStatusContainer& status) const = 0;
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardDataSharingProto::TInitiator::TController& proto) = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(
+        const NKikimrColumnShardDataSharingProto::TInitiator::TController& proto
+    ) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardDataSharingProto::TInitiator::TController& proto) const = 0;
+
 public:
     using TProto = NKikimrColumnShardDataSharingProto::TInitiator::TController;
     using TFactory = NObjectFactory::TObjectFactory<IInitiatorController, TString>;
@@ -52,6 +55,7 @@ public:
 class TInitiatorControllerContainer: public NBackgroundTasks::TInterfaceProtoContainer<IInitiatorController> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IInitiatorController>;
+
 public:
     using TBase::TBase;
 
@@ -72,4 +76,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

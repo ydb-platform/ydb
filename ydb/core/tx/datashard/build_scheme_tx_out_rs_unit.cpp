@@ -5,57 +5,42 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TBuildSchemeTxOutRSUnit : public TExecutionUnit {
+class TBuildSchemeTxOutRSUnit: public TExecutionUnit {
 public:
-    TBuildSchemeTxOutRSUnit(TDataShard &dataShard,
-                            TPipeline &pipeline);
+    TBuildSchemeTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TBuildSchemeTxOutRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TBuildSchemeTxOutRSUnit::TBuildSchemeTxOutRSUnit(TDataShard &dataShard,
-                                                 TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::BuildSchemeTxOutRS, false, dataShard, pipeline)
-{
-}
+TBuildSchemeTxOutRSUnit::TBuildSchemeTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::BuildSchemeTxOutRS, false, dataShard, pipeline) {}
 
-TBuildSchemeTxOutRSUnit::~TBuildSchemeTxOutRSUnit()
-{
-}
+TBuildSchemeTxOutRSUnit::~TBuildSchemeTxOutRSUnit() {}
 
-bool TBuildSchemeTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TBuildSchemeTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
-                                                  TTransactionContext &txc,
-                                                  const TActorContext &)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-    auto &schemeTx = tx->GetSchemeTx();
+    auto& schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasSendSnapshot() && !schemeTx.HasCreateIncrementalBackupSrc())
         return EExecutionStatus::Executed;
 
     Y_ABORT_UNLESS(!op->InputSnapshots().empty(), "Snapshots expected");
 
-    auto &outReadSets = op->OutReadSets();
+    auto& outReadSets = op->OutReadSets();
     ui64 srcTablet = DataShard.TabletID();
 
-    const auto& snapshot =
-        schemeTx.HasSendSnapshot() ?
-        schemeTx.GetSendSnapshot() :
-        schemeTx.GetCreateIncrementalBackupSrc().GetSendSnapshot();
+    const auto& snapshot = schemeTx.HasSendSnapshot() ? schemeTx.GetSendSnapshot()
+                                                      : schemeTx.GetCreateIncrementalBackupSrc().GetSendSnapshot();
     ui64 targetTablet = snapshot.GetSendTo(0).GetShard();
     ui64 tableId = snapshot.GetTableId_Deprecated();
     if (snapshot.HasTableId()) {
@@ -65,11 +50,11 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
     ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
-    for (auto &snapshot : op->InputSnapshots()) {
+    for (auto& snapshot : op->InputSnapshots()) {
         auto* txSnapshot = dynamic_cast<TTxTableSnapshotContext*>(snapshot.Get());
         Y_ABORT_UNLESS(txSnapshot, "Unexpected input snapshot type");
 
-        TString snapBody = DataShard.BorrowSnapshot(localTableId, *snapshot, { }, { }, targetTablet);
+        TString snapBody = DataShard.BorrowSnapshot(localTableId, *snapshot, {}, {}, targetTablet);
         txc.Env.DropSnapshot(snapshot);
 
         Y_ABORT_UNLESS(snapBody, "Failed to make full borrow snap. w/o tx restarts");
@@ -132,14 +117,9 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TBuildSchemeTxOutRSUnit::Complete(TOperation::TPtr,
-                                       const TActorContext &)
-{
-}
+void TBuildSchemeTxOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateBuildSchemeTxOutRSUnit(TDataShard &dataShard,
-                                                     TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateBuildSchemeTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TBuildSchemeTxOutRSUnit>(dataShard, pipeline);
 }
 

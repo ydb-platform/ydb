@@ -4,17 +4,22 @@
 
 namespace NKikimr::NOlap::NReader {
 
-TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index)
+TDataStorageAccessor::TDataStorageAccessor(
+    const std::unique_ptr<TInsertTable>& insertTable,
+    const std::unique_ptr<IColumnEngine>& index
+)
     : InsertTable(insertTable)
-    , Index(index) {
-}
+    , Index(index) {}
 
-std::shared_ptr<TSelectInfo> TDataStorageAccessor::Select(const TReadDescription& readDescription, const bool withUncommitted) const {
+std::shared_ptr<TSelectInfo>
+TDataStorageAccessor::Select(const TReadDescription& readDescription, const bool withUncommitted) const {
     if (readDescription.ReadNothing) {
         return std::make_shared<TSelectInfo>();
     }
     AFL_VERIFY(readDescription.PKRangesFilter);
-    return Index->Select(readDescription.PathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
+    return Index->Select(
+        readDescription.PathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted
+    );
 }
 
 ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInfo& portion) const {
@@ -23,10 +28,16 @@ ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInf
     return schema;
 }
 
-std::vector<TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const TReadDescription& readDescription,
-    const std::shared_ptr<arrow::Schema>& pkSchema, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const {
+std::vector<TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(
+    const TReadDescription& readDescription,
+    const std::shared_ptr<arrow::Schema>& pkSchema,
+    const std::optional<ui64> lockId,
+    const TSnapshot& reqSnapshot
+) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
-    return std::move(InsertTable->Read(readDescription.PathId, lockId, reqSnapshot, pkSchema, &*readDescription.PKRangesFilter));
+    return std::move(
+        InsertTable->Read(readDescription.PathId, lockId, reqSnapshot, pkSchema, &*readDescription.PKRangesFilter)
+    );
 }
 
 }   // namespace NKikimr::NOlap::NReader

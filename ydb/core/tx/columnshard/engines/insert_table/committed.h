@@ -14,27 +14,39 @@ private:
     YDB_READONLY(bool, Remove, false);
 
 public:
-    TCommittedData(const std::shared_ptr<TUserData>& userData, const ui64 planStep, const ui64 txId, const TInsertWriteId insertWriteId)
+    TCommittedData(
+        const std::shared_ptr<TUserData>& userData,
+        const ui64 planStep,
+        const ui64 txId,
+        const TInsertWriteId insertWriteId
+    )
         : TBase(userData)
         , Snapshot(planStep, txId)
         , InsertWriteId(insertWriteId)
-        , DedupId(ToString(planStep) + ":" + ToString((ui64)insertWriteId)) {
-    }
+        , DedupId(ToString(planStep) + ":" + ToString((ui64)insertWriteId)) {}
 
-    TCommittedData(const std::shared_ptr<TUserData>& userData, const ui64 planStep, const ui64 txId, const TInsertWriteId insertWriteId,
-        const TString& dedupId)
+    TCommittedData(
+        const std::shared_ptr<TUserData>& userData,
+        const ui64 planStep,
+        const ui64 txId,
+        const TInsertWriteId insertWriteId,
+        const TString& dedupId
+    )
         : TBase(userData)
         , Snapshot(planStep, txId)
         , InsertWriteId(insertWriteId)
-        , DedupId(dedupId) {
-    }
+        , DedupId(dedupId) {}
 
-    TCommittedData(const std::shared_ptr<TUserData>& userData, const TSnapshot& ss, const ui64 generation, const TInsertWriteId ephemeralWriteId)
+    TCommittedData(
+        const std::shared_ptr<TUserData>& userData,
+        const TSnapshot& ss,
+        const ui64 generation,
+        const TInsertWriteId ephemeralWriteId
+    )
         : TBase(userData)
         , Snapshot(ss)
         , InsertWriteId(ephemeralWriteId)
-        , DedupId(ToString(generation) + ":" + ToString((ui64)ephemeralWriteId)) {
-    }
+        , DedupId(ToString(generation) + ":" + ToString((ui64)ephemeralWriteId)) {}
 
     void SetRemove() {
         AFL_VERIFY(!Remove);
@@ -103,9 +115,17 @@ public:
         return BlobRange.Size;
     }
 
-    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const TInsertWriteId insertWriteId, const ui64 schemaVersion, const ui64 recordsCount,
-        const NArrow::TReplaceKey& first, const NArrow::TReplaceKey& last, const bool isDelete,
-        const NArrow::TSchemaSubset& subset)
+    TCommittedBlob(
+        const TBlobRange& blobRange,
+        const TSnapshot& snapshot,
+        const TInsertWriteId insertWriteId,
+        const ui64 schemaVersion,
+        const ui64 recordsCount,
+        const NArrow::TReplaceKey& first,
+        const NArrow::TReplaceKey& last,
+        const bool isDelete,
+        const NArrow::TSchemaSubset& subset
+    )
         : BlobRange(blobRange)
         , CommittedSnapshot(snapshot)
         , InsertWriteId(insertWriteId)
@@ -114,12 +134,18 @@ public:
         , IsDelete(isDelete)
         , First(first)
         , Last(last)
-        , SchemaSubset(subset) {
-    }
+        , SchemaSubset(subset) {}
 
-    TCommittedBlob(const TBlobRange& blobRange, const TInsertWriteId insertWriteId, const ui64 schemaVersion, const ui64 recordsCount,
-        const NArrow::TReplaceKey& first, const NArrow::TReplaceKey& last, const bool isDelete,
-        const NArrow::TSchemaSubset& subset)
+    TCommittedBlob(
+        const TBlobRange& blobRange,
+        const TInsertWriteId insertWriteId,
+        const ui64 schemaVersion,
+        const ui64 recordsCount,
+        const NArrow::TReplaceKey& first,
+        const NArrow::TReplaceKey& last,
+        const bool isDelete,
+        const NArrow::TSchemaSubset& subset
+    )
         : BlobRange(blobRange)
         , InsertWriteId(insertWriteId)
         , SchemaVersion(schemaVersion)
@@ -127,8 +153,7 @@ public:
         , IsDelete(isDelete)
         , First(first)
         , Last(last)
-        , SchemaSubset(subset) {
-    }
+        , SchemaSubset(subset) {}
 
     /// It uses trick then we place key with planStep:txId in container and find them later by BlobId only.
     /// So hash() and equality should depend on BlobId only.

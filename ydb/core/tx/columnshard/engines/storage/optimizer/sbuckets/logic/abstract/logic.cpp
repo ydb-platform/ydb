@@ -1,5 +1,3 @@
 #include "logic.h"
 
-namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
-
-}
+namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {}

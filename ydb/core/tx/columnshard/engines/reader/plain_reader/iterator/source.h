@@ -61,9 +61,15 @@ protected:
     bool IsReadyFlag = false;
 
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
+        const std::shared_ptr<IDataSource>& sourcePtr,
+        const TFetchingScriptCursor& step,
+        const TColumnsSetIds& columns
+    ) = 0;
     virtual bool DoStartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
+        const std::shared_ptr<IDataSource>& sourcePtr,
+        const TFetchingScriptCursor& step,
+        const std::shared_ptr<TIndexesSet>& indexes
+    ) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) = 0;
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
@@ -116,7 +122,9 @@ public:
         }
         return false;
     }
-    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
+        NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal
+    ) const = 0;
 
     virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
@@ -136,7 +144,9 @@ public:
     void SetIsReady();
 
     void Finalize() {
-        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
+        TMemoryProfileGuard mpg(
+            "SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY)
+        );
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
     }
 
@@ -151,12 +161,19 @@ public:
         DoAssembleColumns(columns);
     }
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+    bool StartFetchingColumns(
+        const std::shared_ptr<IDataSource>& sourcePtr,
+        const TFetchingScriptCursor& step,
+        const TColumnsSetIds& columns
+    ) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
     bool StartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
+        const std::shared_ptr<IDataSource>& sourcePtr,
+        const TFetchingScriptCursor& step,
+        const std::shared_ptr<TIndexesSet>& indexes
+    ) {
         AFL_VERIFY(indexes);
         return DoStartFetchingIndexes(sourcePtr, step, indexes);
     }
@@ -232,9 +249,17 @@ public:
 
     void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
-    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
-        const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions)
+    IDataSource(
+        const ui32 sourceIdx,
+        const std::shared_ptr<TSpecialReadContext>& context,
+        const NArrow::TReplaceKey& start,
+        const NArrow::TReplaceKey& finish,
+        const TSnapshot& recordSnapshotMin,
+        const TSnapshot& recordSnapshotMax,
+        const ui32 recordsCount,
+        const std::optional<ui64> shardingVersion,
+        const bool hasDeletions
+    )
         : SourceIdx(sourceIdx)
         , Start(context->GetReadMetadata()->BuildSortedPosition(start))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
@@ -246,9 +271,12 @@ public:
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
-        UsageClass = Context->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(GetStartReplaceKey(), GetFinishReplaceKey());
+        UsageClass = Context->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(
+            GetStartReplaceKey(), GetFinishReplaceKey()
+        );
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
+        ("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
         }
@@ -268,21 +296,35 @@ private:
     std::shared_ptr<ISnapshotSchema> Schema;
     mutable THashMap<ui64, ui64> FingerprintedData;
 
-    void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
-        THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
+    void NeedFetchColumns(
+        const std::set<ui32>& columnIds,
+        TBlobsAction& blobsAction,
+        THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks,
+        const std::shared_ptr<NArrow::TColumnFilter>& filter
+    );
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
+        const std::shared_ptr<IDataSource>& sourcePtr,
+        const TFetchingScriptCursor& step,
+        const TColumnsSetIds& columns
+    ) override;
     virtual bool DoStartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
+        const std::shared_ptr<IDataSource>& sourcePtr,
+        const TFetchingScriptCursor& step,
+        const std::shared_ptr<TIndexesSet>& indexes
+    ) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion.GetPortionInfo().DebugString());
-        result.InsertValue("commit", Portion.GetPortionInfo().GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
-        result.InsertValue("insert", (ui64)Portion.GetPortionInfo().GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
+        result.InsertValue(
+            "commit", Portion.GetPortionInfo().GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString()
+        );
+        result.InsertValue(
+            "insert", (ui64)Portion.GetPortionInfo().GetInsertWriteIdOptional().value_or(TInsertWriteId(0))
+        );
         return result;
     }
 
@@ -319,7 +361,8 @@ public:
         if (Portion.GetPortionInfo().HasCommitSnapshot() || !Portion.GetPortionInfo().HasInsertWriteId()) {
             GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
             return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion.GetPortionInfo().GetInsertWriteIdVerified())) {
+        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion.GetPortionInfo().GetInsertWriteIdVerified()
+                   )) {
             GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion.GetPortionInfo().GetInsertWriteIdVerified());
             return true;
         }
@@ -330,7 +373,9 @@ public:
         return Portion.HasIndexes(indexIds);
     }
 
-    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
+        NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal
+    ) const override {
         return Portion.DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
@@ -361,8 +406,7 @@ public:
                     selectedInMem.emplace(i);
                 }
             }
-            result = Portion.GetMinMemoryForReadColumns(selectedSeq) +
-                     Portion.GetColumnBlobBytes(selectedSeq, false) +
+            result = Portion.GetMinMemoryForReadColumns(selectedSeq) + Portion.GetColumnBlobBytes(selectedSeq, false) +
                      Portion.GetColumnRawBytes(selectedInMem, false);
         } else {
             result = Portion.GetColumnRawBytes(columnsIds, false);
@@ -387,13 +431,24 @@ public:
         return Portion.GetPortionInfoPtr();
     }
 
-    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(TSnapshot::Zero()),
+    TPortionDataSource(
+        const ui32 sourceIdx,
+        const std::shared_ptr<TPortionInfo>& portion,
+        const std::shared_ptr<TSpecialReadContext>& context
+    )
+        : TBase(
+              sourceIdx,
+              context,
+              portion->IndexKeyStart(),
+              portion->IndexKeyEnd(),
+              portion->RecordSnapshotMin(TSnapshot::Zero()),
               portion->RecordSnapshotMax(TSnapshot::Zero()),
-              portion->GetRecordsCount(), portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+              portion->GetRecordsCount(),
+              portion->GetShardingVersionOptional(),
+              portion->GetMeta().GetDeletionsCount()
+          )
         , Portion(portion)
-        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
-    }
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {}
 };
 
 class TCommittedDataSource: public IDataSource {
@@ -402,13 +457,18 @@ private:
     TCommittedBlob CommittedBlob;
     bool ReadStarted = false;
 
-    virtual void DoAbort() override {
-    }
+    virtual void DoAbort() override {}
 
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
-        const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
+        const std::shared_ptr<IDataSource>& sourcePtr,
+        const TFetchingScriptCursor& step,
+        const TColumnsSetIds& columns
+    ) override;
+    virtual bool DoStartFetchingIndexes(
+        const std::shared_ptr<IDataSource>& /*sourcePtr*/,
+        const TFetchingScriptCursor& /*step*/,
+        const std::shared_ptr<TIndexesSet>& /*indexes*/
+    ) override {
         return false;
     }
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& /*indexMeta*/) override {
@@ -441,7 +501,9 @@ private:
     }
 
 public:
-    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
+    virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
+        NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal
+    ) const override {
         THashMap<TChunkAddress, TString> result;
         for (auto&& i : blobsOriginal) {
             for (auto&& b : i.second) {
@@ -476,11 +538,23 @@ public:
         return CommittedBlob;
     }
 
-    TCommittedDataSource(const ui32 sourceIdx, const TCommittedBlob& committed, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(sourceIdx, context, committed.GetFirst(), committed.GetLast(), committed.GetCommittedSnapshotDef(TSnapshot::Zero()),
-              committed.GetCommittedSnapshotDef(TSnapshot::Zero()), committed.GetRecordsCount(), {}, committed.GetIsDelete())
-        , CommittedBlob(committed) {
-    }
+    TCommittedDataSource(
+        const ui32 sourceIdx,
+        const TCommittedBlob& committed,
+        const std::shared_ptr<TSpecialReadContext>& context
+    )
+        : TBase(
+              sourceIdx,
+              context,
+              committed.GetFirst(),
+              committed.GetLast(),
+              committed.GetCommittedSnapshotDef(TSnapshot::Zero()),
+              committed.GetCommittedSnapshotDef(TSnapshot::Zero()),
+              committed.GetRecordsCount(),
+              {},
+              committed.GetIsDelete()
+          )
+        , CommittedBlob(committed) {}
 };
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

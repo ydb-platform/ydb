@@ -20,13 +20,16 @@ class IStoragesManager;
 }
 
 namespace NKikimr::NOlap::NExport {
-class TSession: public NBackground::TSessionProtoAdapter<NKikimrColumnShardExportProto::TExportSessionLogic,
-    NKikimrColumnShardExportProto::TCursor, NKikimrColumnShardExportProto::TExportSessionState> {
+class TSession
+    : public NBackground::TSessionProtoAdapter<
+          NKikimrColumnShardExportProto::TExportSessionLogic,
+          NKikimrColumnShardExportProto::TCursor,
+          NKikimrColumnShardExportProto::TExportSessionState> {
 public:
     static TString GetClassNameStatic() {
         return "CS::EXPORT";
     }
-    enum class EStatus: ui64 {
+    enum class EStatus : ui64 {
         Draft = 0 /*"draft"*/,
         Confirmed = 1 /*"confirmed"*/,
         Started = 2 /*"started"*/,
@@ -39,7 +42,8 @@ private:
     mutable EStatus Status = EStatus::Draft;
     TCursor Cursor;
 
-    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext& context) const override;
+    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext& context
+    ) const override;
 
     virtual TConclusionStatus DoDeserializeProgressFromProto(const TProtoProgress& proto) override {
         auto cursorConclusion = TCursor::BuildFromProto(proto);
@@ -76,7 +80,8 @@ private:
         *result.MutableTask() = Task->SerializeToProto();
         return result;
     }
-    static const inline TFactory::TRegistrator<TSession> Registrator = TFactory::TRegistrator<TSession>(GetClassNameStatic());
+    static const inline TFactory::TRegistrator<TSession> Registrator =
+        TFactory::TRegistrator<TSession>(GetClassNameStatic());
 
 public:
     std::optional<ui64> GetTxId() const {

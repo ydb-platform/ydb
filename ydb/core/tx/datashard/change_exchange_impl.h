@@ -6,9 +6,15 @@
 namespace NKikimr {
 namespace NDataShard {
 
-IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId);
+IActor*
+CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId);
 IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId& streamPathId);
-IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& restoreTargetPathId);
+IActor* CreateIncrRestoreChangeSender(
+    const TActorId& changeServerActor,
+    const TDataShardId& dataShard,
+    const TTableId& userTableId,
+    const TPathId& restoreTargetPathId
+);
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

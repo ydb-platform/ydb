@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
+struct TTxCoordinator::TTxInit: public TTransactionBase<TTxCoordinator> {
     ui64 Version = 0;
     TVector<TTabletId> Mediators;
     TVector<TTabletId> Coordinators;
@@ -18,13 +18,14 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     TActorId LastBlockedActor;
     ui64 LastBlockedStep = 0;
 
-    TTxInit(TSelf *coordinator)
-        : TBase(coordinator)
-    {}
+    TTxInit(TSelf* coordinator)
+        : TBase(coordinator) {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
         bool ready = true;
@@ -36,7 +37,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         return ready;
     }
 
-    bool LoadDomainConfiguration(NIceDb::TNiceDb &db) {
+    bool LoadDomainConfiguration(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::DomainConfiguration>().Range().Select();
 
         if (!rowset.IsReady())
@@ -74,15 +75,15 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    bool LoadLastPlanned(NIceDb::TNiceDb &db) {
+    bool LoadLastPlanned(NIceDb::TNiceDb& db) {
         return Schema::LoadState(db, Schema::State::KeyLastPlanned, LastPlanned);
     }
 
-    bool LoadLastAcquired(NIceDb::TNiceDb &db) {
+    bool LoadLastAcquired(NIceDb::TNiceDb& db) {
         return Schema::LoadState(db, Schema::State::AcquireReadStepLast, LastAcquired);
     }
 
-    bool LoadLastBlocked(NIceDb::TNiceDb &db) {
+    bool LoadLastBlocked(NIceDb::TNiceDb& db) {
         ui64 x1 = 0;
         ui64 x2 = 0;
         ui64 step = 0;
@@ -101,7 +102,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         if (!LastBlockedActor) {
             // Assume worst case, everything up to LastBlockedStep was planned
             LastPlanned = Max(LastPlanned, LastBlockedStep);
@@ -162,5 +163,5 @@ ITransaction* TTxCoordinator::CreateTxInit() {
     return new TTxCoordinator::TTxInit(this);
 }
 
-}
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

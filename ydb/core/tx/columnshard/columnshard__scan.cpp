@@ -40,4 +40,4 @@ void TColumnShard::Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActo
     Execute(new NOlap::NReader::TTxInternalScan(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NColumnShard

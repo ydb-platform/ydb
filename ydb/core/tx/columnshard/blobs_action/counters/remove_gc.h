@@ -21,6 +21,7 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailBytes;
+
 public:
     TRemoveGCCounters(const TConsumerCounters& owner);
 
@@ -46,4 +47,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations

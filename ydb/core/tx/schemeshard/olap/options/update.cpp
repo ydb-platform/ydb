@@ -1,5 +1,3 @@
 #include "update.h"
 
-namespace NKikimr::NSchemeShard {
-
-}
+namespace NKikimr::NSchemeShard {}

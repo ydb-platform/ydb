@@ -19,18 +19,21 @@ private:
     using TBase = ICommonBlobsAction;
     std::shared_ptr<NBlobOperations::TRemoveDeclareCounters> Counters;
     YDB_READONLY_DEF(TTabletsByBlob, DeclaredBlobs);
+
 protected:
     virtual void DoDeclareRemove(const TTabletId tabletId, const TUnifiedBlobId& blobId) = 0;
     virtual void DoOnExecuteTxAfterRemoving(TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
     virtual void DoOnCompleteTxAfterRemoving(const bool blobsWroteSuccessfully) = 0;
+
 public:
-    IBlobsDeclareRemovingAction(const TString& storageId, const TTabletId& selfTabletId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters)
+    IBlobsDeclareRemovingAction(
+        const TString& storageId,
+        const TTabletId& selfTabletId,
+        const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters
+    )
         : TBase(storageId)
         , SelfTabletId(selfTabletId)
-        , Counters(counters)
-    {
-
-    }
+        , Counters(counters) {}
 
     TTabletId GetSelfTabletId() const {
         return SelfTabletId;
@@ -46,4 +49,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

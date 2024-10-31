@@ -5,7 +5,7 @@
 #include "defs.h"
 
 namespace NKikimrSchemeOp {
-    class TRestoreTask;
+class TRestoreTask;
 }
 
 namespace NKikimr {
@@ -13,9 +13,14 @@ namespace NDataShard {
 
 class TTableInfo;
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info);
+IActor* CreateS3Downloader(
+    const TActorId& dataShard,
+    ui64 txId,
+    const NKikimrSchemeOp::TRestoreTask& task,
+    const TTableInfo& info
+);
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

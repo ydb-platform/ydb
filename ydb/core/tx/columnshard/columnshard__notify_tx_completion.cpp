@@ -2,12 +2,11 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxNotifyTxCompletion : public TTransactionBase<TColumnShard> {
+class TTxNotifyTxCompletion: public TTransactionBase<TColumnShard> {
 public:
     TTxNotifyTxCompletion(TColumnShard* self, TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev)
         : TBase(self)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_UNUSED(txc);
@@ -29,7 +28,9 @@ public:
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_NOTIFY_TX_COMPLETION; }
+    TTxType GetTxType() const override {
+        return TXTYPE_NOTIFY_TX_COMPLETION;
+    }
 
 private:
     TEvColumnShard::TEvNotifyTxCompletion::TPtr Ev;
@@ -40,4 +41,4 @@ void TColumnShard::Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const
     Execute(new TTxNotifyTxCompletion(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NColumnShard

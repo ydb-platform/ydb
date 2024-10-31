@@ -42,8 +42,7 @@ using TEvExternalStorage = NWrappers::TEvExternalStorage;
 struct TS3Request {
     TS3Request(Aws::S3::Model::PutObjectRequest&& request, TString&& buffer)
         : Request(std::move(request))
-        , Buffer(std::move(buffer))
-    {}
+        , Buffer(std::move(buffer)) {}
 
     Aws::S3::Model::PutObjectRequest Request;
     TString Buffer;
@@ -52,15 +51,10 @@ struct TS3Request {
 // TODO try to batch
 // TODO add external way to configure retries
 // TODO add sensors
-class TS3Writer
-    : public TActor<TS3Writer>
-{
+class TS3Writer: public TActor<TS3Writer> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[S3Writer]"
-                << TableName
-                << SelfId() << " ";
+            LogPrefix = TStringBuilder() << "[S3Writer]" << TableName << SelfId() << " ";
         }
 
         return LogPrefix.GetRef();
@@ -121,7 +115,10 @@ class TS3Writer
 
     void SendS3Request() {
         Y_VERIFY(RequestInFlight);
-        Send(S3Client, new TEvExternalStorage::TEvPutObjectRequest(RequestInFlight->Request, TString(RequestInFlight->Buffer)));
+        Send(
+            S3Client,
+            new TEvExternalStorage::TEvPutObjectRequest(RequestInFlight->Request, TString(RequestInFlight->Buffer))
+        );
     }
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
@@ -129,7 +126,8 @@ class TS3Writer
         CB_LOG_D("Handshake"
             << ": worker# " << Worker);
 
-        S3Client = RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        S3Client =
+            RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         WriteIdentity();
     }
@@ -137,8 +135,7 @@ class TS3Writer
     void WriteIdentity() {
         const TString key = GetIdentityKey(WriterName);
 
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(key);
+        auto request = Aws::S3::Model::PutObjectRequest().WithKey(key);
 
         auto identity = NJson::TJsonMap{
             {"finished", Finished},
@@ -168,8 +165,7 @@ class TS3Writer
 
         const TString key = GetPartKey(ev->Get()->Records[0].Offset, WriterName);
 
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(key);
+        auto request = Aws::S3::Model::PutObjectRequest().WithKey(key);
 
         TStringBuilder buffer;
 
@@ -210,12 +206,12 @@ public:
     explicit TS3Writer(
         NWrappers::IExternalStorageConfig::TPtr&& s3Settings,
         const TString& tableName,
-        const TString& writerName)
+        const TString& writerName
+    )
         : TActor(&TThis::StateWork)
         , ExternalStorageConfig(std::move(s3Settings))
         , TableName(tableName)
-        , WriterName(writerName)
-    {}
+        , WriterName(writerName) {}
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -246,8 +242,12 @@ private:
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 }; // TS3Writer
 
-IActor* CreateS3Writer(NWrappers::IExternalStorageConfig::TPtr&& s3Settings, const TString& tableName, const TString& writerName) {
+IActor* CreateS3Writer(
+    NWrappers::IExternalStorageConfig::TPtr&& s3Settings,
+    const TString& tableName,
+    const TString& writerName
+) {
     return new TS3Writer(std::move(s3Settings), tableName, writerName);
 }
 
-}
+} // namespace NKikimr::NReplication::NService

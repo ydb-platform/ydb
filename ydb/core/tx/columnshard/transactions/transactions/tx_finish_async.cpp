@@ -11,4 +11,4 @@ void TTxFinishAsyncTransaction::Complete(const TActorContext& ctx) {
     Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
 }
 
-}
+} // namespace NKikimr::NColumnShard

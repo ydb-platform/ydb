@@ -18,17 +18,31 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     YDB_READONLY(TTabletId, TabletId, TTabletId(0));
     NTabletFlatExecutor::TTabletExecutedFlat& TabletExecutor;
-    virtual bool DoLoadSessionsFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, std::deque<TSessionRecord>& records) = 0;
-    virtual void DoSaveProgressToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
-    virtual void DoSaveStateToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
-    virtual void DoSaveSessionToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
-    virtual void DoRemoveSessionFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TString& className, const TString& identifier) = 0;
+    virtual bool DoLoadSessionsFromLocalDatabase(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        std::deque<TSessionRecord>& records
+    ) = 0;
+    virtual void
+    DoSaveProgressToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
+    virtual void
+    DoSaveStateToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
+    virtual void
+    DoSaveSessionToLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TSessionRecord& container) = 0;
+    virtual void DoRemoveSessionFromLocalDatabase(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TString& className,
+        const TString& identifier
+    ) = 0;
+
 public:
-    ITabletAdapter(const NActors::TActorId& tabletActorId, const TTabletId tabletId, NTabletFlatExecutor::TTabletExecutedFlat& tabletExecutor)
+    ITabletAdapter(
+        const NActors::TActorId& tabletActorId,
+        const TTabletId tabletId,
+        NTabletFlatExecutor::TTabletExecutedFlat& tabletExecutor
+    )
         : TabletActorId(tabletActorId)
         , TabletId(tabletId)
-        , TabletExecutor(tabletExecutor)
-    {
+        , TabletExecutor(tabletExecutor) {
         AFL_VERIFY(!!TabletActorId);
         AFL_VERIFY(!!(ui64)TabletId);
     }
@@ -41,11 +55,16 @@ public:
         return *result;
     }
 
-    void RemoveSessionFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, const TString& className, const TString& identifier) {
+    void RemoveSessionFromLocalDatabase(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TString& className,
+        const TString& identifier
+    ) {
         return DoRemoveSessionFromLocalDatabase(txc, className, identifier);
     }
 
-    [[nodiscard]] bool LoadSessionsFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, std::deque<TSessionRecord>& records) {
+    [[nodiscard]] bool
+    LoadSessionsFromLocalDatabase(NTabletFlatExecutor::TTransactionContext& txc, std::deque<TSessionRecord>& records) {
         return DoLoadSessionsFromLocalDatabase(txc, records);
     }
 
@@ -62,4 +81,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

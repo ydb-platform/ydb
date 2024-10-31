@@ -1,5 +1,3 @@
 #include "common.h"
 
-namespace NKikimr::NColumnShard::NTiers {
-
-}
+namespace NKikimr::NColumnShard::NTiers {}

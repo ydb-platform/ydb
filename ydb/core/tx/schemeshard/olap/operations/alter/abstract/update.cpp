@@ -1,5 +1,3 @@
 #include "update.h"
 
-namespace NKikimr::NSchemeShard::NOlap::NAlter {
-
-}
+namespace NKikimr::NSchemeShard::NOlap::NAlter {}

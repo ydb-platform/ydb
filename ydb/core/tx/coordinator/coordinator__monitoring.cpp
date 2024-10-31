@@ -4,14 +4,13 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-struct TTxCoordinator::TTxMonitoring : public TTxCoordinator::TTxConsistencyCheck {
+struct TTxCoordinator::TTxMonitoring: public TTxCoordinator::TTxConsistencyCheck {
     TActorId ActorToRespond;
     TString CheckResult;
 
     TTxMonitoring(TSelf* self, const TActorId& actorToRespond)
         : TTxCoordinator::TTxConsistencyCheck(self)
-        , ActorToRespond(actorToRespond)
-    {}
+        , ActorToRespond(actorToRespond) {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         try {
@@ -19,8 +18,7 @@ struct TTxCoordinator::TTxMonitoring : public TTxCoordinator::TTxConsistencyChec
             if (!ok)
                 return false;
             CheckResult = "ConsistencyCheck OK";
-        }
-        catch(const yexception& e) {
+        } catch (const yexception& e) {
             CheckResult = "ConsistencyCheck FAILED<br>";
             CheckResult += e.what();
         }
@@ -37,5 +35,5 @@ ITransaction* TTxCoordinator::CreateTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr& 
     return new TTxMonitoring(this, ev->Sender);
 }
 
-}
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

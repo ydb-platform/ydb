@@ -23,6 +23,7 @@ private:
     }
 
     void DoReplyAllocated(const ui64 internalTaskId, const ui64 rbTaskId);
+
 public:
     static TAtomicCounter WaitingBlobsCount;
     TActor(ui64 tabletId, const TActorId& parent);
@@ -36,8 +37,10 @@ public:
     }
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent)
-            ("ev_type", ev->GetTypeName()));
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::
+                                      Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent)(
+                                          "ev_type", ev->GetTypeName()
+                                      ));
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, StartStopping);
             hFunc(TEvStartTask, Handle);
@@ -48,4 +51,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

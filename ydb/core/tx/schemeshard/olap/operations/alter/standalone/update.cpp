@@ -16,7 +16,9 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
         if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {
-            return TConclusionStatus::Fail("update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+            return TConclusionStatus::Fail(
+                "update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE"
+            );
         }
         AlterSchema = std::move(schemaUpdate);
     }
@@ -34,20 +36,22 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     TOlapSchema targetSchema = originalSchema;
     if (AlterSchema) {
         if (!targetSchema.Update(*AlterSchema, collector)) {
-            return TConclusionStatus::Fail("schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+            return TConclusionStatus::Fail(
+                "schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE"
+            );
         }
     }
 
     const TString& parentPathStr = context.GetModification()->GetWorkingDir();
     if (parentPathStr) { // Not empty only if called from Propose, not from ProgressState
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.GetSSOperationContext()->SS);
+        NSchemeShard::TPath parentPath =
+            NSchemeShard::TPath::Resolve(parentPathStr, context.GetSSOperationContext()->SS);
         auto domainInfo = parentPath.DomainInfo();
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
         if (targetSchema.GetColumns().GetColumns().size() > limits.MaxColumnTableColumns) {
-            TString errStr = TStringBuilder()
-                << "Too many columns"
-                << ": new: " << targetSchema.GetColumns().GetColumns().size()
-                << ". Limit: " << limits.MaxColumnTableColumns;
+            TString errStr = TStringBuilder() << "Too many columns"
+                                              << ": new: " << targetSchema.GetColumns().GetColumns().size()
+                                              << ". Limit: " << limits.MaxColumnTableColumns;
             return TConclusionStatus::Fail(errStr);
         }
     }
@@ -66,14 +70,18 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         *description.MutableTtlSettings() = ttl.SerializeToProto();
     }
     if (!targetSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
-        return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
+        return TConclusionStatus::Fail(
+            "ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE"
+        );
     }
     auto saSharding = originalTable.GetTableInfoVerified().GetStandaloneShardingVerified();
 
-    auto targetInfo = std::make_shared<TColumnTableInfo>(originalTable.GetTableInfoVerified().AlterVersion + 1, std::move(description), std::move(saSharding), alterCS);
+    auto targetInfo = std::make_shared<TColumnTableInfo>(
+        originalTable.GetTableInfoVerified().AlterVersion + 1, std::move(description), std::move(saSharding), alterCS
+    );
     TargetStandalone = std::make_shared<TStandaloneTable>(context.GetOriginalEntity().GetPathId(), targetInfo);
 
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

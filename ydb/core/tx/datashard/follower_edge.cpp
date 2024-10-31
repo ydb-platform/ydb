@@ -13,7 +13,7 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
         // readonly operations, but there's little benefit in that, and it's
         // complicated to determine which is the first readable given we may
         // have executed some out of order.
-        return { Min(volatileUncertain, TRowVersion(order.Step, order.TxId)), false, 0 };
+        return {Min(volatileUncertain, TRowVersion(order.Step, order.TxId)), false, 0};
     }
 
     if (!volatileUncertain.IsMax()) {
@@ -22,7 +22,7 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
         // FIXME: when at least one write is committed at this version, it
         // should stop being non-repeatable, and followers need to resolve
         // other possibly out-of-order commits.
-        return { volatileUncertain, false, 0 };
+        return {volatileUncertain, false, 0};
     }
 
     // This is the max version where we had any writes
@@ -35,15 +35,15 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
     TRowVersion nextWrite = GetMvccTxVersion(EMvccTxMode::ReadWrite);
 
     if (maxWrite < nextWrite) {
-        return { maxWrite, true, 0 };
+        return {maxWrite, true, 0};
     }
 
     TRowVersion maxObserved(GetMaxObservedStep(), Max<ui64>());
     if (maxObserved < maxWrite) {
-        return { maxObserved, true, maxWrite.Step };
+        return {maxObserved, true, maxWrite.Step};
     }
 
-    return { maxWrite, false, maxWrite.Next().Step };
+    return {maxWrite, false, maxWrite.Next().Step};
 }
 
 bool TDataShard::PromoteFollowerReadEdge(TTransactionContext& txc) {
@@ -62,15 +62,14 @@ bool TDataShard::PromoteFollowerReadEdge(TTransactionContext& txc) {
     return false;
 }
 
-class TDataShard::TTxUpdateFollowerReadEdge
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
-{
+class TDataShard::TTxUpdateFollowerReadEdge: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxUpdateFollowerReadEdge(TDataShard* self)
-        : TBase(self)
-    {}
+        : TBase(self) {}
 
-    TTxType GetTxType() const override { return TXTYPE_UPDATE_FOLLOWER_READ_EDGE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_UPDATE_FOLLOWER_READ_EDGE;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_ABORT_UNLESS(Self->UpdateFollowerReadEdgePending);

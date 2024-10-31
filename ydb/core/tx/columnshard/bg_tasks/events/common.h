@@ -14,7 +14,10 @@ public:
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_BACKGROUND), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_BACKGROUND)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_BACKGROUND),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_BACKGROUND)"
+    );
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

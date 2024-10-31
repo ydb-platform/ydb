@@ -26,14 +26,19 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
     Aws::ShutdownAPI(Options);
 }
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TBackupTests) {
     using TFillFn = std::function<void(TTestBasicRuntime&)>;
 
-    auto Backup(TTestBasicRuntime& runtime, const TString& compressionCodec,
-            const TString& creationScheme, TFillFn fill, ui32 rowsBatchSize = 128, ui32 minWriteBatchSize = 0)
-    {
+    auto Backup(
+        TTestBasicRuntime & runtime,
+        const TString& compressionCodec,
+        const TString& creationScheme,
+        TFillFn fill,
+        ui32 rowsBatchSize = 128,
+        ui32 minWriteBatchSize = 0
+    ) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -62,7 +67,12 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        TestBackup(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestBackup(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             TableName: "Table"
             Table {
                 %s
@@ -80,7 +90,14 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             Compression {
                 Codec: "%s"
             }
-        )", tableSchema.c_str(), port, minWriteBatchSize, rowsBatchSize, compressionCodec.c_str()));
+        )",
+                tableSchema.c_str(),
+                port,
+                minWriteBatchSize,
+                rowsBatchSize,
+                compressionCodec.c_str()
+            )
+        );
         env.TestWaitNotification(runtime, txId);
 
         return std::make_pair(partsUploaded, objectsPut);
@@ -89,20 +106,28 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnSingleShardTable) {
         TTestBasicRuntime runtime;
 
-        Backup(runtime, ToString(Codec), R"(
+        Backup(
+            runtime,
+            ToString(Codec),
+            R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
-        )", [](TTestBasicRuntime& runtime) {
-            UpdateRow(runtime, "Table", 1, "valueA");
-        });
+        )",
+            [](TTestBasicRuntime& runtime) {
+                UpdateRow(runtime, "Table", 1, "valueA");
+            }
+        );
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {
         TTestBasicRuntime runtime;
 
-        Backup(runtime, ToString(Codec), R"(
+        Backup(
+            runtime,
+            ToString(Codec),
+            R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
@@ -112,51 +137,76 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
                 Tuple { Optional { Uint32: 2 } }
               }
             }
-        )", [](TTestBasicRuntime& runtime) {
-            UpdateRow(runtime, "Table", 1, "valueA", TTestTxConfig::FakeHiveTablets + 0);
-            UpdateRow(runtime, "Table", 2, "valueb", TTestTxConfig::FakeHiveTablets + 1);
-        });
+        )",
+            [](TTestBasicRuntime& runtime) {
+                UpdateRow(runtime, "Table", 1, "valueA", TTestTxConfig::FakeHiveTablets + 0);
+                UpdateRow(runtime, "Table", 2, "valueb", TTestTxConfig::FakeHiveTablets + 1);
+            }
+        );
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(BackupUuidColumn) {
         TTestBasicRuntime runtime;
 
-        Backup(runtime, ToString(Codec), R"(
+        Backup(
+            runtime,
+            ToString(Codec),
+            R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Uuid" }
             KeyColumnNames: ["key"]
-        )", [](TTestBasicRuntime& runtime) {
-            NKikimrMiniKQL::TResult result;
-            TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, Sprintf(R"(
+        )",
+            [](TTestBasicRuntime& runtime) {
+                NKikimrMiniKQL::TResult result;
+                TString error;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(
+                    runtime,
+                    TTestTxConfig::FakeHiveTablets,
+                    Sprintf(
+                        R"(
                 (
                     (let key '( '('key (Uint32 '%d) ) ) )
                     (let row '( '('value (Uuid '"%s") ) ) )
                     (return (AsList (UpdateRow '__user__%s key row) ))
                 )
-            )", 1, "0000111122223333", "Table"), result, error);
+            )",
+                        1,
+                        "0000111122223333",
+                        "Table"
+                    ),
+                    result,
+                    error
+                );
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "");
-        });
+                UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+                UNIT_ASSERT_VALUES_EQUAL(error, "");
+            }
+        );
     }
 
-    template<ECompressionCodec Codec>
+    template <ECompressionCodec Codec>
     void ShouldSucceedOnLargeData(ui32 minWriteBatchSize, const std::pair<ui32, ui32>& expectedResult) {
         TTestBasicRuntime runtime;
         const ui32 batchSize = 10;
 
-        const auto actualResult = Backup(runtime, ToString(Codec), R"(
+        const auto actualResult = Backup(
+            runtime,
+            ToString(Codec),
+            R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
-        )", [](TTestBasicRuntime& runtime) {
-            for (ui32 i = 0; i < 100 * batchSize; ++i) {
-                UpdateRow(runtime, "Table", i, "valueA");
-            }
-        }, batchSize, minWriteBatchSize);
+        )",
+            [](TTestBasicRuntime& runtime) {
+                for (ui32 i = 0; i < 100 * batchSize; ++i) {
+                    UpdateRow(runtime, "Table", i, "valueA");
+                }
+            },
+            batchSize,
+            minWriteBatchSize
+        );
 
         UNIT_ASSERT_VALUES_EQUAL(actualResult, expectedResult);
     }

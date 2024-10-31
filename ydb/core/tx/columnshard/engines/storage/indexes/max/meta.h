@@ -8,16 +8,20 @@ public:
     static TString GetClassNameStatic() {
         return "MAX";
     }
+
 private:
     using TBase = TIndexByColumns;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
+
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
         Y_UNUSED(newMeta);
         return TConclusionStatus::Fail("max index not modifiable");
     }
     virtual void DoFillIndexCheckers(
-        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
+        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info,
+        const NSchemeShard::TOlapSchema& schema
+    ) const override;
 
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
 
@@ -44,8 +48,7 @@ protected:
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32& columnId)
-        : TBase(indexId, indexName, { columnId }, storageId) {
-    }
+        : TBase(indexId, indexName, {columnId}, storageId) {}
 
     ui32 GetColumnId() const {
         AFL_VERIFY(ColumnIds.size() == 1);
@@ -74,7 +77,8 @@ public:
         return GetClassNameStatic();
     }
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalarVerified(const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& type) const;
+    std::shared_ptr<arrow::Scalar>
+    GetMaxScalarVerified(const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& type) const;
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NMax

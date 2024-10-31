@@ -10,10 +10,13 @@ void TDistributor::Bootstrap() {
     Become(&TDistributor::StateMain);
 }
 
-TDistributor::TDistributor(const TConfig& config, const TString& queueName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
+TDistributor::TDistributor(
+    const TConfig& config,
+    const TString& queueName,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals
+)
     : Counters(std::make_shared<TCounters>(queueName, baseSignals))
     , QueueName(queueName)
-    , Config(config) {
-}
+    , Config(config) {}
 
-}
+} // namespace NKikimr::NPrioritiesQueue

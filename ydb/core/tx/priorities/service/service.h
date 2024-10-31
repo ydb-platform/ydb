@@ -25,11 +25,15 @@ private:
     }
 
     void Handle(TEvExecution::TEvAsk::TPtr& ev) {
-        Manager->Ask(ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority());
+        Manager->Ask(
+            ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority()
+        );
     }
 
     void Handle(TEvExecution::TEvAskMax::TPtr& ev) {
-        Manager->AskMax(ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority());
+        Manager->AskMax(
+            ev->Get()->GetClientId(), ev->Get()->GetCount(), ev->Get()->GetRequest(), ev->Get()->GetPriority()
+        );
     }
 
     void Handle(TEvExecution::TEvFree::TPtr& ev) {
@@ -38,7 +42,8 @@ private:
 
 public:
     STATEFN(StateMain) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("name", QueueName)("actor_id", SelfId());
+        NActors::TLogContextGuard lGuard =
+            NActors::TLogContextBuilder::Build()("name", QueueName)("actor_id", SelfId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExecution::TEvRegisterClient, Handle);
             hFunc(TEvExecution::TEvUnregisterClient, Handle);
@@ -46,12 +51,17 @@ public:
             hFunc(TEvExecution::TEvAskMax, Handle);
             hFunc(TEvExecution::TEvFree, Handle);
             default:
-                AFL_ERROR(NKikimrServices::TX_PRIORITIES_QUEUE)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
+                AFL_ERROR(NKikimrServices::TX_PRIORITIES_QUEUE)
+                ("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
                 break;
         }
     }
 
-    TDistributor(const TConfig& config, const TString& queueName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals);
+    TDistributor(
+        const TConfig& config,
+        const TString& queueName,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals
+    );
 
     void Bootstrap();
 };

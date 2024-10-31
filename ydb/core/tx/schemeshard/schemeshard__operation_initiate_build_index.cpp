@@ -16,15 +16,13 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TInitializeBuildIndex TConfigureParts"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TInitializeBuildIndex TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -88,8 +86,8 @@ public:
             found = true;
 
             Y_ABORT_UNLESS(index->AlterData);
-            context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, false, false,
-                *initiate->MutableIndexDescription()
+            context.SS->DescribeTableIndex(
+                childPathId, childName, index->AlterData, false, false, *initiate->MutableIndexDescription()
             );
         }
 
@@ -112,7 +110,9 @@ public:
                                     << " seqNo: " << seqNo
                                     << " at schemeshard: " << ssId);
 
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            auto event = context.SS->MakeDataShardProposal(
+                txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx
+            );
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
 
@@ -126,19 +126,20 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TInitializeBuildIndex TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TInitializeBuildIndex TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-            TEvDataShard::TEvProposeTransactionResult::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvHive::TEvCreateTabletReply::EventType,
+                TEvDataShard::TEvProposeTransactionResult::EventType,
+            }
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -213,15 +214,13 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TInitializeBuildIndex TCreateTxShards"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TInitializeBuildIndex TCreateTxShards"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TCreateTxShards(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -244,7 +243,6 @@ public:
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
 
-
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
 
@@ -259,35 +257,35 @@ class TInitializeBuildIndex: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateTxShards>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateTxShards>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -308,13 +306,13 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -331,8 +329,7 @@ public:
         NSchemeShard::TPath dstPath = parentPath.Child(tableName);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
-            checks
-                .IsAtLocalSchemeShard()
+            checks.IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotUnderDeleting()
                 .NotUnderOperation()
@@ -380,7 +377,7 @@ public:
         txState.State = TTxState::CreateParts;
 
         TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
-        for (auto splitTx: table->GetSplitOpsInFlight()) {
+        for (auto splitTx : table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
@@ -426,4 +423,4 @@ ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxStat
     return MakeSubOperation<TInitializeBuildIndex>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

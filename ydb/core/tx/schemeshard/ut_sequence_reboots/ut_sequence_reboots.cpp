@@ -6,7 +6,6 @@ using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequenceReboots) {
-
     Y_UNIT_TEST(CreateSequence) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -50,21 +49,33 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 }
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateSequenceRequest(t.TxId += 3, "/MyRoot", R"(
                     Name: "seq1"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
-            t.TestEnv->ReliablePropose(runtime,
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateSequenceRequest(t.TxId - 1, "/MyRoot", R"(
                     Name: "seq2"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
-            t.TestEnv->ReliablePropose(runtime,
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateSequenceRequest(t.TxId - 2, "/MyRoot", R"(
                     Name: "seq3"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 2, t.TxId - 1, t.TxId});
 
             {
@@ -96,11 +107,15 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 // no inactive initialization
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateSequenceRequest(++t.TxId, "/MyRoot", R"(
                     Name: "seq"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -108,9 +123,11 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropSequenceRequest(++t.TxId, "/MyRoot", "seq"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -118,11 +135,15 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 TestLs(runtime, "/MyRoot/seq", false, NLs::PathNotExist);
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateSequenceRequest(++t.TxId, "/MyRoot", R"(
                     Name: "seq"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -143,7 +164,8 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 // no inactive initialization
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateIndexedTableRequest(++t.TxId, "/MyRoot", R"(
                     TableDescription {
                         Name: "Table"
@@ -162,21 +184,29 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                         Name: "seq2"
                     }
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
                 TestLs(
-                    runtime, "/MyRoot/Table/seq1", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+                    runtime, "/MyRoot/Table/seq1", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist
+                );
                 TestLs(
-                    runtime, "/MyRoot/Table/seq2", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
-
+                    runtime, "/MyRoot/Table/seq2", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist
+                );
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropTableRequest(++t.TxId, "/MyRoot", "Table"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusPathDoesNotExist,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -215,16 +245,21 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
                 UNIT_ASSERT_VALUES_EQUAL(value, 1);
             }
 
-            t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "copy", "/MyRoot/Table"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists,
-                NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->ReliablePropose(
+                runtime,
+                CopyTableRequest(++t.TxId, "/MyRoot", "copy", "/MyRoot/Table"),
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
 
                 TestLs(
-                    runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+                    runtime, "/MyRoot/copy/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist
+                );
 
                 i64 value = DoNextVal(runtime, "/MyRoot/copy/myseq");
                 UNIT_ASSERT_VALUES_EQUAL(value, 2);

@@ -8,10 +8,9 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoordinator> {
-    TTxRestoreTransactions(TSelf *coordinator)
-        : TBase(coordinator)
-    {}
+struct TTxCoordinator::TTxRestoreTransactions: public TTransactionBase<TTxCoordinator> {
+    TTxRestoreTransactions(TSelf* coordinator)
+        : TBase(coordinator) {}
 
     struct TMediatorState {
         TMediatorStepList Steps;
@@ -56,7 +55,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         state.Index[step] = --state.Steps.end();
     }
 
-    bool Restore(TTransactions &transactions, TTransactionContext &txc, const TActorContext &ctx) {
+    bool Restore(TTransactions& transactions, TTransactionContext& txc, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         NIceDb::TNiceDb db(txc.DB);
 
@@ -74,8 +73,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                 transaction.PlanOnStep = rowset.GetValue<Schema::Transaction::Plan>();
                 TVector<TTabletId> affectedSet = rowset.GetValue<Schema::Transaction::AffectedSet>();
                 transaction.AffectedSet.reserve(affectedSet.size());
-                for (TTabletId id : affectedSet)
-                    transaction.AffectedSet.insert(id);
+                for (TTabletId id : affectedSet) transaction.AffectedSet.insert(id);
                 if (!rowset.Next())
                     return false; // data not ready
             }
@@ -112,7 +110,8 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
             if (errors > 0) {
                 // DB is corrupt. Make a dump and stop
                 const NScheme::TTypeRegistry& tr = *AppData(ctx)->TypeRegistry;
-                TString dbDumpFile = Sprintf("/tmp/coordinator_db_dump_%" PRIu64 ".%" PRIi32, Self->TabletID(), getpid());
+                TString dbDumpFile =
+                    Sprintf("/tmp/coordinator_db_dump_%" PRIu64 ".%" PRIi32, Self->TabletID(), getpid());
                 TFixedBufferFileOutput out(dbDumpFile);
                 txc.DB.DebugDump(out, tr);
                 out.Finish();
@@ -127,13 +126,13 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
 
     TStepId RestoreVolatileSteps() {
         TStepId maxStep = 0;
-        for (auto &pr : Self->VolatileTransactions) {
+        for (auto& pr : Self->VolatileTransactions) {
             auto txId = pr.first;
-            auto &tx = pr.second;
+            auto& tx = pr.second;
             maxStep = Max(maxStep, tx.PlanOnStep);
-            for (auto &prmed : tx.UnconfirmedAffectedSet) {
+            for (auto& prmed : tx.UnconfirmedAffectedSet) {
                 auto medId = prmed.first;
-                auto &medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
+                auto& medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
                 for (ui64 tabletId : prmed.second) {
                     medTx.PushToAffected.push_back(tabletId);
                 }
@@ -142,9 +141,11 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         return maxStep;
     }
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TTransactions transactions;
         bool result = Restore(transactions, txc, ctx);
         if (!result)
@@ -176,10 +177,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                     Schema::SaveState(db, Schema::State::LastBlockedActorX2, Self->CoordinatorStateActorId.RawX2());
                 }
 
-                LastBlockedUpdate = Max(
-                    Self->VolatileState.LastBlockedPending,
-                    Self->VolatileState.LastBlockedCommitted,
-                    Self->VolatileState.LastPlanned);
+                LastBlockedUpdate =
+                    Max(Self->VolatileState.LastBlockedPending,
+                        Self->VolatileState.LastBlockedCommitted,
+                        Self->VolatileState.LastPlanned);
                 Self->VolatileState.LastBlockedPending = LastBlockedUpdate;
                 Schema::SaveState(db, Schema::State::LastBlockedStep, LastBlockedUpdate);
             } else {
@@ -210,7 +211,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         if (StartedStateActor) {
             Self->ConfirmStateActorPersistent();
         }
@@ -220,8 +221,8 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         }
 
         // Send steps to connected queues
-        for (ui64 mediatorId: Self->Config.Mediators->List()) {
-            TMediator &mediator = Self->Mediator(mediatorId, ctx);
+        for (ui64 mediatorId : Self->Config.Mediators->List()) {
+            TMediator& mediator = Self->Mediator(mediatorId, ctx);
             auto& state = Mediators[mediatorId];
             for (auto& pr : state.Index) {
                 Y_ABORT_UNLESS(!pr.second->Confirmed);
@@ -247,5 +248,5 @@ ITransaction* TTxCoordinator::CreateTxRestoreTransactions() {
     return new TTxRestoreTransactions(this);
 }
 
-}
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

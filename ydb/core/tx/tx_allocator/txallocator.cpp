@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 
-IActor* CreateTxAllocator(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateTxAllocator(const TActorId& tablet, TTabletStorageInfo* info) {
     return new NTxAllocator::TTxAllocator(tablet, info);
 }
 
@@ -15,4 +15,4 @@ ui64 TEvTxAllocator::TEvAllocateResult::ExtractPrivateMarker(ui64 item) {
     return item & AllocationMask();
 }
 
-}
+} // namespace NKikimr

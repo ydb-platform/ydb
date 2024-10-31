@@ -9,27 +9,30 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 Y_UNIT_TEST_SUITE(StorageOptimizer) {
-
     using namespace NKikimr::NArrow;
 
     class TPortionsMaker {
     private:
         ui64 PortionId = 0;
-    public:
 
+    public:
         static TReplaceKey MakeKey(const i64 value) {
-            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int64Type>>>(
-                "pk", NConstruction::TIntSeqFiller<arrow::Int64Type>(value));
+            NConstruction::IArrayBuilder::TPtr column = std::make_shared<
+                NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int64Type>>>(
+                "pk", NConstruction::TIntSeqFiller<arrow::Int64Type>(value)
+            );
             return TReplaceKey({column->BuildArray(1)}, 0);
         }
 
         std::shared_ptr<NKikimr::NOlap::TPortionInfo> Make(const i64 pkStart, const i64 pkFinish, const i64 size) {
-            auto result = std::make_shared<NKikimr::NOlap::TPortionInfo>(0, ++PortionId, NKikimr::NOlap::TSnapshot(1, 1));
+            auto result =
+                std::make_shared<NKikimr::NOlap::TPortionInfo>(0, ++PortionId, NKikimr::NOlap::TSnapshot(1, 1));
 
             result->MutableMeta().IndexKeyStart = MakeKey(pkStart);
             result->MutableMeta().IndexKeyEnd = MakeKey(pkFinish);
 
-            result->Records.emplace_back(NKikimr::NOlap::TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, size, 1, 1));
+            result->Records.emplace_back(NKikimr::NOlap::TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, size, 1, 1)
+            );
             return result;
         }
     };
@@ -51,7 +54,9 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         planner.AddPortion(maker.Make(101, 200, 10000));
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
-        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
+        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(
+            planner.GetOptimizationTask(limits, nullptr)
+        );
         Y_ABORT_UNLESS(task);
         Y_ABORT_UNLESS(task->SwitchedPortions.size() == 2);
     }
@@ -65,7 +70,9 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         planner.AddPortion(maker.Make(10, 20, 40000));
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
-        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
+        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(
+            planner.GetOptimizationTask(limits, nullptr)
+        );
         Y_ABORT_UNLESS(task);
         Y_ABORT_UNLESS(task->SwitchedPortions.size() == 4);
     }
@@ -80,11 +87,12 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         planner.AddPortion(maker.Make(1000, 2000, 40000));
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
-        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
+        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(
+            planner.GetOptimizationTask(limits, nullptr)
+        );
         Y_ABORT_UNLESS(task);
         Y_ABORT_UNLESS(task->SwitchedPortions.size() == 2);
         Y_ABORT_UNLESS(task->SwitchedPortions[0].GetPortionId() == 1);
         Y_ABORT_UNLESS(task->SwitchedPortions[1].GetPortionId() == 2);
     }
-
 };

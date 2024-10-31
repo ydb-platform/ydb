@@ -64,19 +64,21 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.
     // We have chosen TIndexCreationConfig's string representation as the serialization format.
     if (bool hasSpecializedDescription = !std::holds_alternative<std::monostate>(info.SpecializedIndexDescription);
-        info.ImplTableDescriptions || hasSpecializedDescription
-    ) {
+        info.ImplTableDescriptions || hasSpecializedDescription) {
         NKikimrSchemeOp::TIndexCreationConfig serializableRepresentation;
 
         for (const auto& description : info.ImplTableDescriptions) {
             *serializableRepresentation.AddIndexImplTableDescriptions() = description;
         }
 
-        std::visit([&]<typename T>(const T& specializedDescription) {
-            if constexpr (std::is_same_v<T, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>) {
-                *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() = specializedDescription;
-            }
-        }, info.SpecializedIndexDescription);
+        std::visit(
+            [&]<typename T>(const T& specializedDescription) {
+                if constexpr (std::is_same_v<T, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>) {
+                    *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() = specializedDescription;
+                }
+            },
+            info.SpecializedIndexDescription
+        );
 
         persistedBuildIndex.Update(
             NIceDb::TUpdate<Schema::IndexBuild::CreationConfig>(serializableRepresentation.SerializeAsString())
@@ -85,158 +87,204 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
 
     ui32 columnNo = 0;
     for (ui32 i = 0; i < info.IndexColumns.size(); ++i, ++columnNo) {
-        db.Table<Schema::IndexBuildColumns>().Key(info.Id, columnNo).Update(
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(info.IndexColumns[i]),
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::KeyColumn)
-        );
+        db.Table<Schema::IndexBuildColumns>()
+            .Key(info.Id, columnNo)
+            .Update(
+                NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(info.IndexColumns[i]),
+                NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::KeyColumn)
+            );
     }
 
     for (ui32 i = 0; i < info.DataColumns.size(); ++i, ++columnNo) {
-        db.Table<Schema::IndexBuildColumns>().Key(info.Id, columnNo).Update(
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(info.DataColumns[i]),
-            NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::DataColumn)
-        );
+        db.Table<Schema::IndexBuildColumns>()
+            .Key(info.Id, columnNo)
+            .Update(
+                NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnName>(info.DataColumns[i]),
+                NIceDb::TUpdate<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::DataColumn)
+            );
     }
 
-    for(ui32 i = 0; i < info.BuildColumns.size(); i++) {
-        db.Table<Schema::BuildColumnOperationSettings>().Key(info.Id, i).Update(
-            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::ColumnName>(info.BuildColumns[i].ColumnName),
-            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromLiteral>(
-                TString(info.BuildColumns[i].DefaultFromLiteral.SerializeAsString())),
-            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::NotNull>(info.BuildColumns[i].NotNull),
-            NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName)
-        );
+    for (ui32 i = 0; i < info.BuildColumns.size(); i++) {
+        db.Table<Schema::BuildColumnOperationSettings>()
+            .Key(info.Id, i)
+            .Update(
+                NIceDb::TUpdate<Schema::BuildColumnOperationSettings::ColumnName>(info.BuildColumns[i].ColumnName),
+                NIceDb::TUpdate<Schema::BuildColumnOperationSettings::DefaultFromLiteral>(
+                    TString(info.BuildColumns[i].DefaultFromLiteral.SerializeAsString())
+                ),
+                NIceDb::TUpdate<Schema::BuildColumnOperationSettings::NotNull>(info.BuildColumns[i].NotNull),
+                NIceDb::TUpdate<Schema::BuildColumnOperationSettings::FamilyName>(info.BuildColumns[i].FamilyName)
+            );
     }
 }
 
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)));
 }
 
 void TSchemeShard::PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::CancelRequest>(indexInfo.CancelRequested));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::CancelRequest>(indexInfo.CancelRequested));
 }
 
 void TSchemeShard::PersistBuildIndexIssue(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.Issue));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.Issue));
 }
 
 void TSchemeShard::PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxId>(indexInfo.AlterMainTableTxId));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxId>(indexInfo.AlterMainTableTxId));
 }
 
 void TSchemeShard::PersistBuildIndexAlterMainTableTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxStatus>(indexInfo.AlterMainTableTxStatus));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxStatus>(indexInfo.AlterMainTableTxStatus));
 }
 
 void TSchemeShard::PersistBuildIndexAlterMainTableTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxDone>(indexInfo.AlterMainTableTxDone));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::AlterMainTableTxDone>(indexInfo.AlterMainTableTxDone));
 }
 
 void TSchemeShard::PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::InitiateTxId>(indexInfo.InitiateTxId));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::InitiateTxId>(indexInfo.InitiateTxId));
 }
 
 void TSchemeShard::PersistBuildIndexInitiateTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::InitiateTxStatus>(indexInfo.InitiateTxStatus));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::InitiateTxStatus>(indexInfo.InitiateTxStatus));
 }
 
 void TSchemeShard::PersistBuildIndexInitiateTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::InitiateTxDone>(indexInfo.InitiateTxDone));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::InitiateTxDone>(indexInfo.InitiateTxDone));
 }
 
 void TSchemeShard::PersistBuildIndexApplyTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::ApplyTxId>(indexInfo.ApplyTxId));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::ApplyTxId>(indexInfo.ApplyTxId));
 }
 
 void TSchemeShard::PersistBuildIndexApplyTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::ApplyTxStatus>(indexInfo.ApplyTxStatus));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::ApplyTxStatus>(indexInfo.ApplyTxStatus));
 }
 
 void TSchemeShard::PersistBuildIndexApplyTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::ApplyTxDone>(indexInfo.ApplyTxDone));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::ApplyTxDone>(indexInfo.ApplyTxDone));
 }
 
 void TSchemeShard::PersistBuildIndexLockTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::LockTxId>(indexInfo.LockTxId));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::LockTxId>(indexInfo.LockTxId));
 }
 
 void TSchemeShard::PersistBuildIndexLockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::LockTxStatus>(indexInfo.LockTxStatus));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::LockTxStatus>(indexInfo.LockTxStatus));
 }
 
 void TSchemeShard::PersistBuildIndexLockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::LockTxDone>(indexInfo.LockTxDone));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::LockTxDone>(indexInfo.LockTxDone));
 }
 
 void TSchemeShard::PersistBuildIndexUnlockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::UnlockTxDone>(indexInfo.UnlockTxDone));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::UnlockTxDone>(indexInfo.UnlockTxDone));
 }
 
 void TSchemeShard::PersistBuildIndexUnlockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::UnlockTxStatus>(indexInfo.UnlockTxStatus));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::UnlockTxStatus>(indexInfo.UnlockTxStatus));
 }
 
 void TSchemeShard::PersistBuildIndexUnlockTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::UnlockTxId>(indexInfo.UnlockTxId));
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(NIceDb::TUpdate<Schema::IndexBuild::UnlockTxId>(indexInfo.UnlockTxId));
 }
 
 void TSchemeShard::PersistBuildIndexBilling(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::RowsBilled>(indexInfo.Billed.GetRows()),
-        NIceDb::TUpdate<Schema::IndexBuild::BytesBilled>(indexInfo.Billed.GetBytes())
+    db.Table<Schema::IndexBuild>()
+        .Key(indexInfo.Id)
+        .Update(
+            NIceDb::TUpdate<Schema::IndexBuild::RowsBilled>(indexInfo.Billed.GetRows()),
+            NIceDb::TUpdate<Schema::IndexBuild::BytesBilled>(indexInfo.Billed.GetBytes())
         );
 }
 
-void TSchemeShard::PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus) {
-    db.Table<Schema::IndexBuildShardStatus>().Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastKeyAck>(shardStatus.LastKeyAck),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::Message>(shardStatus.DebugMessage),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadStatus>(shardStatus.UploadStatus),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::RowsProcessed>(shardStatus.Processed.GetRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::BytesProcessed>(shardStatus.Processed.GetBytes())
-    );
+void TSchemeShard::PersistBuildIndexUploadProgress(
+    NIceDb::TNiceDb& db,
+    TIndexBuildId buildId,
+    const TShardIdx& shardIdx,
+    const TIndexBuildInfo::TShardStatus& shardStatus
+) {
+    db.Table<Schema::IndexBuildShardStatus>()
+        .Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+        .Update(
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastKeyAck>(shardStatus.LastKeyAck),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::Message>(shardStatus.DebugMessage),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadStatus>(shardStatus.UploadStatus),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::RowsProcessed>(shardStatus.Processed.GetRows()),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::BytesProcessed>(shardStatus.Processed.GetBytes())
+        );
 }
 
-void TSchemeShard::PersistBuildIndexUploadInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus) {
+void TSchemeShard::PersistBuildIndexUploadInitiate(
+    NIceDb::TNiceDb& db,
+    TIndexBuildId buildId,
+    const TShardIdx& shardIdx,
+    const TIndexBuildInfo::TShardStatus& shardStatus
+) {
     NKikimrTx::TKeyRange range;
     shardStatus.Range.Serialize(range);
-    db.Table<Schema::IndexBuildShardStatus>().Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::Range>(range),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastKeyAck>(shardStatus.LastKeyAck),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadStatus>(shardStatus.UploadStatus)
-    );
+    db.Table<Schema::IndexBuildShardStatus>()
+        .Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+        .Update(
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::Range>(range),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::LastKeyAck>(shardStatus.LastKeyAck),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
+            NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadStatus>(shardStatus.UploadStatus)
+        );
 }
 
-void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildInfo::TShardStatus& shardStatus) {
+void TSchemeShard::PersistBuildIndexUploadReset(
+    NIceDb::TNiceDb& db,
+    TIndexBuildId buildId,
+    const TShardIdx& shardIdx,
+    TIndexBuildInfo::TShardStatus& shardStatus
+) {
     shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
-    db.Table<Schema::IndexBuildShardStatus>().Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status)
-    );
+    db.Table<Schema::IndexBuildShardStatus>()
+        .Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+        .Update(NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status));
 }
 
 void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuildInfo& info) {
-    for (const auto& [shardIdx, _]: info.Shards) {
+    for (const auto& [shardIdx, _] : info.Shards) {
         db.Table<Schema::IndexBuildShardStatus>().Key(info.Id, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
     }
     info.Shards.clear();
@@ -254,12 +302,12 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
         db.Table<Schema::IndexBuildColumns>().Key(info.Id, columnNo).Delete();
     }
 
-    for (const auto& item: info.Shards) {
+    for (const auto& item : info.Shards) {
         auto shardIdx = item.first;
         db.Table<Schema::IndexBuildShardStatus>().Key(info.Id, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
     }
 
-    for(ui32 idx = 0; idx < info.BuildColumns.size(); ++idx) {
+    for (ui32 idx = 0; idx < info.BuildColumns.size(); ++idx) {
         db.Table<Schema::BuildColumnOperationSettings>().Key(info.Id, idx).Delete();
     }
 }
@@ -272,7 +320,7 @@ void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorCon
     }
 }
 
-void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext &) {
+void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext&) {
     for (const auto& id : indexIds) {
         const auto* buildInfoPtr = IndexBuilds.FindPtr(id);
         if (!buildInfoPtr) {
@@ -280,7 +328,7 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
         }
         const auto& buildInfo = *buildInfoPtr->Get();
 
-        auto handle = [&] (auto txId) {
+        auto handle = [&](auto txId) {
             if (txId) {
                 auto [it, emplaced] = TxIdToIndexBuilds.try_emplace(txId, buildInfo.Id);
                 Y_ABORT_UNLESS(it->second == buildInfo.Id);
@@ -296,5 +344,5 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
     }
 }
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

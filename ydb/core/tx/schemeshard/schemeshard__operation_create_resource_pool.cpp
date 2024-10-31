@@ -2,16 +2,14 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
-class TPropose : public TSubOperationState {
+class TPropose: public TSubOperationState {
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(std::move(id))
-    {}
+        : OperationId(std::move(id)) {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
@@ -60,54 +58,51 @@ private:
     const TOperationId OperationId;
 };
 
-class TCreateResourcePool : public TSubOperation {
+class TCreateResourcePool: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl, bool acceptExisted) {
+    static bool IsDestinationPathValid(
+        const THolder<TProposeResponse>& result,
+        const TPath& dstPath,
+        const TString& acl,
+        bool acceptExisted
+    ) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
         if (dstPath.IsResolved()) {
-            checks
-                .IsResolved()
-                .NotUnderDeleting()
-                .FailOnExist(TPathElement::EPathType::EPathTypeResourcePool, acceptExisted);
+            checks.IsResolved().NotUnderDeleting().FailOnExist(
+                TPathElement::EPathType::EPathTypeResourcePool, acceptExisted
+            );
         } else {
-            checks
-                .NotEmpty()
-                .NotResolved();
+            checks.NotEmpty().NotResolved();
         }
 
         if (checks) {
-            checks
-                .IsValidLeafName()
-                .DepthLimit()
-                .PathsLimit()
-                .DirChildrenLimit()
-                .IsValidACL(acl);
+            checks.IsValidLeafName().DepthLimit().PathsLimit().DirChildrenLimit().IsValidACL(acl);
         }
 
         if (!checks) {
@@ -132,7 +127,7 @@ class TCreateResourcePool : public TSubOperation {
         resourcePool->CreateTxId = OperationId.GetTxId();
         resourcePool->PathType = TPathElement::EPathType::EPathTypeResourcePool;
         resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
-        resourcePool->LastTxId  = OperationId.GetTxId();
+        resourcePool->LastTxId = OperationId.GetTxId();
 
         return resourcePool;
     }
@@ -151,13 +146,19 @@ public:
         const TString& name = resourcePoolDescription.GetName();
         LOG_N("TCreateResourcePool Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                   static_cast<ui64>(OperationId.GetTxId()),
-                                                   static_cast<ui64>(context.SS->SelfTabletId()));
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted,
+            static_cast<ui64>(OperationId.GetTxId()),
+            static_cast<ui64>(context.SS->SelfTabletId())
+        );
 
         if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
             if (!context.SS->EnableResourcePoolsOnServerless) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+                result->SetError(
+                    NKikimrScheme::StatusPreconditionFailed,
+                    "Resource pools are disabled for serverless domains. Please contact your system administrator to "
+                    "enable it"
+                );
                 return result;
             }
         }

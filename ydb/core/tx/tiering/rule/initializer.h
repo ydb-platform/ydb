@@ -9,7 +9,8 @@ class TTierRulesInitializer: public NMetadata::NInitializer::IInitializationBeha
 protected:
     TVector<NMetadata::NInitializer::ITableModifier::TPtr> BuildModifiers() const;
     virtual void DoPrepare(NMetadata::NInitializer::IInitializerInput::TPtr controller) const override;
+
 public:
 };
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

@@ -16,11 +16,18 @@ void TOlapIndexSchema::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDes
     AFL_VERIFY(IndexMeta.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
 }
 
-bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors) {
+bool TOlapIndexSchema::ApplyUpdate(
+    const TOlapSchema& currentSchema,
+    const TOlapIndexUpsert& upsert,
+    IErrorCollector& errors
+) {
     AFL_VERIFY(upsert.GetName() == GetName());
     AFL_VERIFY(!!upsert.GetIndexConstructor());
     if (upsert.GetIndexConstructor().GetClassName() != IndexMeta.GetClassName()) {
-        errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
+        errors.AddError(
+            "different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " +
+            IndexMeta.GetClassName()
+        );
         return false;
     }
     auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), GetName(), currentSchema, errors);
@@ -36,7 +43,12 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
     return true;
 }
 
-bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+bool TOlapIndexesDescription::ApplyUpdate(
+    const TOlapSchema& currentSchema,
+    const TOlapIndexesUpdate& schemaUpdate,
+    IErrorCollector& errors,
+    ui32& nextEntityId
+) {
     for (auto&& index : schemaUpdate.GetUpsertIndexes()) {
         auto* currentIndex = MutableByName(index.GetName());
         if (currentIndex) {
@@ -83,7 +95,8 @@ void TOlapIndexesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapIndexesDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapIndexesDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors)
+    const {
     THashSet<ui32> usedIndexes;
     ui32 lastIdx = 0;
     for (const auto& proto : opSchema.GetIndexes()) {
@@ -111,7 +124,6 @@ bool TOlapIndexesDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
             return false;
         }
         lastIdx = index->GetId();
-
     }
 
     for (auto& pr : Indexes) {
@@ -131,4 +143,4 @@ NKikimr::NSchemeShard::TOlapIndexSchema* TOlapIndexesDescription::MutableByIdVer
     return TValidator::CheckNotNull(MutableById(id));
 }
 
-}
+} // namespace NKikimr::NSchemeShard

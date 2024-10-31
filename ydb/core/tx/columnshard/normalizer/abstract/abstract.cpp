@@ -6,7 +6,9 @@
 
 namespace NKikimr::NOlap {
 
-TNormalizationController::INormalizerComponent::TPtr TNormalizationController::RegisterNormalizer(INormalizerComponent::TPtr normalizer) {
+TNormalizationController::INormalizerComponent::TPtr TNormalizationController::RegisterNormalizer(
+    INormalizerComponent::TPtr normalizer
+) {
     AFL_VERIFY(normalizer);
     Counters.emplace_back(normalizer->GetClassName());
     Normalizers.emplace_back(normalizer);
@@ -39,11 +41,20 @@ bool TNormalizationController::SwitchNormalizer() {
     return !IsNormalizationFinished();
 }
 
-void TTrivialNormalizerTask::Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) {
-    TActorContext::AsActorContext().Send(nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
+void TTrivialNormalizerTask::Start(
+    const TNormalizationController& /* controller */,
+    const TNormalizationContext& nCtx
+) {
+    TActorContext::AsActorContext().Send(
+        nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes)
+    );
 }
 
-void TNormalizationController::AddNormalizerEvent(NIceDb::TNiceDb& db, const TString& eventType, const TString& eventDescription) const {
+void TNormalizationController::AddNormalizerEvent(
+    NIceDb::TNiceDb& db,
+    const TString& eventType,
+    const TString& eventDescription
+) const {
     NColumnShard::Schema::AddNormalizerEvent(db, GetNormalizer()->GetUniqueId(), eventType, eventDescription);
 }
 
@@ -51,7 +62,9 @@ void TNormalizationController::OnNormalizerFinished(NIceDb::TNiceDb& db) const {
     if (auto seqId = GetNormalizer()->GetSequentialId()) {
         NColumnShard::Schema::SaveSpecialValue(db, NColumnShard::Schema::EValueIds::LastNormalizerSequentialId, *seqId);
     }
-    NColumnShard::Schema::FinishNormalizer(db, GetNormalizer()->GetClassName(), GetNormalizer()->GetUniqueDescription(), GetNormalizer()->GetUniqueId());
+    NColumnShard::Schema::FinishNormalizer(
+        db, GetNormalizer()->GetClassName(), GetNormalizer()->GetUniqueDescription(), GetNormalizer()->GetUniqueId()
+    );
 }
 
 void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
@@ -61,9 +74,12 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
         for (auto&& i : AppDataVerified().ColumnShardConfig.GetRepairs()) {
             AFL_VERIFY(i.GetDescription())("error", "repair normalization have to has unique description");
             if (FinishedNormalizers.contains(TNormalizerFullId(i.GetClassName(), i.GetDescription()))) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("warning", "repair already processed")("description", i.GetDescription());
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+                ("warning", "repair already processed")("description", i.GetDescription());
             } else {
-                auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(i.GetClassName(), ctx)));
+                auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(
+                    INormalizerComponent::TFactory::Construct(i.GetClassName(), ctx)
+                ));
                 normalizer->SetIsRepair(true).SetUniqueDescription(i.GetDescription());
             }
         }
@@ -83,9 +99,12 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
         if (nType == ENormalizerSequentialId::MAX) {
             continue;
         }
-        auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(::ToString(nType), ctx)));
+        auto normalizer = RegisterNormalizer(
+            std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(::ToString(nType), ctx))
+        );
         AFL_VERIFY(normalizer->GetEnumSequentialIdVerified() == nType);
-        AFL_VERIFY(lastRegisteredNormalizer <= nType)("current", ToString(nType))("last", ToString(lastRegisteredNormalizer));
+        AFL_VERIFY(lastRegisteredNormalizer <= nType)
+        ("current", ToString(nType))("last", ToString(lastRegisteredNormalizer));
         lastRegisteredNormalizer = nType;
     }
 
@@ -111,7 +130,8 @@ bool TNormalizationController::InitControllerState(NIceDb::TNiceDb& db) {
         while (!rowset.EndOfSet()) {
             const TNormalizerFullId id(
                 rowset.GetValue<NColumnShard::Schema::Normalizers::ClassName>(),
-                rowset.GetValue<NColumnShard::Schema::Normalizers::Description>());
+                rowset.GetValue<NColumnShard::Schema::Normalizers::Description>()
+            );
             if (!rowset.HaveValue<NColumnShard::Schema::Normalizers::Finish>()) {
                 started.emplace(id, rowset.GetValue<NColumnShard::Schema::Normalizers::Identifier>());
             } else {
@@ -126,16 +146,24 @@ bool TNormalizationController::InitControllerState(NIceDb::TNiceDb& db) {
     }
 
     std::optional<ui64> lastNormalizerId;
-    if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::LastNormalizerSequentialId, lastNormalizerId)) {
+    if (!NColumnShard::Schema::GetSpecialValueOpt(
+            db, NColumnShard::Schema::EValueIds::LastNormalizerSequentialId, lastNormalizerId
+        )) {
         return false;
     }
     LastSavedNormalizerId = lastNormalizerId.value_or(0);
     return true;
 }
 
-NKikimr::TConclusion<std::vector<NKikimr::NOlap::INormalizerTask::TPtr>> TNormalizationController::INormalizerComponent::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "normalization_init")("last", controller.GetLastSavedNormalizerId())
-        ("seq_id", GetSequentialId())("type", GetEnumSequentialId());
+NKikimr::TConclusion<std::vector<NKikimr::NOlap::INormalizerTask::TPtr>>
+TNormalizationController::INormalizerComponent::Init(
+    const TNormalizationController& controller,
+    NTabletFlatExecutor::TTransactionContext& txc
+) {
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+    ("event", "normalization_init")("last", controller.GetLastSavedNormalizerId())("seq_id", GetSequentialId())(
+        "type", GetEnumSequentialId()
+    );
     auto result = DoInit(controller, txc);
     if (!result.IsSuccess()) {
         return result;
@@ -148,4 +176,4 @@ NKikimr::TConclusion<std::vector<NKikimr::NOlap::INormalizerTask::TPtr>> TNormal
     return result;
 }
 
-}
+} // namespace NKikimr::NOlap

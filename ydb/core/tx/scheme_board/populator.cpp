@@ -38,17 +38,17 @@ namespace NSchemeBoard {
 
 namespace {
 
-    using TDelayedUpdates = TVector<THolder<IEventHandle>>;
+using TDelayedUpdates = TVector<THolder<IEventHandle>>;
 
-    void ReplayUpdates(TDelayedUpdates& updates) {
-        for (auto& update : updates) {
-            TlsActivationContext->Send(update.Release());
-        }
-
-        TDelayedUpdates().swap(updates);
+void ReplayUpdates(TDelayedUpdates& updates) {
+    for (auto& update : updates) {
+        TlsActivationContext->Send(update.Release());
     }
 
-} // anonymous
+    TDelayedUpdates().swap(updates);
+}
+
+} // namespace
 
 class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     void ProcessSync(NInternalEvents::TEvDescribeResult* msg = nullptr, const TPathId& pathId = TPathId()) {
@@ -65,8 +65,8 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
         }
 
         auto update = msg->HasDescription()
-            ? MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, msg->Description)
-            : MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation);
+                          ? MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation, msg->Description)
+                          : MakeHolder<NInternalEvents::TEvUpdateBuilder>(Owner, Generation);
 
         if (msg->HasDeletedLocalPathIds()) {
             auto& deletedLocalPathIds = *update->Record.MutableDeletedLocalPathIds();
@@ -156,7 +156,8 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             auto& versions = it->second;
             TSet<ui64> txIds;
 
-            for (auto x = versions.begin(), end = versions.upper_bound(std::make_pair(version, Max<ui64>())); x != end;) {
+            for (auto x = versions.begin(), end = versions.upper_bound(std::make_pair(version, Max<ui64>()));
+                 x != end;) {
                 txIds.insert(x->second);
                 versions.erase(x++);
             }
@@ -385,18 +386,12 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_POPULATOR_ACTOR;
     }
 
-    explicit TReplicaPopulator(
-            const TActorId& parent,
-            const TActorId& replica,
-            const ui64 owner,
-            const ui64 generation)
+    explicit TReplicaPopulator(const TActorId& parent, const TActorId& replica, const ui64 owner, const ui64 generation)
         : Parent(parent)
         , Replica(replica)
         , Owner(owner)
         , Generation(generation)
-        , BatchSize(0)
-    {
-    }
+        , BatchSize(0) {}
 
     void Bootstrap() {
         TMonitorableActor::Bootstrap();
@@ -578,7 +573,10 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
 
             if (startPathId.OwnerId == Owner) {
-                Send(replicaPopulator, new NInternalEvents::TEvDescribeResult(startPathId.LocalPathId, MaxPathId.LocalPathId));
+                Send(
+                    replicaPopulator,
+                    new NInternalEvents::TEvDescribeResult(startPathId.LocalPathId, MaxPathId.LocalPathId)
+                );
             } else {
                 Send(replicaPopulator, new NInternalEvents::TEvDescribeResult(1, MaxPathId.LocalPathId));
             }
@@ -608,7 +606,10 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         if (description.Status == NKikimrScheme::EStatus::StatusRedirectDomain) {
             // this path has been migrated to another owner
-            Send(replicaPopulator, new NInternalEvents::TEvDescribeResult(deletedBegin, deletedEnd, it->first.LocalPathId));
+            Send(
+                replicaPopulator,
+                new NInternalEvents::TEvDescribeResult(deletedBegin, deletedEnd, it->first.LocalPathId)
+            );
             return;
         }
 
@@ -724,9 +725,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const ui64 version = record.GetVersion();
 
         auto pathIt = it->second.PathAcks.lower_bound({pathId, 0});
-        while (pathIt != it->second.PathAcks.end()
-               && pathIt->first.first == pathId
-               && pathIt->first.second <= version) {
+        while (pathIt != it->second.PathAcks.end() && pathIt->first.first == pathId && pathIt->first.second <= version
+        ) {
             if (++pathIt->second > (GroupInfo->NToSelect / 2)) {
                 SBP_LOG_N("Ack update"
                     << ": ack to# " << it->second.AckTo
@@ -734,7 +734,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                     << ", pathId# " << pathId
                     << ", version# " << pathIt->first.second);
 
-                auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
+                auto ack =
+                    MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
                 Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
 
                 auto eraseIt = pathIt;
@@ -775,11 +776,12 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
         }
 
-        for (auto it = ReplicaToReplicaPopulator.begin(); it != ReplicaToReplicaPopulator.end(); ) {
+        for (auto it = ReplicaToReplicaPopulator.begin(); it != ReplicaToReplicaPopulator.end();) {
             if (neededReplicas.contains(it->first)) {
                 ++it;
             } else {
-                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second, SelfId(), nullptr, 0));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second, SelfId(), nullptr, 0)
+                );
                 ReplicaToReplicaPopulator.erase(it++);
             }
         }
@@ -859,8 +861,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         for (const auto& x : ReplicaToReplicaPopulator) {
             Send(x.second, new TEvents::TEvPoisonPill());
         }
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
-            nullptr, 0));
+        TActivationContext::Send(
+            new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(), nullptr, 0)
+        );
 
         TMonitorableActor::PassAway();
     }
@@ -878,14 +881,14 @@ public:
     }
 
     explicit TPopulator(
-            const ui64 owner,
-            const ui64 generation,
-            std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& twoPartDescriptions,
-            const ui64 maxPathId)
+        const ui64 owner,
+        const ui64 generation,
+        std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& twoPartDescriptions,
+        const ui64 maxPathId
+    )
         : Owner(owner)
         , Generation(generation)
-        , MaxPathId(TPathId(owner, maxPathId))
-    {
+        , MaxPathId(TPathId(owner, maxPathId)) {
         for (const auto& [pathId, twoPart] : twoPartDescriptions) {
             Descriptions.emplace(pathId, MakeOpaquePathDescription(twoPart));
         }
@@ -962,7 +965,7 @@ private:
 
 }; // TPopulator
 
-} // NSchemeBoard
+} // namespace NSchemeBoard
 
 IActor* CreateSchemeBoardPopulator(
     const ui64 owner,
@@ -973,4 +976,4 @@ IActor* CreateSchemeBoardPopulator(
     return new NSchemeBoard::TPopulator(owner, generation, std::move(twoPartDescriptions), maxPathId);
 }
 
-} // NKikimr
+} // namespace NKikimr

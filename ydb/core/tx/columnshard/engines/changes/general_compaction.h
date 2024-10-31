@@ -14,11 +14,16 @@ private:
     std::shared_ptr<NPrioritiesQueue::TAllocationGuard> PrioritiesAllocationGuard;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     NArrow::NMerger::TIntervalPositions CheckPoints;
-    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions) noexcept;
+    void BuildAppendedPortionsByChunks(TConstructionContext& context, std::vector<TReadPortionInfoWithBlobs>&& portions)
+        noexcept;
 
-    std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
-        const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
-        const ISnapshotSchema::TPtr& resultSchema) const;
+    std::shared_ptr<NArrow::TColumnFilter> BuildPortionFilter(
+        const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual,
+        const std::shared_ptr<NArrow::TGeneralContainer>& batch,
+        const TPortionInfo& pInfo,
+        const THashSet<ui64>& portionsInUsage,
+        const ISnapshotSchema::TPtr& resultSchema
+    ) const;
 
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
@@ -57,10 +62,7 @@ public:
             const ui32 ColumnId;
             ui64 MemoryUsage = 0;
             TColumnInfo(const ui32 columnId)
-                : ColumnId(columnId)
-            {
-
-            }
+                : ColumnId(columnId) {}
         };
         std::list<TColumnInfo> MaxMemoryByColumnChunk;
 

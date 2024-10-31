@@ -6,4 +6,4 @@ void TSSInitiatorController::DoProposeError(const TString& sessionId, const TStr
     AFL_VERIFY(false)("error", "on_propose")("session_id", sessionId)("reason", message);
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

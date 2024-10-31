@@ -2,15 +2,14 @@
 
 namespace NKikimr::NDataShard {
 
-class TDataShard::TTxRemoveLockChangeRecords
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
-{
+class TDataShard::TTxRemoveLockChangeRecords: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxRemoveLockChangeRecords(TDataShard* self)
-        : TBase(self)
-    { }
+        : TBase(self) {}
 
-    TTxType GetTxType() const override { return TXTYPE_REMOVE_LOCK_CHANGE_RECORDS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_REMOVE_LOCK_CHANGE_RECORDS;
+    }
 
     static constexpr size_t MaxRecordsToRemove = 1000;
 

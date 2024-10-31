@@ -33,11 +33,10 @@ class TChangeSender: public TActor<TChangeSender> {
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeSender]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << SelfId() /* contains brackets */
-                << (IsActive() ? "" : "[Inactive]") << " ";
+            LogPrefix = TStringBuilder() << "[ChangeSender]"
+                                         << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                                         << SelfId() /* contains brackets */
+                                         << (IsActive() ? "" : "[Inactive]") << " ";
         }
 
         return LogPrefix.GetRef();
@@ -55,10 +54,10 @@ class TChangeSender: public TActor<TChangeSender> {
 
     TActorId RegisterChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type) const {
         switch (type) {
-        case ESenderType::AsyncIndex:
-            return Register(CreateAsyncIndexChangeSender(DataShard, userTableId, pathId));
-        case ESenderType::CdcStream:
-            return Register(CreateCdcStreamChangeSender(DataShard, pathId));
+            case ESenderType::AsyncIndex:
+                return Register(CreateAsyncIndexChangeSender(DataShard, userTableId, pathId));
+            case ESenderType::CdcStream:
+                return Register(CreateCdcStreamChangeSender(DataShard, pathId));
         }
     }
 
@@ -175,8 +174,13 @@ class TChangeSender: public TActor<TChangeSender> {
                     if (const auto& to = it->second.ActorId) {
                         ctx.Send(ev->Forward(to));
                     } else {
-                        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(TStringBuilder()
-                            << "Change sender '" << pathId << "' (" << it->second.Type << ") is not running"));
+                        Send(
+                            ev->Sender,
+                            new NMon::TEvRemoteHttpInfoRes(
+                                TStringBuilder()
+                                << "Change sender '" << pathId << "' (" << it->second.Type << ") is not running"
+                            )
+                        );
                     }
                 } else {
                     Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPNOTFOUND));
@@ -198,22 +202,42 @@ class TChangeSender: public TActor<TChangeSender> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { html << "#"; }
-                                TABLEH() { html << "PathId"; }
-                                TABLEH() { html << "UserTableId"; }
-                                TABLEH() { html << "Type"; }
-                                TABLEH() { html << "Actor"; }
+                                TABLEH() {
+                                    html << "#";
+                                }
+                                TABLEH() {
+                                    html << "PathId";
+                                }
+                                TABLEH() {
+                                    html << "UserTableId";
+                                }
+                                TABLEH() {
+                                    html << "Type";
+                                }
+                                TABLEH() {
+                                    html << "Actor";
+                                }
                             }
                         }
                         TABLEBODY() {
                             ui32 i = 0;
                             for (const auto& [pathId, sender] : Senders) {
                                 TABLER() {
-                                    TABLED() { html << ++i; }
-                                    TABLED() { PathLink(html, pathId); }
-                                    TABLED() { html << sender.UserTableId; }
-                                    TABLED() { html << sender.Type; }
-                                    TABLED() { ActorLink(html, DataShard.TabletId, pathId); }
+                                    TABLED() {
+                                        html << ++i;
+                                    }
+                                    TABLED() {
+                                        PathLink(html, pathId);
+                                    }
+                                    TABLED() {
+                                        html << sender.UserTableId;
+                                    }
+                                    TABLED() {
+                                        html << sender.Type;
+                                    }
+                                    TABLED() {
+                                        ActorLink(html, DataShard.TabletId, pathId);
+                                    }
                                 }
                             }
                         }
@@ -226,20 +250,36 @@ class TChangeSender: public TActor<TChangeSender> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { html << "#"; }
-                                TABLEH() { html << "Order"; }
-                                TABLEH() { html << "PathId"; }
-                                TABLEH() { html << "BodySize"; }
+                                TABLEH() {
+                                    html << "#";
+                                }
+                                TABLEH() {
+                                    html << "Order";
+                                }
+                                TABLEH() {
+                                    html << "PathId";
+                                }
+                                TABLEH() {
+                                    html << "BodySize";
+                                }
                             }
                         }
                         TABLEBODY() {
                             ui32 i = 0;
                             for (const auto& record : Enqueued) {
                                 TABLER() {
-                                    TABLED() { html << ++i; }
-                                    TABLED() { html << record.Order; }
-                                    TABLED() { PathLink(html, record.PathId); }
-                                    TABLED() { html << record.BodySize; }
+                                    TABLED() {
+                                        html << ++i;
+                                    }
+                                    TABLED() {
+                                        html << record.Order;
+                                    }
+                                    TABLED() {
+                                        PathLink(html, record.PathId);
+                                    }
+                                    TABLED() {
+                                        html << record.BodySize;
+                                    }
                                 }
                             }
                         }
@@ -270,8 +310,7 @@ public:
 
     explicit TChangeSender(const TDataShard* self)
         : TActor(&TThis::StateInactive)
-        , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
-    {
+        , DataShard{self->TabletID(), self->Generation(), self->SelfId()} {
         for (const auto& [tableId, tableInfo] : self->GetUserTables()) {
             const auto fullTableId = TTableId(self->GetPathOwnerId(), tableId);
 
@@ -298,8 +337,8 @@ public:
     STFUNC(StateInactive) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvActivateSender, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -320,4 +359,4 @@ IActor* CreateChangeSender(const TDataShard* self) {
     return new TChangeSender(self);
 }
 
-}
+} // namespace NKikimr::NDataShard

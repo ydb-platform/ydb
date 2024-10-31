@@ -25,8 +25,7 @@ private:
             : Version(version)
             , Step(step)
             , TxId(txId)
-            , Id(id) {
-        }
+            , Id(id) {}
 
         bool operator<(const TKey& item) const {
             if (Id == item.Id) {
@@ -56,8 +55,7 @@ private:
         TTableKey(ui64 pathId, ui64 step, ui64 txId)
             : PathId(pathId)
             , Step(step)
-            , TxId(txId) {
-        }
+            , TxId(txId) {}
     };
 
     std::vector<TKey> VersionsToRemove;
@@ -66,19 +64,24 @@ private:
 public:
     TNormalizerResult(std::vector<TKey>&& versions, std::vector<TTableKey>&& tableVersions)
         : VersionsToRemove(versions)
-        , TableVersionsToRemove(tableVersions) {
-    }
+        , TableVersionsToRemove(tableVersions) {}
 
-    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool
+    ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */)
+        const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto& key : VersionsToRemove) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version in TSchemaVersionNormalizer")("version", key.GetVersion());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "Removing schema version in TSchemaVersionNormalizer")("version", key.GetVersion());
             db.Table<Schema::SchemaPresetVersionInfo>().Key(key.Id, key.Step, key.TxId).Delete();
         }
         for (auto& key : TableVersionsToRemove) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing table version in TSchemaVersionNormalizer")("pathId", key.PathId)(
-                "plan_step", key.Step)("tx_id", key.TxId);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+            ("event",
+             "Removing table version in TSchemaVersionNormalizer")("pathId", key.PathId)("plan_step", key.Step)(
+                "tx_id", key.TxId
+            );
             db.Table<Schema::TableVersionInfo>().Key(key.PathId, key.Step, key.TxId).Delete();
         }
         return true;
@@ -137,8 +140,12 @@ public:
                 Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
                 AFL_VERIFY(info.HasSchema());
                 ui64 version = info.GetSchema().GetVersion();
-                TKey presetVersionKey(id, rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(),
-                    rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>(), version);
+                TKey presetVersionKey(
+                    id,
+                    rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceStep>(),
+                    rowset.GetValue<Schema::SchemaPresetVersionInfo::SinceTxId>(),
+                    version
+                );
                 auto it = maxByPresetId.find(id);
                 if (it == maxByPresetId.end()) {
                     it = maxByPresetId.emplace(id, presetVersionKey).first;
@@ -168,12 +175,19 @@ public:
 
                     NKikimrTxColumnShard::TTableVersionInfo versionInfo;
                     Y_ABORT_UNLESS(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
-                    auto it = schemaIdUsability.find(TKey(versionInfo.GetSchemaPresetId(),
-                        rowset.GetValue<Schema::TableVersionInfo::SinceStep>(), rowset.GetValue<Schema::TableVersionInfo::SinceTxId>(), {}));
+                    auto it = schemaIdUsability.find(TKey(
+                        versionInfo.GetSchemaPresetId(),
+                        rowset.GetValue<Schema::TableVersionInfo::SinceStep>(),
+                        rowset.GetValue<Schema::TableVersionInfo::SinceTxId>(),
+                        {}
+                    ));
                     AFL_VERIFY(it != schemaIdUsability.end());
                     if (!it->second) {
-                        unusedTableSchemaIds.emplace_back(pathId, rowset.GetValue<Schema::TableVersionInfo::SinceStep>(),
-                            rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());
+                        unusedTableSchemaIds.emplace_back(
+                            pathId,
+                            rowset.GetValue<Schema::TableVersionInfo::SinceStep>(),
+                            rowset.GetValue<Schema::TableVersionInfo::SinceTxId>()
+                        );
                     }
 
                     if (!rowset.Next()) {
@@ -186,8 +200,9 @@ public:
             std::vector<TKey> presetVersionsToRemove;
             auto addNormalizationTask = [&](const ui32 limit) {
                 if (presetVersionsToRemove.size() + tableVersionToRemove.size() > limit) {
-                    changes.emplace_back(
-                        std::make_shared<TNormalizerResult>(std::move(presetVersionsToRemove), std::move(tableVersionToRemove)));
+                    changes.emplace_back(std::make_shared<TNormalizerResult>(
+                        std::move(presetVersionsToRemove), std::move(tableVersionToRemove)
+                    ));
                     presetVersionsToRemove = std::vector<TKey>();
                     tableVersionToRemove = std::vector<TTableKey>();
                 }
@@ -210,8 +225,8 @@ public:
     }
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TSchemaVersionNormalizer::DoInit(
-    const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>>
+TSchemaVersionNormalizer::DoInit(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(txc);
     if (!changes) {
         return TConclusionStatus::Fail("Not ready");

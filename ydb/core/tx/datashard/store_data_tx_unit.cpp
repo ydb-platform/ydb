@@ -6,45 +6,32 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TStoreDataTxUnit : public TExecutionUnit {
+class TStoreDataTxUnit: public TExecutionUnit {
 public:
-    TStoreDataTxUnit(TDataShard &dataShard,
-                     TPipeline &pipeline);
+    TStoreDataTxUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TStoreDataTxUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TStoreDataTxUnit::TStoreDataTxUnit(TDataShard &dataShard,
-                                   TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::StoreDataTx, false, dataShard, pipeline)
-{
-}
+TStoreDataTxUnit::TStoreDataTxUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::StoreDataTx, false, dataShard, pipeline) {}
 
-TStoreDataTxUnit::~TStoreDataTxUnit()
-{
-}
+TStoreDataTxUnit::~TStoreDataTxUnit() {}
 
-bool TStoreDataTxUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TStoreDataTxUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &txc,
-                                           const TActorContext &ctx)
-{
+EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     Y_ABORT_UNLESS(op->IsDataTx() || op->IsReadTable());
     Y_ABORT_UNLESS(!op->IsAborted() && !op->IsInterrupted());
 
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
     auto dataTx = tx->GetDataTx();
     Y_ABORT_UNLESS(dataTx);
@@ -64,15 +51,11 @@ EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TStoreDataTxUnit::Complete(TOperation::TPtr op,
-                                const TActorContext &ctx)
-{
+void TStoreDataTxUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
     Pipeline.ProposeComplete(op, ctx);
 }
 
-THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard &dataShard,
-                                              TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TStoreDataTxUnit>(dataShard, pipeline);
 }
 

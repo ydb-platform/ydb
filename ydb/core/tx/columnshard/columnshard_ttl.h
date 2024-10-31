@@ -74,14 +74,15 @@ public:
         return true;
     }
 
-    const THashSet<TString>& TtlColumns() const { return Columns; }
+    const THashSet<TString>& TtlColumns() const {
+        return Columns;
+    }
 
 private:
     THashMap<ui64, TDescription> PathTtls; // pathId -> ttl
     THashSet<TString> Columns;
 
-    std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr) const
-    {
+    std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr) const {
         if (descr.Eviction) {
             auto& evict = descr.Eviction;
             return NOlap::TTierInfo::MakeTtl(evict->EvictAfter, evict->ColumnName, evict->UnitsInSecond);
@@ -90,4 +91,4 @@ private:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

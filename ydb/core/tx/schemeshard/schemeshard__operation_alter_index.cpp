@@ -12,15 +12,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterTableIndex TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterTableIndex TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -81,21 +79,21 @@ class TAlterTableIndex: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -117,7 +115,8 @@ public:
                          << ", transaction: " << Transaction.ShortDebugString()
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasAlterTableIndex()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "AlterTableIndex is not present");
@@ -133,8 +132,7 @@ public:
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -154,11 +152,7 @@ public:
 
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
-            checks
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsTableIndex();
+            checks.IsResolved().NotDeleted().NotUnderDeleting().IsTableIndex();
 
             if (!context.IsAllowedPrivateTables) {
                 checks.IsCommonSensePath();
@@ -229,7 +223,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -241,4 +235,4 @@ ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState st
     return MakeSubOperation<TAlterTableIndex>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

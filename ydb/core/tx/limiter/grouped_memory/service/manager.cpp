@@ -22,15 +22,22 @@ void TManager::RegisterGroup(const ui64 externalProcessId, const ui64 externalSc
 }
 
 void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId) {
-    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "unregister_group")("external_process_id", externalProcessId)(
-        "external_group_id", externalGroupId)("size", ProcessIds.GetSize());
+    AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)
+    ("event", "unregister_group")("external_process_id", externalProcessId)("external_group_id", externalGroupId)(
+        "size", ProcessIds.GetSize()
+    );
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         process->UnregisterGroup(externalScopeId, externalGroupId);
     }
     RefreshSignals();
 }
 
-void TManager::UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume) {
+void TManager::UpdateAllocation(
+    const ui64 externalProcessId,
+    const ui64 externalScopeId,
+    const ui64 allocationId,
+    const ui64 volume
+) {
     TProcessMemory& process = GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId));
     if (process.UpdateAllocation(externalScopeId, allocationId, volume)) {
         TryAllocateWaiting();
@@ -69,22 +76,35 @@ void TManager::UnregisterAllocation(const ui64 externalProcessId, const ui64 ext
     RefreshSignals();
 }
 
-void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
-    const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
+void TManager::RegisterAllocation(
+    const ui64 externalProcessId,
+    const ui64 externalScopeId,
+    const ui64 externalGroupId,
+    const std::shared_ptr<IAllocation>& task,
+    const std::optional<ui32>& stageIdx
+) {
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         process->RegisterAllocation(externalScopeId, externalGroupId, task, stageIdx);
     } else {
-        AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
-                                                                                  "ext_group", externalGroupId)("stage_idx", stageIdx);
+        AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))
+        ("ext_group", externalGroupId)("stage_idx", stageIdx);
     }
     RefreshSignals();
 }
 
-void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<std::shared_ptr<TStageFeatures>>& stages) {
+void TManager::RegisterProcess(
+    const ui64 externalProcessId,
+    const std::vector<std::shared_ptr<TStageFeatures>>& stages
+) {
     auto internalId = ProcessIds.GetInternalIdOptional(externalProcessId);
     if (!internalId) {
         const ui64 internalProcessId = ProcessIds.RegisterExternalIdOrGet(externalProcessId);
-        AFL_VERIFY(Processes.emplace(internalProcessId, TProcessMemory(externalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage)).second);
+        AFL_VERIFY(Processes
+                       .emplace(
+                           internalProcessId,
+                           TProcessMemory(externalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage)
+                       )
+                       .second);
     } else {
         ++Processes.find(*internalId)->second.MutableLinksCount();
     }
@@ -115,7 +135,8 @@ void TManager::RegisterProcessScope(const ui64 externalProcessId, const ui64 ext
 }
 
 void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 externalProcessScopeId) {
-    GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId)).UnregisterScope(externalProcessScopeId);
+    GetProcessMemoryVerified(ProcessIds.GetInternalIdVerified(externalProcessId))
+        .UnregisterScope(externalProcessScopeId);
     RefreshSignals();
 }
 

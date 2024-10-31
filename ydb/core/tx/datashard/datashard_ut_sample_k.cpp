@@ -20,9 +20,14 @@ using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
-Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
-    static void DoSampleKBad(Tests::TServer::TPtr server, TActorId sender,
-                             const TString& tableFrom, const TRowVersion& snapshot, std::unique_ptr<TEvDataShard::TEvSampleKRequest>& ev) {
+Y_UNIT_TEST_SUITE(TTxDataShardSampleKScan) {
+    static void DoSampleKBad(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& tableFrom,
+        const TRowVersion& snapshot,
+        std::unique_ptr<TEvDataShard::TEvSampleKRequest>& ev
+    ) {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, tableFrom);
@@ -71,8 +76,14 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         }
     }
 
-    static TString DoSampleK(Tests::TServer::TPtr server, TActorId sender,
-                             const TString& tableFrom, const TRowVersion& snapshot, ui64 seed, ui64 k) {
+    static TString DoSampleK(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& tableFrom,
+        const TRowVersion& snapshot,
+        ui64 seed,
+        ui64 k
+    ) {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
         auto datashards = GetTableShards(server, sender, tableFrom);
@@ -136,7 +147,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         return data;
     }
 
-    Y_UNIT_TEST (RunScan) {
+    Y_UNIT_TEST(RunScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");
@@ -152,7 +163,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
         // Upsert some initial values
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);"
+        );
 
         auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"});
 
@@ -163,52 +178,58 @@ Y_UNIT_TEST_SUITE (TTxDataShardSampleKScan) {
         {
             k = 1;
             data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
-            UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 30, key = 3\n");
+            UNIT_ASSERT_VALUES_EQUAL(data, "value = 30, key = 3\n");
 
             k = 3;
             data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
-            UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 30, key = 3\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 50, key = 5\n");
+            UNIT_ASSERT_VALUES_EQUAL(
+                data,
+                "value = 30, key = 3\n"
+                "value = 20, key = 2\n"
+                "value = 50, key = 5\n"
+            );
 
             k = 9;
             data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
-            UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 30, key = 3\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 50, key = 5\n"
-                                     "value = 40, key = 4\n"
-                                     "value = 10, key = 1\n");
+            UNIT_ASSERT_VALUES_EQUAL(
+                data,
+                "value = 30, key = 3\n"
+                "value = 20, key = 2\n"
+                "value = 50, key = 5\n"
+                "value = 40, key = 4\n"
+                "value = 10, key = 1\n"
+            );
         }
         snapshot = {};
         seed = 111;
         {
             k = 1;
             data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
-            UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 10, key = 1\n");
+            UNIT_ASSERT_VALUES_EQUAL(data, "value = 10, key = 1\n");
 
             k = 3;
             data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
-            UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 10, key = 1\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 30, key = 3\n");
+            UNIT_ASSERT_VALUES_EQUAL(
+                data,
+                "value = 10, key = 1\n"
+                "value = 20, key = 2\n"
+                "value = 30, key = 3\n"
+            );
 
             k = 9;
             data = DoSampleK(server, sender, "/Root/table-1", snapshot, seed, k);
-            UNIT_ASSERT_VALUES_EQUAL(data,
-                                     "value = 10, key = 1\n"
-                                     "value = 20, key = 2\n"
-                                     "value = 30, key = 3\n"
-                                     "value = 50, key = 5\n"
-                                     "value = 40, key = 4\n");
+            UNIT_ASSERT_VALUES_EQUAL(
+                data,
+                "value = 10, key = 1\n"
+                "value = 20, key = 2\n"
+                "value = 30, key = 3\n"
+                "value = 50, key = 5\n"
+                "value = 40, key = 4\n"
+            );
         }
     }
 
-    Y_UNIT_TEST (ScanBadParameters) {
+    Y_UNIT_TEST(ScanBadParameters) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root");

@@ -11,4 +11,4 @@ TEvConfirmFromInitiator::TEvConfirmFromInitiator(const TString& sessionId) {
     *Record.MutableSessionId() = sessionId;
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing::NEvents

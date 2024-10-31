@@ -9,8 +9,10 @@ private:
     static TString GetClassNameStatic() {
         return "RANDOM";
     }
+
 protected:
-    virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 /*tabletId*/) const override {
+    virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 /*tabletId*/)
+        const override {
         return nullptr;
     }
 
@@ -21,7 +23,8 @@ protected:
         return TConclusionStatus::Success();
     }
 
-    virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& /*proto*/) const override {
+    virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& /*proto*/)
+        const override {
         return {};
     }
 
@@ -38,14 +41,16 @@ protected:
         }
         return TConclusionStatus::Success();
     }
+
 public:
     using TBase::TBase;
 
-    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch
+    ) const override;
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
 };
 
-}
+} // namespace NKikimr::NSharding

@@ -38,11 +38,11 @@ inline auto DefaultRetryableErrors() {
 
 inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::EStatus>& retryable) {
     switch (status.GetStatus()) {
-    case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
-    case NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED:
-        return false;
-    default:
-        return status.IsTransportError() || Find(retryable, status.GetStatus()) != retryable.end();
+        case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
+        case NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED:
+            return false;
+        default:
+            return status.IsTransportError() || Find(retryable, status.GetStatus()) != retryable.end();
     }
 }
 
@@ -51,4 +51,4 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
     return IsRetryableError(status, defaultRetryableErrors);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

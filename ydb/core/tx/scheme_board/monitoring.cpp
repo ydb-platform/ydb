@@ -31,9 +31,9 @@
 
 // additional html elements
 namespace NMonitoring {
-    const char NavTag[] = "nav";
-    using TNav = TTag<NavTag>;
-}
+const char NavTag[] = "nav";
+using TNav = TTag<NavTag>;
+} // namespace NMonitoring
 
 namespace NKikimr {
 namespace NSchemeBoard {
@@ -75,14 +75,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
         TActorInfo(EActivityType activityType, const TJsonMap& attributes)
             : ActivityType(activityType)
-            , Attributes(attributes)
-        {
-        }
+            , Attributes(attributes) {}
 
         TActorInfo(const TSchemeBoardMonEvents::TEvRegister& ev)
-            : TActorInfo(ev.ActivityType, ev.Attributes)
-        {
-        }
+            : TActorInfo(ev.ActivityType, ev.Attributes) {}
     };
 
     void Handle(TSchemeBoardMonEvents::TEvRegister::TPtr& ev) {
@@ -146,61 +142,60 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         }
 
         switch (requestType) {
-        case ERequestType::Index:
-            return str << ROOT;
-        case ERequestType::Populator:
-            return str << "populator";
-        case ERequestType::ReplicaPopulator:
-            return str << "replica_populator";
-        case ERequestType::Replica:
-            return str << "replica";
-        case ERequestType::Subscriber:
-            return str << "subscriber";
-        case ERequestType::SubscriberProxy:
-            return str << "subscriber_proxy";
-        case ERequestType::ReplicaSubscriber:
-            return str << "replica_subscriber";
-        case ERequestType::Cache:
-            return str << "cache";
-        case ERequestType::Describe:
-            return str << "describe";
-        case ERequestType::Resolver:
-            return str << "resolver";
-        case ERequestType::Resolve:
-            return str << "resolve";
-        case ERequestType::Unknown:
-            return str;
+            case ERequestType::Index:
+                return str << ROOT;
+            case ERequestType::Populator:
+                return str << "populator";
+            case ERequestType::ReplicaPopulator:
+                return str << "replica_populator";
+            case ERequestType::Replica:
+                return str << "replica";
+            case ERequestType::Subscriber:
+                return str << "subscriber";
+            case ERequestType::SubscriberProxy:
+                return str << "subscriber_proxy";
+            case ERequestType::ReplicaSubscriber:
+                return str << "replica_subscriber";
+            case ERequestType::Cache:
+                return str << "cache";
+            case ERequestType::Describe:
+                return str << "describe";
+            case ERequestType::Resolver:
+                return str << "resolver";
+            case ERequestType::Resolve:
+                return str << "resolve";
+            case ERequestType::Unknown:
+                return str;
         }
     }
 
     static EAttributeType ParseAttributeType(const TJsonValue& value) {
         switch (value.GetType()) {
-        case JSON_BOOLEAN:
-        case JSON_INTEGER:
-        case JSON_DOUBLE:
-        case JSON_UINTEGER:
-            return EAttributeType::Pod;
+            case JSON_BOOLEAN:
+            case JSON_INTEGER:
+            case JSON_DOUBLE:
+            case JSON_UINTEGER:
+                return EAttributeType::Pod;
 
-        case JSON_STRING:
-            return EAttributeType::String;
+            case JSON_STRING:
+                return EAttributeType::String;
 
-        case JSON_MAP:
-        {
-            const auto* type = value.GetMapSafe().FindPtr("@type");
+            case JSON_MAP: {
+                const auto* type = value.GetMapSafe().FindPtr("@type");
 
-            if (!type || type->GetType() != JSON_STRING) {
-                return EAttributeType::Unknown;
-            }
+                if (!type || type->GetType() != JSON_STRING) {
+                    return EAttributeType::Unknown;
+                }
 
-            if (type->GetStringSafe() == "ACTOR_ID") {
-                return EAttributeType::ActorId;
-            }
+                if (type->GetStringSafe() == "ACTOR_ID") {
+                    return EAttributeType::ActorId;
+                }
             // can not detenmine map type, fallback to unknown
-            [[fallthrough]];
-        }
+                [[fallthrough]];
+            }
 
-        default:
-            return EAttributeType::Unknown;
+            default:
+                return EAttributeType::Unknown;
         }
     }
 
@@ -302,7 +297,9 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 TAG(TH3) {
                     str << title;
                     if (subTitile) {
-                        SMALL() { str << " " << subTitile; }
+                        SMALL() {
+                            str << " " << subTitile;
+                        }
                     }
                 }
             }
@@ -359,9 +356,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static void CollapsedPanel(IOutputStream& str, const TStringBuf title, const TStringBuf targetId, TRenderer body) {
         auto titleRenderer = [&title, &targetId](IOutputStream& str) {
             HTML(str) {
-                str << "<a data-toggle='collapse' href='#" << targetId << "'>"
-                    << title
-                << "</a>";
+                str << "<a data-toggle='collapse' href='#" << targetId << "'>" << title << "</a>";
             }
         };
 
@@ -405,34 +400,48 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         }
     }
 
-    static void Link(IOutputStream& str, ERequestType requestType, const TStringBuf title, const TStringBuf prefix = "..") {
+    static void
+    Link(IOutputStream& str, ERequestType requestType, const TStringBuf title, const TStringBuf prefix = "..") {
         Link(str, MakeLink(requestType, prefix), title);
     }
 
-    static void Link(IOutputStream& str, EActivityType activityType, const TActorId& actorId, const TStringBuf prefix = "..") {
-        const TString path = TStringBuilder()
-            << MakeLink(ConvertActivityType(activityType), prefix)
-            << "/" << ActorIdToStringSafe(actorId);
+    static void
+    Link(IOutputStream& str, EActivityType activityType, const TActorId& actorId, const TStringBuf prefix = "..") {
+        const TString path = TStringBuilder() << MakeLink(ConvertActivityType(activityType), prefix) << "/"
+                                              << ActorIdToStringSafe(actorId);
         Link(str, path, actorId);
     }
 
-    static void Link(IOutputStream& str, EActivityType activityType, const NActorsProto::TActorId& actorId, const TStringBuf prefix = "..") {
+    static void Link(
+        IOutputStream& str,
+        EActivityType activityType,
+        const NActorsProto::TActorId& actorId,
+        const TStringBuf prefix = ".."
+    ) {
         Link(str, activityType, ActorIdFromProto(actorId), prefix);
     }
 
     template <typename T>
     static void TermDesc(IOutputStream& str, const TStringBuf term, const T& desc) {
         HTML(str) {
-            DT() { str << term; }
-            DD() { str << desc; }
+            DT() {
+                str << term;
+            }
+            DD() {
+                str << desc;
+            }
         }
     }
 
     template <typename T>
     static void TermDescLink(IOutputStream& str, const TStringBuf term, EActivityType activityType, const T& actorId) {
         HTML(str) {
-            DT() { str << term; }
-            DD() { Link(str, activityType, actorId); }
+            DT() {
+                str << term;
+            }
+            DD() {
+                Link(str, activityType, actorId);
+            }
         }
     }
 
@@ -442,7 +451,13 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         Both = ByPath | ByPathId,
     };
 
-    static void Form(IOutputStream& str, EFormType formType, ERequestType linkType, const TStringBuf linkPrefix, const TActorId& actorId) {
+    static void Form(
+        IOutputStream& str,
+        EFormType formType,
+        ERequestType linkType,
+        const TStringBuf linkPrefix,
+        const TActorId& actorId
+    ) {
         HTML(str) {
             FORM_CLASS("form-horizontal") {
                 const auto action = MakeLink(linkType, linkPrefix);
@@ -453,12 +468,14 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                             str << "Path";
                         }
                         DIV_CLASS("col-sm-8") {
-                            str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            str << "<input type='text' id='path' name='path' class='form-control' "
+                                   "placeholder='/full/path'>";
                         }
                         DIV_CLASS("col-sm-2") {
-                            str << "<button type='submit' name='byPath' formaction='" << action << "' class='btn btn-primary'>"
+                            str << "<button type='submit' name='byPath' formaction='" << action
+                                << "' class='btn btn-primary'>"
                                 << "Find by path"
-                            << "</button>";
+                                << "</button>";
                         }
                     }
                 }
@@ -469,15 +486,18 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                             str << "PathId";
                         }
                         DIV_CLASS("col-sm-4") {
-                            str << "<input type='number' id='ownerId' name='ownerId' class='form-control' placeholder='owner id'>";
+                            str << "<input type='number' id='ownerId' name='ownerId' class='form-control' "
+                                   "placeholder='owner id'>";
                         }
                         DIV_CLASS("col-sm-4") {
-                            str << "<input type='number' id='pathId' name='pathId' class='form-control' placeholder='local path id'>";
+                            str << "<input type='number' id='pathId' name='pathId' class='form-control' "
+                                   "placeholder='local path id'>";
                         }
                         DIV_CLASS("col-sm-2") {
-                            str << "<button type='submit' name='byPathId' formaction='" << action << "' class='btn btn-info'>"
+                            str << "<button type='submit' name='byPathId' formaction='" << action
+                                << "' class='btn btn-info'>"
                                 << "Find by path id"
-                            << "</button>";
+                                << "</button>";
                         }
                     }
                 }
@@ -538,9 +558,13 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 UL_CLASS("nav nav-pills") {
                     for (const auto& [rt, title] : requestTypeToTitle) {
                         if (rt == originRequestType) {
-                            LI_CLASS("active") { Link(str, "#", title); }
+                            LI_CLASS("active") {
+                                Link(str, "#", title);
+                            }
                         } else {
-                            LI() { Link(str, rt, title, isIndex ? ROOT : ".."); }
+                            LI() {
+                                Link(str, rt, title, isIndex ? ROOT : "..");
+                            }
                         }
                     }
                 }
@@ -564,12 +588,18 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                         TABLE_CLASS("table table-hover") {
                             TABLEHEAD() {
                                 TABLER() {
-                                    TABLEH() { str << "#"; }
-                                    TABLEH() { str << "Actor"; }
+                                    TABLEH() {
+                                        str << "#";
+                                    }
+                                    TABLEH() {
+                                        str << "Actor";
+                                    }
 
                                     Y_ABORT_UNLESS(!actorIds.empty());
                                     for (const auto& [key, _] : GetAttrs(*actorIds.begin())) {
-                                        TABLEH() { str << key; }
+                                        TABLEH() {
+                                            str << key;
+                                        }
                                     }
                                 }
                             }
@@ -577,27 +607,37 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                 int i = 1;
                                 for (const auto& actorId : actorIds) {
                                     TABLER() {
-                                        TABLED() { str << i++; }
-                                        TABLED() { Link(str, activityType, actorId, ROOT); }
+                                        TABLED() {
+                                            str << i++;
+                                        }
+                                        TABLED() {
+                                            Link(str, activityType, actorId, ROOT);
+                                        }
 
                                         for (const auto& [_, value] : GetAttrs(actorId)) {
                                             switch (ParseAttributeType(value)) {
-                                            case EAttributeType::Pod:
-                                                TABLED() { str << value; }
-                                                break;
+                                                case EAttributeType::Pod:
+                                                    TABLED() {
+                                                        str << value;
+                                                    }
+                                                    break;
 
-                                            case EAttributeType::String:
-                                                TABLED() { str << value.GetStringSafe(); }
-                                                break;
+                                                case EAttributeType::String:
+                                                    TABLED() {
+                                                        str << value.GetStringSafe();
+                                                    }
+                                                    break;
 
-                                            case EAttributeType::ActorId: {
-                                                const auto kv = ParseActorId(value.GetMapSafe());
-                                                TABLED() { Link(str, kv.first, kv.second, ROOT); }
-                                                break;
-                                            }
+                                                case EAttributeType::ActorId: {
+                                                    const auto kv = ParseActorId(value.GetMapSafe());
+                                                    TABLED() {
+                                                        Link(str, kv.first, kv.second, ROOT);
+                                                    }
+                                                    break;
+                                                }
 
-                                            case EAttributeType::Unknown:
-                                                break;
+                                                case EAttributeType::Unknown:
+                                                    break;
                                             }
                                         }
                                     }
@@ -628,16 +668,24 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { str << "#"; }
-                                TABLEH() { str << "Actor"; }
+                                TABLEH() {
+                                    str << "#";
+                                }
+                                TABLEH() {
+                                    str << "Actor";
+                                }
                             }
                         }
                         TABLEBODY() {
                             ui32 i = 0;
                             for (const auto& replica : replicas) {
                                 TABLER() {
-                                    TABLED() { str << ++i; }
-                                    TABLED() { Link(str, TActivity::SCHEME_BOARD_REPLICA_ACTOR, replica, ""); }
+                                    TABLED() {
+                                        str << ++i;
+                                    }
+                                    TABLED() {
+                                        Link(str, TActivity::SCHEME_BOARD_REPLICA_ACTOR, replica, "");
+                                    }
                                 }
                             }
                         }
@@ -680,11 +728,21 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { str << "#"; }
-                                TABLEH() { str << "Actor"; }
-                                TABLEH() { str << "Owner"; }
-                                TABLEH() { str << "Generation"; }
-                                TABLEH() { str << "PendingGeneration"; }
+                                TABLEH() {
+                                    str << "#";
+                                }
+                                TABLEH() {
+                                    str << "Actor";
+                                }
+                                TABLEH() {
+                                    str << "Owner";
+                                }
+                                TABLEH() {
+                                    str << "Generation";
+                                }
+                                TABLEH() {
+                                    str << "PendingGeneration";
+                                }
                             }
                         }
                         TABLEBODY() {
@@ -692,11 +750,23 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                 const auto& populator = response.GetPopulators(i);
 
                                 TABLER() {
-                                    TABLED() { str << (i + 1); }
-                                    TABLED() { Link(str, TActivity::SCHEME_BOARD_REPLICA_POPULATOR_ACTOR, populator.GetActorId()); }
-                                    TABLED() { str << populator.GetOwner(); }
-                                    TABLED() { str << populator.GetGeneration(); }
-                                    TABLED() { str << populator.GetPendingGeneration(); }
+                                    TABLED() {
+                                        str << (i + 1);
+                                    }
+                                    TABLED() {
+                                        Link(
+                                            str, TActivity::SCHEME_BOARD_REPLICA_POPULATOR_ACTOR, populator.GetActorId()
+                                        );
+                                    }
+                                    TABLED() {
+                                        str << populator.GetOwner();
+                                    }
+                                    TABLED() {
+                                        str << populator.GetGeneration();
+                                    }
+                                    TABLED() {
+                                        str << populator.GetPendingGeneration();
+                                    }
                                 }
                             }
                         }
@@ -709,9 +779,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { str << "#"; }
-                                TABLEH() { str << "Actor"; }
-                                TABLEH() { str << "Path"; }
+                                TABLEH() {
+                                    str << "#";
+                                }
+                                TABLEH() {
+                                    str << "Actor";
+                                }
+                                TABLEH() {
+                                    str << "Path";
+                                }
                             }
                         }
                         TABLEBODY() {
@@ -719,9 +795,19 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                 const auto& subscriber = response.GetSubscribers(i);
 
                                 TABLER() {
-                                    TABLED() { str << (i + 1); }
-                                    TABLED() { Link(str, TActivity::SCHEME_BOARD_REPLICA_SUBSCRIBER_ACTOR, subscriber.GetActorId()); }
-                                    TABLED() { str << GetPath(subscriber); }
+                                    TABLED() {
+                                        str << (i + 1);
+                                    }
+                                    TABLED() {
+                                        Link(
+                                            str,
+                                            TActivity::SCHEME_BOARD_REPLICA_SUBSCRIBER_ACTOR,
+                                            subscriber.GetActorId()
+                                        );
+                                    }
+                                    TABLED() {
+                                        str << GetPath(subscriber);
+                                    }
                                 }
                             }
                         }
@@ -766,8 +852,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { str << "#"; }
-                                TABLEH() { str << "Actor"; }
+                                TABLEH() {
+                                    str << "#";
+                                }
+                                TABLEH() {
+                                    str << "Actor";
+                                }
                             }
                         }
                         TABLEBODY() {
@@ -775,8 +865,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                 const auto& replicaPopulator = response.GetReplicaPopulators(i);
 
                                 TABLER() {
-                                    TABLED() { str << (i + 1); }
-                                    TABLED() { Link(str, TActivity::SCHEME_BOARD_REPLICA_POPULATOR_ACTOR, replicaPopulator); }
+                                    TABLED() {
+                                        str << (i + 1);
+                                    }
+                                    TABLED() {
+                                        Link(str, TActivity::SCHEME_BOARD_REPLICA_POPULATOR_ACTOR, replicaPopulator);
+                                    }
                                 }
                             }
                         }
@@ -789,10 +883,18 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { str << "#"; }
-                                TABLEH() { str << "Cookie"; }
-                                TABLEH() { str << "AckTo"; }
-                                TABLEH() { str << "PathId / Version / AcksCount"; }
+                                TABLEH() {
+                                    str << "#";
+                                }
+                                TABLEH() {
+                                    str << "Cookie";
+                                }
+                                TABLEH() {
+                                    str << "AckTo";
+                                }
+                                TABLEH() {
+                                    str << "PathId / Version / AcksCount";
+                                }
                             }
                         }
                         TABLEBODY() {
@@ -800,9 +902,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                 const auto& updateAck = response.GetUpdateAcks(i);
 
                                 TABLER() {
-                                    TABLED() { str << (i + 1); }
-                                    TABLED() { str << updateAck.GetCookie(); }
-                                    TABLED() { str << ActorIdFromProto(updateAck.GetAckTo()); }
+                                    TABLED() {
+                                        str << (i + 1);
+                                    }
+                                    TABLED() {
+                                        str << updateAck.GetCookie();
+                                    }
+                                    TABLED() {
+                                        str << ActorIdFromProto(updateAck.GetAckTo());
+                                    }
                                     TABLED() {
                                         TABLE_CLASS("table table-condensed") {
                                             TABLEBODY() {
@@ -810,9 +918,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                                     const auto& pathAck = updateAck.GetPathAcks(i);
 
                                                     TABLER() {
-                                                        TABLED() { str << PathIdFromProto(pathAck.GetPathId()); }
-                                                        TABLED() { str << pathAck.GetVersion(); }
-                                                        TABLED() { str << pathAck.GetAcksCount(); }
+                                                        TABLED() {
+                                                            str << PathIdFromProto(pathAck.GetPathId());
+                                                        }
+                                                        TABLED() {
+                                                            str << pathAck.GetVersion();
+                                                        }
+                                                        TABLED() {
+                                                            str << pathAck.GetAcksCount();
+                                                        }
                                                     }
                                                 }
                                             }
@@ -862,9 +976,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                         TABLE_CLASS("table table-hover") {
                             TABLEHEAD() {
                                 TABLER() {
-                                    TABLEH() { str << "#"; }
-                                    TABLEH() { str << "PathId"; }
-                                    TABLEH() { str << "Version / TxIds"; }
+                                    TABLEH() {
+                                        str << "#";
+                                    }
+                                    TABLEH() {
+                                        str << "PathId";
+                                    }
+                                    TABLEH() {
+                                        str << "Version / TxIds";
+                                    }
                                 }
                             }
                             TABLEBODY() {
@@ -872,8 +992,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                     const auto& update = updates[i];
 
                                     TABLER() {
-                                        TABLED() { str << (i + 1); }
-                                        TABLED() { str << PathIdFromProto(update.GetPathId()); }
+                                        TABLED() {
+                                            str << (i + 1);
+                                        }
+                                        TABLED() {
+                                            str << PathIdFromProto(update.GetPathId());
+                                        }
                                         TABLED() {
                                             TABLE_CLASS("table table-condensed") {
                                                 TABLEBODY() {
@@ -881,8 +1005,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                                         const auto& version = update.GetVersions(i);
 
                                                         TABLER() {
-                                                            TABLED() { str << version.GetVersion(); }
-                                                            TABLED() { str << JoinSeq(", ", version.GetTxIds()); }
+                                                            TABLED() {
+                                                                str << version.GetVersion();
+                                                            }
+                                                            TABLED() {
+                                                                str << JoinSeq(", ", version.GetTxIds());
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -933,7 +1061,9 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                         TermDesc(str, "PathId", PathIdFromProto(response.GetState().GetPathId()));
                         TermDesc(str, "Version", response.GetState().GetVersion());
                         TermDesc(str, "DomainId", PathIdFromProto(response.GetState().GetDomainId()));
-                        TermDesc(str, "AbandonedSchemeShards", JoinSeq(", ", response.GetState().GetAbandonedSchemeShards()));
+                        TermDesc(
+                            str, "AbandonedSchemeShards", JoinSeq(", ", response.GetState().GetAbandonedSchemeShards())
+                        );
                     }
                 }
             });
@@ -943,14 +1073,30 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     TABLE_CLASS("table table-hover") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() { str << "#"; }
-                                TABLEH() { str << "Actor"; }
-                                TABLEH() { str << "Deleted"; }
-                                TABLEH() { str << "Strong"; }
-                                TABLEH() { str << "PathId"; }
-                                TABLEH() { str << "Version"; }
-                                TABLEH() { str << "DomainId"; }
-                                TABLEH() { str << "AbandonedSchemeShards"; }
+                                TABLEH() {
+                                    str << "#";
+                                }
+                                TABLEH() {
+                                    str << "Actor";
+                                }
+                                TABLEH() {
+                                    str << "Deleted";
+                                }
+                                TABLEH() {
+                                    str << "Strong";
+                                }
+                                TABLEH() {
+                                    str << "PathId";
+                                }
+                                TABLEH() {
+                                    str << "Version";
+                                }
+                                TABLEH() {
+                                    str << "DomainId";
+                                }
+                                TABLEH() {
+                                    str << "AbandonedSchemeShards";
+                                }
                             }
                         }
                         TABLEBODY() {
@@ -959,14 +1105,30 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                                 const auto& state = proxy.GetState();
 
                                 TABLER() {
-                                    TABLED() { str << (i + 1); }
-                                    TABLED() { Link(str, TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR, proxy.GetProxy()); }
-                                    TABLED() { str << state.GetDeleted(); }
-                                    TABLED() { str << state.GetStrong(); }
-                                    TABLED() { str << PathIdFromProto(state.GetPathId()); }
-                                    TABLED() { str << state.GetVersion(); }
-                                    TABLED() { str << PathIdFromProto(state.GetDomainId()); }
-                                    TABLED() { str << JoinSeq(", ", state.GetAbandonedSchemeShards()); }
+                                    TABLED() {
+                                        str << (i + 1);
+                                    }
+                                    TABLED() {
+                                        Link(str, TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR, proxy.GetProxy());
+                                    }
+                                    TABLED() {
+                                        str << state.GetDeleted();
+                                    }
+                                    TABLED() {
+                                        str << state.GetStrong();
+                                    }
+                                    TABLED() {
+                                        str << PathIdFromProto(state.GetPathId());
+                                    }
+                                    TABLED() {
+                                        str << state.GetVersion();
+                                    }
+                                    TABLED() {
+                                        str << PathIdFromProto(state.GetDomainId());
+                                    }
+                                    TABLED() {
+                                        str << JoinSeq(", ", state.GetAbandonedSchemeShards());
+                                    }
                                 }
                             }
                         }
@@ -992,7 +1154,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                     DL_CLASS("dl-horizontal") {
                         TermDescLink(str, "Parent", TActivity::SCHEME_BOARD_SUBSCRIBER_ACTOR, response.GetParent());
                         TermDescLink(str, "Replica", TActivity::SCHEME_BOARD_REPLICA_ACTOR, response.GetReplica());
-                        TermDescLink(str, "ReplicaSubscriber", TActivity::SCHEME_BOARD_REPLICA_SUBSCRIBER_ACTOR, response.GetReplicaSubscriber());
+                        TermDescLink(
+                            str,
+                            "ReplicaSubscriber",
+                            TActivity::SCHEME_BOARD_REPLICA_SUBSCRIBER_ACTOR,
+                            response.GetReplicaSubscriber()
+                        );
                         TermDesc(str, "DomainOwnerId", response.GetDomainOwnerId());
                         TermDesc(str, "CurrentSyncRequest", response.GetCurrentSyncRequest());
                         TermDesc(str, "Path", GetPath(response));
@@ -1016,7 +1183,9 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             SimplePanel(str, "Info", [&response](IOutputStream& str) {
                 HTML(str) {
                     DL_CLASS("dl-horizontal") {
-                        TermDescLink(str, "Parent", TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR, response.GetParent());
+                        TermDescLink(
+                            str, "Parent", TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR, response.GetParent()
+                        );
                         TermDescLink(str, "Replica", TActivity::SCHEME_BOARD_REPLICA_ACTOR, response.GetReplica());
                         TermDesc(str, "DomainOwnerId", response.GetDomainOwnerId());
                         TermDesc(str, "CurrentSyncRequest", response.GetCurrentSyncRequest());
@@ -1062,8 +1231,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     template <typename TDerived, typename TEvResponse>
     class TBaseRequester: public TActorBootstrapped<TDerived> {
         static constexpr char HTTPBADGATEWAY[] = "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nBad Gateway\r\n";
-        static constexpr char HTTPUNAVAILABLE[] = "HTTP/1.1 503 Service Unavailable\r\nConnection: Close\r\n\r\nService Unavailable\r\n";
-        static constexpr char HTTPTIMEOUT[] = "HTTP/1.1 504 Gateway Timeout\r\nConnection: Close\r\n\r\nGateway Timeout\r\n";
+        static constexpr char HTTPUNAVAILABLE[] =
+            "HTTP/1.1 503 Service Unavailable\r\nConnection: Close\r\n\r\nService Unavailable\r\n";
+        static constexpr char HTTPTIMEOUT[] =
+            "HTTP/1.1 504 Gateway Timeout\r\nConnection: Close\r\n\r\nGateway Timeout\r\n";
 
     protected:
         virtual IEventBase* MakeRequest() const = 0;
@@ -1097,9 +1268,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
         explicit TBaseRequester(const TActorId& requestFrom, const TActorId& replyTo)
             : RequestFrom(requestFrom)
-            , ReplyTo(replyTo)
-        {
-        }
+            , ReplyTo(replyTo) {}
 
         void Bootstrap() {
             this->Send(RequestFrom, MakeRequest(), IEventHandle::FlagTrackDelivery);
@@ -1138,21 +1307,19 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
 
     public:
         explicit TReplicaEnumerator(const TActorId& replyTo)
-            : TBase(MakeStateStorageProxyId(), replyTo)
-        {
-        }
+            : TBase(MakeStateStorageProxyId(), replyTo) {}
 
     }; // TReplicaEnumerator
 
     class TReplicaResolver: public TBaseRequester<TReplicaResolver, TEvStateStorage::TEvResolveReplicasList> {
         IEventBase* MakeRequest() const override {
             switch (Path.index()) {
-            case 0:
-                return new TEvStateStorage::TEvResolveSchemeBoard(std::get<TString>(Path));
-            case 1:
-                return new TEvStateStorage::TEvResolveSchemeBoard(std::get<TPathId>(Path));
-            default:
-                Y_ABORT("unreachable");
+                case 0:
+                    return new TEvStateStorage::TEvResolveSchemeBoard(std::get<TString>(Path));
+                case 1:
+                    return new TEvStateStorage::TEvResolveSchemeBoard(std::get<TPathId>(Path));
+                default:
+                    Y_ABORT("unreachable");
             }
         }
 
@@ -1173,9 +1340,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         template <typename T>
         explicit TReplicaResolver(const TActorId& requestFrom, const TActorId& replyTo, const T& path)
             : TBase(requestFrom, replyTo)
-            , Path(path)
-        {
-        }
+            , Path(path) {}
 
     private:
         std::variant<TString, TPathId> Path;
@@ -1191,22 +1356,22 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
             const auto& record = ev->Get()->Record;
 
             switch (record.GetResponseCase()) {
-            case NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaResponse:
-                return Reply(RenderReplica(record));
-            case NKikimrSchemeBoardMon::TEvInfoResponse::kPopulatorResponse:
-                return Reply(RenderPopulator(record));
-            case NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaPopulatorResponse:
-                return Reply(RenderReplicaPopulator(record));
-            case NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberResponse:
-                return Reply(RenderSubscriber(record));
-            case NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberProxyResponse:
-                return Reply(RenderSubscriberProxy(record));
-            case NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaSubscriberResponse:
-                return Reply(RenderReplicaSubscriber(record));
-            case NKikimrSchemeBoardMon::TEvInfoResponse::kCacheResponse:
-                return Reply(RenderCache(record));
-            default:
-                return BadGateway();
+                case NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaResponse:
+                    return Reply(RenderReplica(record));
+                case NKikimrSchemeBoardMon::TEvInfoResponse::kPopulatorResponse:
+                    return Reply(RenderPopulator(record));
+                case NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaPopulatorResponse:
+                    return Reply(RenderReplicaPopulator(record));
+                case NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberResponse:
+                    return Reply(RenderSubscriber(record));
+                case NKikimrSchemeBoardMon::TEvInfoResponse::kSubscriberProxyResponse:
+                    return Reply(RenderSubscriberProxy(record));
+                case NKikimrSchemeBoardMon::TEvInfoResponse::kReplicaSubscriberResponse:
+                    return Reply(RenderReplicaSubscriber(record));
+                case NKikimrSchemeBoardMon::TEvInfoResponse::kCacheResponse:
+                    return Reply(RenderCache(record));
+                default:
+                    return BadGateway();
             }
         }
 
@@ -1218,12 +1383,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     class TDescriber: public TBaseRequester<TDescriber, TSchemeBoardMonEvents::TEvDescribeResponse> {
         IEventBase* MakeRequest() const override {
             switch (Path.index()) {
-            case 0:
-                return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TString>(Path));
-            case 1:
-                return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TPathId>(Path));
-            default:
-                Y_ABORT("unreachable");
+                case 0:
+                    return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TString>(Path));
+                case 1:
+                    return new TSchemeBoardMonEvents::TEvDescribeRequest(std::get<TPathId>(Path));
+                default:
+                    Y_ABORT("unreachable");
             }
         }
 
@@ -1236,9 +1401,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         template <typename T>
         explicit TDescriber(const TActorId& requestFrom, const TActorId& replyTo, const T& path)
             : TBase(requestFrom, replyTo)
-            , Path(path)
-        {
-        }
+            , Path(path) {}
 
     private:
         std::variant<TString, TPathId> Path;
@@ -1267,40 +1430,40 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         const auto& params = request.GetParams();
 
         switch (ParseRequestType(request.GetPathInfo())) {
-        case ERequestType::Index:
-            return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderIndex()));
+            case ERequestType::Index:
+                return (void)Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderIndex()));
 
-        case ERequestType::Populator:
-        case ERequestType::ReplicaPopulator:
-        case ERequestType::Replica:
-        case ERequestType::Subscriber:
-        case ERequestType::SubscriberProxy:
-        case ERequestType::ReplicaSubscriber:
-        case ERequestType::Cache:
-            if (const auto actorId = ParseActorIdFromPath(request.GetPathInfo())) {
-                return (void)Register(new TInfoRequester(actorId, ev->Sender));
-            }
-            break;
+            case ERequestType::Populator:
+            case ERequestType::ReplicaPopulator:
+            case ERequestType::Replica:
+            case ERequestType::Subscriber:
+            case ERequestType::SubscriberProxy:
+            case ERequestType::ReplicaSubscriber:
+            case ERequestType::Cache:
+                if (const auto actorId = ParseActorIdFromPath(request.GetPathInfo())) {
+                    return (void)Register(new TInfoRequester(actorId, ev->Sender));
+                }
+                break;
 
-        case ERequestType::Describe:
-            if (const auto actorId = ParseActorId(TStringBuf(params.Get("actorId")))) {
-                if (RunFormAction<TDescriber>(actorId, ev->Sender, params)) {
+            case ERequestType::Describe:
+                if (const auto actorId = ParseActorId(TStringBuf(params.Get("actorId")))) {
+                    if (RunFormAction<TDescriber>(actorId, ev->Sender, params)) {
+                        return;
+                    }
+                }
+                break;
+
+            case ERequestType::Resolver:
+                return (void)Register(new TReplicaEnumerator(ev->Sender));
+
+            case ERequestType::Resolve:
+                if (RunFormAction<TReplicaResolver>(MakeStateStorageProxyId(), ev->Sender, params)) {
                     return;
                 }
-            }
-            break;
+                break;
 
-        case ERequestType::Resolver:
-            return (void)Register(new TReplicaEnumerator(ev->Sender));
-
-        case ERequestType::Resolve:
-            if (RunFormAction<TReplicaResolver>(MakeStateStorageProxyId(), ev->Sender, params)) {
-                return;
-            }
-            break;
-
-        case ERequestType::Unknown:
-            break;
+            case ERequestType::Unknown:
+                break;
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND, 0, EContentType::Custom));
@@ -1314,8 +1477,9 @@ public:
     void Bootstrap() {
         if (auto* mon = AppData()->Mon) {
             auto* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, ROOT, "Scheme Board",
-                false, TlsActivationContext->ActorSystem(), SelfId());
+            mon->RegisterActorPage(
+                actorsMonPage, ROOT, "Scheme Board", false, TlsActivationContext->ActorSystem(), SelfId()
+            );
         }
 
         Become(&TThis::StateWork);
@@ -1338,10 +1502,10 @@ private:
 
 }; // TMonitoring
 
-} // NSchemeBoard
+} // namespace NSchemeBoard
 
 IActor* CreateSchemeBoardMonitoring() {
     return new NSchemeBoard::TMonitoring();
 }
 
-} // NKikimr
+} // namespace NKikimr

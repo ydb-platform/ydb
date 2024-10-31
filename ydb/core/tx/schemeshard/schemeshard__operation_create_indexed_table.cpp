@@ -11,7 +11,8 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
 
-TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
 
     auto indexedTable = tx.GetCreateIndexedTable();
@@ -40,9 +41,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     {
         auto checks = workingDir.Check();
-        checks
-            .IsResolved()
-            .FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
+        checks.IsResolved().FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir());
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
@@ -52,13 +51,15 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
     {
         TString msg = "invalid table name: ";
-        if(!baseTablePath.IsValidLeafName(msg)) {
+        if (!baseTablePath.IsValidLeafName(msg)) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
         }
     }
 
     if (baseTableDescription.GetIsBackup()) {
-        return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter, "Cannot create table with explicit 'IsBackup' property")};
+        return {CreateReject(
+            nextId, NKikimrScheme::StatusInvalidParameter, "Cannot create table with explicit 'IsBackup' property"
+        )};
     }
 
     TSubDomainInfo::TPtr domainInfo = baseTablePath.DomainInfo();
@@ -77,18 +78,16 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
     if (indexesCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
-        auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
-                                    << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
-                                    << ", intention to create new children: " << indexesCount;
+        auto msg =
+            TStringBuilder() << "indexes count has reached maximum value in the table"
+                             << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
+                             << ", intention to create new children: " << indexesCount;
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
     {
         auto checks = baseTablePath.Check();
-        checks
-            .PathShardsLimit(baseShards)
-            .PathsLimit(pathToCreate)
-            .ShardsLimit(shardsToCreate);
+        checks.PathShardsLimit(baseShards).PathsLimit(pathToCreate).ShardsLimit(shardsToCreate);
 
         if (!checks) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, checks.GetError())};
@@ -98,7 +97,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     THashMap<TString, TTableColumns> indexes;
 
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
-    for (auto& indexDescription: indexedTable.GetIndexDescription()) {
+    for (auto& indexDescription : indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
         bool uniformIndexTable = false;
         if (indexDescription.IndexImplTableDescriptionsSize()) {
@@ -116,14 +115,23 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         if (indexes.contains(indexName)) {
-            TString msg = TStringBuilder() << "Can't create indexes with not unique names for table, for example: " << indexDescription.GetName();
+            TString msg = TStringBuilder() << "Can't create indexes with not unique names for table, for example: "
+                                           << indexDescription.GetName();
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
         TTableColumns implTableColumns;
         NKikimrScheme::EStatus status;
         TString errStr;
-        if (!CommonCheck(baseTableDescription, indexDescription, domainInfo->GetSchemeLimits(), uniformIndexTable, implTableColumns, status, errStr)) {
+        if (!CommonCheck(
+                baseTableDescription,
+                indexDescription,
+                domainInfo->GetSchemeLimits(),
+                uniformIndexTable,
+                implTableColumns,
+                status,
+                errStr
+            )) {
             return {CreateReject(nextId, status, errStr)};
         }
 
@@ -143,7 +151,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         if (indexes.contains(sequenceName) || sequences.contains(sequenceName)) {
-            TString msg = TStringBuilder() << "Can't create sequences with non-unique names for table, for example: " << sequenceName;
+            TString msg = TStringBuilder()
+                          << "Can't create sequences with non-unique names for table, for example: " << sequenceName;
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
         }
 
@@ -162,7 +171,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     for (auto& column : baseTableDescription.GetColumns()) {
         if (column.GetNotNull()) {
-            bool isPrimaryKey =  keys.contains(column.GetName());
+            bool isPrimaryKey = keys.contains(column.GetName());
 
             if (isPrimaryKey && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
                 TString msg = TStringBuilder() << "It is not allowed to create not null pk: " << column.GetName();
@@ -170,7 +179,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             }
 
             if (!isPrimaryKey && !AppData()->FeatureFlags.GetEnableNotNullDataColumns()) {
-                TString msg = TStringBuilder() << "It is not allowed to create not null data column: " << column.GetName();
+                TString msg = TStringBuilder()
+                              << "It is not allowed to create not null data column: " << column.GetName();
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
             }
         }
@@ -179,16 +189,14 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             const TString& sequenceName = column.GetDefaultFromSequence();
 
             if (sequenceName.StartsWith('/')) {
-                TString msg = TStringBuilder()
-                    << "Using non-local sequences in tables not supported, e.g. column '"
-                    << column.GetName() << "' using sequence '" << sequenceName << "'";
+                TString msg = TStringBuilder() << "Using non-local sequences in tables not supported, e.g. column '"
+                                               << column.GetName() << "' using sequence '" << sequenceName << "'";
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
             }
 
             if (!sequences.contains(sequenceName)) {
-                TString msg = TStringBuilder()
-                    << "Cannot specify default from an unknown sequence, e.g. column '"
-                    << column.GetName() << "' using sequence '" << sequenceName << "'";
+                TString msg = TStringBuilder() << "Cannot specify default from an unknown sequence, e.g. column '"
+                                               << column.GetName() << "' using sequence '" << sequenceName << "'";
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
             }
         }
@@ -212,17 +220,19 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         result.push_back(CreateNewTable(NextPartId(nextId, result), scheme, sequences));
     }
 
-    for (auto& indexDescription: indexedTable.GetIndexDescription()) {
-
-        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree && !context.SS->EnableVectorIndex) {
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+    for (auto& indexDescription : indexedTable.GetIndexDescription()) {
+        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree &&
+            !context.SS->EnableVectorIndex) {
+            return {CreateReject(
+                nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled"
+            )};
         }
-
 
         {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
-                NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
+                NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex
+            );
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
             scheme.SetInternal(tx.GetInternal());
@@ -240,16 +250,17 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
-        auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        auto createIndexImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
-                NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+                NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable
+            );
             scheme.SetFailOnExist(tx.GetFailOnExist());
             scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
             *scheme.MutableCreateTable() = std::move(implTableDesc);
 
-            return CreateNewTable(NextPartId(nextId, result), scheme);    
+            return CreateNewTable(NextPartId(nextId, result), scheme);
         };
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
@@ -260,9 +271,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
             }
-                
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc)));
+
+            result.push_back(createIndexImplTable(
+                CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)
+            ));
+            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(
+                baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPostingDesc
+            )));
         } else {
             NKikimrSchemeOp::TTableDescription userIndexDesc;
             if (indexDescription.IndexImplTableDescriptionsSize()) {
@@ -270,14 +285,17 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
             }
 
-            result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
+            result.push_back(
+                createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc))
+            );
         }
     }
 
     for (auto& sequenceDescription : indexedTable.GetSequenceDescription()) {
         auto scheme = TransactionTemplate(
             tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
-            NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+            NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence
+        );
         scheme.SetFailOnExist(tx.GetFailOnExist());
         scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
 
@@ -289,4 +307,4 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

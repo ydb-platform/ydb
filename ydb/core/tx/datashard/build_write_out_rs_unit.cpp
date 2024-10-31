@@ -18,7 +18,7 @@ using namespace NMiniKQL;
 #define LOG_C(stream) LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 
-class TBuildWriteOutRSUnit : public TExecutionUnit {
+class TBuildWriteOutRSUnit: public TExecutionUnit {
 public:
     TBuildWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TBuildWriteOutRSUnit() override;
@@ -40,9 +40,8 @@ bool TBuildWriteOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
-    const TActorContext& ctx)
-{
+EExecutionStatus
+TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto writeTx = writeOp->GetWriteTx();
     Y_ABORT_UNLESS(writeTx);
@@ -82,7 +81,10 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
         LOG_C("Exception while preparing out-readsets for KQP transaction " << *op << " at " << DataShard.TabletID() << ": " << e.what());
         if (op->IsImmediate()) {
             writeOp->ReleaseTxData(txc);
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Tx was terminated: " << e.what());
+            writeOp->SetError(
+                NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR,
+                TStringBuilder() << "Tx was terminated: " << e.what()
+            );
             return EExecutionStatus::Executed;
         } else {
             Y_FAIL_S("Unexpected exception in KQP out-readsets prepare: " << e.what());
@@ -94,8 +96,8 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
 
 void TBuildWriteOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-EExecutionStatus TBuildWriteOutRSUnit::OnTabletNotReady(TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx)
-{
+EExecutionStatus
+TBuildWriteOutRSUnit::OnTabletNotReady(TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
     LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
 
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);

@@ -47,4 +47,4 @@ NJson::TJsonValue TSnapshot::SerializeToJson() const {
     return DebugJson();
 }
 
-};
+}; // namespace NKikimr::NOlap

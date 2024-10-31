@@ -3,7 +3,9 @@
 
 namespace NKikimr::NOlap {
 NKikimrSchemeOp::TColumnTableSchemaDiff TSchemaDiffView::MakeSchemasDiff(
-    const NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchema& next) {
+    const NKikimrSchemeOp::TColumnTableSchema& current,
+    const NKikimrSchemeOp::TColumnTableSchema& next
+) {
     NKikimrSchemeOp::TColumnTableSchemaDiff result;
     result.SetVersion(next.GetVersion());
     *result.MutableDefaultCompression() = next.GetDefaultCompression();
@@ -82,9 +84,12 @@ ui64 TSchemaDiffView::GetVersion() const {
     return Version;
 }
 
-void TSchemaDiffView::ApplyForColumns(const std::vector<ui32>& originalColumnIds,
+void TSchemaDiffView::ApplyForColumns(
+    const std::vector<ui32>& originalColumnIds,
     const std::function<void(const ui32 originalIndex)>& addFromOriginal,
-    const std::function<void(const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex)>& addFromDiff) const {
+    const std::function<
+        void(const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex)>& addFromDiff
+) const {
     auto it = ModifiedColumns.begin();
     ui32 i = 0;
     while (i < originalColumnIds.size() || it != ModifiedColumns.end()) {

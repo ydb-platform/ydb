@@ -11,9 +11,7 @@ class TController::TTxAssignStreamName: public TTxBase {
 public:
     explicit TTxAssignStreamName(TController* self, TEvPrivate::TEvAssignStreamName::TPtr& ev)
         : TTxBase("TxAssignStreamName", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_ASSIGN_STREAM_NAME;
@@ -76,4 +74,4 @@ void TController::RunTxAssignStreamName(TEvPrivate::TEvAssignStreamName::TPtr& e
     Execute(new TTxAssignStreamName(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

@@ -12,9 +12,9 @@ constexpr ui64 MEMORY_REQUEST_FACTOR = 8;
 constexpr ui64 MAX_REORDER_TX_KEYS = 100;
 
 namespace NLimits {
-    static constexpr ui64 MaxWriteKeySize = 1024 * 1024 + 1024; // 1MB + small delta (for old ugc tests)
-    static constexpr ui64 MaxWriteValueSize = 16 * 1024 * 1024; // 16MB
-}
+static constexpr ui64 MaxWriteKeySize = 1024 * 1024 + 1024; // 1MB + small delta (for old ugc tests)
+static constexpr ui64 MaxWriteValueSize = 16 * 1024 * 1024; // 16MB
+} // namespace NLimits
 
 } // namespace NDataShard
 } // namespace NKikimr

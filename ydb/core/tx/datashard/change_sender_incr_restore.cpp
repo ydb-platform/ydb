@@ -25,8 +25,7 @@ class TIncrRestoreChangeSenderMain
     , private TSchemeChecksMixin<TIncrRestoreChangeSenderMain>
     , private TResolveUserTableState<TIncrRestoreChangeSenderMain>
     , private TResolveTargetTableState<TIncrRestoreChangeSenderMain>
-    , private TResolveKeysState<TIncrRestoreChangeSenderMain>
-{
+    , private TResolveKeysState<TIncrRestoreChangeSenderMain> {
     friend struct TSchemeChecksMixin;
 
     USE_STATE(ResolveUserTable);
@@ -35,10 +34,9 @@ class TIncrRestoreChangeSenderMain
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[IncrRestoreChangeSenderMain]"
-                << "[" << GetChangeSenderIdentity() << "]" // maybe better add something else
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[IncrRestoreChangeSenderMain]"
+                                         << "[" << GetChangeSenderIdentity() << "]" // maybe better add something else
+                                         << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -51,9 +49,7 @@ class TIncrRestoreChangeSenderMain
     }
 
     bool IsResolving() const override {
-        return IsResolveUserTableState()
-            || IsResolveTargetTableState()
-            || IsResolveKeysState();
+        return IsResolveUserTableState() || IsResolveTargetTableState() || IsResolveKeysState();
     }
 
     TStringBuf CurrentStateName() const {
@@ -127,12 +123,8 @@ class TIncrRestoreChangeSenderMain
 
     IActor* CreateSender(ui64 partitionId) const override {
         return CreateTableChangeSenderShard(
-            SelfId(),
-            DataShard,
-            partitionId,
-            TargetTablePathId,
-            TagMap,
-            ETableChangeSenderType::IncrementalRestore);
+            SelfId(), DataShard, partitionId, TargetTablePathId, TagMap, ETableChangeSenderType::IncrementalRestore
+        );
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -191,15 +183,18 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_INCR_RESTORE_ACTOR_MAIN;
     }
 
-    explicit TIncrRestoreChangeSenderMain(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& targetPathId)
+    explicit TIncrRestoreChangeSenderMain(
+        const TActorId& changeServerActor,
+        const TDataShardId& dataShard,
+        const TTableId& userTableId,
+        const TPathId& targetPathId
+    )
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, changeServerActor)
         , DataShard(dataShard)
         , UserTableId(userTableId)
         , TargetTablePathId(targetPathId)
-        , TargetTableVersion(0)
-    {
-    }
+        , TargetTableVersion(0) {}
 
     void Bootstrap() {
         ResolveUserTable();
@@ -237,7 +232,12 @@ private:
     bool FirstServe = false;
 }; // TIncrRestoreChangeSenderMain
 
-IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& restoreTargetPathId) {
+IActor* CreateIncrRestoreChangeSender(
+    const TActorId& changeServerActor,
+    const TDataShardId& dataShard,
+    const TTableId& userTableId,
+    const TPathId& restoreTargetPathId
+) {
     return new TIncrRestoreChangeSenderMain(changeServerActor, dataShard, userTableId, restoreTargetPathId);
 }
 

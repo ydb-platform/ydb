@@ -22,7 +22,10 @@ protected:
         return Buckets.IsLocked(dataLocksManager);
     }
 
-    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(
+        const THashMap<ui64, TPortionInfo::TPtr>& add,
+        const THashMap<ui64, TPortionInfo::TPtr>& remove
+    ) override {
         for (auto&& [_, i] : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
                 continue;
@@ -43,7 +46,9 @@ protected:
         }
     }
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
-        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager
+    ) const override {
         return Buckets.BuildOptimizationTask(granule, locksManager);
     }
     virtual void DoActualize(const TInstant currentInstant) override {
@@ -73,8 +78,12 @@ public:
         Buckets.ResetLogic(logic);
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IOptimizationLogic>& logic);
+    TOptimizerPlanner(
+        const ui64 pathId,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const std::shared_ptr<IOptimizationLogic>& logic
+    );
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets

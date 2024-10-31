@@ -6,32 +6,33 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
 
-
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TConfigureParts : public TSubOperationState {
+class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCopySequence TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCopySequence TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvHive::TEvCreateTabletReply::EventType,
+            }
+        );
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr& ev, TOperationContext& context)
+        override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -130,24 +131,24 @@ public:
     }
 };
 
-
 class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCopySequence TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TCopySequence TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            }
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -218,19 +219,20 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCopySequence TCopyTableBarrier"
-                << " operationId: " << OperationId;
+        return TStringBuilder() << "TCopySequence TCopyTableBarrier"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TCopyTableBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType,
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvPrivate::TEvOperationPlan::EventType,
+                NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            }
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
@@ -263,15 +265,14 @@ public:
     }
 };
 
-class TProposedCopySequence : public TSubOperationState {
+class TProposedCopySequence: public TSubOperationState {
 private:
     TOperationId OperationId;
     NKikimrTxSequenceShard::TEvGetSequenceResult GetSequenceResult;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCopySequence TProposedCopySequence"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCopySequence TProposedCopySequence"
+                                << " operationId#" << OperationId;
     }
 
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
@@ -288,16 +289,19 @@ private:
 
 public:
     TProposedCopySequence(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType,
-            TEvPrivate::TEvCompleteBarrier::EventType,
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvPrivate::TEvOperationPlan::EventType,
+                TEvPrivate::TEvCompleteBarrier::EventType,
+                NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            }
+        );
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvRestoreSequenceResult::TPtr& ev, TOperationContext& context)
+        override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -311,7 +315,8 @@ public:
 
         switch (status) {
             case NKikimrTxSequenceShard::TEvRestoreSequenceResult::SUCCESS:
-            case NKikimrTxSequenceShard::TEvRestoreSequenceResult::SEQUENCE_ALREADY_ACTIVE: break;
+            case NKikimrTxSequenceShard::TEvRestoreSequenceResult::SEQUENCE_ALREADY_ACTIVE:
+                break;
             default:
                 // Treat all other replies as unexpected and spurious
                 LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -359,7 +364,8 @@ public:
         return true;
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvGetSequenceResult::TPtr& ev, TOperationContext& context)
+        override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -372,7 +378,8 @@ public:
                     << " at tablet " << ssId);
 
         switch (status) {
-            case NKikimrTxSequenceShard::TEvGetSequenceResult::SUCCESS: break;
+            case NKikimrTxSequenceShard::TEvGetSequenceResult::SUCCESS:
+                break;
             default:
                 // Treat all other replies as unexpected and spurious
                 LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -417,7 +424,8 @@ public:
             Y_ABORT_UNLESS(currentTabletId != InvalidTabletId);
 
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvRestoreSequence>(
-                txState->TargetPathId, GetSequenceResult);
+                txState->TargetPathId, GetSequenceResult
+            );
 
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
@@ -475,26 +483,25 @@ public:
 };
 
 class TCopySequence: public TSubOperation {
-
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::CopyTableBarrier;
-        case TTxState::CopyTableBarrier:
-            return TTxState::ProposedCopySequence;
-        case TTxState::ProposedCopySequence:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::CopyTableBarrier;
+            case TTxState::CopyTableBarrier:
+                return TTxState::ProposedCopySequence;
+            case TTxState::ProposedCopySequence:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
         return TTxState::Invalid;
     }
@@ -503,21 +510,21 @@ class TCopySequence: public TSubOperation {
         using TPtr = TSubOperationState::TPtr;
 
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TPtr(new TCreateParts(OperationId));
-        case TTxState::ConfigureParts:
-            return TPtr(new TConfigureParts(OperationId));
-        case TTxState::Propose:
-            return TPtr(new TPropose(OperationId));
-        case TTxState::CopyTableBarrier:
-            return TPtr(new TCopyTableBarrier(OperationId));
-        case TTxState::ProposedCopySequence:
-            return TPtr(new TProposedCopySequence(OperationId));
-        case TTxState::Done:
-            return TPtr(new TDone(OperationId));
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TPtr(new TCreateParts(OperationId));
+            case TTxState::ConfigureParts:
+                return TPtr(new TConfigureParts(OperationId));
+            case TTxState::Propose:
+                return TPtr(new TPropose(OperationId));
+            case TTxState::CopyTableBarrier:
+                return TPtr(new TCopyTableBarrier(OperationId));
+            case TTxState::ProposedCopySequence:
+                return TPtr(new TProposedCopySequence(OperationId));
+            case TTxState::Done:
+                return TPtr(new TDone(OperationId));
+            default:
+                return nullptr;
         }
     }
 
@@ -545,8 +552,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -558,7 +564,8 @@ public:
                 if (parentPath->IsTable()) {
                     // allow immediately inside a normal table
                     if (parentPath.IsUnderOperation()) {
-                        checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId()
+                        ); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
@@ -575,8 +582,7 @@ public:
         TPath srcPath = TPath::Resolve(copySequence.GetCopyFrom(), context.SS);
         {
             TPath::TChecker checks = srcPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
@@ -614,14 +620,11 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeSequence, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeSequence, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
@@ -631,11 +634,7 @@ public:
                     checks.DepthLimit();
                 }
 
-                checks
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .IsTheSameDomain(srcPath)
-                    .IsValidACL(acl);
+                checks.PathsLimit().DirChildrenLimit().IsTheSameDomain(srcPath).IsValidACL(acl);
             }
 
             if (!checks) {
@@ -678,8 +677,7 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
-        TTxState& txState =
-            context.SS->CreateTx(OperationId, TTxState::TxCopySequence, pathId, srcPath.Base()->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopySequence, pathId, srcPath.Base()->PathId);
         txState.State = TTxState::Propose;
 
         TSequenceInfo::TPtr sequenceInfo = new TSequenceInfo(0);
@@ -719,7 +717,9 @@ public:
         for (auto shard : txState.Shards) {
             if (shard.Operation == TTxState::CreateParts) {
                 context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos.at(shard.Idx).BindedChannels);
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
+                context.SS->PersistShardMapping(
+                    db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType
+                );
             }
         }
 
@@ -747,12 +747,11 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx)
-{
+ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCopySequence>(id, tx);
 }
 
@@ -760,4 +759,4 @@ ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state
     return MakeSubOperation<TCopySequence>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

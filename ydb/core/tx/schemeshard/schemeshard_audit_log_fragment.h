@@ -5,7 +5,7 @@
 #include <util/generic/maybe.h>
 
 namespace NKikimrSchemeOp {
-    class TModifyScheme;
+class TModifyScheme;
 }
 
 namespace NKikimr::NSchemeShard {
@@ -25,4 +25,4 @@ struct TAuditLogFragment {
 
 TAuditLogFragment MakeAuditLogFragment(const NKikimrSchemeOp::TModifyScheme& tx);
 
-}
+} // namespace NKikimr::NSchemeShard

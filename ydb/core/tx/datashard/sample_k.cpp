@@ -24,7 +24,9 @@
 
 namespace NKikimr::NDataShard {
 
-class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
+class TSampleKScan final
+    : public TActor<TSampleKScan>
+    , public NTable::IScan {
 protected:
     const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
     const TActorId ResponseActorId;
@@ -61,14 +63,16 @@ public:
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
     }
 
-    TSampleKScan(TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
-                 const TActorId& responseActorId,
-                 const TSerializedTableRange& range,
-                 ui64 k,
-                 ui64 seed,
-                 ui64 maxProbability,
-                 TProtoColumnsCRef columns,
-                 const TUserTable& tableInfo)
+    TSampleKScan(
+        TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
+        const TActorId& responseActorId,
+        const TSerializedTableRange& range,
+        ui64 k,
+        ui64 seed,
+        ui64 maxProbability,
+        TProtoColumnsCRef columns,
+        const TUserTable& tableInfo
+    )
         : TActor(&TThis::StateWork)
         , Response(std::move(response))
         , ResponseActorId(responseActorId)
@@ -173,8 +177,7 @@ public:
         }
         auto& rec = Response->Record;
         return TStringBuilder() << "TSampleKScan:"
-                                << "id: " << rec.GetId()
-                                << ", shard: " << rec.GetTabletId()
+                                << "id: " << rec.GetId() << ", shard: " << rec.GetTabletId()
                                 << ", generation: " << rec.GetRequestSeqNoGeneration()
                                 << ", round: " << rec.GetRequestSeqNoRound();
     }
@@ -223,8 +226,7 @@ class TDataShard::TTxHandleSafeSampleKScan: public NTabletFlatExecutor::TTransac
 public:
     TTxHandleSafeSampleKScan(TDataShard* self, TEvDataShard::TEvSampleKRequest::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev)) {
-    }
+        , Ev(std::move(ev)) {}
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) {
         Self->HandleSafe(Ev, ctx);
@@ -253,8 +255,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
-        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion,
-                                                     std::unique_ptr<IEventHandle>(ev.Release()));
+        VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
     const ui64 id = record.GetId();
@@ -305,20 +306,25 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     auto scanRange = Intersect(userTable.KeyColumnTypes, requestedRange.ToTableRange(), userTable.Range.ToTableRange());
 
     if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
-        badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
-                                    << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
-                                    << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
-                                    << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
+        badRequest(
+            TStringBuilder()
+            << " requested range doesn't intersect with table range"
+            << " requestedRange: "
+            << DebugPrintRange(userTable.KeyColumnTypes, requestedRange.ToTableRange(), *AppData()->TypeRegistry)
+            << " tableRange: "
+            << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
+            << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry)
+        );
         return;
     }
 
     const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
     if (needsSnapshot && !SnapshotManager.FindAvailable(snapshotKey)) {
-        badRequest(TStringBuilder()
-                   << "no snapshot has been found"
-                   << " , path id is " << pathId.OwnerId << ":" << pathId.LocalPathId
-                   << " , snapshot step is " << snapshotKey.Step
-                   << " , snapshot tx is " << snapshotKey.TxId);
+        badRequest(
+            TStringBuilder() << "no snapshot has been found"
+                             << " , path id is " << pathId.OwnerId << ":" << pathId.LocalPathId
+                             << " , snapshot step is " << snapshotKey.Step << " , snapshot tx is " << snapshotKey.TxId
+        );
         return;
     }
 
@@ -341,21 +347,24 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
 
-    const auto scanId = QueueScan(userTable.LocalTid,
-                                  new TSampleKScan(
-                                      std::move(response),
-                                      ev->Sender,
-                                      requestedRange,
-                                      record.GetK(),
-                                      record.GetSeed(),
-                                      record.GetMaxProbability(),
-                                      record.GetColumns(),
-                                      userTable),
-                                  ev->Cookie,
-                                  scanOpts);
+    const auto scanId = QueueScan(
+        userTable.LocalTid,
+        new TSampleKScan(
+            std::move(response),
+            ev->Sender,
+            requestedRange,
+            record.GetK(),
+            record.GetSeed(),
+            record.GetMaxProbability(),
+            record.GetColumns(),
+            userTable
+        ),
+        ev->Cookie,
+        scanOpts
+    );
 
     TScanRecord recCard = {scanId, seqNo};
     ScanManager.Set(id, recCard);
 }
 
-}
+} // namespace NKikimr::NDataShard

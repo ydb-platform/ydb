@@ -15,7 +15,8 @@ private:
     const NActors::TActorId BufferActorId;
     const TSnapshot ActualSnapshot;
     const TWritingContext Context;
-    void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
+    void
+    ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 protected:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
@@ -26,11 +27,14 @@ public:
     }
 
     TBuildBatchesTask(
-        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const TSnapshot& actualSnapshot, const TWritingContext& context)
+        const NActors::TActorId bufferActorId,
+        NEvWrite::TWriteData&& writeData,
+        const TSnapshot& actualSnapshot,
+        const TWritingContext& context
+    )
         : WriteData(std::move(writeData))
         , BufferActorId(bufferActorId)
         , ActualSnapshot(actualSnapshot)
-        , Context(context) {
-    }
+        , Context(context) {}
 };
 }   // namespace NKikimr::NOlap

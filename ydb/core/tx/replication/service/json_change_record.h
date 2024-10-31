@@ -11,7 +11,7 @@
 #include <util/memory/pool.h>
 
 namespace NKikimrTxDataShard {
-    class TEvApplyReplicationChanges_TChange;
+class TEvApplyReplicationChanges_TChange;
 }
 
 namespace NKikimr::NReplication::NService {
@@ -65,7 +65,7 @@ public:
 
 }; // TChangeRecordBuilder
 
-}
+} // namespace NKikimr::NReplication::NService
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TChangeRecord, out, value) {
     return value.Out(out);

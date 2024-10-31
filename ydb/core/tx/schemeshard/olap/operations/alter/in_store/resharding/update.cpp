@@ -7,8 +7,11 @@
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 TConclusionStatus TInStoreShardingUpdate::DoStart(const TUpdateStartContext& context) {
-    NKikimr::NOlap::NBackground::TTask task("SPLIT_SHARDS::" + context.GetObjectPath()->PathString(), std::make_shared<NKikimr::NOlap::NBackground::TFakeStatusChannel>(),
-        std::make_shared<NOlap::NBackground::TTxChainTask>(TxChainData));
+    NKikimr::NOlap::NBackground::TTask task(
+        "SPLIT_SHARDS::" + context.GetObjectPath()->PathString(),
+        std::make_shared<NKikimr::NOlap::NBackground::TFakeStatusChannel>(),
+        std::make_shared<NOlap::NBackground::TTxChainTask>(TxChainData)
+    );
     auto tx = context.GetSSOperationContext()->SS->BackgroundSessionsManager->TxAddTask(task);
     if (!tx->Execute(context.GetSSOperationContext()->GetTxc(), context.GetSSOperationContext()->Ctx)) {
         return TConclusionStatus::Fail("cannot execute transaction for write task");
@@ -20,14 +23,17 @@ TConclusionStatus TInStoreShardingUpdate::DoStart(const TUpdateStartContext& con
 TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializationContext& context) {
     auto& inStoreTable = context.GetOriginalEntityAsVerified<TInStoreTable>();
     AFL_VERIFY(context.GetModification()->GetAlterColumnTable().HasReshardColumnTable());
-    std::shared_ptr<NSharding::IShardingBase> sharding = inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());
+    std::shared_ptr<NSharding::IShardingBase> sharding =
+        inStoreTable.GetTableInfoPtrVerified()->GetShardingVerified(inStoreTable.GetTableSchemaVerified());
     TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> alters = std::vector<NKikimrSchemeOp::TAlterShards>();
     auto& storeInfo = *inStoreTable.GetStoreInfo();
     auto layoutPolicy = storeInfo.GetTablesLayoutPolicy();
-    auto currentLayout = context.GetSSOperationContext()->SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(
-        storeInfo.GetColumnShards(), *context.GetSSOperationContext()->SS));
+    auto currentLayout = context.GetSSOperationContext()->SS->ColumnTables.GetTablesLayout(
+        TColumnTablesLayout::ShardIdxToTabletId(storeInfo.GetColumnShards(), *context.GetSSOperationContext()->SS)
+    );
     currentLayout.RemoveGroupsWithPathId(context.GetOriginalEntity().GetPathId());
-    auto tablePtr = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(context.GetOriginalEntity().GetPathId());
+    auto tablePtr =
+        context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(context.GetOriginalEntity().GetPathId());
     if (context.GetModification()->GetAlterColumnTable().GetReshardColumnTable().GetIncrease()) {
         const ui32 shardsCount = inStoreTable.GetTableInfoPtrVerified()->GetColumnShards().size();
         auto layoutConclusion = layoutPolicy->Layout(currentLayout, shardsCount);
@@ -60,4 +66,4 @@ TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializati
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

@@ -42,8 +42,10 @@ struct TEvChangeExchange {
     struct TEvHandshake: public TEventPB<TEvHandshake, NKikimrChangeExchange::TEvHandshake, EvHandshake> {};
     struct TEvApplyRecords: public TEventPB<TEvApplyRecords, NKikimrChangeExchange::TEvApplyRecords, EvApplyRecords> {};
     struct TEvStatus: public TEventPB<TEvStatus, NKikimrChangeExchange::TEvStatus, EvStatus> {};
-    struct TEvActivateSender: public TEventPB<TEvActivateSender, NKikimrChangeExchange::TEvActivateSender, EvActivateSender> {};
-    struct TEvActivateSenderAck: public TEventPB<TEvActivateSenderAck, NKikimrChangeExchange::TEvActivateSenderAck, EvActivateSenderAck> {};
+    struct TEvActivateSender
+        : public TEventPB<TEvActivateSender, NKikimrChangeExchange::TEvActivateSender, EvActivateSender> {};
+    struct TEvActivateSenderAck
+        : public TEventPB<TEvActivateSenderAck, NKikimrChangeExchange::TEvActivateSenderAck, EvActivateSenderAck> {};
 
     /// Local events
     enum class ESenderType {
@@ -67,12 +69,11 @@ struct TEvChangeExchange {
         TString ToString() const override;
     };
 
-    struct TEvSplitAck: public TEventLocal<TEvSplitAck, EvSplitAck> {
-    };
+    struct TEvSplitAck: public TEventLocal<TEvSplitAck, EvSplitAck> {};
 
 }; // TEvChangeExchange
 
 IActor* CreateChangeSender(const TDataShard* self);
 IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& dstDataShards);
 
-}
+} // namespace NKikimr::NDataShard

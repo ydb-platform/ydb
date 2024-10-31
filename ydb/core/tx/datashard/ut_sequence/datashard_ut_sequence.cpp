@@ -14,12 +14,10 @@ Y_UNIT_TEST_SUITE(TSequence) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(appConfig);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -27,13 +25,16 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1",
-            TShardedTableOptions()
-                .Sequences(true)
-                .Columns({
-                    {"key", "Int64", true, false, "default", "myseq"},
-                    {"value", "Uint32", true, false},
-                }));
+        CreateShardedTable(
+            server,
+            sender,
+            "/Root",
+            "table-1",
+            TShardedTableOptions().Sequences(true).Columns({
+                {"key", "Int64", true, false, "default", "myseq"},
+                {"value", "Uint32", true, false},
+            })
+        );
 
         {
             TString result = KqpSimpleExec(runtime, "UPSERT INTO `/Root/table-1` (value) VALUES (1), (2), (3);");
@@ -62,7 +63,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 "{ items { int64_value: 6 } items { uint32_value: 6 } }, "
                 "{ items { int64_value: 7 } items { uint32_value: 7 } }, "
                 "{ items { int64_value: 8 } items { uint32_value: 8 } }, "
-                "{ items { int64_value: 9 } items { uint32_value: 9 } }");
+                "{ items { int64_value: 9 } items { uint32_value: 9 } }"
+            );
         }
     }
 
@@ -71,12 +73,10 @@ Y_UNIT_TEST_SUITE(TSequence) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(appConfig);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -84,7 +84,11 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-5",
+        CreateShardedTable(
+            server,
+            sender,
+            "/Root",
+            "table-5",
             TShardedTableOptions()
                 .Sequences(true)
                 .Columns({
@@ -93,7 +97,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 })
                 .Indexes({
                     {"by_i1value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobal},
-                }));
+                })
+        );
 
         {
             TString result = KqpSimpleExec(runtime, "UPSERT INTO `/Root/table-5` (value) VALUES (1), (2), (3);");
@@ -122,9 +127,10 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 "{ items { int64_value: 6 } items { uint32_value: 6 } }, "
                 "{ items { int64_value: 7 } items { uint32_value: 7 } }, "
                 "{ items { int64_value: 8 } items { uint32_value: 8 } }, "
-                "{ items { int64_value: 9 } items { uint32_value: 9 } }");
-        }  
-        
+                "{ items { int64_value: 9 } items { uint32_value: 9 } }"
+            );
+        }
+
         {
             TString result = KqpSimpleExec(runtime, "SELECT * FROM `/Root/table-5` view by_i1value;");
             UNIT_ASSERT_VALUES_EQUAL(
@@ -137,8 +143,9 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 "{ items { int64_value: 6 } items { uint32_value: 6 } }, "
                 "{ items { int64_value: 7 } items { uint32_value: 7 } }, "
                 "{ items { int64_value: 8 } items { uint32_value: 8 } }, "
-                "{ items { int64_value: 9 } items { uint32_value: 9 } }");
-        }            
+                "{ items { int64_value: 9 } items { uint32_value: 9 } }"
+            );
+        }
     }
 
     Y_UNIT_TEST(CreateTableWithDefaultFromSequenceFromSelect) {
@@ -146,12 +153,10 @@ Y_UNIT_TEST_SUITE(TSequence) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(appConfig);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -159,13 +164,16 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-4",
-            TShardedTableOptions()
-                .Sequences(true)
-                .Columns({
-                    {"key", "Int64", true, false, "default", "myseq"},
-                    {"value", "Uint32", true, false},
-                }));
+        CreateShardedTable(
+            server,
+            sender,
+            "/Root",
+            "table-4",
+            TShardedTableOptions().Sequences(true).Columns({
+                {"key", "Int64", true, false, "default", "myseq"},
+                {"value", "Uint32", true, false},
+            })
+        );
 
         {
             TString result = KqpSimpleExec(runtime, "UPSERT INTO `/Root/table-4` (value) VALUES (303);");
@@ -174,9 +182,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         {
             TString result = KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table-4`;");
-            UNIT_ASSERT_VALUES_EQUAL(
-                result,
-                "{ items { int64_value: 1 } items { uint32_value: 303 } }");
+            UNIT_ASSERT_VALUES_EQUAL(result, "{ items { int64_value: 1 } items { uint32_value: 303 } }");
         }
 
         {
@@ -189,11 +195,13 @@ Y_UNIT_TEST_SUITE(TSequence) {
             UNIT_ASSERT_VALUES_EQUAL(
                 result,
                 "{ items { int64_value: 1 } items { uint32_value: 303 } }, "
-                "{ items { int64_value: 2 } items { uint32_value: 303 } }");
+                "{ items { int64_value: 2 } items { uint32_value: 303 } }"
+            );
         }
 
         {
-            TString result = KqpSimpleExec(runtime, "UPSERT INTO `/Root/table-4` SELECT value FROM `/Root/table-4` where key = 1;");
+            TString result =
+                KqpSimpleExec(runtime, "UPSERT INTO `/Root/table-4` SELECT value FROM `/Root/table-4` where key = 1;");
             UNIT_ASSERT_VALUES_EQUAL(result, "<empty>");
         }
 
@@ -203,7 +211,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 result,
                 "{ items { int64_value: 1 } items { uint32_value: 303 } }, "
                 "{ items { int64_value: 2 } items { uint32_value: 303 } }, "
-                "{ items { int64_value: 3 } items { uint32_value: 303 } }");
+                "{ items { int64_value: 3 } items { uint32_value: 303 } }"
+            );
         }
     }
 
@@ -212,12 +221,10 @@ Y_UNIT_TEST_SUITE(TSequence) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(appConfig);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -225,20 +232,24 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-3",
-            TShardedTableOptions()
-                .Sequences(true)
-                .Columns({
-                    {"key", "Int64", true, false, "default", "myseq"},
-                    {"value", "Uint32", true, false},
-                }));
+        CreateShardedTable(
+            server,
+            sender,
+            "/Root",
+            "table-3",
+            TShardedTableOptions().Sequences(true).Columns({
+                {"key", "Int64", true, false, "default", "myseq"},
+                {"value", "Uint32", true, false},
+            })
+        );
 
         {
             TString result = KqpSimpleExec(
                 runtime,
                 "$to_update = AsList( "
                 "   AsStruct(CAST(12 as Uint32) as value)); "
-                "UPDATE `/Root/table-3` ON SELECT * FROM AS_TABLE($to_update)");
+                "UPDATE `/Root/table-3` ON SELECT * FROM AS_TABLE($to_update)"
+            );
             UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: BAD_REQUEST");
         }
 
@@ -247,12 +258,12 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 runtime,
                 "$to_update = AsList( "
                 "   AsStruct(CAST(12 as Uint32) as value)); "
-                "DELETE FROM `/Root/table-3` ON SELECT * FROM AS_TABLE($to_update)");
+                "DELETE FROM `/Root/table-3` ON SELECT * FROM AS_TABLE($to_update)"
+            );
             UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: BAD_REQUEST");
         }
-
     }
 
 } // Y_UNIT_TEST_SUITE(TSequence)
 
-}
+} // namespace NKikimr

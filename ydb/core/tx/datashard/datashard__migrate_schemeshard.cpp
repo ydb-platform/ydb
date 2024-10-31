@@ -5,13 +5,12 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-
 TDataShard::TTxMigrateSchemeShard::TTxMigrateSchemeShard(
     TDataShard* ds,
-    TEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev)
+    TEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev
+)
     : TBase(ds)
-    , Ev(std::move(ev))
-{ }
+    , Ev(std::move(ev)) {}
 
 bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     using TResponse = NKikimrTxDataShard::TEvMigrateSchemeShardResponse;
@@ -67,7 +66,6 @@ void TDataShard::TTxMigrateSchemeShard::Complete(const TActorContext& ctx) {
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
 }
-
 
 }   // namespace NDataShard
 }   // namespace NKikimr

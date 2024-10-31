@@ -6,13 +6,13 @@
 
 namespace {
 
-    struct DestroyZCtx {
-        static void Destroy(::ZSTD_CCtx* p) noexcept {
-            ZSTD_freeCCtx(p);
-        }
-    };
+struct DestroyZCtx {
+    static void Destroy(::ZSTD_CCtx* p) noexcept {
+        ZSTD_freeCCtx(p);
+    }
+};
 
-} // anonymous
+} // namespace
 
 namespace NKikimr {
 namespace NDataShard {
@@ -48,15 +48,19 @@ class TS3BufferZstd: public TS3BufferRaw {
     }
 
 public:
-    explicit TS3BufferZstd(int compressionLevel,
-            const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes)
+    explicit TS3BufferZstd(
+        int compressionLevel,
+        const IExport::TTableColumns& columns,
+        ui64 maxRows,
+        ui64 maxBytes,
+        ui64 minBytes
+    )
         : TS3BufferRaw(columns, maxRows, maxBytes)
         , CompressionLevel(compressionLevel)
         , MinBytes(minBytes)
         , Context(ZSTD_createCCtx())
         , ErrorCode(0)
-        , BytesRaw(0)
-    {
+        , BytesRaw(0) {
         Reset();
     }
 
@@ -90,7 +94,7 @@ public:
     TString GetError() const override {
         return ZSTD_getErrorName(ErrorCode);
     }
-    
+
 protected:
     TMaybe<TBuffer> Flush(bool prepare) override {
         if (prepare && BytesRaw) {
@@ -121,13 +125,17 @@ private:
 
 }; // TS3BufferZstd
 
-NExportScan::IBuffer* CreateS3ExportBufferZstd(int compressionLevel,
-        const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes)
-{
+NExportScan::IBuffer* CreateS3ExportBufferZstd(
+    int compressionLevel,
+    const IExport::TTableColumns& columns,
+    ui64 maxRows,
+    ui64 maxBytes,
+    ui64 minBytes
+) {
     return new TS3BufferZstd(compressionLevel, columns, maxRows, maxBytes, minBytes);
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

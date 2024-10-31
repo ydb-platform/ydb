@@ -6,7 +6,9 @@
 
 namespace NKikimr::NColumnShard {
 
-class TSharingTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TSharingTransactionOperator> {
+class TSharingTransactionOperator
+    : public IProposeTxOperator
+    , public TMonitoringObjectsCounter<TSharingTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;
 
@@ -17,14 +19,15 @@ private:
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxPropose;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxConfirm;
     mutable std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
-    static inline auto Registrator = TFactory::TRegistrator<TSharingTransactionOperator>(NKikimrTxColumnShard::TX_KIND_SHARING);
+    static inline auto Registrator =
+        TFactory::TRegistrator<TSharingTransactionOperator>(NKikimrTxColumnShard::TX_KIND_SHARING);
     THashSet<TActorId> NotifySubscribers;
-    virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual TTxController::TProposeResult
+    DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override;
-    virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
-    }
-    virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
-    }
+    virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/)
+        override {}
+    virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {}
     virtual TString DoGetOpType() const override {
         return "Sharing";
     }
@@ -43,7 +46,11 @@ public:
         NotifySubscribers.insert(actorId);
     }
 
-    virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual bool ProgressOnExecute(
+        TColumnShard& owner,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    ) override;
 
     virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override;
 
@@ -51,4 +58,4 @@ public:
     virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) override;
 };
 
-}
+} // namespace NKikimr::NColumnShard

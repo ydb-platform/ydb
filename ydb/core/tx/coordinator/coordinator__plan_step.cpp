@@ -9,8 +9,7 @@ namespace NFlatTxCoordinator {
 struct TInFlyAccountant {
     ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
     TInFlyAccountant(::NMonitoring::TDynamicCounters::TCounterPtr counter)
-        : Counter(counter)
-    {
+        : Counter(counter) {
         Counter->Inc();
     }
     ~TInFlyAccountant() {
@@ -18,7 +17,7 @@ struct TInFlyAccountant {
     }
 };
 
-struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
+struct TTxCoordinator::TTxPlanStep: public TTransactionBase<TTxCoordinator> {
     const ui64 PlanOnStep;
     std::deque<TQueueType::TSlot> Slots;
 
@@ -32,17 +31,15 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     bool StartedStateActor = false;
     ui64 LastBlockedUpdate = 0;
 
-    TTxPlanStep(ui64 toPlan, std::deque<TQueueType::TSlot> &&slots, TSelf *coordinator)
+    TTxPlanStep(ui64 toPlan, std::deque<TQueueType::TSlot>&& slots, TSelf* coordinator)
         : TBase(coordinator)
         , PlanOnStep(toPlan)
         , Slots(std::move(slots))
         , PlannedCounter(0)
         , DeclinedCounter(0)
-        , InFlyAccountant(Self->MonCounters.StepsInFly)
-    {
-    }
+        , InFlyAccountant(Self->MonCounters.StepsInFly) {}
 
-    void Plan(TTransactionContext &txc, const TActorContext &ctx) {
+    void Plan(TTransactionContext& txc, const TActorContext& ctx) {
         if (Self->VolatileState.Preserved) {
             // A preserved state indicates a newer generation has been started
             // already, and this coordinator will stop eventually. Decline
@@ -54,7 +51,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                         proposal.TxId,
                         proposal.Proxy,
                         TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
-                        0);
+                        0
+                    );
                     ++DeclinedCounter;
                 }
             }
@@ -73,7 +71,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         ui64 volatileLeaseMs = Self->VolatilePlanLeaseMs;
 
         // true when step is volatile, i.e. will be acknowledged before we commit
-        bool volatileStep = volatileLeaseMs > 0 && Self->CoordinatorStateActor && PlanOnStep <= Self->VolatileState.LastBlockedCommitted;
+        bool volatileStep = volatileLeaseMs > 0 && Self->CoordinatorStateActor &&
+                            PlanOnStep <= Self->VolatileState.LastBlockedCommitted;
 
         TVector<TMediatorStep> mediatorSteps;
         THashMap<TTabletId, TVector<TTabletId>> byMediatorAffected;
@@ -87,9 +86,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         }
 
         // create mediator steps
-        for (auto &slot : Slots) {
-            for (auto &proposal : slot) {
-                for (auto &x : byMediatorAffected) {
+        for (auto& slot : Slots) {
+            for (auto& proposal : slot) {
+                for (auto& x : byMediatorAffected) {
                     x.second.clear();
                 }
 
@@ -109,10 +108,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 if (proposal.MaxStep < PlanOnStep) {
                     Self->MonCounters.StepOutdatedTx->Inc();
                     ProxyPlanConfirmations.Queue.emplace_back(
-                        txId,
-                        proposal.Proxy,
-                        TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated,
-                        0);
+                        txId, proposal.Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated, 0
+                    );
                     ++DeclinedCounter;
                     continue;
                 }
@@ -125,7 +122,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                             txId,
                             proposal.Proxy,
                             TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned,
-                            it->second.PlanOnStep);
+                            it->second.PlanOnStep
+                        );
                         ++DeclinedCounter;
                         continue;
                     }
@@ -139,7 +137,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                             txId,
                             proposal.Proxy,
                             TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned,
-                            it->second.PlanOnStep);
+                            it->second.PlanOnStep
+                        );
                         ++DeclinedCounter;
                         continue;
                     }
@@ -148,10 +147,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 if (lowDiskSpace && !proposal.IgnoreLowDiskSpace) {
                     Self->MonCounters.StepDeclinedNoSpaceTx->Inc();
                     ProxyPlanConfirmations.Queue.emplace_back(
-                        txId,
-                        proposal.Proxy,
-                        TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace,
-                        0);
+                        txId, proposal.Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace, 0
+                    );
                     ++DeclinedCounter;
                     continue;
                 }
@@ -163,7 +160,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
                     transaction.PlanOnStep = PlanOnStep;
                     Y_ABORT_UNLESS(!proposal.AffectedSet.empty());
-                    for (const auto &txprop : proposal.AffectedSet) {
+                    for (const auto& txprop : proposal.AffectedSet) {
                         const TTabletId affectedTablet = txprop.TabletId;
                         const TTabletId mediatorId = Self->Config.Mediators->Select(affectedTablet);
 
@@ -177,8 +174,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                         TVector<TTabletId> affectedSet(transaction.AffectedSet.begin(), transaction.AffectedSet.end());
 
                         db.Table<Schema::Transaction>().Key(txId).Update(
-                                    NIceDb::TUpdate<Schema::Transaction::Plan>(PlanOnStep),
-                                    NIceDb::TUpdate<Schema::Transaction::AffectedSet>(affectedSet));
+                            NIceDb::TUpdate<Schema::Transaction::Plan>(PlanOnStep),
+                            NIceDb::TUpdate<Schema::Transaction::AffectedSet>(affectedSet)
+                        );
                     }
 
                     FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction " << txId << " has been planned");
@@ -186,15 +184,19 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
                 for (TMediatorStep& m : mediatorSteps) {
                     TTabletId mediatorId = m.MediatorId;
-                    TVector<TTabletId> &affected = byMediatorAffected[mediatorId];
+                    TVector<TTabletId>& affected = byMediatorAffected[mediatorId];
                     if (!affected.empty()) {
                         for (TTabletId tabletId : affected) {
                             if (!volatileTx) {
                                 db.Table<Schema::AffectedSet>().Key(mediatorId, txId, tabletId).Update();
                                 m.Volatile = false;
                             }
-                            FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                                "Planned transaction " << txId << " for mediator " << mediatorId << " tablet " << tabletId);
+                            FLOG_DEBUG_S(
+                                ctx,
+                                NKikimrServices::TX_COORDINATOR,
+                                "Planned transaction " << txId << " for mediator " << mediatorId << " tablet "
+                                                       << tabletId
+                            );
                         }
                         m.Transactions.emplace_back(txId, affected.data(), affected.size());
                     }
@@ -204,10 +206,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
                 Self->MonCounters.StepPlannedTx->Inc();
                 ProxyPlanConfirmations.Queue.emplace_back(
-                    txId,
-                    proposal.Proxy,
-                    TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned,
-                    PlanOnStep);
+                    txId, proposal.Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned, PlanOnStep
+                );
             }
         }
 
@@ -220,7 +220,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             }
 
             TMediator& mediator = Self->Mediator(mediatorId, ctx);
-            if (!mediator.Queue.empty() && mediator.Queue.back().Confirmed && mediator.Queue.back().Transactions.empty()) {
+            if (!mediator.Queue.empty() && mediator.Queue.back().Confirmed &&
+                mediator.Queue.back().Transactions.empty()) {
                 // Remove the last confirmed empty step
             }
             mediator.Queue.emplace_back(std::move(m));
@@ -244,7 +245,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
             bool needCommit = (
                 // We want to extend lease when only a half is left for new steps
-                (Self->VolatileState.LastBlockedPending - PlanOnStep) <= volatileLeaseMs/2);
+                (Self->VolatileState.LastBlockedPending - PlanOnStep) <= volatileLeaseMs / 2
+            );
 
             if (!needCommit) {
                 // Avoid making unnecessary commits
@@ -267,18 +269,20 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         // state to newer generation. It is likely blocked step will be outdated
         // by that time.
         if (Self->CoordinatorStateActorId && volatileLeaseMs > 0) {
-            LastBlockedUpdate = Max(
-                Self->VolatileState.LastBlockedPending,
-                Self->VolatileState.LastBlockedCommitted,
-                PlanOnStep + volatileLeaseMs);
+            LastBlockedUpdate =
+                Max(Self->VolatileState.LastBlockedPending,
+                    Self->VolatileState.LastBlockedCommitted,
+                    PlanOnStep + volatileLeaseMs);
             Self->VolatileState.LastBlockedPending = LastBlockedUpdate;
             Schema::SaveState(db, Schema::State::LastBlockedStep, LastBlockedUpdate);
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_STEP; }
+    TTxType GetTxType() const override {
+        return TXTYPE_STEP;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         PlannedCounter = 0;
         DeclinedCounter = 0;
 
@@ -292,7 +296,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         auto durationMs = (ctx.Now() - ExecStartMoment).MilliSeconds();
         Self->MonCounters.TxPlanLatency->Collect(durationMs);
 
@@ -304,15 +308,17 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             Self->VolatileState.LastBlockedCommitted = LastBlockedUpdate;
         }
 
-        for (auto &pr : StepsToConfirm) {
+        for (auto& pr : StepsToConfirm) {
             const ui64 mediatorId = pr.first;
-            TMediator &mediator = Self->Mediator(mediatorId, ctx);
+            TMediator& mediator = Self->Mediator(mediatorId, ctx);
             Y_ABORT_UNLESS(!mediator.Queue.empty());
             pr.second->Confirmed = true;
             for (auto it = pr.second; it != mediator.Queue.begin();) {
                 --it;
-                if (!it->Confirmed) break;
-                if (!it->Transactions.empty()) break;
+                if (!it->Confirmed)
+                    break;
+                if (!it->Transactions.empty())
+                    break;
                 // Remove empty confirmed steps before us
                 // Needed so the queue does not grow for disconnected mediators
                 mediator.Queue.erase(it++);
@@ -327,9 +333,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxPlanStep(ui64 toStep, std::deque<TQueueType::TSlot> &&slots) {
+ITransaction* TTxCoordinator::CreateTxPlanStep(ui64 toStep, std::deque<TQueueType::TSlot>&& slots) {
     return new TTxPlanStep(toStep, std::move(slots), this);
 }
 
-}
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

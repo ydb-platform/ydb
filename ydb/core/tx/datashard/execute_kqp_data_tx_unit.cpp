@@ -23,7 +23,7 @@ using namespace NMiniKQL;
 #define LOG_C(stream) LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 
-class TExecuteKqpDataTxUnit : public TExecutionUnit {
+class TExecuteKqpDataTxUnit: public TExecutionUnit {
 public:
     TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TExecuteKqpDataTxUnit() override;
@@ -34,8 +34,12 @@ public:
 
 private:
     void AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx);
-    EExecutionStatus OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx, TTransactionContext& txc,
-                                      const TActorContext& ctx);
+    EExecutionStatus OnTabletNotReady(
+        TActiveTransaction& tx,
+        TValidatedDataTx& dataTx,
+        TTransactionContext& txc,
+        const TActorContext& ctx
+    );
 };
 
 TExecuteKqpDataTxUnit::TExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline)
@@ -56,9 +60,8 @@ bool TExecuteKqpDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
     return !op->HasRuntimeConflicts();
 }
 
-EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
-    const TActorContext& ctx)
-{
+EExecutionStatus
+TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
         return EExecutionStatus::Executed;
     }
@@ -188,10 +191,19 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             }
         };
 
-        auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-            ? KqpValidateVolatileTx(tabletId, sysLocks, kqpLocks, useGenericReadSets,
-                txId, tx->DelayedInReadSets(), awaitingDecisions, outReadSets)
-            : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
+        auto [validated, brokenLocks] =
+            op->HasVolatilePrepareFlag()
+                ? KqpValidateVolatileTx(
+                      tabletId,
+                      sysLocks,
+                      kqpLocks,
+                      useGenericReadSets,
+                      txId,
+                      tx->DelayedInReadSets(),
+                      awaitingDecisions,
+                      outReadSets
+                  )
+                : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
         if (!validated) {
             tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
@@ -244,8 +256,15 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
-        auto result = KqpCompleteTransaction(ctx, tabletId, op->GetTxId(),
-            op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(), useGenericReadSets, tasksRunner, computeCtx);
+        auto result = KqpCompleteTransaction(
+            ctx,
+            tabletId,
+            op->GetTxId(),
+            op->HasKqpAttachedRSFlag() ? nullptr : &op->InReadSets(),
+            useGenericReadSets,
+            tasksRunner,
+            computeCtx
+        );
 
         if (!result && computeCtx.HadInconsistentReads()) {
             LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
@@ -280,7 +299,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                     Max<ui64>(),
                     table.GetTableId().OwnerId,
                     table.GetTableId().LocalPathId,
-                    false);
+                    false
+                );
             }
 
             tx->ReleaseTxData(txc, ctx);
@@ -351,7 +371,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 dataTx->GetVolatileChangeGroup(),
                 dataTx->GetVolatileCommitOrdered(),
                 isArbiter,
-                txc);
+                txc
+            );
         }
 
         if (dataTx->GetPerformedUserReads()) {
@@ -366,7 +387,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 }
             }
             if (!op->OutReadSets().empty()) {
-                DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+                DataShard.PrepareAndSaveOutReadSets(
+                    op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx
+                );
             }
             keepOutReadSets = true;
         }
@@ -406,8 +429,10 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR);
 
-        op->Result()->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED,
-            TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes");
+        op->Result()->AddError(
+            NKikimrTxDataShard::TError::SHARD_IS_BLOCKED,
+            TStringBuilder() << "Shard " << DataShard.TabletID() << " cannot write more uncommitted changes"
+        );
 
         for (auto& table : guardLocks.AffectedTables) {
             Y_ABORT_UNLESS(guardLocks.LockTxId);
@@ -418,7 +443,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 Max<ui64>(),
                 table.GetTableId().OwnerId,
                 table.GetTableId().LocalPathId,
-                false);
+                false
+            );
         }
 
         tx->ReleaseTxData(txc, ctx);
@@ -469,17 +495,21 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
                 << *op << " at " << DataShard.TabletID() << " lock " << lock);
         }
 
-        op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-            lock.SchemeShard, lock.PathId, lock.HasWrites);
+        op->Result()->AddTxLock(
+            lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites
+        );
 
         LOG_T("add lock to result: " << op->Result()->Record.GetTxLocks().rbegin()->ShortDebugString());
     }
     DataShard.SubscribeNewLocks(ctx);
 }
 
-EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx,
-    TTransactionContext& txc, const TActorContext& ctx)
-{
+EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(
+    TActiveTransaction& tx,
+    TValidatedDataTx& dataTx,
+    TTransactionContext& txc,
+    const TActorContext& ctx
+) {
     LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << tx << " execution");
 
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);

@@ -5,50 +5,37 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCreateTableUnit : public TExecutionUnit {
+class TCreateTableUnit: public TExecutionUnit {
 public:
-    TCreateTableUnit(TDataShard &dataShard,
-                     TPipeline &pipeline);
+    TCreateTableUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TCreateTableUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
     TVector<THolder<TEvChangeExchange::TEvAddSender>> AddSenders;
 };
 
-TCreateTableUnit::TCreateTableUnit(TDataShard &dataShard,
-                                   TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::CreateTable, false, dataShard, pipeline)
-{
-}
+TCreateTableUnit::TCreateTableUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::CreateTable, false, dataShard, pipeline) {}
 
-TCreateTableUnit::~TCreateTableUnit()
-{
-}
+TCreateTableUnit::~TCreateTableUnit() {}
 
-bool TCreateTableUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TCreateTableUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &txc,
-                                           const TActorContext &ctx)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-    const auto &schemeTx = tx->GetSchemeTx();
+    const auto& schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasCreateTable())
         return EExecutionStatus::Executed;
 
-    const auto &createTableTx = schemeTx.GetCreateTable();
+    const auto& createTableTx = schemeTx.GetCreateTable();
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
@@ -72,9 +59,9 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     DataShard.AddUserTable(tableId, info);
 
     info->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
-        AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
-            tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
-        ));
+        AddSenders.emplace_back(
+            new TEvChangeExchange::TEvAddSender(tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId)
+        );
     });
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
@@ -92,8 +79,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext &ctx)
-{
+void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext& ctx) {
     for (auto& ev : AddSenders) {
         ctx.Send(DataShard.GetChangeSender(), ev.Release());
     }
@@ -101,9 +87,7 @@ void TCreateTableUnit::Complete(TOperation::TPtr, const TActorContext &ctx)
     DataShard.MaybeActivateChangeSender(ctx);
 }
 
-THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard &dataShard,
-                                              TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateCreateTableUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TCreateTableUnit(dataShard, pipeline));
 }
 

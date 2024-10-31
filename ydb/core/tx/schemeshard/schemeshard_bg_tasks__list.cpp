@@ -8,4 +8,4 @@ void TSchemeShard::Handle(NBackground::TEvListRequest::TPtr& ev, const TActorCon
     Execute(new NBackground::TTxTasksList(this, ev), ctx);
 }
 
-} // NKikimr
+} // namespace NKikimr::NSchemeShard

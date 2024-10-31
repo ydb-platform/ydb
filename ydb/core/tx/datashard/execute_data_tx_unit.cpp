@@ -3,43 +3,33 @@
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 
-
 namespace NKikimr {
 namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TExecuteDataTxUnit : public TExecutionUnit {
+class TExecuteDataTxUnit: public TExecutionUnit {
 public:
-    TExecuteDataTxUnit(TDataShard& dataShard,
-                       TPipeline& pipeline);
+    TExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TExecuteDataTxUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext& txc,
-                             const TActorContext& ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext& ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
-    void ExecuteDataTx(TOperation::TPtr op,
-                       TTransactionContext& txc,
-                       const TActorContext& ctx,
-                       TSetupSysLocks& guardLocks);
+    void
+    ExecuteDataTx(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx, TSetupSysLocks& guardLocks);
     void AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx);
 
 private:
-    class TRollbackAndWaitException : public yexception {};
+    class TRollbackAndWaitException: public yexception {};
 };
 
-TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard,
-                                       TPipeline& pipeline)
-    : TExecutionUnit(EExecutionUnitKind::ExecuteDataTx, true, dataShard, pipeline) {
-}
+TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::ExecuteDataTx, true, dataShard, pipeline) {}
 
-TExecuteDataTxUnit::~TExecuteDataTxUnit() {
-}
+TExecuteDataTxUnit::~TExecuteDataTxUnit() {}
 
 bool TExecuteDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
@@ -54,10 +44,7 @@ bool TExecuteDataTxUnit::IsReadyToExecute(TOperation::TPtr op) const {
     return !op->HasRuntimeConflicts();
 }
 
-EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
-                                             TTransactionContext& txc,
-                                             const TActorContext& ctx)
-{
+EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
         return EExecutionStatus::Executed;
     }
@@ -222,11 +209,12 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::ExecutedNoMoreRestarts;
 }
 
-void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
-                                       TTransactionContext& txc,
-                                       const TActorContext& ctx,
-                                       TSetupSysLocks& guardLocks)
-{
+void TExecuteDataTxUnit::ExecuteDataTx(
+    TOperation::TPtr op,
+    TTransactionContext& txc,
+    const TActorContext& ctx,
+    TSetupSysLocks& guardLocks
+) {
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
 
@@ -284,9 +272,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     }
 
     if (engineResult == IEngineFlat::EResult::Cancelled)
-        DataShard.IncCounter(op->IsImmediate()
-                                 ? COUNTER_IMMEDIATE_TX_CANCELLED
-                                 : COUNTER_PLANNED_TX_CANCELLED);
+        DataShard.IncCounter(op->IsImmediate() ? COUNTER_IMMEDIATE_TX_CANCELLED : COUNTER_PLANNED_TX_CANCELLED);
 
     auto& result = BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     result->Record.SetOrderId(op->GetTxId());
@@ -333,7 +319,8 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
             tx->GetDataTx()->GetVolatileChangeGroup(),
             tx->GetDataTx()->GetVolatileCommitOrdered(),
             /* arbiter */ false,
-            txc);
+            txc
+        );
     }
 
     if (tx->GetDataTx()->GetPerformedUserReads()) {
@@ -353,14 +340,14 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
                          "Lock is not set for " << *op << " at " << DataShard.TabletID()
                                                 << " lock " << lock);
         }
-        op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-                                lock.SchemeShard, lock.PathId, lock.HasWrites);
+        op->Result()->AddTxLock(
+            lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites
+        );
     }
     DataShard.SubscribeNewLocks(ctx);
 }
 
-void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {
-}
+void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
 THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TExecuteDataTxUnit(dataShard, pipeline));

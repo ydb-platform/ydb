@@ -68,4 +68,4 @@ TString TPortionAddress::DebugString() const {
     return TStringBuilder() << "(path_id=" << PathId << ";portion_id=" << PortionId << ")";
 }
 
-}
+} // namespace NKikimr::NOlap

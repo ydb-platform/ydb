@@ -8,17 +8,18 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-class TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+class TTxPlanStep: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 public:
     TTxPlanStep(TColumnShard* self, TEvTxProcessing::TEvPlanStep::TPtr& ev)
         : TBase(self)
         , Ev(ev)
-        , TabletTxNo(++Self->TabletTxCounter)
-    {}
+        , TabletTxNo(++Self->TabletTxCounter) {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PLANSTEP; }
+    TTxType GetTxType() const override {
+        return TXTYPE_PLANSTEP;
+    }
 
 private:
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
@@ -34,7 +35,6 @@ private:
         return TStringBuilder() << " at tablet " << Self->TabletID();
     }
 };
-
 
 bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_ABORT_UNLESS(Ev);
@@ -64,23 +64,20 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
             Y_ABORT_UNLESS(lastTxId < txId, "Transactions must be sorted and unique");
             auto planResult = Self->ProgressTxController->PlanTx(step, txId, txc);
             switch (planResult) {
-                case TTxController::EPlanResult::Skipped:
-                {
+                case TTxController::EPlanResult::Skipped: {
                     LOG_S_WARN(TxPrefix() << "Ignoring step " << step
                     << " for unknown txId " << txId
                     << TxSuffix());
                     break;
                 }
-                case TTxController::EPlanResult::AlreadyPlanned:
-                {
+                case TTxController::EPlanResult::AlreadyPlanned: {
                     LOG_S_WARN(TxPrefix() << "Ignoring step " << step
                         << " for txId " << txId
                         << " which is already planned for step " << step
                         << TxSuffix());
                     break;
                 }
-                case TTxController::EPlanResult::Planned:
-                {
+                case TTxController::EPlanResult::Planned: {
                     ++plannedCount;
                     break;
                 }
@@ -117,12 +114,13 @@ void TTxPlanStep::Complete(const TActorContext& ctx) {
 
     ui64 step = Ev->Get()->Record.GetStep();
     for (auto& kv : TxAcks) {
-        ctx.Send(kv.first, new TEvTxProcessing::TEvPlanStepAck(Self->TabletID(), step, kv.second.begin(), kv.second.end()));
+        ctx.Send(
+            kv.first, new TEvTxProcessing::TEvPlanStepAck(Self->TabletID(), step, kv.second.begin(), kv.second.end())
+        );
     }
 
     ctx.Send(Ev->Sender, Result.release());
 }
-
 
 void TColumnShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx) {
     ui64 step = ev->Get()->Record.GetStep();
@@ -132,4 +130,4 @@ void TColumnShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCo
     Execute(new TTxPlanStep(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NColumnShard

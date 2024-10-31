@@ -1,17 +1,20 @@
 #include "filtered_scheme.h"
 #include <util/string/join.h>
 
-
 namespace NKikimr::NOlap {
 
-TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds)
-    : TFilteredSnapshotSchema(originalSnapshot, std::vector(columnIds.begin(), columnIds.end())) {
-}
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(
+    const ISnapshotSchema::TPtr& originalSnapshot,
+    const std::set<ui32>& columnIds
+)
+    : TFilteredSnapshotSchema(originalSnapshot, std::vector(columnIds.begin(), columnIds.end())) {}
 
-TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds)
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(
+    const ISnapshotSchema::TPtr& originalSnapshot,
+    const std::vector<ui32>& columnIds
+)
     : OriginalSnapshot(originalSnapshot)
-    , ColumnIds(columnIds)
-{
+    , ColumnIds(columnIds) {
     std::vector<std::shared_ptr<arrow::Field>> schemaFields;
     for (auto&& i : columnIds) {
         IdIntoIndex.emplace(i, schemaFields.size());
@@ -77,10 +80,9 @@ ui64 TFilteredSnapshotSchema::GetVersion() const {
 
 TString TFilteredSnapshotSchema::DoDebugString() const {
     return TStringBuilder() << "("
-        << "original=" << OriginalSnapshot->DebugString() << ";"
-        << "column_ids=[" << JoinSeq(",", ColumnIds) << "];"
-        << ")"
-        ;
+                            << "original=" << OriginalSnapshot->DebugString() << ";"
+                            << "column_ids=[" << JoinSeq(",", ColumnIds) << "];"
+                            << ")";
 }
 
-}
+} // namespace NKikimr::NOlap

@@ -51,10 +51,10 @@ TUnifiedBlobId ParseExtendedDsBlobId(const TString& s, TString& error) {
     return TUnifiedBlobId(dsGroup, logoBlobId);
 }
 
-}
+} // namespace
 
-TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str,
-    const IBlobGroupSelector* dsGroupSelector, TString& error) {
+TUnifiedBlobId
+TUnifiedBlobId::ParseFromString(const TString& str, const IBlobGroupSelector* dsGroupSelector, TString& error) {
     if (str.size() <= 2) {
         error = TStringBuilder() << "Wrong blob id: '" << str << "'";
         return TUnifiedBlobId();
@@ -90,7 +90,9 @@ NKikimr::TConclusionStatus TUnifiedBlobId::DeserializeFromProto(const NKikimrCol
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusion<NKikimr::NOlap::TUnifiedBlobId> TUnifiedBlobId::BuildFromProto(const NKikimrColumnShardProto::TUnifiedBlobId& proto) {
+NKikimr::TConclusion<NKikimr::NOlap::TUnifiedBlobId> TUnifiedBlobId::BuildFromProto(
+    const NKikimrColumnShardProto::TUnifiedBlobId& proto
+) {
     TUnifiedBlobId result;
     auto parse = result.DeserializeFromProto(proto);
     if (!parse) {
@@ -118,7 +120,9 @@ NKikimr::TConclusionStatus TBlobRange::DeserializeFromProto(const NKikimrColumnS
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusion<NKikimr::NOlap::TBlobRange> TBlobRange::BuildFromProto(const NKikimrColumnShardProto::TBlobRange& proto) {
+NKikimr::TConclusion<NKikimr::NOlap::TBlobRange> TBlobRange::BuildFromProto(
+    const NKikimrColumnShardProto::TBlobRange& proto
+) {
     TBlobRange result;
     auto parsed = result.DeserializeFromProto(proto);
     if (!parsed) {
@@ -141,14 +145,17 @@ TString TBlobRange::GetData(const TString& blobData) const {
     return blobData.substr(Offset, Size);
 }
 
-NKikimr::TConclusionStatus TBlobRangeLink16::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
+NKikimr::TConclusionStatus TBlobRangeLink16::DeserializeFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto
+) {
     BlobIdx = proto.GetBlobIdx();
     Offset = proto.GetOffset();
     Size = proto.GetSize();
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusion<NKikimr::NOlap::TBlobRangeLink16> TBlobRangeLink16::BuildFromProto(const NKikimrColumnShardProto::TBlobRangeLink16& proto) {
+NKikimr::TConclusion<NKikimr::NOlap::TBlobRangeLink16> TBlobRangeLink16::BuildFromProto(
+    const NKikimrColumnShardProto::TBlobRangeLink16& proto
+) {
     TBlobRangeLink16 result;
     auto parsed = result.DeserializeFromProto(proto);
     if (!parsed) {
@@ -175,4 +182,4 @@ NKikimr::NOlap::TBlobRange TBlobRangeLink16::RestoreRange(const TUnifiedBlobId& 
     return TBlobRange(blobId, Offset, Size);
 }
 
-}
+} // namespace NKikimr::NOlap

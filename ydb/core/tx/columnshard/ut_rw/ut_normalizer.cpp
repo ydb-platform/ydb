@@ -34,12 +34,9 @@ struct TPortionRecord {
 
 class TNormalizerChecker {
 public:
-    virtual ~TNormalizerChecker() {
-    }
+    virtual ~TNormalizerChecker() {}
 
-    virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& /*columnShardConfig*/) const {
-
-    }
+    virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& /*columnShardConfig*/) const {}
 
     virtual ui64 RecordsCountAfterReboot(const ui64 initialRecodsCount) const {
         return initialRecodsCount;
@@ -98,7 +95,7 @@ public:
     }
 };
 
-class TSchemaVersionsCleaner : public NYDBTest::ILocalDBModifier {
+class TSchemaVersionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -111,7 +108,8 @@ public:
             info.SetSinceTxId(1);
             info.MutableSchema()->SetVersion(0);
             db.Table<Schema::SchemaPresetVersionInfo>().Key(1, 5, 1).Update(
-                NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString()));
+                NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString())
+            );
         }
 
         {
@@ -121,15 +119,15 @@ public:
             versionInfo.SetSinceStep(5);
             versionInfo.SetSinceTxId(1);
             db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
-                NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
+                NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString())
+            );
         }
 
         db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
-
     }
 };
 
-class TPortionsCleaner : public NYDBTest::ILocalDBModifier {
+class TPortionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -142,7 +140,9 @@ public:
 
             while (!rowset.EndOfSet()) {
                 NOlap::TPortionAddress addr(
-                    rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>());
+                    rowset.GetValue<Schema::IndexPortions::PathId>(),
+                    rowset.GetValue<Schema::IndexPortions::PortionId>()
+                );
                 portions.emplace_back(addr);
                 UNIT_ASSERT(rowset.Next());
             }
@@ -165,8 +165,10 @@ public:
                 metaProto.SetDeletionsCount(0);
                 metaProto.SetIsInserted(true);
 
-                const auto schema = std::make_shared<arrow::Schema>(
-                    arrow::FieldVector({ std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
+                const auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector(
+                    {std::make_shared<arrow::Field>("key1", arrow::uint64()),
+                     std::make_shared<arrow::Field>("key2", arrow::uint64())}
+                ));
                 auto batch = NArrow::MakeEmptyBatch(schema, 1);
                 NArrow::TFirstLastSpecialKeys keys(batch);
                 metaProto.SetPrimaryKeyBorders(keys.SerializePayloadToString());
@@ -176,10 +178,12 @@ public:
                 metaProto.MutableRecordSnapshotMax()->SetTxId(0);
                 db.Table<Schema::IndexPortions>()
                     .Key(pathId, portionId)
-                    .Update(NIceDb::TUpdate<Schema::IndexPortions::SchemaVersion>(1),
+                    .Update(
+                        NIceDb::TUpdate<Schema::IndexPortions::SchemaVersion>(1),
                         NIceDb::TUpdate<Schema::IndexPortions::Metadata>(metaProto.SerializeAsString()),
                         NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotPlanStep>(10),
-                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(10));
+                        NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(10)
+                    );
             }
         }
     }
@@ -249,28 +253,38 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     template <class TLocalDBModifier>
     void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
         using namespace NArrow;
-        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TLocalDBModifier>>();
+        auto csControllerGuard =
+            NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TLocalDBModifier>>();
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
-        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig); 
+        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig);
 
         const ui64 tableId = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
-        const std::vector<ui32> columnsIds = { 1, 2, 3 };
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
+        };
+        const std::vector<ui32> columnsIds = {1, 2, 3};
         PrepareTablet(runtime, tableId, schema, 2);
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr key1Column =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key1");
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>(
+                "key1"
+            );
         NConstruction::IArrayBuilder::TPtr key2Column =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key2");
-        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
-            "field", NConstruction::TStringPoolFiller(8, 100));
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>(
+                "key2"
+            );
+        NConstruction::IArrayBuilder::TPtr column =
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+                "field", NConstruction::TStringPoolFiller(8, 100)
+            );
 
-        auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
+        auto batch = NConstruction::TRecordBatchConstructor({key1Column, key2Column, column}).BuildBatch(20048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2, 3}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
@@ -299,7 +313,8 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     Y_UNIT_TEST(SchemaVersionsNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
-            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig
+            ) const override {
                 auto* repair = columnShardConfig.MutableRepairs()->Add();
                 repair->SetClassName("SchemaVersionCleaner");
                 repair->SetDescription("Removing unused schema versions");
@@ -312,14 +327,14 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TEmptyPortionsCleaner>();
     }
 
-
     Y_UNIT_TEST(EmptyTablesNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
             ui64 RecordsCountAfterReboot(const ui64) const override {
                 return 0;
             }
-            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig
+            ) const override {
                 auto* repair = columnShardConfig.MutableRepairs()->Add();
                 repair->SetClassName("PortionsCleaner");
                 repair->SetDescription("Removing dirty portions withno tables");
@@ -330,4 +345,4 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 }
 
-}   // namespace NKikimr
+} // namespace NKikimr

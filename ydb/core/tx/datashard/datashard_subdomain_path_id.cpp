@@ -12,34 +12,33 @@ static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);
 void TDataShard::StopFindSubDomainPathId() {
     if (FindSubDomainPathIdActor) {
         Send(FindSubDomainPathIdActor, new TEvents::TEvPoison);
-        FindSubDomainPathIdActor = { };
+        FindSubDomainPathIdActor = {};
     }
 }
 
 void TDataShard::StartFindSubDomainPathId(bool delayFirstRequest) {
-    if (!FindSubDomainPathIdActor &&
-        CurrentSchemeShardId != 0 &&
-        CurrentSchemeShardId != INVALID_TABLET_ID &&
-        (!SubDomainPathId || SubDomainPathId->OwnerId != CurrentSchemeShardId))
-    {
-        FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(SelfId(), TabletID(), CurrentSchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay));
+    if (!FindSubDomainPathIdActor && CurrentSchemeShardId != 0 && CurrentSchemeShardId != INVALID_TABLET_ID &&
+        (!SubDomainPathId || SubDomainPathId->OwnerId != CurrentSchemeShardId)) {
+        FindSubDomainPathIdActor = Register(CreateFindSubDomainPathIdActor(
+            SelfId(), TabletID(), CurrentSchemeShardId, delayFirstRequest, MaxFindSubDomainPathIdDelay
+        ));
     }
 }
 
-class TDataShard::TTxPersistSubDomainPathId : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxPersistSubDomainPathId: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxPersistSubDomainPathId(TDataShard* self, ui64 schemeShardId, ui64 localPathId)
         : TTransactionBase(self)
         , SchemeShardId(schemeShardId)
-        , LocalPathId(localPathId)
-    { }
+        , LocalPathId(localPathId) {}
 
-    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_PATH_ID; }
+    TTxType GetTxType() const override {
+        return TXTYPE_PERSIST_SUBDOMAIN_PATH_ID;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        if (Self->CurrentSchemeShardId == SchemeShardId &&
-            !Self->SubDomainPathId || Self->SubDomainPathId->OwnerId != SchemeShardId)
-        {
+        if (Self->CurrentSchemeShardId == SchemeShardId && !Self->SubDomainPathId ||
+            Self->SubDomainPathId->OwnerId != SchemeShardId) {
             Self->PersistSubDomainPathId(SchemeShardId, LocalPathId, txc);
             Self->StartWatchingSubDomainPathId();
         }
@@ -59,7 +58,7 @@ void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::T
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {
-        FindSubDomainPathIdActor = { };
+        FindSubDomainPathIdActor = {};
     }
 
     Execute(new TTxPersistSubDomainPathId(this, msg->SchemeShardId, msg->LocalPathId), ctx);
@@ -87,14 +86,15 @@ void TDataShard::StartWatchingSubDomainPathId() {
     }
 }
 
-class TDataShard::TTxPersistSubDomainOutOfSpace : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxPersistSubDomainOutOfSpace: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxPersistSubDomainOutOfSpace(TDataShard* self, bool outOfSpace)
         : TTransactionBase(self)
-        , OutOfSpace(outOfSpace)
-    { }
+        , OutOfSpace(outOfSpace) {}
 
-    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_OUT_OF_SPACE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_PERSIST_SUBDOMAIN_OUT_OF_SPACE;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
@@ -118,10 +118,8 @@ private:
 void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
-        const bool outOfSpace = msg->Result->GetPathDescription()
-            .GetDomainDescription()
-            .GetDomainState()
-            .GetDiskQuotaExceeded();
+        const bool outOfSpace =
+            msg->Result->GetPathDescription().GetDomainDescription().GetDomainState().GetDiskQuotaExceeded();
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace

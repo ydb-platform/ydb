@@ -8,17 +8,15 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
-ui64 GetRSCount(TTestActorRuntime &runtime, TActorId sender, ui64 shard)
-{
+ui64 GetRSCount(TTestActorRuntime& runtime, TActorId sender, ui64 shard) {
     auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
-    TString miniKQL =   R"___((
+    TString miniKQL = R"___((
         (let range '('ExcFrom '('TxId (Uint64 '0) (Void))))
         (let select '('TxId))
         (let options '())
@@ -33,24 +31,20 @@ ui64 GetRSCount(TTestActorRuntime &runtime, TActorId sender, ui64 shard)
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), 0);
-    return reply->Record.GetExecutionEngineEvaluatedResponse()
-        .GetValue().GetStruct(0).GetOptional().GetUint64();
+    return reply->Record.GetExecutionEngineEvaluatedResponse().GetValue().GetStruct(0).GetOptional().GetUint64();
 }
 
 struct IsReadSet {
     IsReadSet(ui64 src, ui64 dest)
         : Source(src)
-        , Dest(dest)
-    {
-    }
+        , Dest(dest) {}
 
-    bool operator()(IEventHandle& ev)
-    {
+    bool operator()(IEventHandle& ev) {
         if (ev.GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-            auto &rec = ev.Get<TEvTxProcessing::TEvReadSet>()->Record;
-            bool isExpectation = (
-                (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
-                (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA));
+            auto& rec = ev.Get<TEvTxProcessing::TEvReadSet>()->Record;
+            bool isExpectation =
+                ((rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
+                 (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA));
             if (rec.GetTabletSource() == Source && rec.GetTabletDest() == Dest && !isExpectation) {
                 return true;
             }
@@ -72,7 +66,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             .SetEnableDataShardVolatileTransactions(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
@@ -87,7 +81,11 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // Fill some data. Later we will copy data from shards 2 and 3 to shard 1.
         {
-            auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) VALUES (0x50000000,1),(0x80000001,1),(0x80000002,1),(0x80000003,1),(0x80000004,1),(0x80000005,1),(0x80000006,1),(0x80000007,1),(0x80000008,1),(0x80000009,1)");
+            auto request = MakeSQLRequest(
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES "
+                "(0x50000000,1),(0x80000001,1),(0x80000002,1),(0x80000003,1),(0x80000004,1),(0x80000005,1),(0x80000006,"
+                "1),(0x80000007,1),(0x80000008,1),(0x80000009,1)"
+            );
             runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
         }
@@ -97,7 +95,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // Add some fake RS to the first shard.
         {
             auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
-            TString miniKQL =   R"___((
+            TString miniKQL = R"___((
                 (let range (ListFromRange (Uint64 '1) (Uint64 '450001)))
                 (let upd (lambda '(x) (UpdateRow 'InReadSets
                                                  '( '('TxId x) '('Origin x) '('From x) '('To x) )
@@ -114,9 +112,9 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // Run multishard tx but drop RS to pause it on the first shard.
         {
-            auto captureRS = [shard=shards[1]](TAutoPtr<IEventHandle> &event) -> auto {
+            auto captureRS = [shard = shards[1]](TAutoPtr<IEventHandle>& event) -> auto {
                 if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-                    auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
+                    auto& rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
                     if (rec.GetTabletSource() == shard)
                         return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -124,7 +122,9 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             };
             runtime.SetObserverFunc(captureRS);
 
-            auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = 0x50000000");
+            auto request = MakeSQLRequest(
+                "UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = 0x50000000"
+            );
             runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             // Wait until both parts of tx are finished on the second shard.
             TDispatchOptions options;
@@ -135,7 +135,11 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // Run more txs and wait until RSs are in local db.
         {
             for (auto i = 1; i < 10; ++i) {
-                auto request = MakeSQLRequest(Sprintf("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = %" PRIu32, i + 0x80000000));
+                auto request = MakeSQLRequest(Sprintf(
+                    "UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = "
+                    "%" PRIu32,
+                    i + 0x80000000
+                ));
                 runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             }
             TDispatchOptions options;
@@ -156,14 +160,13 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
             // We can't be sure RS are cleaned up because shared event number
             // is used to track cleanup txs. So make a check loop.
-            while (GetRSCount(runtime, sender, shards[0]) != 9)
-                runtime.DispatchEvents(options, TDuration::Seconds(1));
+            while (GetRSCount(runtime, sender, shards[0]) != 9) runtime.DispatchEvents(options, TDuration::Seconds(1));
         }
 
         // Check all remained RS are for existing txs
         {
             auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
-            TString miniKQL =   R"___((
+            TString miniKQL = R"___((
                 (let range '('ExcFrom '('TxId (Uint64 '0) (Void))))
                 (let select '('TxId))
                 (let options '())
@@ -178,8 +181,12 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             TAutoPtr<IEventHandle> handle;
             auto reply = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(handle);
             UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), 0);
-            for (auto &row : reply->Record.GetExecutionEngineEvaluatedResponse()
-                     .GetValue().GetStruct(0).GetOptional().GetStruct(0).GetList()) {
+            for (auto& row : reply->Record.GetExecutionEngineEvaluatedResponse()
+                                 .GetValue()
+                                 .GetStruct(0)
+                                 .GetOptional()
+                                 .GetStruct(0)
+                                 .GetList()) {
                 UNIT_ASSERT(row.GetStruct(0).GetOptional().GetUint64() > 450000);
             }
         }
@@ -193,19 +200,17 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             options.FinalEvents.emplace_back(IsTxResultComplete(), 10);
             runtime.DispatchEvents(options);
 
-            while (GetRSCount(runtime, sender, shards[0]) != 0)
-                runtime.DispatchEvents(options, TDuration::Seconds(1));
+            while (GetRSCount(runtime, sender, shards[0]) != 0) runtime.DispatchEvents(options, TDuration::Seconds(1));
         }
     }
 
     Y_UNIT_TEST(TestDelayedRSAckForUnknownTx) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
@@ -217,7 +222,12 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         CreateShardedTable(server, sender, "/Root", "table-2", 4);
 
         // Fill some data.
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (0x20000000,0x20000001),(0x60000000,0x60000001),(0xA0000000,0xA0000001),(0xE0000000,0xE0000001);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES "
+            "(0x20000000,0x20000001),(0x60000000,0x60000001),(0xA0000000,0xA0000001),(0xE0000000,0xE0000001);"
+        );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         auto shards2 = GetTableShards(server, sender, "/Root/table-2");
@@ -225,9 +235,9 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // Run multishard tx but drop all RS acks to the table-1.
         // Tx should still finish successfully.
         {
-            auto captureRS = [shard=shards1[0]](TAutoPtr<IEventHandle> &event) -> auto {
+            auto captureRS = [shard = shards1[0]](TAutoPtr<IEventHandle>& event) -> auto {
                 if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSetAck) {
-                    auto &rec = event->Get<TEvTxProcessing::TEvReadSetAck>()->Record;
+                    auto& rec = event->Get<TEvTxProcessing::TEvReadSetAck>()->Record;
                     if (rec.GetTabletSource() == shard) {
                         return TTestActorRuntime::EEventAction::DROP;
                     }
@@ -242,8 +252,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // Now we have multishard tx completed but RS not acked. Restart
         // second table shards to trigger RS resend.
         runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
-        for (auto shard : shards2)
-            runtime.Register(CreateTabletKiller(shard));
+        for (auto shard : shards2) runtime.Register(CreateTabletKiller(shard));
 
         // Try to drop table which waits for all OutRS to be acked. If acks
         // for completed tx work correctly then it should succeed.
@@ -264,7 +273,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             .SetEnableDataShardVolatileTransactions(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
@@ -286,17 +295,17 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // We want to intercept all RS from table-1 and all RS acks
         // from table-3.
-        auto captureRS = [shard1,shard3](TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureRS = [shard1, shard3](TAutoPtr<IEventHandle>& event) -> auto {
             if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
-                auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
-                bool isExpectation = (
-                    (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
-                    (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA));
+                auto& rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
+                bool isExpectation =
+                    ((rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
+                     (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA));
                 if (rec.GetTabletSource() == shard1 && !isExpectation) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             } else if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSetAck) {
-                auto &rec = event->Get<TEvTxProcessing::TEvReadSetAck>()->Record;
+                auto& rec = event->Get<TEvTxProcessing::TEvReadSetAck>()->Record;
                 if (rec.GetTabletDest() == shard3) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -341,12 +350,10 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
     Y_UNIT_TEST(TestGenericReadSetDecisionCommit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataShardGenericReadSets(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableDataShardGenericReadSets(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -366,10 +373,11 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
                 SELECT key, value FROM `/Root/table-1`
                 ORDER BY key
                 )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }"
+        );
 
         size_t readSets = 0;
-        auto observeReadSets = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+        auto observeReadSets = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -395,19 +403,18 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             KqpSimpleCommit(runtime, sessionId, txId, R"(
                 UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)
             )"),
-            "<empty>");
+            "<empty>"
+        );
         UNIT_ASSERT(readSets > 0);
     }
 
     Y_UNIT_TEST(TestGenericReadSetDecisionAbort) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataShardGenericReadSets(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableDataShardGenericReadSets(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -427,12 +434,13 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
                 SELECT key, value FROM `/Root/table-1`
                 ORDER BY key
                 )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }"
+        );
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)");
 
         size_t readSets = 0;
-        auto observeReadSets = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+        auto observeReadSets = [&](TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
@@ -462,7 +470,8 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             KqpSimpleCommit(runtime, sessionId, txId, R"(
                 UPSERT INTO `/Root/table-2` (key, value) VALUES (3, 3)
             )"),
-            "ERROR: ABORTED");
+            "ERROR: ABORTED"
+        );
         UNIT_ASSERT(readSets > 0);
     }
 }

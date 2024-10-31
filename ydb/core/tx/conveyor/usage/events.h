@@ -18,6 +18,7 @@ struct TEvExecution {
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
         YDB_READONLY_DEF(ITask::TPtr, Task);
+
     public:
         TEvNewTask() = default;
 
@@ -25,4 +26,4 @@ struct TEvExecution {
     };
 };
 
-}
+} // namespace NKikimr::NConveyor

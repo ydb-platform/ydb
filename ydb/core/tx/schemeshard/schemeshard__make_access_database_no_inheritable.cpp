@@ -5,21 +5,22 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBase<TSchemeShard> {
+struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable: public TTransactionBase<TSchemeShard> {
     bool IsDryRun;
     TActorId AnswerTo;
-    std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) > AnswerFunc;
+    std::function<NActors::IEventBase*(const TMap<TPathId, TSet<TString>>&)> AnswerFunc;
     TSideEffects SideEffects;
 
-    TTxMakeAccessDatabaseNoInheritable(TSelf* self,
-                                   const bool isDryRun,
-                                   const TActorId& answerTo,
-                                   std::function< NActors::IEventBase* (const TMap<TPathId, TSet<TString>>&) > answerFunc)
+    TTxMakeAccessDatabaseNoInheritable(
+        TSelf* self,
+        const bool isDryRun,
+        const TActorId& answerTo,
+        std::function<NActors::IEventBase*(const TMap<TPathId, TSet<TString>>&)> answerFunc
+    )
         : TTransactionBase<TSchemeShard>(self)
-          , IsDryRun(isDryRun)
-          , AnswerTo(answerTo)
-          , AnswerFunc(answerFunc)
-    {}
+        , IsDryRun(isDryRun)
+        , AnswerTo(answerTo)
+        , AnswerFunc(answerFunc) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_UPGRADE_SCHEME;
@@ -31,10 +32,10 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
         NACLib::TACL acl(aclData);
 
         for (const NACLibProto::TACE& ace : acl.GetACE()) {
-            if (ace.GetAccessType() == static_cast<ui32>(NACLib::EAccessType::Allow)
-                && ace.GetAccessRight() == NACLib::EAccessRights::ConnectDatabase
-                && ace.GetInheritanceType() == (NACLib::EInheritanceType::InheritObject | NACLib::EInheritanceType::InheritContainer))
-            {
+            if (ace.GetAccessType() == static_cast<ui32>(NACLib::EAccessType::Allow) &&
+                ace.GetAccessRight() == NACLib::EAccessRights::ConnectDatabase &&
+                ace.GetInheritanceType() ==
+                    (NACLib::EInheritanceType::InheritObject | NACLib::EInheritanceType::InheritContainer)) {
                 result.insert(ace.GetSID());
             }
         }
@@ -44,8 +45,13 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
     TString FixAccess(const TString& aclData, const TSet<TString>& sids) {
         NACLib::TACL acl(aclData);
 
-        for (const auto& x: sids) {
-            acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::ConnectDatabase, x, NACLib::EInheritanceType::InheritObject | NACLib::EInheritanceType::InheritContainer);
+        for (const auto& x : sids) {
+            acl.RemoveAccess(
+                NACLib::EAccessType::Allow,
+                NACLib::EAccessRights::ConnectDatabase,
+                x,
+                NACLib::EInheritanceType::InheritObject | NACLib::EInheritanceType::InheritContainer
+            );
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::ConnectDatabase, x, NACLib::InheritNone);
         }
 
@@ -55,7 +61,7 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
         return proto;
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxUpgradeSchema.Execute");
 
         if (!Self->IsSchemeShardConfigured()) {
@@ -64,7 +70,7 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
 
         TMap<TPathId, TSet<TString>> sidsByDomain;
 
-        for (const auto& item: Self->PathsById) {
+        for (const auto& item : Self->PathsById) {
             const TPathElement::TPtr pathElem = item.second;
 
             if (pathElem->Dropped() || pathElem->IsMigrated()) {
@@ -90,7 +96,7 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
         if (!IsDryRun) {
             NIceDb::TNiceDb db(txc.DB);
 
-            for (const auto& item: sidsByDomain) {
+            for (const auto& item : sidsByDomain) {
                 TPathId domainId = item.first;
                 const TPathElement::TPtr domainElem = Self->PathsById.at(domainId);
                 Y_ABORT_UNLESS(domainElem->IsDomainRoot());
@@ -111,15 +117,18 @@ struct TSchemeShard::TTxMakeAccessDatabaseNoInheritable : public TTransactionBas
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxMakeAccessDatabaseNoInheritable(
-    const TActorId& answerTo, bool isDryRun, std::function< NActors::IEventBase*(const TMap<TPathId, TSet<TString>>&) > func) {
+    const TActorId& answerTo,
+    bool isDryRun,
+    std::function<NActors::IEventBase*(const TMap<TPathId, TSet<TString>>&)> func
+) {
     return new TTxMakeAccessDatabaseNoInheritable(this, isDryRun, answerTo, func);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

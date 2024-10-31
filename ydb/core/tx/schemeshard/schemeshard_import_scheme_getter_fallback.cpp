@@ -12,12 +12,13 @@ public:
     explicit TSchemeGetterFallback(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
         : ReplyTo(replyTo)
         , ImportInfo(importInfo)
-        , ItemIdx(itemIdx)
-    {
-    }
+        , ItemIdx(itemIdx) {}
 
     void Bootstrap() {
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, false, "Imports from S3 are disabled"));
+        Send(
+            ReplyTo,
+            new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, false, "Imports from S3 are disabled")
+        );
         PassAway();
     }
 
@@ -32,5 +33,5 @@ IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo
     return new TSchemeGetterFallback(replyTo, importInfo, itemIdx);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

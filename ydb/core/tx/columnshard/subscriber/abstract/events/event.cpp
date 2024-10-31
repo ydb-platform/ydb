@@ -1,4 +1,3 @@
 #include "event.h"
 
-namespace NKikimr::NColumnShard::NSubscriber {
-}
+namespace NKikimr::NColumnShard::NSubscriber {}

@@ -18,15 +18,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TUpdateMainTableOnIndexMove TConfigureParts"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TUpdateMainTableOnIndexMove TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -46,7 +44,6 @@ public:
 
         return true;
     }
-
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
@@ -95,8 +92,7 @@ public:
                 TTxState* txState = context.SS->TxInFlight.FindPtr(opId);
                 if (!txState) {
                     TStringStream msg;
-                    msg << "txState for opId: " << opId
-                        << " has not been found, cur opId: " << OperationId;
+                    msg << "txState for opId: " << opId << " has not been found, cur opId: " << OperationId;
                     Y_ABORT("%s", msg.Str().data());
                 }
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -156,15 +152,17 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveIndex TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TMoveIndex TPropose"
+                                << ", operationId: " << OperationId;
     }
+
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -228,7 +226,9 @@ public:
             shardSet.insert(tablet);
         }
 
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, std::move(shardSet));
+        context.OnComplete.ProposeToCoordinator(
+            OperationId, txState->TargetPathId, txState->MinStep, std::move(shardSet)
+        );
         return false;
     }
 };
@@ -238,16 +238,19 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveIndex TDeleteTableBarrier"
-                << " operationId: " << OperationId;
+        return TStringBuilder() << "TMoveIndex TDeleteTableBarrier"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TDeleteTableBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvDataShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -270,10 +273,8 @@ public:
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
-
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         TTableInfo::TPtr table = context.SS->Tables.at(txState->TargetPathId);
@@ -314,35 +315,35 @@ class TUpdateMainTableOnIndexMove: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::DeletePathBarrier;
-        case TTxState::DeletePathBarrier:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::DeletePathBarrier;
+            case TTxState::DeletePathBarrier:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeleteTableBarrier>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::DeletePathBarrier:
+                return MakeHolder<TDeleteTableBarrier>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -367,13 +368,13 @@ public:
                         << ", message: " << Transaction.ShortDebugString()
                         << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath tablePath = TPath::Resolve(workingDir, context.SS).Dive(mainTableName);
         {
             TPath::TChecker checks = tablePath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -417,13 +418,14 @@ public:
         context.DbChanges.PersistPath(tablePath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxUpdateMainTableOnIndexMove, tablePath.Base()->PathId);
+        TTxState& txState =
+            context.SS->CreateTx(OperationId, TTxState::TxUpdateMainTableOnIndexMove, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();
 
-        for (auto splitTx: table->GetSplitOpsInFlight()) {
+        for (auto splitTx : table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
@@ -449,14 +451,14 @@ public:
 
         context.OnComplete.DoneOperation(OperationId);
     }
-
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateConsistentMoveIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
 
     TVector<ISubOperation::TPtr> result;
@@ -483,8 +485,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
     TPath mainTablePath = TPath::Resolve(mainTable, context.SS);
     {
         TPath::TChecker checks = mainTablePath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -513,8 +514,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
     TPath srcIndexPath = mainTablePath.Child(srcIndex);
     {
         TPath::TChecker checks = srcIndexPath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -540,7 +540,8 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
     TPath dstIndexPath = mainTablePath.Child(dstIndex);
 
     {
-        auto mainTableAlter = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        auto mainTableAlter =
+            TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
         auto operation = mainTableAlter.MutableAlterTable();
         operation->SetName(mainTablePath.LeafName());
         result.push_back(new TUpdateMainTableOnIndexMove(NextPartId(nextId, result), mainTableAlter));
@@ -548,8 +549,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
 
     {
         TPath::TChecker checks = dstIndexPath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -560,19 +560,20 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
         if (checks) {
             if (!allowOverwrite) {
                 TString errStr = TStringBuilder()
-                    << "Index " << dstIndex
-                    << "exists, but overwrite flag has not been set";
+                                 << "Index " << dstIndex << "exists, but overwrite flag has not been set";
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
             }
             {
-                auto indexDropping = TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
+                auto indexDropping = TransactionTemplate(
+                    mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex
+                );
                 auto operation = indexDropping.MutableDrop();
                 operation->SetName(dstIndex);
 
                 result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
             }
 
-            for (const auto& items: dstIndexPath.Base()->GetChildren()) {
+            for (const auto& items : dstIndexPath.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(items.second));
                 auto implPath = context.SS->PathsById.at(items.second);
                 if (implPath->Dropped()) {
@@ -582,7 +583,8 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
                 auto implTable = context.SS->PathsById.at(items.second);
                 Y_ABORT_UNLESS(implTable->IsTable());
 
-                auto implTableDropping = TransactionTemplate(dstIndexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+                auto implTableDropping =
+                    TransactionTemplate(dstIndexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
                 auto operation = implTableDropping.MutableDrop();
                 operation->SetName(items.first);
 
@@ -612,4 +614,4 @@ ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::
     return MakeSubOperation<TUpdateMainTableOnIndexMove>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -6,12 +6,15 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOperation::TPtr op, NWilson::TTraceId &&traceId)
+TDataShard::TTxProgressTransaction::TTxProgressTransaction(
+    TDataShard* self,
+    TOperation::TPtr op,
+    NWilson::TTraceId&& traceId
+)
     : TBase(self, std::move(traceId))
-    , ActiveOp(std::move(op))
-{}
+    , ActiveOp(std::move(op)) {}
 
-bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) {
+bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Execute at " << Self->TabletID());
 
@@ -26,10 +29,9 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
         }
 
         if (!ActiveOp) {
-            const bool expireSnapshotsAllowed = (
-                    Self->State == TShardState::Ready ||
-                    Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-                    Self->State == TShardState::SplitSrcMakeSnapshot);
+            const bool expireSnapshotsAllowed =
+                (Self->State == TShardState::Ready || Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
+                 Self->State == TShardState::SplitSrcMakeSnapshot);
 
             const bool needFutureCleanup = Self->TxInFly() > 0 || expireSnapshotsAllowed;
 
@@ -118,7 +120,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
     }
 }
 
-void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
+void TDataShard::TTxProgressTransaction::Complete(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Complete at " << Self->TabletID());
 
@@ -128,8 +130,7 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
             auto commitTime = AppData()->TimeProvider->Now() - CommitStart;
             ActiveOp->SetCommitTime(CompleteList.front(), commitTime);
 
-            if (!ActiveOp->IsExecutionPlanFinished()
-                && (ActiveOp->GetCurrentUnit() != CompleteList.front()))
+            if (!ActiveOp->IsExecutionPlanFinished() && (ActiveOp->GetCurrentUnit() != CompleteList.front()))
                 ActiveOp->SetDelayedCommitTime(commitTime);
 
             Self->Pipeline.RunCompleteList(ActiveOp, CompleteList, ctx);
@@ -151,4 +152,5 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
     Self->CheckSplitCanStart(ctx);
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

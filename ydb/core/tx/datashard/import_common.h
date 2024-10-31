@@ -12,13 +12,8 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-#if defined IMPORT_LOG_T || \
-    defined IMPORT_LOG_D || \
-    defined IMPORT_LOG_I || \
-    defined IMPORT_LOG_N || \
-    defined IMPORT_LOG_W || \
-    defined IMPORT_LOG_E || \
-    defined IMPORT_LOG_C
+#if defined IMPORT_LOG_T || defined IMPORT_LOG_D || defined IMPORT_LOG_I || defined IMPORT_LOG_N || \
+    defined IMPORT_LOG_W || defined IMPORT_LOG_E || defined IMPORT_LOG_C
 #error log macro redefinition
 #endif
 
@@ -43,9 +38,7 @@ struct TImportJobProduct: public IDestructable {
         : Success(success)
         , Error(std::move(error))
         , BytesWritten(bytes)
-        , RowsWritten(rows)
-    {
-    }
+        , RowsWritten(rows) {}
 
 }; // TImportJobProduct
 
@@ -69,9 +62,7 @@ public:
     explicit TTableInfo(ui64 id, TUserTable::TCPtr info)
         : Id(id)
         , Info(info)
-        , ColumnNameIndex(MakeColumnNameIndex(info))
-    {
-    }
+        , ColumnNameIndex(MakeColumnNameIndex(info)) {}
 
     ui64 GetId() const {
         return Id;
@@ -130,5 +121,5 @@ private:
 
 }; // TTableInfo
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

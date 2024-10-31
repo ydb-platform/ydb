@@ -5,7 +5,7 @@
 
 namespace NKikimr::NDataShard {
 
-class TDataShardLocksDb : public NLocks::TShardLocksDb<TDataShard, TDataShard::Schema> {
+class TDataShardLocksDb: public NLocks::TShardLocksDb<TDataShard, TDataShard::Schema> {
 private:
     using TBase = NLocks::TShardLocksDb<TDataShard, TDataShard::Schema>;
 

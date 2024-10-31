@@ -11,12 +11,17 @@ class IMerger {
 private:
     NArrow::NMerger::TRWSortableBatchPosition IncomingPosition;
 
-    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
+    virtual TConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& exists,
+        const NArrow::NMerger::TSortableBatchPosition& incoming
+    ) = 0;
     virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
+
 protected:
     std::shared_ptr<ISnapshotSchema> Schema;
     std::shared_ptr<arrow::RecordBatch> IncomingData;
     bool IncomingFinished = false;
+
 public:
     IMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
         : IncomingPosition(incoming, 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
@@ -37,12 +42,18 @@ public:
 class TInsertMerger: public IMerger {
 private:
     using TBase = IMerger;
-    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
-        return TConclusionStatus::Fail("Conflict with existing key. " + exists.GetSorting()->DebugJson(exists.GetPosition()).GetStringRobust());
+    virtual TConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& exists,
+        const NArrow::NMerger::TSortableBatchPosition& /*incoming*/
+    ) override {
+        return TConclusionStatus::Fail(
+            "Conflict with existing key. " + exists.GetSorting()->DebugJson(exists.GetPosition()).GetStringRobust()
+        );
     }
     virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         return TConclusionStatus::Success();
     }
+
 public:
     using TBase::TBase;
     virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
@@ -54,7 +65,10 @@ class TReplaceMerger: public IMerger {
 private:
     using TBase = IMerger;
     NArrow::TColumnFilter Filter = NArrow::TColumnFilter::BuildDenyFilter();
-    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& /*exists*/, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+    virtual TConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& /*exists*/,
+        const NArrow::NMerger::TSortableBatchPosition& /*incoming*/
+    ) override {
         Filter.Add(true);
         return TConclusionStatus::Success();
     }
@@ -62,6 +76,7 @@ private:
         Filter.Add(false);
         return TConclusionStatus::Success();
     }
+
 public:
     using TBase::TBase;
 
@@ -80,7 +95,10 @@ private:
     std::vector<std::shared_ptr<arrow::BooleanArray>> HasIncomingDataFlags;
     const std::optional<NArrow::NMerger::TSortableBatchPosition> DefaultExists;
     const TString InsertDenyReason;
-    virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) override;
+    virtual TConclusionStatus OnEqualKeys(
+        const NArrow::NMerger::TSortableBatchPosition& exists,
+        const NArrow::NMerger::TSortableBatchPosition& incoming
+    ) override;
     virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) override {
         if (!!InsertDenyReason) {
             return TConclusionStatus::Fail("insertion is impossible: " + InsertDenyReason);
@@ -91,13 +109,18 @@ private:
             return OnEqualKeys(*DefaultExists, incoming);
         }
     }
+
 public:
     virtual std::shared_ptr<arrow::RecordBatch> BuildResultBatch() override {
         return Builder.Finalize();
     }
 
-    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
-        const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});
+    TUpdateMerger(
+        const std::shared_ptr<arrow::RecordBatch>& incoming,
+        const std::shared_ptr<ISnapshotSchema>& actualSchema,
+        const TString& insertDenyReason,
+        const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {}
+    );
 };
 
-}
+} // namespace NKikimr::NOlap

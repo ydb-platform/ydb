@@ -14,8 +14,7 @@ public:
 
     TTxScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvScan::TPtr& ev)
         : TBase(self)
-        , Ev(ev) {
-    }
+        , Ev(ev) {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;

@@ -4,10 +4,14 @@
 
 namespace NKikimr::NOlap {
 
-void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
+void IBlobsGCAction::OnCompleteTxAfterCleaning(
+    NColumnShard::TColumnShard& self,
+    const std::shared_ptr<IBlobsGCAction>& taskAction
+) {
     if (!AbortedFlag) {
         NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", self.TabletID());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)
+        ("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
         auto storage = self.GetStoragesManager()->GetOperatorVerified(GetStorageId());
         storage->GetSharedBlobs()->OnTransactionCompleteAfterCleaning(BlobsToRemove);
         ui64 sumBytesRemove = 0;
@@ -35,12 +39,16 @@ void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, 
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             RemoveBlobIdFromDB(i.GetTabletId(), i.GetBlobId(), dbBlobs);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "OnExecuteTxAfterCleaning")("action_guid", GetActionGuid());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)
+        ("event", "OnExecuteTxAfterCleaning")("action_guid", GetActionGuid());
         return DoOnExecuteTxAfterCleaning(self, dbBlobs);
     }
 }
 
-void IBlobsGCAction::OnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
+void IBlobsGCAction::OnCompleteTxBeforeCleaning(
+    NColumnShard::TColumnShard& self,
+    const std::shared_ptr<IBlobsGCAction>& taskAction
+) {
     if (!AbortedFlag) {
         if (!DoOnCompleteTxBeforeCleaning(self, taskAction)) {
             return;
@@ -65,4 +73,4 @@ void IBlobsGCAction::OnFinished() {
     FinishedFlag = true;
 }
 
-}
+} // namespace NKikimr::NOlap

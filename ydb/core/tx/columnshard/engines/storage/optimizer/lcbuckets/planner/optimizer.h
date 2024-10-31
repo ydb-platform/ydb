@@ -47,7 +47,9 @@ protected:
     }
 
     virtual void DoModifyPortions(
-        const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+        const THashMap<ui64, TPortionInfo::TPtr>& add,
+        const THashMap<ui64, TPortionInfo::TPtr>& remove
+    ) override {
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         for (auto&& [_, i] : remove) {
@@ -66,12 +68,13 @@ protected:
                 continue;
             }
             PortionsInfo->AddPortion(i);
-            if (i->GetCompactionLevel() && (i->GetCompactionLevel() >= Levels.size() || !Levels[i->GetCompactionLevel()]->CanTakePortion(i))) {
+            if (i->GetCompactionLevel() &&
+                (i->GetCompactionLevel() >= Levels.size() || !Levels[i->GetCompactionLevel()]->CanTakePortion(i))) {
                 i->MutableMeta().ResetCompactionLevel(0);
             }
             AFL_VERIFY(i->GetCompactionLevel() < Levels.size());
             if (i->GetMeta().GetCompactionLevel()) {
-                Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({ i }, {});
+                Levels[i->GetMeta().GetCompactionLevel()]->ModifyPortions({i}, {});
             }
         }
 
@@ -92,13 +95,15 @@ protected:
                     }
                 }
             } else {
-                Levels[0]->ModifyPortions({ i }, {});
+                Levels[0]->ModifyPortions({i}, {});
             }
         }
         RefreshWeights();
     }
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
-        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager
+    ) const override;
 
     virtual void DoActualize(const TInstant currentInstant) override {
         if (currentInstant - LastActualization > TDuration::Seconds(180)) {
@@ -145,7 +150,10 @@ public:
     }
 
     TOptimizerPlanner(
-        const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema);
+        const ui64 pathId,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema
+    );
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

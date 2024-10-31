@@ -13,11 +13,14 @@
 
 namespace NKikimr::NOlap::NExport {
 
-class TExportTask: public NBackgroundTasks::TInterfaceProtoAdapter<NKikimrColumnShardExportProto::TExportTask, NBackground::ITaskDescription> {
+class TExportTask
+    : public NBackgroundTasks::
+          TInterfaceProtoAdapter<NKikimrColumnShardExportProto::TExportTask, NBackground::ITaskDescription> {
 public:
     static TString GetClassNameStatic() {
         return "CS::EXPORT";
     }
+
 private:
     TIdentifier Identifier = TIdentifier(0);
     YDB_READONLY_DEF(TSelectorContainer, Selector);
@@ -27,13 +30,11 @@ private:
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) override;
     virtual NKikimrColumnShardExportProto::TExportTask DoSerializeToProto() const override;
-    static const inline TFactory::TRegistrator<TExportTask> Registrator = TFactory::TRegistrator<TExportTask>(GetClassNameStatic());
+    static const inline TFactory::TRegistrator<TExportTask> Registrator =
+        TFactory::TRegistrator<TExportTask>(GetClassNameStatic());
     virtual std::shared_ptr<NBackground::ISessionLogic> DoBuildSession() const override;
 
 public:
-
-
-
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
@@ -47,18 +48,22 @@ public:
 
     TExportTask() = default;
 
-    TExportTask(const TIdentifier& id, const TSelectorContainer& selector, const TStorageInitializerContainer& storageInitializer, 
-        const NArrow::NSerialization::TSerializerContainer& serializer, const std::optional<ui64> txId = {})
+    TExportTask(
+        const TIdentifier& id,
+        const TSelectorContainer& selector,
+        const TStorageInitializerContainer& storageInitializer,
+        const NArrow::NSerialization::TSerializerContainer& serializer,
+        const std::optional<ui64> txId = {}
+    )
         : Identifier(id)
         , Selector(selector)
         , StorageInitializer(storageInitializer)
         , Serializer(serializer)
-        , TxId(txId)
-    {
-    }
+        , TxId(txId) {}
 
     TString DebugString() const {
-        return TStringBuilder() << "{task_id=" << Identifier.DebugString() << ";selector=" << Selector.DebugString() << ";}";
+        return TStringBuilder() << "{task_id=" << Identifier.DebugString() << ";selector=" << Selector.DebugString()
+                                << ";}";
     }
 };
-}
+} // namespace NKikimr::NOlap::NExport

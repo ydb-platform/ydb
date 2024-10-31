@@ -14,8 +14,7 @@ public:
     TAllocationGuard(const NActors::TActorId& serviceActorId, const ui64 clientId, const ui32 count)
         : ServiceActorId(serviceActorId)
         , ClientId(clientId)
-        , Count(count) {
-    }
+        , Count(count) {}
 
     ~TAllocationGuard();
 

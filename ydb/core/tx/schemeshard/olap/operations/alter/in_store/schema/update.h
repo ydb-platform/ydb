@@ -41,10 +41,9 @@ private:
     }
 
 public:
-
     virtual NKikimrTxColumnShard::ETransactionKind GetShardTransactionKind() const override {
         return NKikimrTxColumnShard::ETransactionKind::TX_KIND_SCHEMA;
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

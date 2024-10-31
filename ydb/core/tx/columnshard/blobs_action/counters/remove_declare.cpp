@@ -4,8 +4,7 @@
 namespace NKikimr::NOlap::NBlobOperations {
 
 TRemoveDeclareCounters::TRemoveDeclareCounters(const TConsumerCounters& owner)
-    : TBase(owner, "RemoveDeclare")
-{
+    : TBase(owner, "RemoveDeclare") {
     RequestsCount = TBase::GetDeriviative("Requests/Count");
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");
 
@@ -20,4 +19,4 @@ TRemoveDeclareCounters::TRemoveDeclareCounters(const TConsumerCounters& owner)
     FailDurationByCount = TBase::GetHistogram("Fails/Duration/Count", NMonitoring::ExponentialHistogram(15, 2, 2));
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations

@@ -20,7 +20,8 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool restore = false);
+    bool restore = false
+);
 
 void DoCreateStream(
     TVector<ISubOperation::TPtr>& result,
@@ -29,7 +30,8 @@ void DoCreateStream(
     const TPath& workingDirPath,
     const TPath& tablePath,
     const bool acceptExisted,
-    const bool initialScan);
+    const bool initialScan
+);
 
 void DoCreatePqPart(
     TVector<ISubOperation::TPtr>& result,
@@ -39,6 +41,7 @@ void DoCreatePqPart(
     const TString& streamName,
     TTableInfo::TCPtr table,
     const TVector<TString>& boundaries,
-    const bool acceptExisted);
+    const bool acceptExisted
+);
 
-} // namespace NKikimr::NSchemesShard::NCdc
+} // namespace NKikimr::NSchemeShard::NCdc

@@ -9,6 +9,7 @@ private:
     const ui32 RecordsCount;
     const ui64 RawBytes;
     const TString Data;
+
 protected:
     virtual const TString& DoGetData() const override {
         return Data;
@@ -16,7 +17,11 @@ protected:
     virtual TString DoDebugString() const override {
         return "";
     }
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& /*saver*/, const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/, const std::vector<ui64>& /*splitSizes*/) const override {
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(
+        const TColumnSaver& /*saver*/,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& /*counters*/,
+        const std::vector<ui64>& /*splitSizes*/
+    ) const override {
         AFL_VERIFY(false);
         return {};
     }
@@ -35,8 +40,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return nullptr;
     }
-    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const override;
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& /*columnInfo*/) const override;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo)
+        const override;
+    virtual std::shared_ptr<IPortionDataChunk>
+    DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& /*columnInfo*/) const override;
     virtual void DoAddInplaceIntoPortion(TPortionInfoConstructor& portionInfo) const override;
 
 public:
@@ -44,9 +51,6 @@ public:
         : TBase(address.GetColumnId(), address.GetChunkIdx())
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(data)
-    {
-    }
-
+        , Data(data) {}
 };
 }   // namespace NKikimr::NOlap::NChunks

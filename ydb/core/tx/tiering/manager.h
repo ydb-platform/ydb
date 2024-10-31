@@ -17,8 +17,12 @@
 namespace NKikimr::NColumnShard {
 namespace NTiers {
 
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto);
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto);
+NArrow::NSerialization::TSerializerContainer ConvertCompression(
+    const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto
+);
+NArrow::NSerialization::TSerializerContainer ConvertCompression(
+    const NKikimrSchemeOp::TCompressionOptions& compressionProto
+);
 
 class TManager {
 private:
@@ -27,6 +31,7 @@ private:
     YDB_READONLY_DEF(TTierConfig, Config);
     YDB_READONLY_DEF(NActors::TActorId, StorageActorId);
     std::optional<NKikimrSchemeOp::TS3Settings> S3Settings;
+
 public:
     const NKikimrSchemeOp::TS3Settings& GetS3Settings() const {
         Y_ABORT_UNLESS(S3Settings);
@@ -43,7 +48,7 @@ public:
         return GetConfig().GetTierName();
     }
 };
-}
+} // namespace NTiers
 
 class TTiersManager: public ITiersManager {
 private:
@@ -61,16 +66,18 @@ private:
     mutable NMetadata::NFetcher::ISnapshotsFetcher::TPtr ExternalDataManipulation;
 
 public:
-    TTiersManager(const ui64 tabletId, const TActorId& tabletActorId,
-                std::function<void(const TActorContext& ctx)> shardCallback = {})
+    TTiersManager(
+        const ui64 tabletId,
+        const TActorId& tabletActorId,
+        std::function<void(const TActorContext& ctx)> shardCallback = {}
+    )
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
-        , ShardCallback(shardCallback)
-    {
-    }
+        , ShardCallback(shardCallback) {}
     TActorId GetActorId() const;
     THashMap<ui64, NOlap::TTiering> GetTiering() const;
-    void TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshot, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    void
+    TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshot, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     void EnablePathId(const ui64 pathId, const TString& tieringId) {
         PathIdTiering.emplace(pathId, tieringId);
     }
@@ -90,7 +97,6 @@ public:
     }
     virtual const NTiers::TManager* GetManagerOptional(const TString& tierId) const override;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;
-
 };
 
-}
+} // namespace NKikimr::NColumnShard

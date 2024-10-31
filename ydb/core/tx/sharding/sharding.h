@@ -7,7 +7,7 @@
 namespace NKikimrSchemeOp {
 class TColumnTableSharding;
 class TGranuleShardingLogicContainer;
-}
+} // namespace NKikimrSchemeOp
 
 namespace NKikimr::NSharding {
 
@@ -33,7 +33,7 @@ public:
     }
 
     std::shared_ptr<NArrow::TColumnFilter> GetFilter(const std::shared_ptr<arrow::RecordBatch>& rb) const {
-        return DoGetFilter(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({ rb })));
+        return DoGetFilter(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({rb})));
     }
     std::set<TString> GetColumnNames() const {
         return DoGetColumnNames();
@@ -53,6 +53,7 @@ class TGranuleShardingLogicContainer: public NBackgroundTasks::TInterfaceProtoCo
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IGranuleShardingLogic>;
     using TProto = IGranuleShardingLogic::TProto;
+
 public:
     using TBase::TBase;
 };
@@ -69,13 +70,11 @@ private:
     TShardInfo() = default;
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TGranuleShardInfo& proto);
+
 public:
     TShardInfo(const ui64 tabletId, const ui32 seqIdx)
         : TabletId(tabletId)
-        , SequenceIdx(seqIdx)
-    {
-
-    }
+        , SequenceIdx(seqIdx) {}
 
     const NKikimr::NOlap::TSnapshot& GetOpenForWriteSnapshotVerified() const {
         AFL_VERIFY(OpenForWriteSnapshot);
@@ -164,10 +163,12 @@ protected:
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) = 0;
     virtual TConclusionStatus DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) = 0;
     virtual std::set<ui64> DoGetModifiedShardIds(const NKikimrSchemeOp::TShardingModification& proto) const = 0;
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const {
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>>
+    DoBuildSplitShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const {
         return TConclusionStatus::Fail("shards splitting not implemented for " + GetClassName());
     }
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const {
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>>
+    DoBuildMergeShardsModifiers(const std::vector<ui64>& /*newTabletIds*/) const {
         return TConclusionStatus::Fail("shards merging not implemented for " + GetClassName());
     }
     virtual TConclusionStatus DoOnAfterModification() = 0;
@@ -176,6 +177,7 @@ protected:
 
 public:
     using TColumn = TExternalTableColumn;
+
 public:
     IShardingBase() = default;
 
@@ -235,16 +237,24 @@ public:
         return DoGetModifiedShardIds(proto);
     }
 
-    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildSplitShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const {
         return DoBuildSplitShardsModifiers(newTabletIds);
     }
 
-    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildMergeShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const {
         return DoBuildMergeShardsModifiers(newTabletIds);
     }
 
-    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildAddShardsModifiers(const std::vector<ui64>& newTabletIds) const;
-    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildReduceShardsModifiers(const std::vector<ui64>& newTabletIds) const;
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildAddShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const;
+    TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> BuildReduceShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const;
 
     void CloseShardWriting(const ui64 shardId) {
         GetShardInfoVerified(shardId).SetIsOpenForWrite(false);
@@ -289,12 +299,19 @@ public:
         return !IsActiveForWrite(shardId);
     }
 
-    static TConclusionStatus ValidateBehaviour(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
-    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
+    static TConclusionStatus ValidateBehaviour(
+        const NSchemeShard::TOlapSchema& schema,
+        const NKikimrSchemeOp::TColumnTableSharding& shardingInfo
+    );
+    static TConclusion<std::unique_ptr<IShardingBase>>
+    BuildFromProto(const NSchemeShard::TOlapSchema& schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
         return BuildFromProto(&schema, shardingInfo);
     }
-    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
-    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
+    static TConclusion<std::unique_ptr<IShardingBase>>
+    BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
+    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(
+        const NKikimrSchemeOp::TColumnTableSharding& shardingInfo
+    ) {
         return BuildFromProto(nullptr, shardingInfo);
     }
 
@@ -310,12 +327,15 @@ public:
 
     virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
 
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch);
-    TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit);
+    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByShardsToArrowBatches(
+        const std::shared_ptr<arrow::RecordBatch>& batch
+    );
+    TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>>
+    SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit);
 
     virtual TString DebugString() const;
 
     virtual ~IShardingBase() = default;
 };
 
-}
+} // namespace NKikimr::NSharding

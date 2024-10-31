@@ -13,14 +13,13 @@ namespace NKikimr {
 namespace NSchemeBoard {
 
 Y_UNIT_TEST_SUITE(TMonitoringTests) {
-    static constexpr char HTTPUNAVAILABLE[] = "HTTP/1.1 503 Service Unavailable\r\nConnection: Close\r\n\r\nService Unavailable\r\n";
+    static constexpr char HTTPUNAVAILABLE[] =
+        "HTTP/1.1 503 Service Unavailable\r\nConnection: Close\r\n\r\nService Unavailable\r\n";
 
     struct TMockMonRequest: public NMonitoring::IMonHttpRequest {
         explicit TMockMonRequest(const TString& pathInfo = {}, const TCgiParameters& params = {})
             : PathInfo(pathInfo)
-            , Params(params)
-        {
-        }
+            , Params(params) {}
 
         TStringBuf GetPathInfo() const override {
             return PathInfo;
@@ -30,26 +29,52 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
             return Params;
         }
 
-        IOutputStream& Output() override { Y_ABORT("Not implemented"); }
-        HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
-        TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
-        TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
-        const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
-        TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
-        const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
-        TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
-        TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
-        TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
-        TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
-        NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
-        NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+        IOutputStream& Output() override {
+            Y_ABORT("Not implemented");
+        }
+        HTTP_METHOD GetMethod() const override {
+            Y_ABORT("Not implemented");
+        }
+        TStringBuf GetPath() const override {
+            Y_ABORT("Not implemented");
+        }
+        TStringBuf GetUri() const override {
+            Y_ABORT("Not implemented");
+        }
+        const TCgiParameters& GetPostParams() const override {
+            Y_ABORT("Not implemented");
+        }
+        TStringBuf GetPostContent() const override {
+            Y_ABORT("Not implemented");
+        }
+        const THttpHeaders& GetHeaders() const override {
+            Y_ABORT("Not implemented");
+        }
+        TStringBuf GetHeader(TStringBuf) const override {
+            Y_ABORT("Not implemented");
+        }
+        TStringBuf GetCookie(TStringBuf) const override {
+            Y_ABORT("Not implemented");
+        }
+        TString GetRemoteAddr() const override {
+            Y_ABORT("Not implemented");
+        }
+        TString GetServiceTitle() const override {
+            Y_ABORT("Not implemented");
+        }
+        NMonitoring::IMonPage* GetPage() const override {
+            Y_ABORT("Not implemented");
+        }
+        NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override {
+            Y_ABORT("Not implemented");
+        }
 
     private:
         const TString PathInfo;
         const TCgiParameters Params;
     };
 
-    TActorId CreateMonitoring(TTestActorRuntimeBase& runtime) {
+    TActorId CreateMonitoring(TTestActorRuntimeBase & runtime) {
         const auto actorId = runtime.Register(CreateSchemeBoardMonitoring());
 
         // wait until actor is ready
@@ -62,9 +87,14 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
         return actorId;
     }
 
-    void TestActorId(TTestContext& ctx, const TActorId& monitoring, const TActorId& sender,
-            const TString& path, const TCgiParameters& params, const TString& expectedAnswer)
-    {
+    void TestActorId(
+        TTestContext & ctx,
+        const TActorId& monitoring,
+        const TActorId& sender,
+        const TString& path,
+        const TCgiParameters& params,
+        const TString& expectedAnswer
+    ) {
         auto request = MakeHolder<TMockMonRequest>(path, params);
         ctx.Send(monitoring, sender, new NMon::TEvHttpInfo(*request.Get()));
 
@@ -75,9 +105,13 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
         UNIT_ASSERT_VALUES_EQUAL(response->Answer, expectedAnswer);
     }
 
-    void TestValidActorId(TTestContext& ctx, const TActorId& monitoring, const TActorId& sender,
-            const TString& path, const TCgiParameters& params = {})
-    {
+    void TestValidActorId(
+        TTestContext & ctx,
+        const TActorId& monitoring,
+        const TActorId& sender,
+        const TString& path,
+        const TCgiParameters& params = {}
+    ) {
         TestActorId(ctx, monitoring, sender, path, params, HTTPUNAVAILABLE);
     }
 
@@ -100,9 +134,13 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
         }
     }
 
-    void TestInvalidActorId(TTestContext& ctx, const TActorId& monitoring, const TActorId& sender,
-            const TString& path, const TCgiParameters& params = {})
-    {
+    void TestInvalidActorId(
+        TTestContext & ctx,
+        const TActorId& monitoring,
+        const TActorId& sender,
+        const TString& path,
+        const TCgiParameters& params = {}
+    ) {
         TestActorId(ctx, monitoring, sender, path, params, NMonitoring::HTTPNOTFOUND);
     }
 
@@ -126,5 +164,5 @@ Y_UNIT_TEST_SUITE(TMonitoringTests) {
     }
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

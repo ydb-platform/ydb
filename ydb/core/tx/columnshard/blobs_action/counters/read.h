@@ -21,6 +21,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FailBytes;
     NMonitoring::THistogramPtr FailDurationByCount;
     NMonitoring::THistogramPtr FailDurationBySize;
+
 public:
     TReadCounters(const TConsumerCounters& owner);
 
@@ -44,4 +45,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations

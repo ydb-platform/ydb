@@ -8,7 +8,10 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
+void TSourceCursor::BuildSelection(
+    const std::shared_ptr<IStoragesManager>& storagesManager,
+    const TVersionedIndex& index
+) {
     THashMap<ui64, NEvents::TPathIdData> result;
     auto itCurrentPath = PortionsForSend.find(StartPathId);
     AFL_VERIFY(itCurrentPath != PortionsForSend.end());
@@ -44,7 +47,8 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
     THashMap<TTabletId, TTaskForTablet> tabletTasksResult;
 
     for (auto&& i : result) {
-        THashMap<TTabletId, TTaskForTablet> tabletTasks = i.second.BuildLinkTabletTasks(storagesManager, SelfTabletId, TransferContext, index);
+        THashMap<TTabletId, TTaskForTablet> tabletTasks =
+            i.second.BuildLinkTabletTasks(storagesManager, SelfTabletId, TransferContext, index);
         for (auto&& t : tabletTasks) {
             auto it = tabletTasksResult.find(t.first);
             if (it == tabletTasksResult.end()) {
@@ -107,8 +111,10 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor:
     return result;
 }
 
-NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
-    const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic) {
+NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(
+    const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
+    const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic
+) {
     StartPathId = proto.GetStartPathId();
     StartPortionId = proto.GetStartPortionId();
     PackIdx = proto.GetPackIdx();
@@ -119,7 +125,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         AFL_VERIFY(proto.GetNextPathId() == *NextPathId)("next_local", *NextPathId)("proto", proto.GetNextPathId());
     }
     if (proto.HasNextPortionId()) {
-        AFL_VERIFY(proto.GetNextPortionId() == *NextPortionId)("next_local", *NextPortionId)("proto", proto.GetNextPortionId());
+        AFL_VERIFY(proto.GetNextPortionId() == *NextPortionId)
+        ("next_local", *NextPortionId)("proto", proto.GetNextPortionId());
     }
     if (proto.HasAckReceivedForPackIdx()) {
         AckReceivedForPackIdx = proto.GetAckReceivedForPackIdx();
@@ -140,25 +147,33 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     return TConclusionStatus::Success();
 }
 
-TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext)
+TSourceCursor::TSourceCursor(
+    const TTabletId selfTabletId,
+    const std::set<ui64>& pathIds,
+    const TTransferContext transferContext
+)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
-    , PathIds(pathIds) {
-}
+    , PathIds(pathIds) {}
 
 void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId) {
     using SourceSessions = NKikimr::NColumnShard::Schema::SourceSessions;
     db.Table<SourceSessions>().Key(sessionId).Update(
-        NIceDb::TUpdate<SourceSessions::CursorDynamic>(SerializeDynamicToProto().SerializeAsString()));
+        NIceDb::TUpdate<SourceSessions::CursorDynamic>(SerializeDynamicToProto().SerializeAsString())
+    );
     if (!IsStaticSaved) {
         db.Table<SourceSessions>().Key(sessionId).Update(
-            NIceDb::TUpdate<SourceSessions::CursorStatic>(SerializeStaticToProto().SerializeAsString()));
+            NIceDb::TUpdate<SourceSessions::CursorStatic>(SerializeStaticToProto().SerializeAsString())
+        );
         IsStaticSaved = true;
     }
 }
 
-bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions, const TVersionedIndex& index) {
+bool TSourceCursor::Start(
+    const std::shared_ptr<IStoragesManager>& storagesManager,
+    const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions,
+    const TVersionedIndex& index
+) {
     AFL_VERIFY(!IsStartedFlag);
     std::map<ui64, std::map<ui32, TPortionDataAccessor>> local;
     NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);

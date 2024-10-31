@@ -8,12 +8,10 @@ private:
     using TBase = ISubscriptionEvent;
     YDB_READONLY_DEF(THashSet<ui64>, PathIds);
     virtual TString DoDebugString() const override;
+
 public:
     TEventTablesErased(const THashSet<ui64>& pathIds)
         : TBase(EEventType::TablesErased)
-        , PathIds(pathIds)
-    {
-
-    }
+        , PathIds(pathIds) {}
 };
-}
+} // namespace NKikimr::NColumnShard::NSubscriber

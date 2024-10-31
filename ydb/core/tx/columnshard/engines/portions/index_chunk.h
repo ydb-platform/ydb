@@ -33,6 +33,7 @@ private:
 
     TIndexChunk() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto);
+
 public:
     ui64 GetDataSize() const;
 
@@ -72,22 +73,31 @@ public:
         return IndexId;
     }
 
-    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRangeLink16& blobRange)
+    TIndexChunk(
+        const ui32 indexId,
+        const ui32 chunkIdx,
+        const ui32 recordsCount,
+        const ui64 rawBytes,
+        const TBlobRangeLink16& blobRange
+    )
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(blobRange) {
+        , Data(blobRange) {}
 
-    }
-
-    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TString& blobData)
+    TIndexChunk(
+        const ui32 indexId,
+        const ui32 chunkIdx,
+        const ui32 recordsCount,
+        const ui64 rawBytes,
+        const TString& blobData
+    )
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
-        , Data(blobData) {
-    }
+        , Data(blobData) {}
 
     void RegisterBlobIdx(const TBlobRangeLink16::TLinkId blobLinkId) {
         auto* result = std::get_if<TBlobRangeLink16>(&Data);
@@ -105,7 +115,6 @@ public:
     }
 
     NKikimrColumnShardDataSharingProto::TIndexChunk SerializeToProto() const;
-
 };
 
-}
+} // namespace NKikimr::NOlap

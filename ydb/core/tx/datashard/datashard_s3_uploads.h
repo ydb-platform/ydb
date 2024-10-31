@@ -23,12 +23,21 @@ public:
         return Add(nicedb, txId, uploadId);
     }
 
-    const TS3Upload& ChangeStatus(NIceDb::TNiceDb& db, ui64 txId, TS3Upload::EStatus status,
-        TMaybe<TString>&& error, TVector<TString>&& parts);
+    const TS3Upload& ChangeStatus(
+        NIceDb::TNiceDb& db,
+        ui64 txId,
+        TS3Upload::EStatus status,
+        TMaybe<TString>&& error,
+        TVector<TString>&& parts
+    );
 
-    const TS3Upload& ChangeStatus(NTable::TDatabase& db, ui64 txId, TS3Upload::EStatus status,
-            TMaybe<TString>&& error, TVector<TString>&& parts)
-    {
+    const TS3Upload& ChangeStatus(
+        NTable::TDatabase& db,
+        ui64 txId,
+        TS3Upload::EStatus status,
+        TMaybe<TString>&& error,
+        TVector<TString>&& parts
+    ) {
         NIceDb::TNiceDb nicedb(db);
         return ChangeStatus(nicedb, txId, status, std::move(error), std::move(parts));
     }

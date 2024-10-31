@@ -14,46 +14,33 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TCompleteOperationUnit : public TExecutionUnit {
+class TCompleteOperationUnit: public TExecutionUnit {
 public:
-    TCompleteOperationUnit(TDataShard &dataShard,
-                           TPipeline &pipeline);
+    TCompleteOperationUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TCompleteOperationUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
-    void CompleteOperation(TOperation::TPtr op,
-                           const TActorContext &ctx);
+    void CompleteOperation(TOperation::TPtr op, const TActorContext& ctx);
 };
 
-TCompleteOperationUnit::TCompleteOperationUnit(TDataShard &dataShard,
-                                               TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::CompleteOperation, false, dataShard, pipeline)
-{
-}
+TCompleteOperationUnit::TCompleteOperationUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::CompleteOperation, false, dataShard, pipeline) {}
 
-TCompleteOperationUnit::~TCompleteOperationUnit()
-{
-}
+TCompleteOperationUnit::~TCompleteOperationUnit() {}
 
-bool TCompleteOperationUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TCompleteOperationUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
-                                                 TTransactionContext &txc,
-                                                 const TActorContext &ctx)
-{
+EExecutionStatus
+TCompleteOperationUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     Pipeline.DeactivateOp(op, txc, ctx);
 
-    TOutputOpData::TResultPtr &result = op->Result();
+    TOutputOpData::TResultPtr& result = op->Result();
     if (result) {
         auto execLatency = op->GetCompletedAt() - op->GetStartExecutionAt();
         result->Record.SetExecLatency(execLatency.MilliSeconds());
@@ -75,22 +62,20 @@ EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::DelayComplete;
 }
 
-void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
-                                               const TActorContext &ctx)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op, const TActorContext& ctx) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt();
 
-    if (DataShard.GetDataTxProfileLogThresholdMs()
-        && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
+    if (DataShard.GetDataTxProfileLogThresholdMs() &&
+        duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
         LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
                    op->ExecutionProfileLogString(DataShard.TabletID()));
     }
 
-    if (DataShard.GetDataTxProfileBufferThresholdMs()
-        && duration.MilliSeconds() >= DataShard.GetDataTxProfileBufferThresholdMs()) {
+    if (DataShard.GetDataTxProfileBufferThresholdMs() &&
+        duration.MilliSeconds() >= DataShard.GetDataTxProfileBufferThresholdMs()) {
         Pipeline.HoldExecutionProfile(op);
     }
 
@@ -108,16 +93,16 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
         }
 
         if (!op->IsImmediate() && !op->IsReadOnly() && op->IsKqpDataTransaction()) {
-            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), status);
+            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrTxDataShard::TEvProposeTransactionResult>(
+                ctx, DataShard.TabletID(), op->GetGlobalTxId(), status
+            );
         }
     }
 
     Pipeline.RemoveCompletingOp(op);
 }
 
-void TCompleteOperationUnit::Complete(TOperation::TPtr op,
-                                      const TActorContext &ctx)
-{
+void TCompleteOperationUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
     Pipeline.RemoveCommittingOp(op);
     Pipeline.RemoveTx(op->GetStepOrder());
     DataShard.IncCounter(COUNTER_PLANNED_TX_COMPLETE);
@@ -147,16 +132,16 @@ void TCompleteOperationUnit::Complete(TOperation::TPtr op,
             }
             // We have an expected readset without a corresponding out readset
             for (const auto& recipient : itExpected->second) {
-                DataShard.SendReadSetNoData(ctx, recipient, op->GetStep(), op->GetTxId(), itExpected->first.first, itExpected->first.second);
+                DataShard.SendReadSetNoData(
+                    ctx, recipient, op->GetStep(), op->GetTxId(), itExpected->first.first, itExpected->first.second
+                );
             }
             ++itExpected;
         }
     }
 }
 
-THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,
-                                                    TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TCompleteOperationUnit(dataShard, pipeline));
 }
 

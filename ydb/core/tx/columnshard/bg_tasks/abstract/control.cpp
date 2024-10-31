@@ -10,7 +10,9 @@ NKikimrTxBackgroundProto::TSessionControlContainer TSessionControlContainer::Ser
     return result;
 }
 
-NKikimr::TConclusionStatus TSessionControlContainer::DeserializeFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& proto) {
+NKikimr::TConclusionStatus TSessionControlContainer::DeserializeFromProto(
+    const NKikimrTxBackgroundProto::TSessionControlContainer& proto
+) {
     if (!ChannelContainer.DeserializeFromString(proto.GetStatusChannelContainer())) {
         return TConclusionStatus::Fail("cannot parse channel from proto");
     }
@@ -32,4 +34,4 @@ void ISessionLogicControl::SerializeToProto(TProto& proto) const {
     proto.SetSessionControlDescription(SerializeToString());
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

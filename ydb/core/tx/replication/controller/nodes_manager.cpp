@@ -34,7 +34,8 @@ void TNodesManager::DiscoverNodes(const TString& tenant, const TActorId& cache, 
     );
 }
 
-TNodesManager::TProcessResult TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
+TNodesManager::TProcessResult
+TNodesManager::ProcessResponse(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
     Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
     Y_ABORT_UNLESS(!ev->Get()->CachedMessageData->InfoEntries.empty());
     Y_ABORT_UNLESS(ev->Get()->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
@@ -85,5 +86,4 @@ void TNodesManager::Shutdown(const TActorContext& ctx) {
     }
 }
 
-}
-
+} // namespace NKikimr::NReplication::NController

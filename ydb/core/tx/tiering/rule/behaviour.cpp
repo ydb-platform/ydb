@@ -5,7 +5,9 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-TTieringRuleBehaviour::TFactory::TRegistrator<TTieringRuleBehaviour> TTieringRuleBehaviour::Registrator(TTieringRule::GetTypeId());
+TTieringRuleBehaviour::TFactory::TRegistrator<TTieringRuleBehaviour> TTieringRuleBehaviour::Registrator(
+    TTieringRule::GetTypeId()
+);
 
 TString TTieringRuleBehaviour::GetInternalStorageTablePath() const {
     return "tiering/rules";
@@ -23,4 +25,4 @@ TString TTieringRuleBehaviour::GetTypeId() const {
     return TTieringRule::GetTypeId();
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

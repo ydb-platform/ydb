@@ -42,13 +42,13 @@ void TColumnEngineChanges::WriteIndexOnExecute(NColumnShard::TColumnShard* self,
 void TColumnEngineChanges::WriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
     Y_ABORT_UNLESS(Stage == EStage::Written || !self);
     Stage = EStage::Finished;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+    ("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
     DoWriteIndexOnComplete(self, context);
     if (self) {
         OnFinish(*self, context);
         self->Counters.GetTabletCounters()->IncCounter(GetCounterIndex(context.FinishedSuccessfully));
     }
-
 }
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
@@ -62,12 +62,13 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-//    AFL_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted)("stage", Stage);
+    //    AFL_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted)("stage", Stage);
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Abort")("reason", context.ErrorMessage);
-    AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)("stage", Stage)("reason", context.ErrorMessage)("prev_reason", AbortedReason);
+    AFL_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted)
+    ("stage", Stage)("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     Stage = EStage::Aborted;
     AbortedReason = context.ErrorMessage;
     OnFinish(self, context);
@@ -94,7 +95,8 @@ void TColumnEngineChanges::StartEmergency() {
 }
 
 void TColumnEngineChanges::AbortEmergency(const TString& reason) {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+    ("event", "AbortEmergency")("reason", reason)("prev_reason", AbortedReason);
     if (Stage == EStage::Aborted) {
         AbortedReason += "; AnotherReason: " + reason;
     } else {
@@ -114,12 +116,15 @@ void TColumnEngineChanges::OnFinish(NColumnShard::TColumnShard& self, TChangesFi
     DoOnFinish(self, context);
 }
 
-TWriteIndexContext::TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
+TWriteIndexContext::TWriteIndexContext(
+    NTable::TDatabase* db,
+    IDbWrapper& dbWrapper,
+    TColumnEngineForLogs& engineLogs,
+    const TSnapshot& snapshot
+)
     : DB(db)
     , DBWrapper(dbWrapper)
     , EngineLogs(engineLogs)
-    , Snapshot(snapshot) {
+    , Snapshot(snapshot) {}
 
-}
-
-}
+} // namespace NKikimr::NOlap

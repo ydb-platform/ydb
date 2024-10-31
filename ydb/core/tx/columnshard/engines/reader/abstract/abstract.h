@@ -7,15 +7,12 @@ namespace NKikimr::NOlap::NReader {
 
 class TScanIteratorBase {
 protected:
-    virtual void DoOnSentDataFromInterval(const ui32 /*intervalIdx*/) const {
+    virtual void DoOnSentDataFromInterval(const ui32 /*intervalIdx*/) const {}
 
-    }
 public:
     virtual ~TScanIteratorBase() = default;
 
-    virtual void Apply(const std::shared_ptr<IApplyAction>& /*task*/) {
-
-    }
+    virtual void Apply(const std::shared_ptr<IApplyAction>& /*task*/) {}
 
     virtual TConclusionStatus Start() = 0;
 
@@ -32,14 +29,14 @@ public:
     }
     virtual bool Finished() const = 0;
     virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() = 0;
-    virtual void PrepareResults() {
-
+    virtual void PrepareResults() {}
+    virtual TConclusion<bool> ReadNextInterval() {
+        return false;
     }
-    virtual TConclusion<bool> ReadNextInterval() { return false; }
     virtual TString DebugString(const bool verbose = false) const {
         Y_UNUSED(verbose);
         return "NO_DATA";
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader

@@ -18,9 +18,11 @@ class TCommonBlobsTracker: public IBlobInUseTracker {
 private:
     // List of blobs that are used by in-flight requests
     THashMap<TUnifiedBlobId, i64> BlobsUseCount;
+
 protected:
     virtual bool DoUseBlob(const TUnifiedBlobId& blobId) override;
     virtual bool DoFreeBlob(const TUnifiedBlobId& blobId) override;
+
 public:
     virtual bool IsBlobInUsage(const NOlap::TUnifiedBlobId& blobId) const override;
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) = 0;
@@ -34,8 +36,11 @@ private:
     YDB_READONLY(bool, Stopped, false);
     std::shared_ptr<NBlobOperations::TStorageCounters> Counters;
     YDB_ACCESSOR_DEF(std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>, SharedBlobs);
+
 protected:
-    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) = 0;
+    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(
+        const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters
+    ) = 0;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() = 0;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() = 0;
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) = 0;
@@ -57,17 +62,22 @@ protected:
         return DoStartGCAction(action);
     }
 
-    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const = 0;
-    std::shared_ptr<IBlobsGCAction> CreateGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) const {
+    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(
+        const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters
+    ) const = 0;
+    std::shared_ptr<IBlobsGCAction> CreateGCAction(const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters
+    ) const {
         return DoCreateGCAction(counters);
     }
 
 public:
-    IBlobsStorageOperator(const TString& storageId, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs)
+    IBlobsStorageOperator(
+        const TString& storageId,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs
+    )
         : SelfTabletId(sharedBlobs->GetSelfTabletId())
         , StorageId(storageId)
-        , SharedBlobs(sharedBlobs)
-    {
+        , SharedBlobs(sharedBlobs) {
         Counters = std::make_shared<NBlobOperations::TStorageCounters>(storageId);
     }
 
@@ -95,7 +105,8 @@ public:
         return DoOnTieringModified(tiers);
     }
 
-    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const NBlobOperations::EConsumer consumerId) {
+    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const NBlobOperations::EConsumer consumerId
+    ) {
         return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
     }
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const NBlobOperations::EConsumer consumerId) {
@@ -116,7 +127,10 @@ public:
     }
 
     [[nodiscard]] std::shared_ptr<IBlobsGCAction> CreateGC() {
-        NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("storage_id", GetStorageId())("tablet_id", GetSelfTabletId());
+        NActors::TLogContextGuard gLogging =
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("storage_id", GetStorageId())(
+                "tablet_id", GetSelfTabletId()
+            );
         if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "gc_in_progress");
             return nullptr;
@@ -131,4 +145,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

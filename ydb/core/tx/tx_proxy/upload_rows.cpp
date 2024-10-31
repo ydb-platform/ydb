@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NTxProxy {
 
-class TUploadRowsInternal : public TUploadRowsBase<NKikimrServices::TActivity::UPLOAD_ROWS_INTERNAL> {
+class TUploadRowsInternal: public TUploadRowsBase<NKikimrServices::TActivity::UPLOAD_ROWS_INTERNAL> {
 public:
     TUploadRowsInternal(
         TActorId sender,
@@ -14,12 +14,12 @@ public:
         std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
         EUploadRowsMode mode,
-        bool writeToPrivateTable)
+        bool writeToPrivateTable
+    )
         : Sender(sender)
         , Table(table)
         , ColumnTypes(types)
-        , Rows(rows)
-    {
+        , Rows(rows) {
         AllowWriteToPrivateTable = writeToPrivateTable;
 
         switch (mode) {
@@ -36,7 +36,7 @@ public:
     }
 
 private:
-    TString GetDatabase()override {
+    TString GetDatabase() override {
         return TString();
     }
 
@@ -84,19 +84,15 @@ private:
     NYql::TIssues Issues;
 };
 
-IActor* CreateUploadRowsInternal(const TActorId& sender,
+IActor* CreateUploadRowsInternal(
+    const TActorId& sender,
     const TString& table,
     std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
     std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
-    bool writeToPrivateTable)
-{
-    return new TUploadRowsInternal(sender,
-        table,
-        types,
-        rows,
-        mode,
-        writeToPrivateTable);
+    bool writeToPrivateTable
+) {
+    return new TUploadRowsInternal(sender, table, types, rows, mode, writeToPrivateTable);
 }
 
 } // namespace NTxProxy

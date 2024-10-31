@@ -22,9 +22,7 @@ namespace NKikimr::NDataShard {
 using ESenderType = TEvChangeExchange::ESenderType;
 
 template <typename TDerived>
-class TResolveIndexState
-    : virtual public NSchemeCache::TSchemeCacheHelpers
-{
+class TResolveIndexState: virtual public NSchemeCache::TSchemeCacheHelpers {
     DEFINE_STATE_INTRO;
 
 public:
@@ -40,8 +38,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             sFunc(TEvents::TEvWakeup, ResolveIndex);
-        default:
-            return AsDerived()->StateBase(ev);
+            default:
+                return AsDerived()->StateBase(ev);
         }
     }
 
@@ -100,8 +98,7 @@ class TAsyncIndexChangeSenderMain
     , private TResolveUserTableState<TAsyncIndexChangeSenderMain>
     , private TResolveIndexState<TAsyncIndexChangeSenderMain>
     , private TResolveTargetTableState<TAsyncIndexChangeSenderMain>
-    , private TResolveKeysState<TAsyncIndexChangeSenderMain>
-{
+    , private TResolveKeysState<TAsyncIndexChangeSenderMain> {
     friend struct TSchemeChecksMixin;
 
     USE_STATE(ResolveUserTable);
@@ -111,10 +108,9 @@ class TAsyncIndexChangeSenderMain
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[AsyncIndexChangeSenderMain]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[AsyncIndexChangeSenderMain]"
+                                         << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                                         << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -127,10 +123,8 @@ class TAsyncIndexChangeSenderMain
     }
 
     bool IsResolving() const override {
-        return IsResolveUserTableState()
-            || IsResolveIndexState()
-            || IsResolveTargetTableState()
-            || IsResolveKeysState();
+        return IsResolveUserTableState() || IsResolveIndexState() || IsResolveTargetTableState() ||
+               IsResolveKeysState();
     }
 
     TStringBuf CurrentStateName() const {
@@ -212,12 +206,8 @@ class TAsyncIndexChangeSenderMain
 
     IActor* CreateSender(ui64 partitionId) const override {
         return CreateTableChangeSenderShard(
-            SelfId(),
-            DataShard,
-            partitionId,
-            TargetTablePathId,
-            TagMap,
-            ETableChangeSenderType::AsyncIndex);
+            SelfId(), DataShard, partitionId, TargetTablePathId, TagMap, ETableChangeSenderType::AsyncIndex
+        );
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -272,15 +262,17 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_ASYNC_INDEX_ACTOR_MAIN;
     }
 
-    explicit TAsyncIndexChangeSenderMain(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId)
+    explicit TAsyncIndexChangeSenderMain(
+        const TDataShardId& dataShard,
+        const TTableId& userTableId,
+        const TPathId& indexPathId
+    )
         : TActorBootstrapped()
         , TChangeSender(this, this, this, this, dataShard.ActorId)
         , IndexPathId(indexPathId)
         , DataShard(dataShard)
         , UserTableId(userTableId)
-        , TargetTableVersion(0)
-    {
-    }
+        , TargetTableVersion(0) {}
 
     void Bootstrap() {
         ResolveUserTable();
@@ -326,8 +318,9 @@ private:
     THolder<TKeyDesc> KeyDesc;
 }; // TAsyncIndexChangeSenderMain
 
-IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {
+IActor*
+CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTableId& userTableId, const TPathId& indexPathId) {
     return new TAsyncIndexChangeSenderMain(dataShard, userTableId, indexPathId);
 }
 
-}
+} // namespace NKikimr::NDataShard

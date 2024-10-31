@@ -20,13 +20,7 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_E || \
-    defined LOG_C
+#if defined LOG_T || defined LOG_D || defined LOG_I || defined LOG_N || defined LOG_W || defined LOG_E || defined LOG_C
 #error log macro redefinition
 #endif
 
@@ -100,9 +94,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     public:
         explicit TTableInfo(const TNavigate::TEntry& entry, const TKeyMap& keyMap)
             : KeyMap(keyMap ? keyMap : MakeSelfKeyMap(entry))
-            , KeyDesc(MakeKeyDesc(entry))
-        {
-        }
+            , KeyDesc(MakeKeyDesc(entry)) {}
 
         const TKeyMap& GetKeyMap() const {
             return KeyMap;
@@ -157,9 +149,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
     void Reply(TEvResponse::EStatus status = TEvResponse::OK, const TString& error = TString()) {
         const TString done = TStringBuilder() << "Reply"
-            << ": txId# " << TxId
-            << ", status# " << status
-            << ", error# " << error;
+                                              << ": txId# " << TxId << ", status# " << status << ", error# " << error;
 
         if (status == TEvResponse::OK) {
             LOG_D(done);
@@ -220,10 +210,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return true;
         }
 
-        SchemeError(TStringBuilder() << "Entries count mismatch at '" << marker << "'"
-            << ": expected# " << expected
-            << ", actual# " << result->ResultSet.size()
-            << ", result# " << result->ToString(*AppData()->TypeRegistry));
+        SchemeError(
+            TStringBuilder() << "Entries count mismatch at '" << marker << "'"
+                             << ": expected# " << expected << ", actual# " << result->ResultSet.size() << ", result# "
+                             << result->ToString(*AppData()->TypeRegistry)
+        );
         return false;
     }
 
@@ -249,9 +240,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return true;
         }
 
-        SchemeError(TStringBuilder() << "Failed to resolve table at '" << marker << "'"
-            << ": tableId# " << GetTableId(entry)
-            << ", status# " << entry.Status);
+        SchemeError(
+            TStringBuilder() << "Failed to resolve table at '" << marker << "'"
+                             << ": tableId# " << GetTableId(entry) << ", status# " << entry.Status
+        );
         return false;
     }
 
@@ -274,12 +266,16 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         Y_ABORT_UNLESS(!keyDesc->GetPartitions().empty());
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            keyDesc->GetPartitions().begin(), keyDesc->GetPartitions().end(), true,
+            keyDesc->GetPartitions().begin(),
+            keyDesc->GetPartitions().end(),
+            true,
             [&](const TKeyDesc::TPartitionInfo& partition, bool) {
                 const int compares = CompareBorders<true, false>(
-                    partition.Range->EndKeyPrefix.GetCells(), range.From,
+                    partition.Range->EndKeyPrefix.GetCells(),
+                    range.From,
                     partition.Range->IsInclusive || partition.Range->IsPoint,
-                    range.InclusiveFrom || range.Point, keyDesc->KeyColumnTypes
+                    range.InclusiveFrom || range.Point,
+                    keyDesc->KeyColumnTypes
                 );
 
                 return (compares < 0);
@@ -317,8 +313,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     STATEFN(StateAllocateTxId) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
-        default:
-            return StatePrepareBase(ev);
+            default:
+                return StatePrepareBase(ev);
         }
     }
 
@@ -351,8 +347,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     STATEFN(StateResolveTables) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        default:
-            return StatePrepareBase(ev);
+            default:
+                return StatePrepareBase(ev);
         }
     }
 
@@ -379,17 +375,19 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
 
             if (entry.TableId.PathId != MainTableId.PathId) {
-                return SchemeError(TStringBuilder() << "Main table's path id mismatch"
-                    << ": expected# " << MainTableId.PathId
-                    << ", actual# " << entry.TableId.PathId
-                    << ", entry# " << entry.ToString());
+                return SchemeError(
+                    TStringBuilder() << "Main table's path id mismatch"
+                                     << ": expected# " << MainTableId.PathId << ", actual# " << entry.TableId.PathId
+                                     << ", entry# " << entry.ToString()
+                );
             }
 
             if (entry.TableId.SchemaVersion != MainTableId.SchemaVersion) {
-                return SchemeError(TStringBuilder() << "Main table's schema version mismatch"
-                    << ": expected# " << MainTableId.SchemaVersion
-                    << ", actual# " << entry.TableId.SchemaVersion
-                    << ", entry# " << entry.ToString());
+                return SchemeError(
+                    TStringBuilder() << "Main table's schema version mismatch"
+                                     << ": expected# " << MainTableId.SchemaVersion << ", actual# "
+                                     << entry.TableId.SchemaVersion << ", entry# " << entry.ToString()
+                );
             }
 
             ui32 nIndexes = 0;
@@ -400,29 +398,32 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
                 const auto tableId = TTableId(index.GetPathOwnerId(), index.GetLocalPathId(), index.GetSchemaVersion());
                 switch (index.GetState()) {
-                case NKikimrSchemeOp::EIndexStateReady:
-                case NKikimrSchemeOp::EIndexStateWriteOnly:
-                case NKikimrSchemeOp::EIndexStateNotReady:
-                    break;
-                case NKikimrSchemeOp::EIndexStateInvalid:
-                    return SchemeError(TStringBuilder() << "Invalid index state"
-                        << ": tableId# " << tableId
-                        << ", name# " << index.GetName());
-                default:
-                    return SchemeError(TStringBuilder() << "Unknown index state"
-                        << ": tableId# " << tableId
-                        << ", name# " << index.GetName()
-                        << ", state# " << static_cast<ui32>(index.GetState()));
+                    case NKikimrSchemeOp::EIndexStateReady:
+                    case NKikimrSchemeOp::EIndexStateWriteOnly:
+                    case NKikimrSchemeOp::EIndexStateNotReady:
+                        break;
+                    case NKikimrSchemeOp::EIndexStateInvalid:
+                        return SchemeError(
+                            TStringBuilder() << "Invalid index state"
+                                             << ": tableId# " << tableId << ", name# " << index.GetName()
+                        );
+                    default:
+                        return SchemeError(
+                            TStringBuilder() << "Unknown index state"
+                                             << ": tableId# " << tableId << ", name# " << index.GetName() << ", state# "
+                                             << static_cast<ui32>(index.GetState())
+                        );
                 }
 
                 ++nIndexes;
             }
 
             if (nIndexes != Indexes.size()) {
-                return SchemeError(TStringBuilder() << "Indexes count mismatch"
-                    << ": expected# " << Indexes.size()
-                    << ", actual# " << entry.Indexes.size()
-                    << ", entry# " << entry.ToString());
+                return SchemeError(
+                    TStringBuilder() << "Indexes count mismatch"
+                                     << ": expected# " << Indexes.size() << ", actual# " << entry.Indexes.size()
+                                     << ", entry# " << entry.ToString()
+                );
             }
 
             AddTableInfo(entry);
@@ -438,32 +439,37 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
 
             if (!Indexes.contains(entry.TableId)) {
-                return SchemeError(TStringBuilder() << "Unknown index"
-                    << " (probably schema version mismatch)"
-                    << ": tableId# " << entry.TableId
-                    << ", path# " << JoinPath(entry.Path));
+                return SchemeError(
+                    TStringBuilder() << "Unknown index"
+                                     << " (probably schema version mismatch)"
+                                     << ": tableId# " << entry.TableId << ", path# " << JoinPath(entry.Path)
+                );
             }
 
             if (!indexesSeen.insert(entry.TableId).second) {
-                return SchemeError(TStringBuilder() << "Duplicate index"
-                    << ": tableId# " << entry.TableId
-                    << ", path# " << JoinPath(entry.Path));
+                return SchemeError(
+                    TStringBuilder() << "Duplicate index"
+                                     << ": tableId# " << entry.TableId << ", path# " << JoinPath(entry.Path)
+                );
             }
 
             AddTableInfo(entry, Indexes.at(entry.TableId));
         }
 
         if (indexesSeen.size() != Indexes.size()) {
-            return SchemeError(TStringBuilder() << "Incomplete indexes"
-                << ": expected# " << Indexes.size()
-                << ", actual# " << indexesSeen.size());
+            return SchemeError(
+                TStringBuilder() << "Incomplete indexes"
+                                 << ": expected# " << Indexes.size() << ", actual# " << indexesSeen.size()
+            );
         }
 
         NSchemeCache::TDomainInfo::TPtr domainInfo;
         for (const auto& entry : request->ResultSet) {
             if (!entry.DomainInfo) {
-                return SchemeError(TStringBuilder() << "Empty domain info"
-                    << ": entry# " << entry.ToString());
+                return SchemeError(
+                    TStringBuilder() << "Empty domain info"
+                                     << ": entry# " << entry.ToString()
+                );
             }
 
             if (!domainInfo) {
@@ -472,10 +478,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
 
             if (domainInfo->DomainKey != entry.DomainInfo->DomainKey) {
-                return SchemeError(TStringBuilder() << "Failed locality check"
-                    << ": expected# " << domainInfo->DomainKey
-                    << ", actual# " << entry.DomainInfo->DomainKey
-                    << ", entry# " << entry.ToString());
+                return SchemeError(
+                    TStringBuilder() << "Failed locality check"
+                                     << ": expected# " << domainInfo->DomainKey << ", actual# "
+                                     << entry.DomainInfo->DomainKey << ", entry# " << entry.ToString()
+                );
             }
         }
 
@@ -509,8 +516,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
     STATEFN(StateResolveKeys) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
-        default:
-            return StatePrepareBase(ev);
+            default:
+                return StatePrepareBase(ev);
         }
     }
 
@@ -542,8 +549,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
 
             if (entry.KeyDescription->GetPartitions().empty()) {
-                return SchemeError(TStringBuilder() << "Empty partitions list"
-                    << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
+                return SchemeError(
+                    TStringBuilder() << "Empty partitions list"
+                                     << ": entry# " << entry.ToString(*AppData()->TypeRegistry)
+                );
             }
 
             auto& info = TTableInfo::FromUserDataHandle(entry.UserData);
@@ -577,11 +586,13 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         const auto& record = ev->Get()->Record;
 
         switch (record.GetConditionCase()) {
-        case NKikimrTxDataShard::TEvEraseRowsRequest::kExpiration:
-            break;
-        default:
-            return BadRequest(TStringBuilder() << "Unknown condition"
-                << ": condition# " << static_cast<ui32>(record.GetConditionCase()));
+            case NKikimrTxDataShard::TEvEraseRowsRequest::kExpiration:
+                break;
+            default:
+                return BadRequest(
+                    TStringBuilder() << "Unknown condition"
+                                     << ": condition# " << static_cast<ui32>(record.GetConditionCase())
+                );
         }
 
         THashMap<ui32, ui32> keyColumnIdToIdx;
@@ -617,17 +628,20 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
             TSerializedCellVec keyCells;
             if (!TSerializedCellVec::TryParse(serializedKey, keyCells)) {
-                return BadRequest(TStringBuilder() << "Cannot parse key"
-                    << ": serialized# " << serializedKey);
+                return BadRequest(
+                    TStringBuilder() << "Cannot parse key"
+                                     << ": serialized# " << serializedKey
+                );
             }
 
             for (const auto& [tableId, info] : TableInfos) {
                 TVector<TCell> cells(Reserve(info.GetKeyMap().size()));
                 for (const auto& [_, id] : info.GetKeyMap()) {
                     if (!keyColumnIdToIdx.contains(id)) {
-                        return BadRequest(TStringBuilder() << "Key column is absent"
-                            << ": tableId# " << tableId
-                            << ", columnId# " << id);
+                        return BadRequest(
+                            TStringBuilder() << "Key column is absent"
+                                             << ": tableId# " << tableId << ", columnId# " << id
+                        );
                     }
 
                     cells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
@@ -658,10 +672,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
         Y_ABORT_UNLESS(keys.contains(MainTableId));
         if (keys.at(MainTableId).size() > 1) {
-            return ExecError(TStringBuilder() << "Too many main table's shards"
-                << ": tableId# " << MainTableId
-                << ", expected# " << 1
-                << ", actual# " << keys.at(MainTableId).size());
+            return ExecError(
+                TStringBuilder() << "Too many main table's shards"
+                                 << ": tableId# " << MainTableId << ", expected# " << 1 << ", actual# "
+                                 << keys.at(MainTableId).size()
+            );
         }
 
         auto getDependents = [&keys](const TTableId& mainTableId) {
@@ -706,11 +721,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 }
 
                 switch (record.GetConditionCase()) {
-                case NKikimrTxDataShard::TEvEraseRowsRequest::kExpiration:
-                    request.MutableExpiration()->CopyFrom(record.GetExpiration());
-                    break;
-                default:
-                    Y_FAIL_S("Unknown condition: " << static_cast<ui32>(record.GetConditionCase()));
+                    case NKikimrTxDataShard::TEvEraseRowsRequest::kExpiration:
+                        request.MutableExpiration()->CopyFrom(record.GetExpiration());
+                        break;
+                    default:
+                        Y_FAIL_S("Unknown condition: " << static_cast<ui32>(record.GetConditionCase()));
                 }
 
                 if (tableId == MainTableId) {
@@ -764,8 +779,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePropose);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePropose);
-        default:
-            return StateExecuteBase(ev);
+            default:
+                return StateExecuteBase(ev);
         }
     }
 
@@ -784,10 +799,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             << ", status# " << static_cast<ui32>(status));
 
         auto error = [&](TEvResponse::EStatus code, const TStringBuf header) {
-            return Reply(code, TStringBuilder() << header
-                << ": reason# " << msg->GetError()
-                << ", txId# " << TxId
-                << ", shard# " << shardId);
+            return Reply(
+                code,
+                TStringBuilder() << header << ": reason# " << msg->GetError() << ", txId# " << TxId << ", shard# "
+                                 << shardId
+            );
         };
 
         switch (status) {
@@ -810,11 +826,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 if (!SelectedCoordinator || SelectedCoordinator != privateCoordinator) {
                     CancelProposal();
                     Mon->TxResultAborted->Inc();
-                    return CoordinatorUnknown(TStringBuilder() << "Unable to choose coordinator"
-                        << ": txId# " << TxId
-                        << ", shard# " << shardId
-                        << ", selectCoordinator# " << SelectedCoordinator
-                        << ", privateCoordinator# " << privateCoordinator);
+                    return CoordinatorUnknown(
+                        TStringBuilder() << "Unable to choose coordinator"
+                                         << ": txId# " << TxId << ", shard# " << shardId << ", selectCoordinator# "
+                                         << SelectedCoordinator << ", privateCoordinator# " << privateCoordinator
+                    );
                 }
 
                 PendingPrepare.erase(shardId);
@@ -827,9 +843,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             case NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE:
                 CancelProposal();
                 Mon->TxResultComplete->Inc();
-                return ExecError(TStringBuilder() << "Unexpected COMPLETE result"
-                    << ": txId# " << TxId
-                    << ", shard# " << shardId);
+                return ExecError(
+                    TStringBuilder() << "Unexpected COMPLETE result"
+                                     << ": txId# " << TxId << ", shard# " << shardId
+                );
             case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR:
                 CancelProposal(shardId);
                 Mon->TxResultError->Inc();
@@ -860,10 +877,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             default:
                 CancelProposal();
                 Mon->TxResultFatal->Inc();
-                return ShardUnknown(TStringBuilder() << "Unexpected status"
-                    << ": reason# " << msg->GetError()
-                    << ", txId# " << TxId
-                    << ", shard# " << shardId);
+                return ShardUnknown(
+                    TStringBuilder() << "Unexpected status"
+                                     << ": reason# " << msg->GetError() << ", txId# " << TxId << ", shard# " << shardId
+                );
         }
     }
 
@@ -879,14 +896,17 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         Mon->ClientConnectedError->Inc();
 
         if (msg->NotDelivered) {
-            return Reply(TEvResponse::SHARD_NOT_AVAILABLE, TStringBuilder() << "Could not deliver program"
-                << ": txId# " << TxId
-                << ", shard# " << shardId);
+            return Reply(
+                TEvResponse::SHARD_NOT_AVAILABLE,
+                TStringBuilder() << "Could not deliver program"
+                                 << ": txId# " << TxId << ", shard# " << shardId
+            );
         } else {
-            return ShardUnknown(TStringBuilder() << "Tx state unknown"
-                << ": reason# " << "lost pipe while waiting for reply (propose)"
-                << ", txId# " << TxId
-                << ", shard# " << shardId);
+            return ShardUnknown(
+                TStringBuilder() << "Tx state unknown"
+                                 << ": reason# " << "lost pipe while waiting for reply (propose)"
+                                 << ", txId# " << TxId << ", shard# " << shardId
+            );
         }
     }
 
@@ -900,8 +920,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             << ", minStep# " << AggrMinStep
             << ", maxStep# " << AggrMaxStep);
 
-        auto propose = MakeHolder<TEvTxProxy::TEvProposeTransaction>(
-            SelectedCoordinator, TxId, 0, AggrMinStep, AggrMaxStep);
+        auto propose =
+            MakeHolder<TEvTxProxy::TEvProposeTransaction>(SelectedCoordinator, TxId, 0, AggrMinStep, AggrMaxStep);
 
         auto& affectedSet = *propose->Record.MutableTransaction()->MutableAffectedSet();
         affectedSet.Reserve(Shards.size());
@@ -924,8 +944,8 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandlePlan);
             hFunc(TEvDataShard::TEvProposeTransactionResult, HandlePlan);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePlan);
-        default:
-            return StateExecuteBase(ev);
+            default:
+                return StateExecuteBase(ev);
         }
     }
 
@@ -936,30 +956,31 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             << ", status# " << static_cast<ui32>(status));
 
         switch (status) {
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
-            Mon->ClientTxStatusAccepted->Inc();
-            break;
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
-            Mon->ClientTxStatusProcessed->Inc();
-            break;
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
-            Mon->ClientTxStatusConfirmed->Inc();
-            break;
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
-            Mon->ClientTxStatusPlanned->Inc();
-            break;
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry
-            CancelProposal();
-            [[fallthrough]];
-        default:
-            Mon->ClientTxStatusCoordinatorDeclined->Inc();
-            return CoordinatorDeclined(TStringBuilder() << "Tx failed to plan"
-                << ": reason# " << "declined by coodinator"
-                << ", txId# " << TxId
-                << ", status# " << static_cast<ui32>(status));
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
+                Mon->ClientTxStatusAccepted->Inc();
+                break;
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
+                Mon->ClientTxStatusProcessed->Inc();
+                break;
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
+                Mon->ClientTxStatusConfirmed->Inc();
+                break;
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
+                Mon->ClientTxStatusPlanned->Inc();
+                break;
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
+            case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry
+                CancelProposal();
+                [[fallthrough]];
+            default:
+                Mon->ClientTxStatusCoordinatorDeclined->Inc();
+                return CoordinatorDeclined(
+                    TStringBuilder() << "Tx failed to plan"
+                                     << ": reason# " << "declined by coodinator"
+                                     << ", txId# " << TxId << ", status# " << static_cast<ui32>(status)
+                );
         }
     }
 
@@ -978,10 +999,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             << ", status# " << static_cast<ui32>(status));
 
         auto error = [&](TEvResponse::EStatus code, const TStringBuf header) {
-            return Reply(code, TStringBuilder() << header
-                << ": reason# " << msg->GetError()
-                << ", txId# " << TxId
-                << ", shard# " << shardId);
+            return Reply(
+                code,
+                TStringBuilder() << header << ": reason# " << msg->GetError() << ", txId# " << TxId << ", shard# "
+                                 << shardId
+            );
         };
 
         switch (status) {
@@ -1016,25 +1038,28 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         if (SelectedCoordinator == msg->TabletId) {
             if (msg->NotDelivered) {
                 Mon->PlanCoordinatorDeclined->Inc();
-                return CoordinatorDeclined(TStringBuilder() << "Tx failed to plan"
-                    << ": reason# " << "not delivered to coordinator"
-                    << ", txId# " << TxId
-                    << ", coordinator# " << msg->TabletId);
+                return CoordinatorDeclined(
+                    TStringBuilder() << "Tx failed to plan"
+                                     << ": reason# " << "not delivered to coordinator"
+                                     << ", txId# " << TxId << ", coordinator# " << msg->TabletId
+                );
             } else {
                 Mon->PlanClientDestroyed->Inc();
-                return CoordinatorUnknown(TStringBuilder() << "Tx state unknown"
-                    << ": reason# " << "delivery problem to coordinator"
-                    << ", txId# " << TxId
-                    << ", coordinator# " << msg->TabletId);
+                return CoordinatorUnknown(
+                    TStringBuilder() << "Tx state unknown"
+                                     << ": reason# " << "delivery problem to coordinator"
+                                     << ", txId# " << TxId << ", coordinator# " << msg->TabletId
+                );
             }
         }
 
         if (PendingResult.contains(msg->TabletId)) {
             Mon->ClientConnectedError->Inc();
-            return ShardUnknown(TStringBuilder() << "Tx state unknown"
-                << ": reason# " << "lost pipe while waiting for reply (plan)"
-                << ", txId# " << TxId
-                << ", shard# " << msg->TabletId);
+            return ShardUnknown(
+                TStringBuilder() << "Tx state unknown"
+                                 << ": reason# " << "lost pipe while waiting for reply (plan)"
+                                 << ", txId# " << TxId << ", shard# " << msg->TabletId
+            );
         }
     }
 
@@ -1062,9 +1087,7 @@ public:
         , TxId(0)
         , SelectedCoordinator(0)
         , AggrMinStep(0)
-        , AggrMaxStep(Max<ui64>())
-    {
-    }
+        , AggrMaxStep(Max<ui64>()) {}
 
     void Bootstrap() {
         AllocateTxId();
@@ -1113,5 +1136,5 @@ IActor* CreateDistributedEraser(const TActorId& replyTo, const TTableId& mainTab
     return new TDistEraser(replyTo, mainTableId, indexes);
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

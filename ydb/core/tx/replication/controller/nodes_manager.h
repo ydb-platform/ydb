@@ -35,4 +35,4 @@ private:
     THashMap<TActorId, TString> NodeDiscoverers;
 };
 
-}
+} // namespace NKikimr::NReplication::NController

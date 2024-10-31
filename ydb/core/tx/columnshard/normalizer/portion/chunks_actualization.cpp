@@ -19,13 +19,14 @@ public:
         return PortionInfo;
     }
 
-    TPatchItem(TPortionLoadContext&& portion, std::vector<TColumnChunkLoadContext>&& records, std::vector<TIndexChunkLoadContext>&& indexes)
+    TPatchItem(
+        TPortionLoadContext&& portion,
+        std::vector<TColumnChunkLoadContext>&& records,
+        std::vector<TIndexChunkLoadContext>&& indexes
+    )
         : PortionInfo(std::move(portion))
         , Records(std::move(records))
-        , Indexes(std::move(indexes))
-    {
-
-    }
+        , Indexes(std::move(indexes)) {}
 };
 
 class TChanges: public INormalizerChanges {
@@ -34,9 +35,9 @@ private:
 
 public:
     TChanges(std::vector<TPatchItem>&& patches)
-        : Patches(std::move(patches)) {
-    }
-    virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
+        : Patches(std::move(patches)) {}
+    virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&)
+        const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Patches) {
@@ -46,7 +47,7 @@ public:
             ui64 indexRawBytes = 0;
             ui32 columnBlobBytes = 0;
             ui32 indexBlobBytes = 0;
-            
+
             for (auto&& c : i.GetRecords()) {
                 columnRawBytes += c.GetMetaProto().GetRawBytes();
                 columnBlobBytes += c.GetBlobRange().GetSize();
@@ -75,11 +76,10 @@ public:
     virtual ui64 GetSize() const override {
         return Patches.size();
     }
-
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
-    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>>
+TNormalizer::DoInit(const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -94,7 +94,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     THashMap<ui64, TPortionLoadContext> dbPortions;
     THashMap<ui64, std::vector<TColumnChunkLoadContext>> recordsByPortion;
     THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesByPortion;
-    
+
     {
         auto rowset = db.Table<Schema::IndexPortions>().Select();
         if (!rowset.IsReady()) {
@@ -146,7 +146,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
             }
         }
     }
-    AFL_VERIFY(dbPortions.size() == recordsByPortion.size())("portions", dbPortions.size())("records", recordsByPortion.size());
+    AFL_VERIFY(dbPortions.size() == recordsByPortion.size())
+    ("portions", dbPortions.size())("records", recordsByPortion.size());
 
     for (auto&& i : indexesByPortion) {
         AFL_VERIFY(dbPortions.contains(i.first));
@@ -166,7 +167,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         auto itRecords = recordsByPortion.find(portion.GetPortionId());
         AFL_VERIFY(itRecords != recordsByPortion.end());
         auto itIndexes = indexesByPortion.find(portion.GetPortionId());
-        auto indexes = (itIndexes == indexesByPortion.end()) ? Default<std::vector<TIndexChunkLoadContext>>() : itIndexes->second;
+        auto indexes =
+            (itIndexes == indexesByPortion.end()) ? Default<std::vector<TIndexChunkLoadContext>>() : itIndexes->second;
         package.emplace_back(std::move(portion), std::move(itRecords->second), std::move(indexes));
         if (package.size() == 100) {
             std::vector<TPatchItem> local;
@@ -181,4 +183,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     return tasks;
 }
 
-}   // namespace NKikimr::NOlap::NChunksActualization
+}   // namespace NKikimr::NOlap::NSyncChunksWithPortions1

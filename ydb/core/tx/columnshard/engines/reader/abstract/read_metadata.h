@@ -24,9 +24,14 @@ private:
 
 public:
     TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index);
-    std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription, const bool withUncommitted) const;
-    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema,
-        const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const;
+    std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription, const bool withUncommitted)
+        const;
+    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(
+        const TReadDescription& readDescription,
+        const std::shared_ptr<arrow::Schema>& pkSchema,
+        const std::optional<ui64> lockId,
+        const TSnapshot& reqSnapshot
+    ) const;
 };
 
 // Holds all metadata that is needed to perform read/scan
@@ -45,12 +50,10 @@ private:
     std::shared_ptr<TVersionedIndex> IndexVersionsPointer;
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
-    virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
-    }
-    virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
-    }
-    virtual void DoOnReplyConstruction(const ui64 /*tabletId*/, NKqp::NInternalImplementation::TEvScanData& /*scanData*/) const {
-    }
+    virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {}
+    virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {}
+    virtual void
+    DoOnReplyConstruction(const ui64 /*tabletId*/, NKqp::NInternalImplementation::TEvScanData& /*scanData*/) const {}
 
 protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
@@ -132,14 +135,18 @@ public:
         RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
     }
 
-    TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+    TReadMetadataBase(
+        const std::shared_ptr<TVersionedIndex> index,
+        const ESorting sorting,
+        const TProgramContainer& ssaProgram,
+        const std::shared_ptr<ISnapshotSchema>& schema,
+        const TSnapshot& requestSnapshot
+    )
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
-        , ResultIndexSchema(schema) {
-    }
+        , ResultIndexSchema(schema) {}
     virtual ~TReadMetadataBase() = default;
 
     ui64 Limit = 0;

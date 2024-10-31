@@ -5,7 +5,10 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NPortions {
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
+void TStatsIterator::AppendStats(
+    const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders,
+    const TPortionInfo& portion
+) const {
     NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
     const std::string prod = ::ToString(portion.GetMeta().Produced);
     NArrow::Append<arrow::StringType>(*builders[1], prod);
@@ -23,7 +26,9 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     const TString statInfo = Default<TString>();
     NArrow::Append<arrow::StringType>(*builders[11], arrow::util::string_view(statInfo.data(), statInfo.size()));
 
-    NArrow::Append<arrow::UInt8Type>(*builders[12], portion.HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized));
+    NArrow::Append<arrow::UInt8Type>(
+        *builders[12], portion.HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)
+    );
     NArrow::Append<arrow::UInt64Type>(*builders[13], portion.GetMeta().GetCompactionLevel());
     {
         NJson::TJsonValue details = NJson::JSON_MAP;
@@ -32,7 +37,9 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
         details.InsertValue("primary_key_min", portion.IndexKeyStart().DebugString());
         details.InsertValue("primary_key_max", portion.IndexKeyEnd().DebugString());
         const auto detailsInfo = details.GetStringRobust();
-        NArrow::Append<arrow::StringType>(*builders[14], arrow::util::string_view(detailsInfo.data(), detailsInfo.size()));
+        NArrow::Append<arrow::StringType>(
+            *builders[14], arrow::util::string_view(detailsInfo.data(), detailsInfo.size())
+        );
     }
 }
 
@@ -40,7 +47,10 @@ ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& gran
     return std::min<ui32>(10000, granule.GetPortions().size());
 }
 
-bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
+bool TStatsIterator::AppendStats(
+    const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders,
+    NAbstract::TGranuleMetaView& granule
+) const {
     ui64 recordsCount = 0;
     while (auto portion = granule.PopFrontPortion()) {
         recordsCount += 1;
@@ -52,7 +62,8 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     return granule.GetPortions().size();
 }
 
-std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
+std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext
+) const {
     return std::make_unique<TStatsIterator>(readContext->GetReadMetadataPtrVerifiedAs<TReadStatsMetadata>());
 }
 
@@ -60,11 +71,17 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
     return GetColumns(TStatsIterator::StatsSchema, TStatsIterator::StatsSchema.KeyColumns);
 }
 
-std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+std::shared_ptr<NAbstract::TReadStatsMetadata>
+TConstructor::BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
+    return std::make_shared<TReadStatsMetadata>(
+        index ? index->CopyVersionedIndexPtr() : nullptr,
+        self->TabletID(),
         IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-        read.GetProgram(), index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
+        read.GetProgram(),
+        index ? index->GetVersionedIndex().GetLastSchema() : nullptr,
+        read.GetSnapshot()
+    );
 }
 
-}
+} // namespace NKikimr::NOlap::NReader::NSysView::NPortions

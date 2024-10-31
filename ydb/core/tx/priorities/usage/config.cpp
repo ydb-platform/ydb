@@ -22,4 +22,4 @@ TString TConfig::DebugString() const {
     return sb;
 }
 
-}
+} // namespace NKikimr::NPrioritiesQueue

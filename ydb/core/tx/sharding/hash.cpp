@@ -1,5 +1,3 @@
 #include "hash.h"
 
-namespace NKikimr::NArrow::NHash {
-
-}
+namespace NKikimr::NArrow::NHash {}

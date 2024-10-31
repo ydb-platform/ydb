@@ -7,6 +7,7 @@ class IResourceRequest {
 private:
     YDB_READONLY(ui64, Volume, 0);
     virtual void DoOnResourceAllocated() = 0;
+
 public:
     void OnResourceAllocated() {
         return DoOnResourceAllocated();
@@ -15,10 +16,7 @@ public:
     virtual ~IResourceRequest() = default;
 
     IResourceRequest(const ui64 volume)
-        : Volume(volume)
-    {
-
-    }
+        : Volume(volume) {}
 };
 
-}
+} // namespace NKikimr::NLimiter

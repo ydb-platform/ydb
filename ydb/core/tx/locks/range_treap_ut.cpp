@@ -9,14 +9,14 @@ namespace NDataShard {
 
 namespace {
 
-    TVector<NScheme::TTypeInfo> CreateSchema(size_t n) {
-        TVector<NScheme::TTypeInfo> schema;
-        auto type = NScheme::TTypeInfo(NScheme::NTypeIds::Uint64);
-        for (size_t i = 0; i < n; ++i) {
-            schema.emplace_back(type);
-        }
-        return schema;
+TVector<NScheme::TTypeInfo> CreateSchema(size_t n) {
+    TVector<NScheme::TTypeInfo> schema;
+    auto type = NScheme::TTypeInfo(NScheme::NTypeIds::Uint64);
+    for (size_t i = 0; i < n; ++i) {
+        schema.emplace_back(type);
     }
+    return schema;
+}
 
 #if 0
     TVector<TCell> CreateKey(std::initializer_list<ui64> keys) {
@@ -28,107 +28,104 @@ namespace {
     }
 #endif
 
-    TVector<TCell> CreateKey(ui64 key) {
-        TVector<TCell> cells(Reserve(1));
-        cells.emplace_back(TCell::Make(key));
-        return cells;
-    }
+TVector<TCell> CreateKey(ui64 key) {
+    TVector<TCell> cells(Reserve(1));
+    cells.emplace_back(TCell::Make(key));
+    return cells;
+}
 
-    void PrintKey(TStringBuilder& builder, TConstArrayRef<TCell> key, size_t columns) {
-        if (columns != 1) {
-            builder << '{';
+void PrintKey(TStringBuilder& builder, TConstArrayRef<TCell> key, size_t columns) {
+    if (columns != 1) {
+        builder << '{';
+    }
+    for (size_t i = 0; i < columns; ++i) {
+        if (i > 0) {
+            builder << ',';
         }
-        for (size_t i = 0; i < columns; ++i) {
-            if (i > 0) {
-                builder << ',';
-            }
-            if (i < key.size()) {
-                builder << key[i].AsValue<ui64>();
-            } else {
-                builder << "any";
-            }
-        }
-        if (columns != 1) {
-            builder << '}';
+        if (i < key.size()) {
+            builder << key[i].AsValue<ui64>();
+        } else {
+            builder << "any";
         }
     }
+    if (columns != 1) {
+        builder << '}';
+    }
+}
 
-    void PrintRange(TStringBuilder& builder, const TRangeTreeBase::TRange& range, ui64 value, size_t columns) {
-        builder << (range.LeftInclusive ? '[' : '(');
-        PrintKey(builder, range.LeftKey, columns);
-        builder << ", ";
-        PrintKey(builder, range.RightKey, columns);
-        builder << (range.RightInclusive ? ']' : ')');
-        builder << " -> ";
-        builder << value;
+void PrintRange(TStringBuilder& builder, const TRangeTreeBase::TRange& range, ui64 value, size_t columns) {
+    builder << (range.LeftInclusive ? '[' : '(');
+    PrintKey(builder, range.LeftKey, columns);
+    builder << ", ";
+    PrintKey(builder, range.RightKey, columns);
+    builder << (range.RightInclusive ? ']' : ')');
+    builder << " -> ";
+    builder << value;
+}
+
+class TRangesToString: public TStringBuilder {
+public:
+    TRangesToString(TStringBuilder& builder, size_t columns)
+        : Builder(builder)
+        , Columns(columns) {}
+
+    void operator()(const TRangeTreeBase::TRange& range, ui64 value) {
+        if (Index++) {
+            Builder << ',';
+            Builder << ' ';
+        }
+        PrintRange(Builder, range, value, Columns);
     }
 
-    class TRangesToString : public TStringBuilder {
-    public:
-        TRangesToString(TStringBuilder& builder, size_t columns)
-            : Builder(builder)
-            , Columns(columns)
-        { }
+private:
+    TStringBuilder& Builder;
+    const size_t Columns;
+    size_t Index = 0;
+};
 
-        void operator()(const TRangeTreeBase::TRange& range, ui64 value) {
-            if (Index++) {
-                Builder << ',';
-                Builder << ' ';
-            }
-            PrintRange(Builder, range, value, Columns);
-        }
+TString TreapToString(const TRangeTreap<ui64>& treap) {
+    TStringBuilder builder;
+    treap.EachRange(TRangesToString(builder, treap.KeyColumns()));
+    return builder;
+}
 
-    private:
-        TStringBuilder& Builder;
-        const size_t Columns;
-        size_t Index = 0;
-    };
+template <class TNeedle>
+TString IntersectionToString(const TRangeTreap<ui64>& treap, const TNeedle& needle) {
+    TStringBuilder builder;
+    treap.EachIntersection(needle, TRangesToString(builder, treap.KeyColumns()));
+    return builder;
+}
 
-    TString TreapToString(const TRangeTreap<ui64>& treap) {
-        TStringBuilder builder;
-        treap.EachRange(TRangesToString(builder, treap.KeyColumns()));
-        return builder;
+struct TCheckValue {
+    ui64 Left, Right, Value;
+
+    TCheckValue(ui64 left, ui64 right, ui64 value)
+        : Left(left)
+        , Right(right)
+        , Value(value) {}
+
+    TString ToString() const {
+        return TStringBuilder() << *this;
     }
 
-    template<class TNeedle>
-    TString IntersectionToString(const TRangeTreap<ui64>& treap, const TNeedle& needle) {
-        TStringBuilder builder;
-        treap.EachIntersection(needle, TRangesToString(builder, treap.KeyColumns()));
-        return builder;
+    friend inline bool operator==(const TCheckValue& a, const TCheckValue& b) {
+        return a.Left == b.Left && a.Right == b.Right && a.Value == b.Value;
     }
 
-    struct TCheckValue {
-        ui64 Left, Right, Value;
-
-        TCheckValue(ui64 left, ui64 right, ui64 value)
-            : Left(left)
-            , Right(right)
-            , Value(value)
-        { }
-
-        TString ToString() const {
-            return TStringBuilder() << *this;
-        }
-
-        friend inline bool operator==(const TCheckValue& a, const TCheckValue& b) {
-            return a.Left == b.Left && a.Right == b.Right && a.Value == b.Value;
-        }
-
-        friend inline IOutputStream& operator<<(IOutputStream& out, const TCheckValue& check) {
-            out << '[';
-            out << check.Left;
-            out << ", ";
-            out << check.Right;
-            out << "] -> ";
-            out << check.Value;
-            return out;
-        }
-    };
+    friend inline IOutputStream& operator<<(IOutputStream& out, const TCheckValue& check) {
+        out << '[';
+        out << check.Left;
+        out << ", ";
+        out << check.Right;
+        out << "] -> ";
+        out << check.Value;
+        return out;
+    }
+};
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TRangeTreap) {
-
     Y_UNIT_TEST(Simple) {
         using TRange = TRangeTreeBase::TRange;
         TRangeTreap<ui64> treap;
@@ -146,29 +143,19 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
         UNIT_ASSERT_VALUES_EQUAL(TreapToString(treap), "[1, 10] -> 42, [2, 40] -> 43, [3, 30] -> 44");
         UNIT_ASSERT_VALUES_EQUAL(treap.Size(), 3u);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            IntersectionToString(treap, CreateKey(1)),
-            "[1, 10] -> 42");
+        UNIT_ASSERT_VALUES_EQUAL(IntersectionToString(treap, CreateKey(1)), "[1, 10] -> 42");
+
+        UNIT_ASSERT_VALUES_EQUAL(IntersectionToString(treap, CreateKey(2)), "[1, 10] -> 42, [2, 40] -> 43");
 
         UNIT_ASSERT_VALUES_EQUAL(
-            IntersectionToString(treap, CreateKey(2)),
-            "[1, 10] -> 42, [2, 40] -> 43");
+            IntersectionToString(treap, CreateKey(3)), "[1, 10] -> 42, [2, 40] -> 43, [3, 30] -> 44"
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            IntersectionToString(treap, CreateKey(3)),
-            "[1, 10] -> 42, [2, 40] -> 43, [3, 30] -> 44");
+        UNIT_ASSERT_VALUES_EQUAL(IntersectionToString(treap, CreateKey(15)), "[2, 40] -> 43, [3, 30] -> 44");
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            IntersectionToString(treap, CreateKey(15)),
-            "[2, 40] -> 43, [3, 30] -> 44");
+        UNIT_ASSERT_VALUES_EQUAL(IntersectionToString(treap, CreateKey(35)), "[2, 40] -> 43");
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            IntersectionToString(treap, CreateKey(35)),
-            "[2, 40] -> 43");
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            IntersectionToString(treap, CreateKey(45)),
-            "");
+        UNIT_ASSERT_VALUES_EQUAL(IntersectionToString(treap, CreateKey(45)), "");
 
         treap.RemoveRanges(43);
         treap.Validate();
@@ -196,16 +183,12 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
         treap.Validate();
 
         auto buildStats = treap.Stats();
-        Cerr << "NOTE: building treap of size " << treap.Size()
-            << " got height " << treap.Height() << " and needed "
-            << (buildStats.Inserts + buildStats.Updates + buildStats.Deletes) << " ops ("
-            << buildStats.Inserts << " inserts "
-            << buildStats.Updates << " updates "
-            << buildStats.Deletes << " deletes) and "
-            << buildStats.Comparisons << " comparisons ("
-            << double(buildStats.Comparisons) / double(buildStats.Inserts + buildStats.Updates + buildStats.Deletes)
-            << " per op)"
-            << Endl;
+        Cerr << "NOTE: building treap of size " << treap.Size() << " got height " << treap.Height() << " and needed "
+             << (buildStats.Inserts + buildStats.Updates + buildStats.Deletes) << " ops (" << buildStats.Inserts
+             << " inserts " << buildStats.Updates << " updates " << buildStats.Deletes << " deletes) and "
+             << buildStats.Comparisons << " comparisons ("
+             << double(buildStats.Comparisons) / double(buildStats.Inserts + buildStats.Updates + buildStats.Deletes)
+             << " per op)" << Endl;
     }
 
     Y_UNIT_TEST(Random) {
@@ -263,16 +246,12 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
         }
 
         auto buildStats = treap.Stats();
-        Cerr << "NOTE: building treap of size " << treap.Size()
-            << " got height " << treap.Height() << " and needed "
-            << (buildStats.Inserts + buildStats.Updates + buildStats.Deletes) << " ops ("
-            << buildStats.Inserts << " inserts "
-            << buildStats.Updates << " updates "
-            << buildStats.Deletes << " deletes) and "
-            << buildStats.Comparisons << " comparisons ("
-            << double(buildStats.Comparisons) / double(buildStats.Inserts + buildStats.Updates + buildStats.Deletes)
-            << " per op)"
-            << Endl;
+        Cerr << "NOTE: building treap of size " << treap.Size() << " got height " << treap.Height() << " and needed "
+             << (buildStats.Inserts + buildStats.Updates + buildStats.Deletes) << " ops (" << buildStats.Inserts
+             << " inserts " << buildStats.Updates << " updates " << buildStats.Deletes << " deletes) and "
+             << buildStats.Comparisons << " comparisons ("
+             << double(buildStats.Comparisons) / double(buildStats.Inserts + buildStats.Updates + buildStats.Deletes)
+             << " per op)" << Endl;
 
         // The resulting treap must be valid
         treap.Validate();
@@ -282,9 +261,9 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
 
         auto checkIt = map.begin();
         treap.EachRange([&](const TRange& range, ui64 value) {
-            TCheckValue found{ range.LeftKey[0].AsValue<ui64>(), range.RightKey[0].AsValue<ui64>(), value };
+            TCheckValue found{range.LeftKey[0].AsValue<ui64>(), range.RightKey[0].AsValue<ui64>(), value};
             UNIT_ASSERT_C(checkIt != map.end(), "Treap has more values than the map, e.g.: " << found);
-            TCheckValue expected{ checkIt->first.first, checkIt->second, checkIt->first.second };
+            TCheckValue expected{checkIt->first.first, checkIt->second, checkIt->first.second};
             UNIT_ASSERT_VALUES_EQUAL(found, expected);
             ++checkIt;
         });
@@ -298,13 +277,15 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
             treap.ResetStats();
             size_t foundCount = 0;
             treap.EachIntersection(CreateKey(point), [&](const TRange& range, ui64 value) {
-                TCheckValue found{ range.LeftKey[0].AsValue<ui64>(), range.RightKey[0].AsValue<ui64>(), value };
+                TCheckValue found{range.LeftKey[0].AsValue<ui64>(), range.RightKey[0].AsValue<ui64>(), value};
                 // Skip all map values that don't intersect with point
                 while (checkIt != map.end() && !(checkIt->first.first <= point && point <= checkIt->second)) {
                     ++checkIt;
                 }
-                UNIT_ASSERT_C(checkIt != map.end(), "Treap returned value that was not found in the map, e.g." << found);
-                TCheckValue expected{ checkIt->first.first, checkIt->second, checkIt->first.second };
+                UNIT_ASSERT_C(
+                    checkIt != map.end(), "Treap returned value that was not found in the map, e.g." << found
+                );
+                TCheckValue expected{checkIt->first.first, checkIt->second, checkIt->first.second};
                 UNIT_ASSERT_VALUES_EQUAL_C(found, expected, "Treap returned a value that does not match with the map");
                 ++checkIt;
                 ++foundCount;
@@ -314,16 +295,15 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
             while (checkIt != map.end() && !(checkIt->first.first <= point && point <= checkIt->second)) {
                 ++checkIt;
             }
-            UNIT_ASSERT_C(checkIt == map.end(), "Map has a value that was not returned from the treap, e.g."
-                    << TCheckValue(checkIt->first.first, checkIt->second, checkIt->first.second));
-            Cerr << "... found " << foundCount << " ranges, needed "
-                << foundStats.Comparisons << " comparisons ("
-                << double(foundStats.Comparisons) / double(Max(foundCount, ui64(1)))
-                << " per range)"
-                << Endl;
+            UNIT_ASSERT_C(
+                checkIt == map.end(),
+                "Map has a value that was not returned from the treap, e.g."
+                    << TCheckValue(checkIt->first.first, checkIt->second, checkIt->first.second)
+            );
+            Cerr << "... found " << foundCount << " ranges, needed " << foundStats.Comparisons << " comparisons ("
+                 << double(foundStats.Comparisons) / double(Max(foundCount, ui64(1))) << " per range)" << Endl;
         }
     }
-
 }
 
 } // namespace NDataShard

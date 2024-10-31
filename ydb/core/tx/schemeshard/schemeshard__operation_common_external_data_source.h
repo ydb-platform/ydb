@@ -31,10 +31,12 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath, const TTxTrans
     return std::move(checks);
 }
 
-inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
-                              const TPath& parentPath,
-                              const TTxTransaction& tx,
-                              const bool isCreate) {
+inline bool IsParentPathValid(
+    const THolder<TProposeResponse>& result,
+    const TPath& parentPath,
+    const TTxTransaction& tx,
+    const bool isCreate
+) {
     const auto checks = IsParentPathValid(parentPath, tx, isCreate);
 
     if (!checks) {
@@ -44,11 +46,13 @@ inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
     return static_cast<bool>(checks);
 }
 
-bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
-              const NExternalSource::IExternalSourceFactory::TPtr& factory,
-              TString& errStr);
+bool Validate(
+    const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
+    const NExternalSource::IExternalSourceFactory::TPtr& factory,
+    TString& errStr
+);
 
-TExternalDataSourceInfo::TPtr CreateExternalDataSource(
-    const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion);
+TExternalDataSourceInfo::TPtr
+CreateExternalDataSource(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion);
 
 } // namespace NKikimr::NSchemeShard::NExternalDataSource

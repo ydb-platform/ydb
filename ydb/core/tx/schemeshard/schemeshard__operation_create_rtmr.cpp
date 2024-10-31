@@ -9,7 +9,11 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool ValidateConfig(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TString& errStr, TEvSchemeShard::EStatus& status) {
+bool ValidateConfig(
+    const NKikimrSchemeOp::TRtmrVolumeDescription& op,
+    TString& errStr,
+    TEvSchemeShard::EStatus& status
+) {
     ui64 count = op.PartitionsSize();
     for (ui64 i = 0; i < count; ++i) {
         const auto& part = op.GetPartitions(i);
@@ -31,7 +35,8 @@ bool ValidateConfig(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TString& 
     return true;
 }
 
-TRtmrVolumeInfo::TPtr CreateRtmrVolume(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TTxState& state, TSchemeShard* ss) {
+TRtmrVolumeInfo::TPtr
+CreateRtmrVolume(const NKikimrSchemeOp::TRtmrVolumeDescription& op, TTxState& state, TSchemeShard* ss) {
     TRtmrVolumeInfo::TPtr rtmrVol = new TRtmrVolumeInfo;
 
     state.Shards.clear();
@@ -60,14 +65,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateRTMR TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateRTMR TConfigureParts"
+                                << " operationId#" << OperationId;
     }
+
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -88,7 +92,7 @@ public:
                  "%" PRIu64 "rtmr shards expected, %" PRIu64 " created",
                  rtmrVol->Partitions.size(), txState->Shards.size());
 
-        for (const auto& shard: txState->Shards) {
+        for (const auto& shard : txState->Shards) {
             auto rtmrPartition = rtmrVol->Partitions[shard.Idx];
             Y_VERIFY_S(rtmrPartition, "rtmr partitions is null shard idx " <<  shard.Idx << " Path " << txState->TargetPathId);
 
@@ -107,15 +111,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateRTMR TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TCreateRTMR TPropose"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -175,31 +177,31 @@ class TCreateRTMR: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -229,8 +231,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -252,19 +253,15 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeRtmrVolume, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeRtmrVolume, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
+                checks.IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -296,7 +293,9 @@ public:
 
         TChannelsBindings channelsBinding;
         if (!context.SS->ResolveRtmrChannels(dstPath.GetPathIdForDomain(), channelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
+            result->SetError(
+                NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool"
+            );
             return result;
         }
 
@@ -319,7 +318,8 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         if (parentPath.Base()->HasActiveChanges()) {
-            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+            TTxId parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -345,13 +345,15 @@ public:
         TShardInfo rtmrPartitionInfo = TShardInfo::RtmrPartitionInfo(OperationId.GetTxId(), newRtmrVolume->PathId);
         rtmrPartitionInfo.BindedChannels = channelsBinding;
 
-        for (const auto& part: rtmrVolumeInfo->Partitions) {
+        for (const auto& part : rtmrVolumeInfo->Partitions) {
             auto shardIdx = part.second->ShardIdx;
             auto tabletId = part.second->TabletId;
 
             context.SS->RegisterShardInfo(shardIdx, rtmrPartitionInfo);
 
-            context.SS->PersistShardMapping(db, shardIdx, tabletId, newRtmrVolume->PathId, OperationId.GetTxId(), TTabletTypes::RTMRPartition);
+            context.SS->PersistShardMapping(
+                db, shardIdx, tabletId, newRtmrVolume->PathId, OperationId.GetTxId(), TTabletTypes::RTMRPartition
+            );
             context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
         }
 
@@ -391,7 +393,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -404,4 +406,4 @@ ISubOperation::TPtr CreateNewRTMR(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateRTMR>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

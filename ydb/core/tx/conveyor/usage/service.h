@@ -10,12 +10,10 @@ namespace NKikimr::NConveyor {
 class TAsyncTaskExecutor: public TActorBootstrapped<TAsyncTaskExecutor> {
 private:
     const std::shared_ptr<ITask> Task;
+
 public:
     TAsyncTaskExecutor(const std::shared_ptr<ITask>& task)
-        : Task(task)
-    {
-
-    }
+        : Task(task) {}
 
     void Bootstrap() {
         auto gAway = PassAwayGuard();
@@ -35,6 +33,7 @@ private:
         Y_ABORT_UNLESS(TConveyorPolicy::Name.size() == 4);
         return TConveyorPolicy::Name;
     }
+
 public:
     static void AsyncTaskToExecute(const std::shared_ptr<ITask>& task) {
         auto& context = NActors::TActorContext::AsActorContext();
@@ -57,11 +56,11 @@ public:
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcConv" + GetConveyorName());
     }
-    static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
+    static NActors::IActor*
+    CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
         Register(config);
         return new TDistributor(config, GetConveyorName(), conveyorSignals);
     }
-
 };
 
 class TScanConveyorPolicy {
@@ -83,4 +82,4 @@ using TScanServiceOperator = TServiceOperatorImpl<TScanConveyorPolicy>;
 using TCompServiceOperator = TServiceOperatorImpl<TCompConveyorPolicy>;
 using TInsertServiceOperator = TServiceOperatorImpl<TInsertConveyorPolicy>;
 
-}
+} // namespace NKikimr::NConveyor

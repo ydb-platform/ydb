@@ -23,7 +23,6 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
-
     struct TReadIteratorCounter {
         int Reads = 0;
         int Continues = 0;
@@ -38,10 +37,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         }
     };
 
-    std::unique_ptr<TReadIteratorCounter> SetupReadIteratorObserver(TTestActorRuntime& runtime) {
+    std::unique_ptr<TReadIteratorCounter> SetupReadIteratorObserver(TTestActorRuntime & runtime) {
         std::unique_ptr<TReadIteratorCounter> iteratorCounter = std::make_unique<TReadIteratorCounter>();
 
-        auto captureEvents = [&](TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureEvents = [&](TAutoPtr<IEventHandle>& event) -> auto {
             switch (event->GetTypeRewrite()) {
                 case TEvDataShard::EvRead: {
                     iteratorCounter->Reads++;
@@ -75,7 +74,8 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         TActorId Sender;
         TTestActorRuntime* Runtime;
 
-        TNode(bool useExternalBlobs, int externalBlobColumns = 1) : ServerSettings(Pm.GetPort(2134)) {
+        TNode(bool useExternalBlobs, int externalBlobColumns = 1)
+            : ServerSettings(Pm.GetPort(2134)) {
             ServerSettings.SetDomainName("Root")
                 .SetUseRealThreads(false)
                 .AddStoragePool("ssd")
@@ -84,34 +84,44 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
                 .SetEnableUuidAsPrimaryKey(true);
 
             Server = new TServer(ServerSettings);
-            
+
             Runtime = Server->GetRuntime();
 
             Sender = Runtime->AllocateEdgeActor();
-        
+
             InitRoot(Server, Sender);
-            
+
             TShardedTableOptions::TFamily fam;
-            
+
             if (useExternalBlobs) {
-                fam = {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd", 
-                        .ExternalPoolKind = "ext", .DataThreshold = 100u, .ExternalThreshold = 512_KB};
+                fam = {
+                    .Name = "default",
+                    .LogPoolKind = "ssd",
+                    .SysLogPoolKind = "ssd",
+                    .DataPoolKind = "ssd",
+                    .ExternalPoolKind = "ext",
+                    .DataThreshold = 100u,
+                    .ExternalThreshold = 512_KB
+                };
             } else {
-                fam = {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd", .DataThreshold = 100u};
+                fam = {
+                    .Name = "default",
+                    .LogPoolKind = "ssd",
+                    .SysLogPoolKind = "ssd",
+                    .DataPoolKind = "ssd",
+                    .DataThreshold = 100u
+                };
             }
-            
+
             TVector<TShardedTableOptions::TColumn> columns = {
-                    {"blob_id", "Uuid", true, false}, 
-                    {"chunk_num", "Int32", true, false}
+                {"blob_id", "Uuid", true, false}, {"chunk_num", "Int32", true, false}
             };
 
             for (int i = 0; i < externalBlobColumns; i++) {
                 columns.push_back({"data" + ToString(i), "String", false, false});
             }
 
-            auto opts = TShardedTableOptions()
-                .Columns(columns)
-                .Families({fam});
+            auto opts = TShardedTableOptions().Columns(columns).Families({fam});
 
             CreateShardedTable(Server, Sender, "/Root", "table-1", opts);
 
@@ -120,12 +130,13 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         }
     };
 
-    void ValidateReadResult(TTestActorRuntime& runtime,
-            NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> readFuture,
-            int rowsCount,
-            int firstBlobChunkNum = 0,
-            int extBlobColumnCount = 1)
-    {
+    void ValidateReadResult(
+        TTestActorRuntime & runtime,
+        NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> readFuture,
+        int rowsCount,
+        int firstBlobChunkNum = 0,
+        int extBlobColumnCount = 1
+    ) {
         Ydb::Table::ExecuteDataQueryResponse res = AwaitResponse(runtime, std::move(readFuture));
         auto& operation = res.Getoperation();
         UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
@@ -152,11 +163,12 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             }
         }
     }
-    
-    void ValidateReadResult(TTestActorRuntime& runtime,
-            NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> readFuture,
-            const std::vector<i32>& expectedResult)
-    {
+
+    void ValidateReadResult(
+        TTestActorRuntime & runtime,
+        NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> readFuture,
+        const std::vector<i32>& expectedResult
+    ) {
         Ydb::Table::ExecuteDataQueryResponse res = AwaitResponse(runtime, std::move(readFuture));
         auto& operation = res.Getoperation();
         UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
@@ -197,9 +209,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             TString chunkNum = ToString(i);
             TString query = R"___(
                 UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                            chunkNum + ", \"" + largeValue + "\");";
+
+            ExecSQL(server, sender, query);
         }
 
         {
@@ -253,9 +266,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             TString chunkNum = ToString(i);
             TString query = R"___(
                 UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                            chunkNum + ", \"" + largeValue + "\");";
+
+            ExecSQL(server, sender, query);
         }
 
         CompactTable(runtime, shard1, tableId1, false);
@@ -263,10 +277,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         for (int i = 0; i < 7; i++) {
             TString chunkNum = ToString(i);
             TString query = R"___(
-                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=)___"
-                + chunkNum + ";";
-            
-            ExecSQL(server, sender, query);    
+                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=)___" +
+                            chunkNum + ";";
+
+            ExecSQL(server, sender, query);
         }
 
         auto iteratorCounter = SetupReadIteratorObserver(runtime);
@@ -302,20 +316,21 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             TString chunkNum = ToString(i);
             TString query = R"___(
                 UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                            chunkNum + ", \"" + largeValue + "\");";
+
+            ExecSQL(server, sender, query);
         }
-        
+
         CompactTable(runtime, shard1, tableId1, false);
 
         for (int i = 3; i < 10; i++) {
             TString chunkNum = ToString(i);
             TString query = R"___(
-                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=)___"
-                + chunkNum + ";";
-            
-            ExecSQL(server, sender, query);    
+                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=)___" +
+                            chunkNum + ";";
+
+            ExecSQL(server, sender, query);
         }
 
         auto iteratorCounter = SetupReadIteratorObserver(runtime);
@@ -351,9 +366,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             TString chunkNum = ToString(i);
             TString query = R"___(
                 UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                            chunkNum + ", \"" + largeValue + "\");";
+
+            ExecSQL(server, sender, query);
         }
 
         CompactTable(runtime, shard1, tableId1, false);
@@ -361,17 +377,17 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         {
             TString query = R"___(
                 DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=0;)___";
-            
-            ExecSQL(server, sender, query);    
+
+            ExecSQL(server, sender, query);
         }
 
         for (int i = 2; i < 5; i++) {
             TString chunkNum = ToString(i);
             TString query = R"___(
-                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=)___"
-                + chunkNum + ";";
-            
-            ExecSQL(server, sender, query);    
+                DELETE FROM `/Root/table-1` WHERE blob_id=Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c") and chunk_num=)___" +
+                            chunkNum + ";";
+
+            ExecSQL(server, sender, query);
         }
 
         auto iteratorCounter = SetupReadIteratorObserver(runtime);
@@ -407,7 +423,8 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             TString chunkNum = ToString(i);
             TString query = R"___(
                 UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                            chunkNum + ", \"" + largeValue + "\");";
             ExecSQL(server, sender, query);
         }
 
@@ -429,8 +446,8 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         bool finished = false;
         std::vector<TEvDataShard::TEvReadResult::TPtr> blockedResults;
         std::optional<std::pair<TActorId, ui64>> dropReadId;
-        auto blockResults = runtime.AddObserver<TEvDataShard::TEvReadResult>(
-            [&](TEvDataShard::TEvReadResult::TPtr& ev) {
+        auto blockResults =
+            runtime.AddObserver<TEvDataShard::TEvReadResult>([&](TEvDataShard::TEvReadResult::TPtr& ev) {
                 auto* msg = ev->Get();
                 if (dropReadId) {
                     if (*dropReadId == std::make_pair(ev->GetRecipientRewrite(), msg->Record.GetReadId())) {
@@ -458,15 +475,17 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
                 LIMIT 5;
             )");
 
-        runtime.WaitFor("blocked results", [&]{ return blockedResults.size() > 0 || finished; });
+        runtime.WaitFor("blocked results", [&] {
+            return blockedResults.size() > 0 || finished;
+        });
 
         if (!finished) {
             UNIT_ASSERT_VALUES_EQUAL(passedRows, 1u);
 
             if (withReboot) {
                 dropReadId.emplace(
-                    blockedResults[0]->GetRecipientRewrite(),
-                    blockedResults[0]->Get()->Record.GetReadId());
+                    blockedResults[0]->GetRecipientRewrite(), blockedResults[0]->Get()->Record.GetReadId()
+                );
 
                 RebootTablet(runtime, shard1, sender);
             } else {
@@ -504,10 +523,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             TString chunkNum = ToString(i);
             TString query = R"___(
                 UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0, data1) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___"
-                     + chunkNum + ", \"" + largeValue + "\", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                            chunkNum + ", \"" + largeValue + "\", \"" + largeValue + "\");";
+
+            ExecSQL(server, sender, query);
         }
 
         {
@@ -575,9 +594,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
 
                 TString query = R"___(
                     UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-                
-                ExecSQL(server, sender, query);    
+                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                                chunkNum + ", \"" + largeValue + "\");";
+
+                ExecSQL(server, sender, query);
             }
 
             {
@@ -602,9 +622,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
 
                 TString query = R"___(
                     UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-                
-                ExecSQL(server, sender, query);    
+                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                                chunkNum + ", \"" + largeValue + "\");";
+
+                ExecSQL(server, sender, query);
             }
 
             for (int i = compactedPart + test; i < 20; i++) {
@@ -612,9 +633,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
 
                 TString query = R"___(
                     UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-                
-                ExecSQL(server, sender, query);    
+                        (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                                chunkNum + ", \"" + largeValue + "\");";
+
+                ExecSQL(server, sender, query);
             }
 
             auto iteratorCounter = SetupReadIteratorObserver(runtime);
@@ -666,9 +688,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             TString chunkNum = ToString(i);
             TString query = R"___(
                 UPSERT INTO `/Root/table-1` (blob_id, chunk_num, data0) VALUES
-                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" + chunkNum + ", \"" + largeValue + "\");";
-            
-            ExecSQL(server, sender, query);    
+                    (Uuid("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), )___" +
+                            chunkNum + ", \"" + largeValue + "\");";
+
+            ExecSQL(server, sender, query);
         }
 
         {
@@ -696,10 +719,9 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
                     chunk_num >= 0
                 ORDER BY blob_id, chunk_num ASC
                 LIMIT 100;)");
-        
+
         ValidateReadResult(runtime, std::move(readFuture), 10);
     }
-
 }
 
 } // namespace NKikimr

@@ -6,6 +6,7 @@ namespace NKikimr::NOlap::NIndexes {
 class TCompositeIndexChecker: public IIndexChecker {
 protected:
     std::vector<TIndexCheckerContainer> Checkers;
+
 protected:
     virtual bool DoDeserializeFromProto(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) override {
         for (auto&& i : proto.GetComposite().GetChildrenCheckers()) {
@@ -28,12 +29,11 @@ protected:
         }
         return result;
     }
+
 public:
     TCompositeIndexChecker() = default;
     TCompositeIndexChecker(const std::vector<TIndexCheckerContainer>& checkers)
-        : Checkers(checkers) {
-
-    }
+        : Checkers(checkers) {}
     TCompositeIndexChecker(const std::vector<std::shared_ptr<IIndexChecker>>& checkers) {
         for (auto&& i : checkers) {
             Checkers.emplace_back(i);
@@ -44,12 +44,15 @@ public:
 class TAndIndexChecker: public TCompositeIndexChecker {
 private:
     using TBase = TCompositeIndexChecker;
+
 public:
     static TString GetClassNameStatic() {
         return "AND_FILTERS";
     }
+
 private:
     static inline auto Registrator = TFactory::TRegistrator<TAndIndexChecker>(GetClassNameStatic());
+
 protected:
     virtual bool DoCheck(const THashMap<ui32, std::vector<TString>>& blobsByIndexId) const override {
         for (auto&& i : Checkers) {
@@ -59,6 +62,7 @@ protected:
         }
         return true;
     }
+
 public:
     using TBase::TBase;
 
@@ -70,12 +74,15 @@ public:
 class TOrIndexChecker: public TCompositeIndexChecker {
 private:
     using TBase = TCompositeIndexChecker;
+
 public:
     static TString GetClassNameStatic() {
         return "OR_FILTERS";
     }
+
 private:
     static inline auto Registrator = TFactory::TRegistrator<TOrIndexChecker>(GetClassNameStatic());
+
 protected:
     virtual bool DoCheck(const THashMap<ui32, std::vector<TString>>& blobsByIndexId) const override {
 //        ui32 idx = 0;
@@ -87,6 +94,7 @@ protected:
         }
         return false;
     }
+
 public:
     using TBase::TBase;
 

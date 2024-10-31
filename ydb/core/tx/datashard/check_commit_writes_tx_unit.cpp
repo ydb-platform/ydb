@@ -6,12 +6,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCheckCommitWritesTxUnit : public TExecutionUnit {
+class TCheckCommitWritesTxUnit: public TExecutionUnit {
 public:
     TCheckCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CheckCommitWritesTx, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::CheckCommitWritesTx, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -31,11 +29,11 @@ public:
 
         const auto& commitTx = tx->GetCommitWritesTx()->GetBody();
 
-        auto buildUnsuccessfulResult = [&](
-                const TString& reason,
-                NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status = NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST,
-                NKikimrTxDataShard::TError::EKind kind = NKikimrTxDataShard::TError::BAD_ARGUMENT)
-        {
+        auto buildUnsuccessfulResult = [&](const TString& reason,
+                                           NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status =
+                                               NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST,
+                                           NKikimrTxDataShard::TError::EKind kind =
+                                               NKikimrTxDataShard::TError::BAD_ARGUMENT) {
             BuildResult(op, status)->AddError(kind, reason);
             op->Abort(EExecutionUnitKind::FinishPropose);
             return EExecutionStatus::Executed;
@@ -43,30 +41,25 @@ public:
 
         const auto& tableId = commitTx.GetTableId();
         if (tableId.GetOwnerId() != DataShard.GetPathOwnerId() ||
-            !DataShard.GetUserTables().contains(tableId.GetTableId()))
-        {
+            !DataShard.GetUserTables().contains(tableId.GetTableId())) {
             return buildUnsuccessfulResult(
-                TStringBuilder()
-                    << "CommitWrites refers to table "
-                    << tableId.GetOwnerId() << ":" << tableId.GetTableId()
-                    << " that doesn't exist at shard "
-                    << DataShard.TabletID(),
+                TStringBuilder() << "CommitWrites refers to table " << tableId.GetOwnerId() << ":"
+                                 << tableId.GetTableId() << " that doesn't exist at shard " << DataShard.TabletID(),
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
-                NKikimrTxDataShard::TError::SCHEME_ERROR);
+                NKikimrTxDataShard::TError::SCHEME_ERROR
+            );
         }
 
         const auto& tableInfo = *DataShard.GetUserTables().at(tableId.GetTableId());
 
         if (tableId.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() != tableId.GetSchemaVersion()) {
             return buildUnsuccessfulResult(
-                TStringBuilder()
-                    << "SchemaVersion mismatch for table "
-                    << tableId.GetOwnerId() << ":" << tableId.GetTableId()
-                    << " requested " << tableId.GetSchemaVersion()
-                    << " expected " << tableInfo.GetTableSchemaVersion()
-                    << " at shard " << DataShard.TabletID(),
+                TStringBuilder() << "SchemaVersion mismatch for table " << tableId.GetOwnerId() << ":"
+                                 << tableId.GetTableId() << " requested " << tableId.GetSchemaVersion() << " expected "
+                                 << tableInfo.GetTableSchemaVersion() << " at shard " << DataShard.TabletID(),
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
-                NKikimrTxDataShard::TError::SCHEME_ERROR);
+                NKikimrTxDataShard::TError::SCHEME_ERROR
+            );
         }
 
         if (!commitTx.HasWriteTxId() || commitTx.GetWriteTxId() == 0) {
@@ -75,14 +68,14 @@ public:
 
         if (!Pipeline.AssignPlanInterval(op)) {
             const TString err = TStringBuilder()
-                << "Can't propose tx " << op->GetTxId()
-                << " at blocked shard " << DataShard.TabletID();
+                                << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
 
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
             return buildUnsuccessfulResult(
                 err,
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
-                NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
+                NKikimrTxDataShard::TError::SHARD_IS_BLOCKED
+            );
         }
 
         BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
@@ -94,8 +87,7 @@ public:
         return EExecutionStatus::Executed;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override {}
 };
 
 THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline) {

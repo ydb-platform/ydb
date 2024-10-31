@@ -10,7 +10,6 @@ bool TTxWriteSourceCursor::DoExecute(NTabletFlatExecutor::TTransactionContext& t
     return true;
 }
 
-void TTxWriteSourceCursor::DoComplete(const TActorContext& /*ctx*/) {
-}
+void TTxWriteSourceCursor::DoComplete(const TActorContext& /*ctx*/) {}
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

@@ -20,15 +20,13 @@ namespace {
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "NewCdcStream TPropose"
-            << " opId# " << OperationId << " ";
+        return TStringBuilder() << "NewCdcStream TPropose"
+                                << " opId# " << OperationId << " ";
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -88,21 +86,21 @@ class TNewCdcStream: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -120,13 +118,14 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         const auto tablePath = TPath::Resolve(workingDir, context.SS);
         {
             const auto checks = tablePath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -149,25 +148,18 @@ public:
         auto streamPath = tablePath.Child(streamName);
         {
             const auto checks = streamPath.Check();
-            checks
-                .IsAtLocalSchemeShard();
+            checks.IsAtLocalSchemeShard();
 
             if (streamPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeCdcStream, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .PathsLimit()
-                    .DirChildrenLimit();
+                checks.IsValidLeafName().PathsLimit().DirChildrenLimit();
             }
 
             if (!checks) {
@@ -181,91 +173,109 @@ public:
         }
 
         switch (streamDesc.GetMode()) {
-        case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamModeNewImage:
-        case NKikimrSchemeOp::ECdcStreamModeOldImage:
-        case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
-        case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
-            break;
-        case NKikimrSchemeOp::ECdcStreamModeUpdate:
-            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode");
+            case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
+            case NKikimrSchemeOp::ECdcStreamModeNewImage:
+            case NKikimrSchemeOp::ECdcStreamModeOldImage:
+            case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+            case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
+                break;
+            case NKikimrSchemeOp::ECdcStreamModeUpdate:
+                if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
+                    result->SetError(
+                        NKikimrScheme::StatusInvalidParameter,
+                        "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode"
+                    );
+                    return result;
+                }
+                if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDebeziumJson) {
+                    result->SetError(
+                        NKikimrScheme::StatusInvalidParameter,
+                        "DEBEZIUM_JSON format incompatible with specified stream mode"
+                    );
+                    return result;
+                }
+                break;
+            default:
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    TStringBuilder() << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode())
+                );
                 return result;
-            }
-            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDebeziumJson) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DEBEZIUM_JSON format incompatible with specified stream mode");
-                return result;
-            }
-            break;
-        default:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-                << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()));
-            return result;
         }
 
         switch (streamDesc.GetFormat()) {
-        case NKikimrSchemeOp::ECdcStreamFormatProto:
-        case NKikimrSchemeOp::ECdcStreamFormatJson:
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
-            if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "DYNAMODB_STREAMS_JSON format is not supported yet");
+            case NKikimrSchemeOp::ECdcStreamFormatProto:
+            case NKikimrSchemeOp::ECdcStreamFormatJson:
+                break;
+            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+                if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
+                    result->SetError(
+                        NKikimrScheme::StatusPreconditionFailed, "DYNAMODB_STREAMS_JSON format is not supported yet"
+                    );
+                    return result;
+                }
+                if (tablePath.Base()->DocumentApiVersion < 1) {
+                    result->SetError(
+                        NKikimrScheme::StatusInvalidParameter,
+                        "DYNAMODB_STREAMS_JSON format incompatible with non-document table"
+                    );
+                    return result;
+                }
+                break;
+            case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson:
+                if (!AppData()->FeatureFlags.GetEnableChangefeedDebeziumJsonFormat()) {
+                    result->SetError(
+                        NKikimrScheme::StatusPreconditionFailed, "DEBEZIUM_JSON format is not supported yet"
+                    );
+                    return result;
+                }
+                break;
+            default:
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    TStringBuilder() << "Invalid stream format: " << static_cast<ui32>(streamDesc.GetFormat())
+                );
                 return result;
-            }
-            if (tablePath.Base()->DocumentApiVersion < 1) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "DYNAMODB_STREAMS_JSON format incompatible with non-document table");
-                return result;
-            }
-            break;
-        case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson:
-            if (!AppData()->FeatureFlags.GetEnableChangefeedDebeziumJsonFormat()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "DEBEZIUM_JSON format is not supported yet");
-                return result;
-            }
-            break;
-        default:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-                << "Invalid stream format: " << static_cast<ui32>(streamDesc.GetFormat()));
-            return result;
         }
 
         if (!streamDesc.GetAwsRegion().empty()) {
             switch (streamDesc.GetFormat()) {
-            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
-                break;
-            default:
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "AWS_REGION option incompatible with specified stream format");
-                return result;
+                case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+                    break;
+                default:
+                    result->SetError(
+                        NKikimrScheme::StatusInvalidParameter,
+                        "AWS_REGION option incompatible with specified stream format"
+                    );
+                    return result;
             }
         }
 
         if (streamDesc.GetVirtualTimestamps()) {
             switch (streamDesc.GetFormat()) {
-            case NKikimrSchemeOp::ECdcStreamFormatProto:
-            case NKikimrSchemeOp::ECdcStreamFormatJson:
-                break;
-            default:
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "VIRTUAL_TIMESTAMPS incompatible with specified stream format");
-                return result;
+                case NKikimrSchemeOp::ECdcStreamFormatProto:
+                case NKikimrSchemeOp::ECdcStreamFormatJson:
+                    break;
+                default:
+                    result->SetError(
+                        NKikimrScheme::StatusInvalidParameter,
+                        "VIRTUAL_TIMESTAMPS incompatible with specified stream format"
+                    );
+                    return result;
             }
         }
 
         if (streamDesc.GetResolvedTimestampsIntervalMs()) {
             switch (streamDesc.GetFormat()) {
-            case NKikimrSchemeOp::ECdcStreamFormatProto:
-            case NKikimrSchemeOp::ECdcStreamFormatJson:
-                break;
-            default:
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "RESOLVED_TIMESTAMPS incompatible with specified stream format");
-                return result;
+                case NKikimrSchemeOp::ECdcStreamFormatProto:
+                case NKikimrSchemeOp::ECdcStreamFormatJson:
+                    break;
+                default:
+                    result->SetError(
+                        NKikimrScheme::StatusInvalidParameter,
+                        "RESOLVED_TIMESTAMPS incompatible with specified stream format"
+                    );
+                    return result;
             }
         }
 
@@ -277,8 +287,7 @@ public:
 
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
         if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateChangefeed, streamDesc.GetUserAttributes(), errStr) ||
-            !userAttrs->CheckLimits(errStr))
-        {
+            !userAttrs->CheckLimits(errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -346,7 +355,8 @@ public:
 
 class TConfigurePartsAtTable: public NCdcStreamState::TConfigurePartsAtTable {
 protected:
-    void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
+    void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context)
+        const override {
         auto& notice = *tx.MutableCreateCdcStreamNotice();
         NCdcStreamAtTable::FillNotice(pathId, context, notice);
     }
@@ -432,54 +442,50 @@ class TNewCdcStreamAtTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigurePartsAtTable>(OperationId);
-        case TTxState::Propose:
-            if (InitialScan) {
-                return MakeHolder<TProposeAtTableWithInitialScan>(OperationId);
-            } else {
-                return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
-            }
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            if (InitialScan) {
-                return MakeHolder<TDoneWithInitialScan>(OperationId);
-            } else {
-                return MakeHolder<TDone>(OperationId);
-            }
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigurePartsAtTable>(OperationId);
+            case TTxState::Propose:
+                if (InitialScan) {
+                    return MakeHolder<TProposeAtTableWithInitialScan>(OperationId);
+                } else {
+                    return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
+                }
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                if (InitialScan) {
+                    return MakeHolder<TDoneWithInitialScan>(OperationId);
+                } else {
+                    return MakeHolder<TDone>(OperationId);
+                }
+            default:
+                return nullptr;
         }
     }
 
 public:
     explicit TNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan)
         : TSubOperation(id, tx)
-        , InitialScan(initialScan)
-    {
-    }
+        , InitialScan(initialScan) {}
 
     explicit TNewCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool initialScan)
         : TSubOperation(id, state)
-        , InitialScan(initialScan)
-    {
-    }
+        , InitialScan(initialScan) {}
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -491,23 +497,22 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << tableName << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {
             const auto checks = workingDirPath.Check();
-            NCdcStreamAtTable::CheckWorkingDirOnPropose(
-                checks,
-                workingDirPath.IsTableIndex(Nothing(), false));
+            NCdcStreamAtTable::CheckWorkingDirOnPropose(checks, workingDirPath.IsTableIndex(Nothing(), false));
         }
 
         const auto tablePath = workingDirPath.Child(tableName);
         {
             const auto checks = tablePath.Check();
             NCdcStreamAtTable::CheckSrcDirOnPropose(
-                checks,
-                tablePath.IsInsideTableIndexPath(false),
-                InitialScan ? OperationId.GetTxId() : InvalidTxId);
+                checks, tablePath.IsInsideTableIndexPath(false), InitialScan ? OperationId.GetTxId() : InvalidTxId
+            );
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -548,9 +553,8 @@ public:
         Y_ABORT_UNLESS(table->AlterVersion != 0);
         Y_ABORT_UNLESS(!table->AlterData);
 
-        const auto txType = InitialScan
-            ? TTxState::TxCreateCdcStreamAtTableWithInitialScan
-            : TTxState::TxCreateCdcStreamAtTable;
+        const auto txType =
+            InitialScan ? TTxState::TxCreateCdcStreamAtTableWithInitialScan : TTxState::TxCreateCdcStreamAtTable;
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
@@ -587,11 +591,11 @@ private:
 }; // TNewCdcStreamAtTable
 
 void DoCreateLock(
-        TVector<ISubOperation::TPtr>& result,
-        const TOperationId opId,
-        const TPath& workingDirPath,
-        const TPath& tablePath)
-{
+    TVector<ISubOperation::TPtr>& result,
+    const TOperationId opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath
+) {
     auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
     outTx.SetFailOnExist(false);
     outTx.SetInternal(true);
@@ -621,19 +625,20 @@ bool IsReplicationSupportTopicAutopartitioning(const NKikimrSchemeOp::TCreateCdc
     return false;
 }
 
-} // anonymous
+} // namespace
 
 void DoCreatePqPart(
-        TVector<ISubOperation::TPtr>& result,
-        const NKikimrSchemeOp::TCreateCdcStream& op,
-        const TOperationId& opId,
-        const TPath& streamPath,
-        const TString& streamName,
-        TTableInfo::TCPtr table,
-        const TVector<TString>& boundaries,
-        const bool acceptExisted)
-{
-    auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+    TVector<ISubOperation::TPtr>& result,
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TOperationId& opId,
+    const TPath& streamPath,
+    const TString& streamName,
+    TTableInfo::TCPtr table,
+    const TVector<TString>& boundaries,
+    const bool acceptExisted
+) {
+    auto outTx =
+        TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
     outTx.SetFailOnExist(!acceptExisted);
 
     auto& desc = *outTx.MutableCreatePersQueueGroup();
@@ -652,15 +657,20 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && IsReplicationSupportTopicAutopartitioning(op)) {
-        auto * ps = pqConfig.MutablePartitionStrategy();
-        ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+    if (AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() &&
+        IsReplicationSupportTopicAutopartitioning(op)) {
+        auto* ps = pqConfig.MutablePartitionStrategy();
+        ps->SetPartitionStrategyType(
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
+        );
         ps->SetMinPartitionCount(1);
         ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 10, 50));
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {
-        auto * ps = pqConfig.MutablePartitionStrategy();
-        ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
+        auto* ps = pqConfig.MutablePartitionStrategy();
+        ps->SetPartitionStrategyType(
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
+        );
         ps->SetMaxPartitionCount(op.GetMaxPartitionCount());
         ps->SetMinPartitionCount(op.HasTopicPartitions() ? op.GetTopicPartitions() : 1);
         ps->SetScaleThresholdSeconds(30);
@@ -699,12 +709,12 @@ void DoCreatePqPart(
 }
 
 static void FillModifySchemaForCdc(
-        NKikimrSchemeOp::TModifyScheme& outTx,
-        const NKikimrSchemeOp::TCreateCdcStream& op,
-        const TOperationId& opId,
-        bool acceptExisted,
-        bool initialScan)
-{
+    NKikimrSchemeOp::TModifyScheme& outTx,
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TOperationId& opId,
+    bool acceptExisted,
+    bool initialScan
+) {
     outTx.SetFailOnExist(!acceptExisted);
     outTx.MutableCreateCdcStream()->CopyFrom(op);
     if (initialScan) {
@@ -713,21 +723,24 @@ static void FillModifySchemaForCdc(
 }
 
 void DoCreateStream(
-        TVector<ISubOperation::TPtr>& result,
-        const NKikimrSchemeOp::TCreateCdcStream& op,
-        const TOperationId& opId,
-        const TPath& workingDirPath,
-        const TPath& tablePath,
-        const bool acceptExisted,
-        const bool initialScan)
-{
+    TVector<ISubOperation::TPtr>& result,
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath,
+    const bool acceptExisted,
+    const bool initialScan
+) {
     {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
+        auto outTx =
+            TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
         FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
         result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
     }
     {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
+        auto outTx = TransactionTemplate(
+            workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable
+        );
         FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
         result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, initialScan));
     }
@@ -737,25 +750,16 @@ namespace {
 
 ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& streamPath, const bool acceptExisted) {
     const auto checks = streamPath.Check();
-    checks
-        .IsAtLocalSchemeShard();
+    checks.IsAtLocalSchemeShard();
 
     if (streamPath.IsResolved()) {
-        checks
-            .IsResolved()
-            .NotUnderDeleting()
-            .FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
+        checks.IsResolved().NotUnderDeleting().FailOnExist(TPathElement::EPathType::EPathTypeCdcStream, acceptExisted);
     } else {
-        checks
-            .NotEmpty()
-            .NotResolved();
+        checks.NotEmpty().NotResolved();
     }
 
     if (checks) {
-        checks
-            .IsValidLeafName()
-            .PathsLimit()
-            .DirChildrenLimit();
+        checks.IsValidLeafName().PathsLimit().DirChildrenLimit();
     }
 
     if (!checks) {
@@ -767,8 +771,7 @@ ISubOperation::TPtr RejectOnCdcChecks(const TOperationId& opId, const TPath& str
 
 ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPath& tablePath, bool restore) {
     const auto checks = tablePath.Check();
-    checks
-        .NotEmpty()
+    checks.NotEmpty()
         .NotUnderDomainUpgrade()
         .IsAtLocalSchemeShard()
         .IsResolved()
@@ -778,8 +781,7 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         .NotUnderOperation();
 
     if (!restore) {
-        checks
-            .NotAsyncReplicaTable();
+        checks.NotAsyncReplicaTable();
     }
 
     if (checks) {
@@ -787,12 +789,14 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
             checks.IsCommonSensePath();
         } else {
             if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
-                return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
-                    "Cannot add changefeed to index table");
+                return CreateReject(
+                    opId, NKikimrScheme::StatusPreconditionFailed, "Cannot add changefeed to index table"
+                );
             }
             if (!AppData()->FeatureFlags.GetEnableChangefeedsOnIndexTables()) {
-                return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
-                    "Changefeed on index table is not supported yet");
+                return CreateReject(
+                    opId, NKikimrScheme::StatusPreconditionFailed, "Changefeed on index table is not supported yet"
+                );
             }
         }
     }
@@ -804,7 +808,12 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
     return nullptr;
 }
 
-bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcStream& op, TVector<TString>& boundaries, TString& errStr) {
+bool FillBoundaries(
+    const TTableInfo& table,
+    const NKikimrSchemeOp::TCreateCdcStream& op,
+    TVector<TString>& boundaries,
+    TString& errStr
+) {
     if (op.HasTopicPartitions()) {
         const auto& keyColumns = table.KeyColumnIds;
         const auto& columns = table.Columns;
@@ -813,7 +822,14 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
         Y_ABORT_UNLESS(columns.contains(keyColumns.at(0)));
         const auto firstKeyColumnType = columns.at(keyColumns.at(0)).PType;
 
-        if (!TSchemeShard::FillUniformPartitioning(boundaries, keyColumns.size(), firstKeyColumnType, op.GetTopicPartitions(), AppData()->TypeRegistry, errStr)) {
+        if (!TSchemeShard::FillUniformPartitioning(
+                boundaries,
+                keyColumns.size(),
+                firstKeyColumnType,
+                op.GetTopicPartitions(),
+                AppData()->TypeRegistry,
+                errStr
+            )) {
             return false;
         }
     } else {
@@ -831,7 +847,7 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
     return true;
 }
 
-} // anonymous
+} // namespace
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TOperationId& opId,
@@ -839,8 +855,8 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
     const TString& tableName,
     const TString& streamName,
     bool acceptExisted,
-    bool restore)
-{
+    bool restore
+) {
     const auto tablePath = workingDirPath.Child(tableName);
     if (auto reject = RejectOnTablePathChecks(opId, tablePath, restore)) {
         return reject;
@@ -874,7 +890,8 @@ ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxStat
     return MakeSubOperation<TNewCdcStreamAtTable>(id, state, initialScan);
 }
 
-TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateNewCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
 
     LOG_D("CreateNewCdcStream"
@@ -896,29 +913,39 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     const auto [tablePath, streamPath] = std::get<TStreamPaths>(checksResult);
 
     switch (streamDesc.GetMode()) {
-    case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-    case NKikimrSchemeOp::ECdcStreamModeUpdate:
-    case NKikimrSchemeOp::ECdcStreamModeNewImage:
-    case NKikimrSchemeOp::ECdcStreamModeOldImage:
-    case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
-    case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
-        break;
-    default:
-        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-            << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()))};
+        case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
+        case NKikimrSchemeOp::ECdcStreamModeUpdate:
+        case NKikimrSchemeOp::ECdcStreamModeNewImage:
+        case NKikimrSchemeOp::ECdcStreamModeOldImage:
+        case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+        case NKikimrSchemeOp::ECdcStreamModeRestoreIncrBackup:
+            break;
+        default:
+            return {CreateReject(
+                opId,
+                NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode())
+            )};
     }
 
     const ui64 aliveStreams = context.SS->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeCdcStream);
     if (aliveStreams + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusResourceExhausted, TStringBuilder()
-            << "cdc streams count has reached maximum value in the table"
-            << ", children limit for dir in domain: " << tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams
-            << ", intention to create new children: " << aliveStreams + 1)};
+        return {CreateReject(
+            opId,
+            NKikimrScheme::EStatus::StatusResourceExhausted,
+            TStringBuilder() << "cdc streams count has reached maximum value in the table"
+                             << ", children limit for dir in domain: "
+                             << tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams
+                             << ", intention to create new children: " << aliveStreams + 1
+        )};
     }
 
     if (!AppData()->PQConfig.GetEnableProtoSourceIdInfo()) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
-            << "Changefeeds require proto source id info to be enabled")};
+        return {CreateReject(
+            opId,
+            NKikimrScheme::EStatus::StatusPreconditionFailed,
+            TStringBuilder() << "Changefeeds require proto source id info to be enabled"
+        )};
     }
 
     TString errStr;
@@ -932,12 +959,17 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
 
     const bool initialScan = op.GetStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateScan;
     if (initialScan && !AppData()->FeatureFlags.GetEnableChangefeedInitialScan()) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
-            << "Initial scan is not supported yet")};
+        return {CreateReject(
+            opId,
+            NKikimrScheme::EStatus::StatusPreconditionFailed,
+            TStringBuilder() << "Initial scan is not supported yet"
+        )};
     }
 
     if (op.HasTopicPartitions() && op.GetTopicPartitions() <= 0) {
-        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Topic partitions count must be greater than 0")};
+        return {
+            CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Topic partitions count must be greater than 0")
+        };
     }
 
     TVector<ISubOperation::TPtr> result;
@@ -947,7 +979,9 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     }
 
     if (workingDirPath.IsTableIndex()) {
-        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        auto outTx = TransactionTemplate(
+            workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex
+        );
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
 
@@ -968,4 +1002,4 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

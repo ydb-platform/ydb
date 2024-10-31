@@ -4,9 +4,9 @@
 namespace NKikimr {
 namespace NSequenceProxy {
 
-    IActor* CreateSequenceProxy(const TSequenceProxySettings& settings) {
-        return new TSequenceProxy(settings);
-    }
+IActor* CreateSequenceProxy(const TSequenceProxySettings& settings) {
+    return new TSequenceProxy(settings);
+}
 
 } // namespace NSequenceProxy
 } // namespace NKikimr

@@ -12,11 +12,13 @@ using namespace NSchemeShard;
 class TDeleteParts: public TDeletePartsAndDone {
 public:
     explicit TDeleteParts(const TOperationId& id)
-        : TDeletePartsAndDone(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvPrivate::TEvOperationPlan::EventType,
-        });
+        : TDeletePartsAndDone(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvPrivate::TEvOperationPlan::EventType,
+            }
+        );
     }
 };
 
@@ -25,15 +27,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSolomon TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropSolomon TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -48,7 +48,6 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSolomonVolume);
-
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -101,23 +100,23 @@ class TDropSolomon: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return TTxState::ProposedDeleteParts;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return TTxState::ProposedDeleteParts;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedDeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedDeleteParts:
+                return MakeHolder<TDeleteParts>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -139,16 +138,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -225,7 +223,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -238,4 +236,4 @@ ISubOperation::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state)
     return MakeSubOperation<TDropSolomon>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

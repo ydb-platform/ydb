@@ -116,5 +116,5 @@ struct TEvBackup {
     };
 }; // TEvBackup
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

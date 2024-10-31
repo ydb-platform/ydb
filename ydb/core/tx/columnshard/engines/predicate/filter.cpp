@@ -18,36 +18,44 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const arrow::Datum& 
 }
 
 TConclusionStatus TPKRangesFilter::Add(
-    std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::shared_ptr<NOlap::TPredicate> f,
+    std::shared_ptr<NOlap::TPredicate> t,
+    const std::shared_ptr<arrow::Schema>& pkSchema
+) {
     if ((!f || f->Empty()) && (!t || t->Empty())) {
         return TConclusionStatus::Success();
     }
     auto fromContainerConclusion = TPredicateContainer::BuildPredicateFrom(f, pkSchema);
     if (fromContainerConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect from container")(
-            "from", fromContainerConclusion.GetErrorMessage());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+        ("event",
+         "add_range_filter")("problem", "incorrect from container")("from", fromContainerConclusion.GetErrorMessage());
         return fromContainerConclusion;
     }
     auto toContainerConclusion = TPredicateContainer::BuildPredicateTo(t, pkSchema);
     if (toContainerConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect to container")(
-            "from", toContainerConclusion.GetErrorMessage());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+        ("event",
+         "add_range_filter")("problem", "incorrect to container")("from", toContainerConclusion.GetErrorMessage());
         return toContainerConclusion;
     }
     if (SortedRanges.size() && !FakeRanges) {
         if (ReverseFlag) {
             if (fromContainerConclusion->CrossRanges(SortedRanges.front().GetPredicateTo())) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+                ("event", "add_range_filter")("problem", "not sorted sequence");
                 return TConclusionStatus::Fail("not sorted sequence");
             }
         } else {
             if (fromContainerConclusion->CrossRanges(SortedRanges.back().GetPredicateTo())) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+                ("event", "add_range_filter")("problem", "not sorted sequence");
                 return TConclusionStatus::Fail("not sorted sequence");
             }
         }
     }
-    auto pkRangeFilterConclusion = TPKRangeFilter::Build(fromContainerConclusion.DetachResult(), toContainerConclusion.DetachResult());
+    auto pkRangeFilterConclusion =
+        TPKRangeFilter::Build(fromContainerConclusion.DetachResult(), toContainerConclusion.DetachResult());
     if (pkRangeFilterConclusion.IsFail()) {
         return pkRangeFilterConclusion;
     }
@@ -103,7 +111,8 @@ bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
     return SortedRanges.empty();
 }
 
-TPKRangeFilter::EUsageClass TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass
+TPKRangesFilter::IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
     for (auto&& i : SortedRanges) {
         switch (i.IsPortionInPartialUsage(start, end)) {
             case TPKRangeFilter::EUsageClass::FullUsage:
@@ -119,30 +128,43 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::IsPortionInPartialUsage(const NArro
 
 TPKRangesFilter::TPKRangesFilter(const bool reverse)
     : ReverseFlag(reverse) {
-    auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
+    auto range = TPKRangeFilter::Build(
+        TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo()
+    );
     Y_ABORT_UNLESS(range);
     SortedRanges.emplace_back(*range);
 }
 
-std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
-    auto fullSchema = NArrow::TStatusValidator::GetValid(
-        pkSchema->AddField(pkSchema->num_fields(), std::make_shared<arrow::Field>(".ydb_operation_type", arrow::uint32())));
+std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(
+    const std::shared_ptr<arrow::Schema>& pkSchema
+) const {
+    auto fullSchema = NArrow::TStatusValidator::GetValid(pkSchema->AddField(
+        pkSchema->num_fields(), std::make_shared<arrow::Field>(".ydb_operation_type", arrow::uint32())
+    ));
     auto builders = NArrow::MakeBuilders(fullSchema, SortedRanges.size() * 2);
     for (auto&& i : SortedRanges) {
         for (ui32 idx = 0; idx < (ui32)pkSchema->num_fields(); ++idx) {
             if (idx < i.GetPredicateFrom().GetReplaceKey()->Size()) {
                 AFL_VERIFY(NArrow::Append(
-                    *builders[idx], i.GetPredicateFrom().GetReplaceKey()->Column(idx), i.GetPredicateFrom().GetReplaceKey()->GetPosition()));
+                    *builders[idx],
+                    i.GetPredicateFrom().GetReplaceKey()->Column(idx),
+                    i.GetPredicateFrom().GetReplaceKey()->GetPosition()
+                ));
             } else {
                 NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
             }
         }
-        NArrow::Append<arrow::UInt32Type>(*builders[pkSchema->num_fields()], (ui32)i.GetPredicateFrom().GetCompareType());
+        NArrow::Append<arrow::UInt32Type>(
+            *builders[pkSchema->num_fields()], (ui32)i.GetPredicateFrom().GetCompareType()
+        );
 
         for (ui32 idx = 0; idx < (ui32)pkSchema->num_fields(); ++idx) {
             if (idx < i.GetPredicateTo().GetReplaceKey()->Size()) {
                 AFL_VERIFY(NArrow::Append(
-                    *builders[idx], i.GetPredicateTo().GetReplaceKey()->Column(idx), i.GetPredicateTo().GetReplaceKey()->GetPosition()));
+                    *builders[idx],
+                    i.GetPredicateTo().GetReplaceKey()->Column(idx),
+                    i.GetPredicateTo().GetReplaceKey()->GetPosition()
+                ));
             } else {
                 NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
             }
@@ -152,8 +174,8 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
     return arrow::RecordBatch::Make(fullSchema, SortedRanges.size() * 2, NArrow::Finish(std::move(builders)));
 }
 
-std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const bool reverse) {
+std::shared_ptr<NKikimr::NOlap::TPKRangesFilter>
+TPKRangesFilter::BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch, const bool reverse) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(reverse);
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
         auto batchRow = batch->Slice(i, 1);
@@ -165,7 +187,10 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchFull(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse) {
+    const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::shared_ptr<arrow::Schema>& pkSchema,
+    const bool reverse
+) {
     std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(reverse);
     auto pkBatch = NArrow::TColumnOperator().Adapt(batch, pkSchema).DetachResult();
     auto c = batch->GetColumnByName(".ydb_operation_type");
@@ -206,7 +231,10 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromString(
-    const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse) {
+    const TString& data,
+    const std::shared_ptr<arrow::Schema>& pkSchema,
+    const bool reverse
+) {
     auto batch = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(data));
     return BuildFromRecordBatchFull(batch, pkSchema, reverse);
 }

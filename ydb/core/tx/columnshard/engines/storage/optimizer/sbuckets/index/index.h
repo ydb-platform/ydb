@@ -7,6 +7,7 @@ class TWeightedPortionsBucket {
 private:
     std::weak_ptr<TPortionsBucket> Bucket;
     const ui64 Hash;
+
 public:
     operator size_t() const {
         return Hash;
@@ -18,8 +19,7 @@ public:
 
     TWeightedPortionsBucket(const std::shared_ptr<TPortionsBucket>& bucket)
         : Bucket(bucket)
-        , Hash((ui64)bucket.get())
-    {
+        , Hash((ui64)bucket.get()) {
         AFL_VERIFY(!Bucket.expired());
     }
 
@@ -51,7 +51,6 @@ private:
     void AddBucketToRating(const std::shared_ptr<TPortionsBucket>& bucket) {
         AFL_VERIFY(RatedBuckets.emplace(bucket).second);
         AFL_VERIFY(BucketsByWeight[bucket->ResetWeight(CurrentWeightInstant)].emplace(bucket).second);
-
     }
 
     void RemoveBucketFromRating(const std::shared_ptr<TPortionsBucket>& bucket) {
@@ -88,7 +87,8 @@ private:
         }
     }
 
-    std::vector<std::shared_ptr<TPortionsBucket>> GetAffectedBuckets(const TLeftBucketBorder& fromInclude, const TLeftBucketBorder& toInclude) {
+    std::vector<std::shared_ptr<TPortionsBucket>>
+    GetAffectedBuckets(const TLeftBucketBorder& fromInclude, const TLeftBucketBorder& toInclude) {
         std::vector<std::shared_ptr<TPortionsBucket>> result;
         auto itFrom = Buckets.upper_bound(fromInclude);
         auto itTo = Buckets.upper_bound(toInclude);
@@ -101,14 +101,20 @@ private:
     }
 
 public:
-    TPortionBuckets(const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<TCounters>& counters, const std::shared_ptr<IOptimizationLogic>& logic)
+    TPortionBuckets(
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<TCounters>& counters,
+        const std::shared_ptr<IOptimizationLogic>& logic
+    )
         : PrimaryKeysSchema(primaryKeysSchema)
         , StoragesManager(storagesManager)
         , Counters(counters)
-        , Logic(logic)
-    {
-        Buckets.emplace(TLeftBucketBorder(), std::make_shared<TPortionsBucket>(Counters, Logic, TLeftBucketBorder(), TRightBucketBorder()));
+        , Logic(logic) {
+        Buckets.emplace(
+            TLeftBucketBorder(),
+            std::make_shared<TPortionsBucket>(Counters, Logic, TLeftBucketBorder(), TRightBucketBorder())
+        );
         AddBucketToRating(Buckets.begin()->second);
     }
 
@@ -215,11 +221,15 @@ public:
         AFL_VERIFY(RatedBuckets.size() == Buckets.size());
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager
+    ) const {
         AFL_VERIFY(BucketsByWeight.size());
         AFL_VERIFY(BucketsByWeight.begin()->first);
         AFL_VERIFY(BucketsByWeight.begin()->second.size());
-        const std::shared_ptr<TPortionsBucket> bucketForOptimization = BucketsByWeight.begin()->second.begin()->GetBucketVerified();
+        const std::shared_ptr<TPortionsBucket> bucketForOptimization =
+            BucketsByWeight.begin()->second.begin()->GetBucketVerified();
         auto it = Buckets.find(bucketForOptimization->GetStart());
         AFL_VERIFY(it != Buckets.end());
         ++it;
@@ -232,7 +242,9 @@ public:
             if (!i.first.HasValue()) {
                 continue;
             }
-            NArrow::NMerger::TSortableBatchPosition posStart(i.first.GetValueVerified().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition posStart(
+                i.first.GetValueVerified().ToBatch(PrimaryKeysSchema), 0, PrimaryKeysSchema->field_names(), {}, false
+            );
             result.AddPosition(std::move(posStart), false);
         }
         return result;

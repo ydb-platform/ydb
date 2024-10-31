@@ -7,9 +7,10 @@
 
 namespace {
 
-THashMap<ui32, TString> MapChannelsToStoragePoolKinds(const NActors::TActorContext& ctx,
-                                                      const NKikimr::TStoragePools& pools,
-                                                      const NKikimr::TChannelsBindings& bindings
+THashMap<ui32, TString> MapChannelsToStoragePoolKinds(
+    const NActors::TActorContext& ctx,
+    const NKikimr::TStoragePools& pools,
+    const NKikimr::TChannelsBindings& bindings
 ) {
     THashMap<TString, TString> nameToKindMap(pools.size());
     for (const auto& pool : pools) {
@@ -29,7 +30,7 @@ THashMap<ui32, TString> MapChannelsToStoragePoolKinds(const NActors::TActorConte
     return channelsMapping;
 }
 
-}
+} // namespace
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -37,16 +38,14 @@ namespace NSchemeShard {
 template <typename T>
 static ui64 GetThroughput(const T& c) {
     ui64 acc = 0;
-    for (const auto& v : c)
-        acc += v.GetThroughput();
+    for (const auto& v : c) acc += v.GetThroughput();
     return acc;
 }
 
 template <typename T>
 static ui64 GetIops(const T& c) {
     ui64 acc = 0;
-    for (const auto& v : c)
-        acc += v.GetIops();
+    for (const auto& v : c) acc += v.GetIops();
     return acc;
 }
 
@@ -54,14 +53,22 @@ void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, 
     ctx.Send(ev->Forward(SysPartitionStatsCollector));
 }
 
-auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TTabletId datashardId, ui32 followerId,
-    TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats, const TActorContext& ctx)
-{
+auto TSchemeShard::BuildStatsForCollector(
+    TPathId pathId,
+    TShardIdx shardIdx,
+    TTabletId datashardId,
+    ui32 followerId,
+    TMaybe<ui32> nodeId,
+    TMaybe<ui64> startTime,
+    const TPartitionStats& stats,
+    const TActorContext& ctx
+) {
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "BuildStatsForCollector: datashardId " <<  datashardId << ", followerId " << followerId);
 
     auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>(
-        GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId())));
+        GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()))
+    );
 
     auto& sysStats = ev->Stats;
     sysStats.SetDataSize(stats.DataSize);
@@ -103,34 +110,39 @@ class TTxStoreTableStats: public TTxStoreStats<TEvDataShard::TEvPeriodicTableSta
 
         TMessage(const TActorId& actor, IEventBase* event)
             : Actor(actor)
-            , Event(event)
-        {}
+            , Event(event) {}
     };
 
     TVector<TMessage> PendingMessages;
 
 public:
-    TTxStoreTableStats(TSchemeShard* ss, TStatsQueue<TEvDataShard::TEvPeriodicTableStats>& queue, bool& persistStatsPending)
-        : TTxStoreStats(ss, queue, persistStatsPending)
-    {
-    }
+    TTxStoreTableStats(
+        TSchemeShard* ss,
+        TStatsQueue<TEvDataShard::TEvPeriodicTableStats>& queue,
+        bool& persistStatsPending
+    )
+        : TTxStoreStats(ss, queue, persistStatsPending) {}
 
     virtual ~TTxStoreTableStats() = default;
 
     void Complete(const TActorContext& ctx) override;
 
     // returns true to continue batching
-    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
+    bool PersistSingleStats(
+        const TPathId& pathId,
+        const TStatsQueue<TEvDataShard::TEvPeriodicTableStats>::TItem& item,
+        TTransactionContext& txc,
+        const TActorContext& ctx
+    ) override;
     void ScheduleNextBatch(const TActorContext& ctx) override;
 
     template <typename T>
-    TPartitionStats PrepareStats(const TActorContext& ctx, const T& rec, const THashMap<ui32, TString>& channelsMapping = {}) const;
+    TPartitionStats
+    PrepareStats(const TActorContext& ctx, const T& rec, const THashMap<ui32, TString>& channelsMapping = {}) const;
 };
 
-
-THolder<TProposeRequest> MergeRequest(
-    TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
-{
+THolder<TProposeRequest>
+MergeRequest(TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge) {
     auto request = MakeHolder<TProposeRequest>(ui64(txId), ui64(ss->SelfTabletId()));
     auto& record = request->Record;
 
@@ -156,9 +168,10 @@ THolder<TProposeRequest> MergeRequest(
 }
 
 template <typename T>
-TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
-                                                 const T& rec,
-                                                 const THashMap<ui32, TString>& channelsMapping
+TPartitionStats TTxStoreTableStats::PrepareStats(
+    const TActorContext& ctx,
+    const T& rec,
+    const THashMap<ui32, TString>& channelsMapping
 ) const {
     const auto& tableStats = rec.GetTableStats();
     const auto& tabletMetrics = rec.GetTabletMetrics();
@@ -227,9 +240,12 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
     return newStats;
 }
 
-bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
-                                            const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item,
-                                            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxStoreTableStats::PersistSingleStats(
+    const TPathId& pathId,
+    const TStatsQueueItem<TEvDataShard::TEvPeriodicTableStats>& item,
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const TActorContext& ctx
+) {
     const auto& rec = item.Ev->Get()->Record;
     const auto datashardId = TTabletId(rec.GetDatashardId());
     const ui32 followerId = rec.GetFollowerId();
@@ -265,9 +281,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     auto subDomainInfo = Self->ResolveDomainInfo(pathId);
-    const auto channelsMapping = MapChannelsToStoragePoolKinds(ctx,
-                                                               subDomainInfo->EffectiveStoragePools(),
-                                                               shardInfo->BindedChannels);
+    const auto channelsMapping =
+        MapChannelsToStoragePoolKinds(ctx, subDomainInfo->EffectiveStoragePools(), shardInfo->BindedChannels);
 
     const auto pathElement = Self->PathsById[pathId];
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -305,7 +320,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         PendingMessages.emplace_back(
             Self->SysPartitionStatsCollector,
-            Self->BuildStatsForCollector(pathId, shardIdx, datashardId, followerId, nodeId, startTime, newStats, ctx).Release());
+            Self->BuildStatsForCollector(pathId, shardIdx, datashardId, followerId, nodeId, startTime, newStats, ctx)
+                .Release()
+        );
     }
 
     // Skip statistics from follower
@@ -421,9 +438,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
-    if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
-        && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, mainTableForIndex)
-    ) {
+    if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady) &&
+        table->CheckCanMergePartitions(
+            Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, mainTableForIndex
+        )) {
         TTxId txId = Self->GetCachedTxId(ctx);
 
         if (!txId) {
@@ -469,9 +487,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         auto checks = path.Check();
 
         constexpr ui64 deltaShards = 2;
-        checks
-            .PathShardsLimit(deltaShards)
-            .ShardsLimit(deltaShards);
+        checks.PathShardsLimit(deltaShards).ShardsLimit(deltaShards);
 
         if (!checks) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -490,8 +506,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     // Request histograms from the datashard
-    LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-             "Requesting full stats from datashard %" PRIu64, rec.GetDatashardId());
+    LOG_DEBUG(
+        ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Requesting full stats from datashard %" PRIu64, rec.GetDatashardId()
+    );
     auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
     request->Record.SetCollectKeySample(collectKeySample);
     PendingMessages.emplace_back(item.Ev->Sender, request);
@@ -502,7 +519,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 void TTxStoreTableStats::Complete(const TActorContext& ctx) {
     MergeOpSideEffects.ApplyOnComplete(Self, ctx);
 
-    for (auto& m: PendingMessages) {
+    for (auto& m : PendingMessages) {
         Y_ABORT_UNLESS(m.Event);
         ctx.Send(m.Actor, m.Event.Release());
     }
@@ -525,8 +542,8 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
     ui64 rowCount = tableStats.GetRowCount();
 
     TPathId pathId = rec.HasTableOwnerId()
-            ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
-            : MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
+                         ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
+                         : MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Got periodic table stats at tablet " << TabletID()
@@ -547,7 +564,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
 
     TStatsId statsId(pathId, datashardId, followerId);
 
-    switch(TableStatsQueue.Add(statsId, ev.Release())) {
+    switch (TableStatsQueue.Add(statsId, ev.Release())) {
         case READY:
             ExecuteTableStatsBatch(ctx);
             break;
@@ -557,7 +574,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
             break;
 
         default:
-          Y_ABORT("Unknown batch status");
+            Y_ABORT("Unknown batch status");
     }
 }
 
@@ -590,10 +607,7 @@ void TSchemeShard::ScheduleTableStatsBatch(const TActorContext& ctx) {
     }
 }
 
-void TSchemeShard::UpdateShardMetrics(
-    const TShardIdx& shardIdx,
-    const TPartitionStats& newStats)
-{
+void TSchemeShard::UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats) {
     if (newStats.HasBorrowedData)
         ShardsWithBorrowed.insert(shardIdx);
     else
@@ -611,7 +625,8 @@ void TSchemeShard::UpdateShardMetrics(
     if (it != PartitionMetricsMap.end()) {
         const auto& metrics = it->second;
         TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].DecrementFor(metrics.SearchHeight);
-        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].DecrementFor(metrics.HoursSinceFullCompaction);
+        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].DecrementFor(metrics.HoursSinceFullCompaction
+        );
         TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].DecrementFor(metrics.RowDeletes);
     } else {
         it = PartitionMetricsMap.insert_direct(std::make_pair(shardIdx, TPartitionMetrics()), insertCtx);
@@ -654,4 +669,5 @@ void TSchemeShard::RemoveShardMetrics(const TShardIdx& shardIdx) {
     PartitionMetricsMap.erase(it);
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

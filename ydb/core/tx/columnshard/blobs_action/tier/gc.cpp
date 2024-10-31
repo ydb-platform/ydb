@@ -15,8 +15,11 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
     }
 }
 
-bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+bool TGCTask::DoOnCompleteTxAfterCleaning(
+    NColumnShard::TColumnShard& /*self*/,
+    const std::shared_ptr<IBlobsGCAction>& /*taskAction*/
+) {
     return true;
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NTier

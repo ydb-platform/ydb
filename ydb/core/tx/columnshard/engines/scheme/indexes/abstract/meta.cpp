@@ -5,11 +5,13 @@ namespace NKikimr::NOlap::NIndexes {
 
 bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
     if (!proto.GetId()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect id - 0");
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "cannot parse secondary data builder")("reason", "incorrect id - 0");
         return false;
     }
     if (!proto.GetName()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect name - empty string");
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "cannot parse secondary data builder")("reason", "incorrect name - empty string");
         return false;
     }
     IndexId = proto.GetId();

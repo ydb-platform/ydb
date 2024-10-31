@@ -3,7 +3,7 @@
 #include <ydb/core/base/defs.h>
 
 namespace NKikimr {
-    struct TPathId;
+struct TPathId;
 }
 
 namespace NKikimr::NReplication::NService {

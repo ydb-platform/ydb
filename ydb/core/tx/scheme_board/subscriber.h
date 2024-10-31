@@ -8,22 +8,11 @@
 
 namespace NKikimr {
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TString& path
-);
+IActor* CreateSchemeBoardSubscriber(const TActorId& owner, const TString& path);
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TString& path,
-    const ui64 domainOwnerId
-);
+IActor* CreateSchemeBoardSubscriber(const TActorId& owner, const TString& path, const ui64 domainOwnerId);
 
-IActor* CreateSchemeBoardSubscriber(
-    const TActorId& owner,
-    const TPathId& pathId,
-    const ui64 domainOwnerId
-);
+IActor* CreateSchemeBoardSubscriber(const TActorId& owner, const TPathId& pathId, const ui64 domainOwnerId);
 
 // deprecated
 enum class ESchemeBoardSubscriberDeletionPolicy {
@@ -44,4 +33,4 @@ IActor* CreateSchemeBoardSubscriber(
     const ESchemeBoardSubscriberDeletionPolicy deletionPolicy
 );
 
-} // NKikimr
+} // namespace NKikimr

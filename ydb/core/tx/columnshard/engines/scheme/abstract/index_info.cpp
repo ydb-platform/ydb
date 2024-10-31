@@ -17,11 +17,21 @@ const std::shared_ptr<NKikimr::NOlap::TColumnLoader>& IIndexInfo::GetColumnLoade
 void IIndexInfo::AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete) {
     const i64 numRows = batch.num_rows();
 
-    batch.AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()), 
-        NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows)).Validate();
+    batch
+        .AddField(
+            arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()),
+            NArrow::TThreadSimpleArraysCache::GetConst(
+                arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows
+            )
+        )
+        .Validate();
 }
 
-void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId) {
+void IIndexInfo::AddSnapshotColumns(
+    NArrow::TGeneralContainer& batch,
+    const TSnapshot& snapshot,
+    const ui64 insertWriteId
+) {
     const i64 numRows = batch.num_rows();
 
     batch.AddField(PlanStepField, NArrow::MakeUI64Array(snapshot.GetPlanStep(), numRows)).Validate();

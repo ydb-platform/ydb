@@ -21,11 +21,10 @@ public:
 class TSSFetchingController: public ISSFetchingController {
 private:
     const TActorIdentity ActorId;
+
 public:
     TSSFetchingController(const TActorIdentity& actorId)
-        : ActorId(actorId) {
-
-    }
+        : ActorId(actorId) {}
 
     virtual void FetchingProblem(const TString& errorMessage) const override {
         ActorId.Send(ActorId, new NSchemeShard::TEvSchemeShard::TEvProcessingResponse(errorMessage));
@@ -41,6 +40,7 @@ private:
     NSchemeShard::ISSDataProcessor::TPtr Processor;
     ISSFetchingController::TPtr Controller;
     void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
+
 protected:
     virtual void OnBootstrap() override {
         UnsafeBecome(&TSSFetchingActor::StateMain);
@@ -53,6 +53,7 @@ protected:
         auto req = std::make_unique<NSchemeShard::TEvSchemeShard::TEvProcessingRequest>(*Processor);
         Send(SchemeShardPipe, new TEvPipeCache::TEvForward(req.release(), SchemeShardId, false));
     }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     STFUNC(StateMain) {
@@ -62,7 +63,11 @@ public:
                 TBase::StateMain(ev);
         }
     }
-    TSSFetchingActor(NSchemeShard::ISSDataProcessor::TPtr processor, ISSFetchingController::TPtr controller, const TDuration livetime);
+    TSSFetchingActor(
+        NSchemeShard::ISSDataProcessor::TPtr processor,
+        ISSFetchingController::TPtr controller,
+        const TDuration livetime
+    );
 };
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

@@ -19,19 +19,19 @@
 namespace NKikimr {
 namespace NTxMediator {
 
-class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
+class TTxMediatorTabletQueue: public TActor<TTxMediatorTabletQueue> {
     struct TStepEntry;
     struct TGranularWatcher;
     struct TGranularServer;
 
-    struct TTabletEntry : TIntrusiveListItem<TTabletEntry> {
+    struct TTabletEntry: TIntrusiveListItem<TTabletEntry> {
         enum class EState {
             Init,
             Connecting,
             Connected,
         };
 
-        struct TStep : TIntrusiveListItem<TStep> {
+        struct TStep: TIntrusiveListItem<TStep> {
             TStepEntry* const StepRef;
             // The current list of transactions
             TVector<TTx> Transactions;
@@ -40,8 +40,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             TVector<TTx> OutOfOrder;
 
             TStep(TStepEntry* stepRef)
-                : StepRef(stepRef)
-            {}
+                : StepRef(stepRef) {}
         };
 
         const ui64 TabletId;
@@ -53,8 +52,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         THashSet<TGranularWatcher*> Watchers;
 
         explicit TTabletEntry(ui64 tabletId)
-            : TabletId(tabletId)
-        {}
+            : TabletId(tabletId) {}
 
         bool Redundant() const {
             return State == EState::Init && Queue.empty() && Watchers.empty();
@@ -69,11 +67,10 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TIntrusiveList<TTabletEntry::TStep> TabletSteps;
 
         explicit TStepEntry(TStepId step)
-            : Step(step)
-        {}
+            : Step(step) {}
     };
 
-    struct TGranularWatcher : public TIntrusiveListItem<TGranularWatcher> {
+    struct TGranularWatcher: public TIntrusiveListItem<TGranularWatcher> {
         const TActorId ActorId;
         ui64 SubscriptionId = 0;
         ui64 Cookie = 0;
@@ -83,8 +80,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         std::unique_ptr<TEvMediatorTimecast::TEvGranularUpdate> NextUpdate;
 
         explicit TGranularWatcher(const TActorId& actorId)
-            : ActorId(actorId)
-        {}
+            : ActorId(actorId) {}
     };
 
     struct TGranularServer {
@@ -92,17 +88,15 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TIntrusiveList<TGranularWatcher> Watchers;
 
         explicit TGranularServer(const TActorId& serverId)
-            : ServerId(serverId)
-        {}
+            : ServerId(serverId) {}
     };
 
     TTabletEntry* EnsureTablet(ui64 tabletId) {
         TTabletEntry* tabletEntry = Tablets.FindPtr(tabletId);
         if (tabletEntry == nullptr) {
             auto res = Tablets.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(tabletId),
-                std::forward_as_tuple(tabletId));
+                std::piecewise_construct, std::forward_as_tuple(tabletId), std::forward_as_tuple(tabletId)
+            );
             tabletEntry = &res.first->second;
         }
         return tabletEntry;
@@ -117,8 +111,15 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             if (tx.Moderator)
                 x->SetModerator(tx.Moderator);
             ActorIdToProto(tx.AckTo, x->MutableAckTo());
-            LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
-                PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tabletId, tabletStep->StepRef->Step, tx.TxId);
+            LOG_DEBUG(
+                ctx,
+                NKikimrServices::TX_MEDIATOR_PRIVATE,
+                "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %" PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64,
+                Mediator,
+                tabletId,
+                tabletStep->StepRef->Step,
+                tx.TxId
+            );
         }
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " SEND to# " << tabletId << " " << evx->ToString());
@@ -128,9 +129,9 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void UpdateTimecastLag(const TActorContext& ctx) {
         if (!TimecastLagCounter) {
             TimecastLagCounter = GetServiceCounters(AppData(ctx)->Counters, "processing")
-                ->GetSubgroup("mediator", ToString(Mediator))
-                ->GetSubgroup("sensor", "TimecastLag")
-                ->GetNamedCounter("Bucket", ToString(HashBucket));
+                                     ->GetSubgroup("mediator", ToString(Mediator))
+                                     ->GetSubgroup("sensor", "TimecastLag")
+                                     ->GetNamedCounter("Bucket", ToString(HashBucket));
         }
 
         *TimecastLagCounter = (AcceptedStep - CommitedStep);
@@ -173,7 +174,9 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             for (const TActorId& x : TimecastWatches) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString());
-                ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
+                ctx.ExecutorThread.Send(
+                    new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0)
+                );
             }
         }
     }
@@ -195,9 +198,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         Y_ABORT_UNLESS(ActiveStep->Step == step);
 
         auto res = tabletEntry->Queue.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(step),
-            std::forward_as_tuple(ActiveStep));
+            std::piecewise_construct, std::forward_as_tuple(step), std::forward_as_tuple(ActiveStep)
+        );
         Y_ABORT_UNLESS(res.second);
 
         TTabletEntry::TStep* tabletStep = &res.first->second;
@@ -206,19 +208,19 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         ActiveTablets.PushBack(tabletEntry);
 
         switch (tabletEntry->State) {
-        case TTabletEntry::EState::Init:
-            Pipes->Prepare(ctx, tabletId);
-            tabletEntry->State = TTabletEntry::EState::Connecting;
-            break;
-        case TTabletEntry::EState::Connecting:
-            break;
-        case TTabletEntry::EState::Connected:
-            SendToTablet(tabletStep, tabletId, ctx);
-            break;
+            case TTabletEntry::EState::Init:
+                Pipes->Prepare(ctx, tabletId);
+                tabletEntry->State = TTabletEntry::EState::Connecting;
+                break;
+            case TTabletEntry::EState::Connecting:
+                break;
+            case TTabletEntry::EState::Connected:
+                SendToTablet(tabletStep, tabletId, ctx);
+                break;
         }
     }
 
-    void Handle(TEvTxMediator::TEvOoOTabletStep::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvTxMediator::TEvOoOTabletStep::TPtr& ev, const TActorContext& ctx) {
         TEvTxMediator::TEvOoOTabletStep* msg = ev->Get();
         const TStepId step = msg->Step;
         const TTabletId tabletId = msg->TabletId;
@@ -245,7 +247,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         tabletEntry->MergeToOutOfOrder(&it->second, std::move(msg->Transactions));
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         const TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         const TTabletId tabletId = msg->TabletId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
@@ -293,7 +295,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
         const TEvTabletPipe::TEvClientDestroyed* msg = ev->Get();
         const TTabletId tabletId = msg->TabletId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
@@ -377,7 +379,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         CheckStepHead(ctx);
     }
 
-    void Handle(TEvTxMediator::TEvWatchBucket::TPtr& ev, const TActorContext &ctx) {
+    void Handle(TEvTxMediator::TEvWatchBucket::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString());
         const TActorId& source = ev->Get()->Source;
@@ -392,7 +394,9 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " SEND to# " << source.ToString() << " " << evx.ToString());
         const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
-        ctx.ExecutorThread.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, source, ctx.SelfID, data, 0));
+        ctx.ExecutorThread.Send(
+            new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, source, ctx.SelfID, data, 0)
+        );
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
@@ -404,10 +408,11 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     void AckOoO(TTabletId tablet, TStepId step, const TVector<TTx>& transactions, const TActorContext& ctx) {
         TMap<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStepAck>> acks;
-        for (const TTx &tx : transactions) {
+        for (const TTx& tx : transactions) {
             auto& ack = acks[tx.AckTo];
             if (!ack) {
-                ack.reset(new TEvTxProcessing::TEvPlanStepAck(tablet, step, (const ui64 *)nullptr, (const ui64 *)nullptr));
+                ack.reset(new TEvTxProcessing::TEvPlanStepAck(tablet, step, (const ui64*)nullptr, (const ui64*)nullptr)
+                );
             }
             ack->Record.AddTxId(tx.TxId);
         }
@@ -423,9 +428,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         auto it = GranularWatchers.find(actorId);
         if (it == GranularWatchers.end()) {
             auto res = GranularWatchers.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(actorId),
-                std::forward_as_tuple(actorId));
+                std::piecewise_construct, std::forward_as_tuple(actorId), std::forward_as_tuple(actorId)
+            );
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
@@ -436,9 +440,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         auto it = GranularServers.find(serverId);
         if (it == GranularServers.end()) {
             auto res = GranularServers.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(serverId),
-                std::forward_as_tuple(serverId));
+                std::piecewise_construct, std::forward_as_tuple(serverId), std::forward_as_tuple(serverId)
+            );
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
@@ -458,9 +461,11 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         return frozenStep;
     }
 
-    void AddGranularWatcherTablet(TGranularWatcher* watcher, ui64 tabletId,
-            NKikimrTxMediatorTimecast::TEvGranularUpdate& record)
-    {
+    void AddGranularWatcherTablet(
+        TGranularWatcher* watcher,
+        ui64 tabletId,
+        NKikimrTxMediatorTimecast::TEvGranularUpdate& record
+    ) {
         TTabletEntry* tabletEntry = EnsureTablet(tabletId);
 
         const TStepId frozenStep = GetFrozenStep(tabletEntry);
@@ -474,10 +479,11 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         }
     }
 
-    void SendGranularUpdate(TGranularWatcher* watcher,
-            std::unique_ptr<TEvMediatorTimecast::TEvGranularUpdate>&& response,
-            const TActorContext& ctx)
-    {
+    void SendGranularUpdate(
+        TGranularWatcher* watcher,
+        std::unique_ptr<TEvMediatorTimecast::TEvGranularUpdate>&& response,
+        const TActorContext& ctx
+    ) {
         // Note: we don't use delivery flags and rely on pipe server notification instead
         auto ev = std::make_unique<IEventHandle>(watcher->ActorId, ctx.SelfID, response.release(), 0, watcher->Cookie);
 
@@ -495,7 +501,9 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         for (auto& pr : GranularWatchers) {
             TGranularWatcher* watcher = &pr.second;
             Y_ABORT_UNLESS(!watcher->NextUpdate);
-            watcher->NextUpdate.reset(new TEvMediatorTimecast::TEvGranularUpdate(Mediator, HashBucket, watcher->SubscriptionId));
+            watcher->NextUpdate.reset(
+                new TEvMediatorTimecast::TEvGranularUpdate(Mediator, HashBucket, watcher->SubscriptionId)
+            );
             watcher->NextUpdate->Record.SetLatestStep(AcceptedStep);
         }
 
@@ -549,7 +557,9 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             // none of the tablets have ever been frozen, and we never reported
             // this tablet as frozen before.
             if (it->second != frozenStep) {
-                auto response = std::make_unique<TEvMediatorTimecast::TEvGranularUpdate>(Mediator, HashBucket, watcher->SubscriptionId);
+                auto response = std::make_unique<TEvMediatorTimecast::TEvGranularUpdate>(
+                    Mediator, HashBucket, watcher->SubscriptionId
+                );
                 response->Record.SetLatestStep(AcceptedStep);
                 if (frozenStep != Max<ui64>()) {
                     // An updated frozen step for this tablet
@@ -565,7 +575,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         }
     }
 
-    void Handle(TEvMediatorTimecast::TEvGranularWatch::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvMediatorTimecast::TEvGranularWatch::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const ui64 subscriptionId = msg->Record.GetSubscriptionId();
         if (subscriptionId == 0) {
@@ -617,7 +627,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         SendGranularUpdate(watcher, std::move(response), ctx);
     }
 
-    void Handle(TEvMediatorTimecast::TEvGranularWatchModify::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvMediatorTimecast::TEvGranularWatchModify::TPtr& ev, const TActorContext& ctx) {
         auto it = GranularWatchers.find(ev->Sender);
         if (it == GranularWatchers.end()) {
             return;
@@ -656,7 +666,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         SendGranularUpdate(watcher, std::move(response), ctx);
     }
 
-    void Handle(TEvTxMediator::TEvServerDisconnected::TPtr &ev, const TActorContext&) {
+    void Handle(TEvTxMediator::TEvServerDisconnected::TPtr& ev, const TActorContext&) {
         auto* msg = ev->Get();
 
         auto it = GranularServers.find(msg->ServerId);
@@ -683,7 +693,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         GranularServers.erase(it);
     }
 
-    void Die(const TActorContext &ctx) override {
+    void Die(const TActorContext& ctx) override {
         Pipes->Detach(ctx);
         Pipes.reset();
 
@@ -707,15 +717,14 @@ public:
         return NKikimrServices::TActivity::TX_MEDIATOR_TABLET_QUEUE_ACTOR;
     }
 
-    TTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket)
+    TTxMediatorTabletQueue(const TActorId& owner, ui64 mediator, ui64 hashRange, ui64 hashBucket)
         : TActor(&TThis::StateFunc)
         , Owner(owner)
         , Mediator(mediator)
         , HashRange(hashRange)
         , HashBucket(hashBucket)
-        , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
-    {
-       Y_UNUSED(HashRange);
+        , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig())) {
+        Y_UNUSED(HashRange);
     }
 
     STFUNC(StateFunc) {
@@ -818,10 +827,10 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStep* sx, TVector<
     sx->OutOfOrder = std::move(update);
 }
 
-}
+} // namespace NTxMediator
 
 IActor* CreateTxMediatorTabletQueue(const TActorId& owner, ui64 mediator, ui64 hashRange, ui64 hashBucket) {
     return new NTxMediator::TTxMediatorTabletQueue(owner, mediator, hashRange, hashBucket);
 }
 
-}
+} // namespace NKikimr

@@ -14,7 +14,10 @@ public:
     TPKRangesFilter(const bool reverse);
 
     [[nodiscard]] TConclusionStatus Add(
-        std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const std::shared_ptr<arrow::Schema>& pkSchema);
+        std::shared_ptr<NOlap::TPredicate> f,
+        std::shared_ptr<NOlap::TPredicate> t,
+        const std::shared_ptr<arrow::Schema>& pkSchema
+    );
     std::shared_ptr<arrow::RecordBatch> SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const;
     TString SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const;
 
@@ -44,7 +47,8 @@ public:
     }
 
     bool IsPortionInUsage(const TPortionInfo& info) const;
-    TPKRangeFilter::EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+    TPKRangeFilter::EUsageClass
+    IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
@@ -63,15 +67,20 @@ public:
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
 
-    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch, const bool reverse);
+    static std::shared_ptr<TPKRangesFilter>
+    BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch, const bool reverse);
 
     static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
-    static std::shared_ptr<TPKRangesFilter> BuildFromString(
-        const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::shared_ptr<arrow::Schema>& pkSchema,
+        const bool reverse
+    );
+    static std::shared_ptr<TPKRangesFilter>
+    BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse);
 
     template <class TProto>
-    static TConclusion<TPKRangesFilter> BuildFromProto(const TProto& proto, const bool reverse, const std::vector<TNameTypeInfo>& ydbPk) {
+    static TConclusion<TPKRangesFilter>
+    BuildFromProto(const TProto& proto, const bool reverse, const std::vector<TNameTypeInfo>& ydbPk) {
         TPKRangesFilter result(reverse);
         for (auto& protoRange : proto.GetRanges()) {
             TSerializedTableRange range(protoRange);
@@ -79,7 +88,9 @@ public:
             auto toPredicate = std::make_shared<TPredicate>();
             TSerializedTableRange serializedRange(protoRange);
             std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(serializedRange, ydbPk);
-            auto status = result.Add(fromPredicate, toPredicate, NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(ydbPk)));
+            auto status = result.Add(
+                fromPredicate, toPredicate, NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(ydbPk))
+            );
             if (status.IsFail()) {
                 return status;
             }
@@ -88,4 +99,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

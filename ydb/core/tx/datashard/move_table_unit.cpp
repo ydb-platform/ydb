@@ -5,22 +5,25 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TMoveTableUnit : public TExecutionUnit {
+class TMoveTableUnit: public TExecutionUnit {
     TVector<IDataShardChangeCollector::TChange> ChangeRecords;
 
 public:
     TMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::MoveTable, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::MoveTable, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
     }
 
-    void MoveChangeRecords(NIceDb::TNiceDb& db, const NKikimrTxDataShard::TMoveTable& move, TVector<IDataShardChangeCollector::TChange>& changeRecords) {
+    void MoveChangeRecords(
+        NIceDb::TNiceDb& db,
+        const NKikimrTxDataShard::TMoveTable& move,
+        TVector<IDataShardChangeCollector::TChange>& changeRecords
+    ) {
         const THashMap<TPathId, TPathId> remap = DataShard.GetRemapIndexes(move);
 
-        for (auto& record: changeRecords) {
+        for (auto& record : changeRecords) {
             // We skip records for deleted indexes
             if (remap.contains(record.PathId)) {
                 record.PathId = remap.at(record.PathId);

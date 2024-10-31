@@ -14,37 +14,29 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TCompleteWriteUnit : public TExecutionUnit {
+class TCompleteWriteUnit: public TExecutionUnit {
 public:
-    TCompleteWriteUnit(TDataShard &dataShard, TPipeline &pipeline);
+    TCompleteWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TCompleteWriteUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext &txc,const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op, const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
-    void CompleteWrite(TOperation::TPtr op, const TActorContext &ctx);
+    void CompleteWrite(TOperation::TPtr op, const TActorContext& ctx);
 };
 
-TCompleteWriteUnit::TCompleteWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::CompleteWrite, false, dataShard, pipeline)
-{
-}
+TCompleteWriteUnit::TCompleteWriteUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::CompleteWrite, false, dataShard, pipeline) {}
 
-TCompleteWriteUnit::~TCompleteWriteUnit()
-{
-}
+TCompleteWriteUnit::~TCompleteWriteUnit() {}
 
-bool TCompleteWriteUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TCompleteWriteUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TCompleteWriteUnit::Execute(TOperation::TPtr op,
-                                                 TTransactionContext &txc,
-                                                 const TActorContext &ctx)
-{
+EExecutionStatus TCompleteWriteUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     Pipeline.DeactivateOp(op, txc, ctx);
@@ -62,18 +54,17 @@ EExecutionStatus TCompleteWriteUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::DelayComplete;
 }
 
-void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext& ctx)
-{
+void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext& ctx) {
     auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt();
 
-    if (DataShard.GetDataTxProfileLogThresholdMs()
-        && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
+    if (DataShard.GetDataTxProfileLogThresholdMs() &&
+        duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
         LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
                    op->ExecutionProfileLogString(DataShard.TabletID()));
     }
 
-    if (DataShard.GetDataTxProfileBufferThresholdMs()
-        && duration.MilliSeconds() >= DataShard.GetDataTxProfileBufferThresholdMs()) {
+    if (DataShard.GetDataTxProfileBufferThresholdMs() &&
+        duration.MilliSeconds() >= DataShard.GetDataTxProfileBufferThresholdMs()) {
         Pipeline.HoldExecutionProfile(op);
     }
 
@@ -91,19 +82,20 @@ void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext&
         }
 
         if (!op->IsImmediate() && !op->IsReadOnly()) {
-            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrDataEvents::TEvWriteResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), status);
+            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrDataEvents::TEvWriteResult>(
+                ctx, DataShard.TabletID(), op->GetGlobalTxId(), status
+            );
         }
     }
 
     Pipeline.RemoveCompletingOp(op);
 }
 
-void TCompleteWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
-{
+void TCompleteWriteUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
     Pipeline.RemoveCommittingOp(op);
     Pipeline.RemoveTx(op->GetStepOrder());
     DataShard.IncCounter(COUNTER_WRITE_SUCCESS);
-    
+
     CompleteWrite(op, ctx);
 
     DataShard.SendDelayedAcks(ctx, op->DelayedAcks());
@@ -127,15 +119,16 @@ void TCompleteWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
             }
             // We have an expected readset without a corresponding out readset
             for (const auto& recipient : itExpected->second) {
-                DataShard.SendReadSetNoData(ctx, recipient, op->GetStep(), op->GetTxId(), itExpected->first.first, itExpected->first.second);
+                DataShard.SendReadSetNoData(
+                    ctx, recipient, op->GetStep(), op->GetTxId(), itExpected->first.first, itExpected->first.second
+                );
             }
             ++itExpected;
         }
     }
 }
 
-THolder<TExecutionUnit> CreateCompleteWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateCompleteWriteUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TCompleteWriteUnit(dataShard, pipeline));
 }
 

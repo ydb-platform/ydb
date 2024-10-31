@@ -8,8 +8,10 @@ public:
     static TString GetClassNameStatic() {
         return "l-buckets";
     }
+
 private:
-    static inline const TFactory::TRegistrator<TOptimizerPlannerConstructor> Registrator = TFactory::TRegistrator<TOptimizerPlannerConstructor>(GetClassNameStatic());
+    static inline const TFactory::TRegistrator<TOptimizerPlannerConstructor> Registrator =
+        TFactory::TRegistrator<TOptimizerPlannerConstructor>(GetClassNameStatic());
 
     virtual void DoSerializeToProto(TProto& proto) const override;
 
@@ -21,11 +23,11 @@ private:
 
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override;
     virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const override;
+
 public:
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
-
 };
 
 } // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets

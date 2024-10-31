@@ -87,8 +87,11 @@ protected:
     }
 
 public:
-    TActor(std::shared_ptr<NBackground::TSession> bgSession, const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
-        const std::shared_ptr<IBlobsStorageOperator>& blobsOperator)
+    TActor(
+        std::shared_ptr<NBackground::TSession> bgSession,
+        const std::shared_ptr<NBackground::ITabletAdapter>& adapter,
+        const std::shared_ptr<IBlobsStorageOperator>& blobsOperator
+    )
         : TBase(bgSession, adapter)
         , BlobsOperator(blobsOperator) {
         ExportSession = bgSession->GetLogicAsVerifiedPtr<NExport::TSession>();

@@ -24,6 +24,7 @@ private:
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
+
 protected:
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;
@@ -31,16 +32,18 @@ protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) = 0;
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) = 0;
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
+    virtual void DoOnExecuteTxAfterWrite(
+        NColumnShard::TColumnShard& self,
+        TBlobManagerDb& dbBlobs,
+        const bool blobsWroteSuccessfully
+    ) = 0;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
 
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) = 0;
+
 public:
     IBlobsWritingAction(const TString& storageId)
-        : TBase(storageId)
-    {
-
-    }
+        : TBase(storageId) {}
     virtual ~IBlobsWritingAction();
     bool IsReady() const;
 
@@ -83,7 +86,11 @@ public:
         return DoOnCompleteTxBeforeWrite(self);
     }
 
-    void OnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterWrite(
+        NColumnShard::TColumnShard& self,
+        TBlobManagerDb& dbBlobs,
+        const bool blobsWroteSuccessfully
+    ) {
         return DoOnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
     }
 
@@ -97,6 +104,7 @@ public:
 class TWriteActionsCollection {
 private:
     THashMap<TString, std::shared_ptr<IBlobsWritingAction>> Actions;
+
 public:
     THashMap<TString, std::shared_ptr<IBlobsWritingAction>>::const_iterator begin() const {
         return Actions.begin();
@@ -133,4 +141,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

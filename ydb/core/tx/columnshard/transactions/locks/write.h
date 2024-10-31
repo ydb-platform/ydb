@@ -9,7 +9,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
 
     virtual bool DoCheckInteraction(
-        const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
+        const ui64 selfTxId,
+        TInteractionsContext& context,
+        TTxConflicts& conflicts,
+        TTxConflicts& /*notifications*/
+    ) const override {
         THashSet<ui64> txIds = context.GetAffectedTxIds(PathId, RecordBatch);
         txIds.erase(selfTxId);
         TTxConflicts result;
@@ -25,7 +29,11 @@ private:
     }
 
 public:
-    TEvWriteWriter(const ui64 pathId, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema)
+    TEvWriteWriter(
+        const ui64 pathId,
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::shared_ptr<arrow::Schema>& pkSchema
+    )
         : PathId(pathId)
         , RecordBatch(NArrow::TColumnOperator().Extract(batch, pkSchema->field_names())) {
         AFL_VERIFY(PathId);

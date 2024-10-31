@@ -46,7 +46,9 @@ std::set<std::string> TTestColumn::GetNullableSet(const std::vector<TTestColumn>
     return result;
 }
 
-std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TTestColumn::ConvertToPairs(const std::vector<TTestColumn>& columns) {
+std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TTestColumn::ConvertToPairs(
+    const std::vector<TTestColumn>& columns
+) {
     std::vector<std::pair<TString, NScheme::TTypeInfo>> result;
     for (auto&& i : columns) {
         result.emplace_back(std::make_pair(i.GetName(), i.GetType()));
@@ -55,7 +57,8 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TTestColumn::Conver
 }
 
 std::vector<NKikimr::NArrow::NTest::TTestColumn> TTestColumn::BuildFromPairs(
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns
+) {
     std::vector<TTestColumn> result;
     for (auto&& i : columns) {
         result.emplace_back(i.first, i.second);
@@ -71,7 +74,8 @@ THashMap<TString, NKikimr::NScheme::TTypeInfo> TTestColumn::ConvertToHash(const 
     return result;
 }
 
-std::vector<NKikimr::NArrow::NTest::TTestColumn> TTestColumn::CropSchema(const std::vector<TTestColumn>& input, const ui32 size) {
+std::vector<NKikimr::NArrow::NTest::TTestColumn>
+TTestColumn::CropSchema(const std::vector<TTestColumn>& input, const ui32 size) {
     AFL_VERIFY(input.size() >= size);
     return std::vector<TTestColumn>(input.begin(), input.begin() + size);
 }
@@ -100,17 +104,27 @@ namespace NKikimr::NOlap {
 
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TTestStoragesManager::DoBuildOperator(const TString& storageId) {
     if (storageId == TBase::DefaultStorageId) {
-        return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo, GetGeneration(),
-            SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
+        return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(
+            storageId,
+            NActors::TActorId(),
+            TabletInfo,
+            GetGeneration(),
+            SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId)
+        );
     } else if (storageId == TBase::LocalMetadataStorageId) {
         return std::make_shared<NOlap::NBlobOperations::NLocal::TOperator>(
-            storageId, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
+            storageId, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId)
+        );
     } else if (storageId == TBase::MemoryStorageId) {
 #ifndef KIKIMR_DISABLE_S3_OPS
         Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
-        return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, NActors::TActorId(),
+        return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
+            storageId,
+            NActors::TActorId(),
             std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
-            SharedBlobsManager->GetStorageManagerGuarantee(storageId), GetGeneration());
+            SharedBlobsManager->GetStorageManagerGuarantee(storageId),
+            GetGeneration()
+        );
 #endif
     }
     return nullptr;

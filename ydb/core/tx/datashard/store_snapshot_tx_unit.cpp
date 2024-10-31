@@ -5,11 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TStoreSnapshotTxUnit : public TExecutionUnit {
+class TStoreSnapshotTxUnit: public TExecutionUnit {
 public:
     TStoreSnapshotTxUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::StoreSnapshotTx, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::StoreSnapshotTx, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -32,10 +31,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateStoreSnapshotTxUnit(
-        TDataShard& dataShard,
-        TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateStoreSnapshotTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TStoreSnapshotTxUnit(dataShard, pipeline));
 }
 

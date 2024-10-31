@@ -67,9 +67,12 @@ bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
     return true;
 }
 
-bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
-{
+bool TAsyncIndexChangeCollector::Collect(
+    const TTableId& tableId,
+    ERowOp rop,
+    TArrayRef<const TRawTypeValue> key,
+    TArrayRef<const TUpdateOp> updates
+) {
     Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
@@ -78,12 +81,12 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         << ", tags# " << userTable->KeyColumnIds.size());
 
     switch (rop) {
-    case ERowOp::Upsert:
-    case ERowOp::Erase:
-    case ERowOp::Reset:
-        break;
-    default:
-        Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
+        case ERowOp::Upsert:
+        case ERowOp::Erase:
+        case ERowOp::Reset:
+            break;
+        default:
+            Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
     }
 
     const auto tagsToSelect = GetTagsToSelect(tableId, rop);
@@ -102,8 +105,12 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         return true;
     }
 
-    const auto tagToPos = MakeTagToPos(tagsToSelect, [](const auto tag) { return tag; });
-    const auto updatedTagToPos = MakeTagToPos(updates, [](const TUpdateOp& op) { return op.Tag; });
+    const auto tagToPos = MakeTagToPos(tagsToSelect, [](const auto tag) {
+        return tag;
+    });
+    const auto updatedTagToPos = MakeTagToPos(updates, [](const TUpdateOp& op) {
+        return op.Tag;
+    });
 
     userTable->ForEachAsyncIndex([&](const auto& pathId, const TUserTable::TTableIndex& index) {
         if (generateDeletions) {
@@ -213,13 +220,13 @@ TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tabl
     }
 
     switch (rop) {
-    case ERowOp::Upsert:
-        return it->second.Columns;
-    case ERowOp::Erase:
-    case ERowOp::Reset:
-        return it->second.IndexColumns;
-    default:
-        Y_ABORT("unreachable");
+        case ERowOp::Upsert:
+            return it->second.Columns;
+        case ERowOp::Erase:
+        case ERowOp::Reset:
+            return it->second.IndexColumns;
+        default:
+            Y_ABORT("unreachable");
     }
 }
 
@@ -232,7 +239,12 @@ void TAsyncIndexChangeCollector::AddRawValue(TVector<TUpdateOp>& out, TTag tag, 
     AddValue(out, TUpdateOp(tag, ECellOp::Set, value));
 }
 
-void TAsyncIndexChangeCollector::AddCellValue(TVector<TUpdateOp>& out, TTag tag, const TCell& cell, const NScheme::TTypeInfo& type) {
+void TAsyncIndexChangeCollector::AddCellValue(
+    TVector<TUpdateOp>& out,
+    TTag tag,
+    const TCell& cell,
+    const NScheme::TTypeInfo& type
+) {
     AddRawValue(out, tag, TRawTypeValue(cell.AsRef(), type.GetTypeId()));
 }
 
@@ -240,9 +252,13 @@ void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag,
     AddCellValue(out, tag, {}, type);
 }
 
-void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
-        TArrayRef<const TUpdateOp> keyVals, TArrayRef<const TUpdateOp> dataVals)
-{
+void TAsyncIndexChangeCollector::Persist(
+    const TTableId& tableId,
+    const TPathId& pathId,
+    ERowOp rop,
+    TArrayRef<const TUpdateOp> keyVals,
+    TArrayRef<const TUpdateOp> dataVals
+) {
     TVector<TRawTypeValue> key(Reserve(keyVals.size()));
     TVector<TTag> keyTags(Reserve(keyVals.size()));
     for (const auto& v : keyVals) {
@@ -253,9 +269,14 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
     Persist(tableId, pathId, rop, key, keyTags, dataVals);
 }
 
-void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
-{
+void TAsyncIndexChangeCollector::Persist(
+    const TTableId& tableId,
+    const TPathId& pathId,
+    ERowOp rop,
+    TArrayRef<const TRawTypeValue> key,
+    TArrayRef<const TTag> keyTags,
+    TArrayRef<const TUpdateOp> updates
+) {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
     Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
@@ -267,5 +288,5 @@ void TAsyncIndexChangeCollector::Clear() {
     DataVals.clear();
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

@@ -23,8 +23,12 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
     for (auto&& i : BlobIdsToRemove) {
         auto awsRequest = Aws::S3::Model::DeleteObjectRequest().WithKey(i.ToString());
         auto request = std::make_unique<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(awsRequest);
-        auto hRequest = std::make_unique<IEventHandle>(NActors::TActorId(), TActorContext::AsActorContext().SelfID, request.release());
-        TAutoPtr<TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>> evPtr((TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>*)hRequest.release());
+        auto hRequest = std::make_unique<IEventHandle>(
+            NActors::TActorId(), TActorContext::AsActorContext().SelfID, request.release()
+        );
+        TAutoPtr<TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>> evPtr(
+            (TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>*)hRequest.release()
+        );
         GCTask->GetExternalStorageOperator()->Execute(evPtr);
     }
     TBase::Bootstrap(ctx);
@@ -35,8 +39,10 @@ void TGarbageCollectionActor::CheckFinished() {
     if (SharedRemovingFinished && BlobIdsToRemove.empty()) {
         auto g = PassAwayGuard();
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "finished");
-        TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
+        TActorContext::AsActorContext().Send(
+            TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask)
+        );
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NTier

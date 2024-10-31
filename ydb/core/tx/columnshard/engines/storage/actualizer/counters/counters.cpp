@@ -1,5 +1,3 @@
 #include "counters.h"
 
-namespace NKikimr::NOlap::NActualizer {
-
-}
+namespace NKikimr::NOlap::NActualizer {}

@@ -32,17 +32,17 @@
 
 namespace {
 
-    struct DestroyZCtx {
-        static void Destroy(::ZSTD_DCtx* p) noexcept {
-            ZSTD_freeDCtx(p);
-        }
-    };
-
-    constexpr ui64 SumWithSaturation(ui64 a, ui64 b) {
-        return Max<ui64>() - a < b ? Max<ui64>() : a + b;
+struct DestroyZCtx {
+    static void Destroy(::ZSTD_DCtx* p) noexcept {
+        ZSTD_freeDCtx(p);
     }
+};
 
-} // anonymous
+constexpr ui64 SumWithSaturation(ui64 a, ui64 b) {
+    return Max<ui64>() - a < b ? Max<ui64>() : a + b;
+}
+
+} // namespace
 
 namespace NKikimr {
 namespace NDataShard {
@@ -77,8 +77,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     public:
         explicit TReadController(ui32 rangeSize, ui64 bufferSizeLimit)
             : RangeSize(rangeSize)
-            , BufferSizeLimit(bufferSizeLimit)
-        {
+            , BufferSizeLimit(bufferSizeLimit) {
             // able to contain at least one range
             Buffer.Reserve(RangeSize);
         }
@@ -171,8 +170,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     public:
         explicit TReadControllerZstd(ui32 rangeSize, ui64 bufferSizeLimit)
             : TReadController(rangeSize, bufferSizeLimit)
-            , Context(ZSTD_createDCtx())
-        {
+            , Context(ZSTD_createDCtx()) {
             Reset();
             // able to contain at least one block
             // take effect if RangeSize < BlockSize
@@ -314,13 +312,16 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         IMPORT_LOG_D("AllocateResource");
 
         const auto* appData = AppData();
-        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
-            TStringBuilder() << "Restore { " << TxId << ":" << DataShard << " }",
-            {{ 1, 0 }},
-            appData->DataShardConfig.GetRestoreTaskName(),
-            appData->DataShardConfig.GetRestoreTaskPriority(),
-            nullptr
-        ));
+        Send(
+            MakeResourceBrokerID(),
+            new TEvResourceBroker::TEvSubmitTask(
+                TStringBuilder() << "Restore { " << TxId << ":" << DataShard << " }",
+                {{1, 0}},
+                appData->DataShardConfig.GetRestoreTaskName(),
+                appData->DataShardConfig.GetRestoreTaskPriority(),
+                nullptr
+            )
+        );
 
         Become(&TThis::StateAllocateResource);
     }
@@ -342,7 +343,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Send(client, new TEvents::TEvPoisonPill());
         }
 
-
         Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
@@ -353,8 +353,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         IMPORT_LOG_D("HeadObject"
             << ": key# " << key);
 
-        auto request = Model::HeadObjectRequest()
-            .WithKey(key);
+        auto request = Model::HeadObjectRequest().WithKey(key);
 
         Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
@@ -364,9 +363,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ": key# " << key
             << ", range# " << range.first << "-" << range.second);
 
-        auto request = Model::GetObjectRequest()
-            .WithKey(key)
-            .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
+        auto request = Model::GetObjectRequest().WithKey(key).WithRange(
+            TStringBuilder() << "bytes=" << range.first << "-" << range.second
+        );
 
         Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
@@ -377,33 +376,36 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             switch (result.GetError().GetErrorType()) {
-            case S3Errors::RESOURCE_NOT_FOUND:
-            case S3Errors::NO_SUCH_KEY:
-                break;
-            default:
-                IMPORT_LOG_E("Error at 'HeadObject'"
+                case S3Errors::RESOURCE_NOT_FOUND:
+                case S3Errors::NO_SUCH_KEY:
+                    break;
+                default:
+                    IMPORT_LOG_E("Error at 'HeadObject'"
                     << ": error# " << result);
-                return RetryOrFinish(result.GetError());
+                    return RetryOrFinish(result.GetError());
             }
 
             CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
             if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
-                return Finish(false, TStringBuilder() << "Cannot find any supported data file"
-                    << ": prefix# " << Settings.GetObjectKeyPattern());
+                return Finish(
+                    false,
+                    TStringBuilder() << "Cannot find any supported data file"
+                                     << ": prefix# " << Settings.GetObjectKeyPattern()
+                );
             }
 
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
         switch (CompressionCodec) {
-        case NBackupRestoreTraits::ECompressionCodec::None:
-            Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_ABORT("unreachable");
+            case NBackupRestoreTraits::ECompressionCodec::None:
+                Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+                break;
+            case NBackupRestoreTraits::ECompressionCodec::Zstd:
+                Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+                break;
+            case NBackupRestoreTraits::ECompressionCodec::Invalid:
+                Y_ABORT("unreachable");
         }
 
         ETag = result.GetResult().GetETag();
@@ -417,9 +419,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
-            Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
-                ETag, ProcessedBytes, WrittenBytes, WrittenRows
-            }));
+            Send(
+                DataShard,
+                new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {ETag, ProcessedBytes, WrittenBytes, WrittenRows})
+            );
             return;
         }
 
@@ -475,21 +478,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         TString error;
 
         switch (Reader->TryGetData(data, error)) {
-        case TReadController::READY_DATA:
-            break;
+            case TReadController::READY_DATA:
+                break;
 
-        case TReadController::NOT_ENOUGH_DATA:
-            if (SumWithSaturation(ProcessedBytes, Reader->PendingBytes()) < ContentLength) {
-                return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
-                    Reader->NextRange(ContentLength, ProcessedBytes));
-            } else {
-                error = "reached end of file";
-            }
-            [[fallthrough]];
+            case TReadController::NOT_ENOUGH_DATA:
+                if (SumWithSaturation(ProcessedBytes, Reader->PendingBytes()) < ContentLength) {
+                    return GetObject(
+                        Settings.GetDataKey(DataFormat, CompressionCodec),
+                        Reader->NextRange(ContentLength, ProcessedBytes)
+                    );
+                } else {
+                    error = "reached end of file";
+                }
+                [[fallthrough]];
 
-        default: // ERROR
-            return Finish(false, TStringBuilder() << "Cannot process data"
-                << ": " << error);
+            default: // ERROR
+                return Finish(
+                    false,
+                    TStringBuilder() << "Cannot process data"
+                                     << ": " << error
+                );
         }
 
         RequestBuilder.New(TableInfo, Scheme);
@@ -524,8 +532,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         columnOrderTypes.reserve(Scheme.GetColumns().size());
 
         for (const auto& column : Scheme.GetColumns()) {
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(
+                column.GetTypeId(), column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr
+            );
             columnOrderTypes.emplace_back(TableInfo.KeyOrder(column.GetName()), typeInfoMod.TypeInfo);
         }
 
@@ -557,9 +566,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ": count# " << record->RowsSize()
             << ", size# " << record->ByteSizeLong());
 
-        Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
-            ETag, ProcessedBytes, WrittenBytes, WrittenRows
-        }));
+        Send(
+            DataShard,
+            new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {ETag, ProcessedBytes, WrittenBytes, WrittenRows})
+        );
     }
 
     void Handle(TEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
@@ -567,15 +577,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
-        case NKikimrTxDataShard::TError::OK:
-            return ProcessDownloadInfo(ev->Get()->Info, TStringBuf("UploadResponse"));
+            case NKikimrTxDataShard::TError::OK:
+                return ProcessDownloadInfo(ev->Get()->Info, TStringBuf("UploadResponse"));
 
-        case NKikimrTxDataShard::TError::SCHEME_ERROR:
-        case NKikimrTxDataShard::TError::BAD_ARGUMENT:
-            return Finish(false, record.GetErrorDescription());
+            case NKikimrTxDataShard::TError::SCHEME_ERROR:
+            case NKikimrTxDataShard::TError::BAD_ARGUMENT:
+                return Finish(false, record.GetErrorDescription());
 
-        default:
-            return RetryOrFinish(record.GetErrorDescription());
+            default:
+                return RetryOrFinish(record.GetErrorDescription());
         }
     }
 
@@ -598,8 +608,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         const TString error = TStringBuilder() << "ETag mismatch at '" << marker << "'"
-            << ": expected# " << expected
-            << ", got# " << got;
+                                               << ": expected# " << expected << ", got# " << got;
 
         IMPORT_LOG_E(error);
         Finish(false, error);
@@ -617,25 +626,32 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         for (const auto& column : Scheme.GetColumns()) {
             if (!TableInfo.HasColumn(column.GetName())) {
-                return finish(TStringBuilder() << "Scheme mismatch: cannot find column"
-                    << ": name# " << column.GetName());
+                return finish(
+                    TStringBuilder() << "Scheme mismatch: cannot find column"
+                                     << ": name# " << column.GetName()
+                );
             }
 
             const auto type = TableInfo.GetColumnType(column.GetName());
-            auto schemeType = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+            auto schemeType = NScheme::TypeInfoModFromProtoColumnType(
+                column.GetTypeId(), column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr
+            );
             if (type.first != schemeType.TypeInfo || type.second != schemeType.TypeMod) {
-                return finish(TStringBuilder() << "Scheme mismatch: column type mismatch"
-                    << ": name# " << column.GetName()
-                    << ", expected# " << NScheme::TypeName(type.first, type.second)
-                    << ", got# " << NScheme::TypeName(schemeType.TypeInfo, schemeType.TypeMod));
+                return finish(
+                    TStringBuilder() << "Scheme mismatch: column type mismatch"
+                                     << ": name# " << column.GetName() << ", expected# "
+                                     << NScheme::TypeName(type.first, type.second) << ", got# "
+                                     << NScheme::TypeName(schemeType.TypeInfo, schemeType.TypeMod)
+                );
             }
         }
 
         if (TableInfo.GetKeyColumnIds().size() != (ui32)Scheme.KeyColumnNamesSize()) {
-            return finish(TStringBuilder() << "Scheme mismatch: key column count mismatch"
-                << ": expected# " << TableInfo.GetKeyColumnIds().size()
-                << ", got# " << Scheme.KeyColumnNamesSize());
+            return finish(
+                TStringBuilder() << "Scheme mismatch: key column count mismatch"
+                                 << ": expected# " << TableInfo.GetKeyColumnIds().size() << ", got# "
+                                 << Scheme.KeyColumnNamesSize()
+            );
         }
 
         for (ui32 i = 0; i < (ui32)Scheme.KeyColumnNamesSize(); ++i) {
@@ -643,10 +659,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             const ui32 keyOrder = TableInfo.KeyOrder(name);
 
             if (keyOrder != i) {
-                return finish(TStringBuilder() << "Scheme mismatch: key order mismatch"
-                    << ": name# " << name
-                    << ", expected# " << keyOrder
-                    << ", got# " << i);
+                return finish(
+                    TStringBuilder() << "Scheme mismatch: key order mismatch"
+                                     << ": name# " << name << ", expected# " << keyOrder << ", got# " << i
+                );
             }
         }
 
@@ -723,7 +739,12 @@ public:
         return LogPrefix_;
     }
 
-    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
+    explicit TS3Downloader(
+        const TActorId& dataShard,
+        ui64 txId,
+        const NKikimrSchemeOp::TRestoreTask& task,
+        const TTableInfo& tableInfo
+    )
         : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
         , DataShard(dataShard)
         , TxId(txId)
@@ -735,9 +756,7 @@ public:
         , LogPrefix_(TStringBuilder() << "s3:" << TxId)
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
-        , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
-    {
-    }
+        , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit()) {}
 
     void Bootstrap() {
         IMPORT_LOG_D("Bootstrap"
@@ -805,11 +824,16 @@ private:
 
 }; // TS3Downloader
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
+IActor* CreateS3Downloader(
+    const TActorId& dataShard,
+    ui64 txId,
+    const NKikimrSchemeOp::TRestoreTask& task,
+    const TTableInfo& info
+) {
     return new TS3Downloader(dataShard, txId, task, info);
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

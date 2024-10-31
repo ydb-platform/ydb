@@ -1,5 +1,3 @@
 #include "abstract.h"
 
-namespace NKikimr::NLimiter {
-
-}
+namespace NKikimr::NLimiter {}

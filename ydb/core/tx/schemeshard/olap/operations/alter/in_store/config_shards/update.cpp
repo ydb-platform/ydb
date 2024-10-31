@@ -35,8 +35,12 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
         AFL_VERIFY(ModifiedShardIds.emplace(i).second);
     }
 
-    auto targetInfo = std::make_shared<TColumnTableInfo>(tableInfo->AlterVersion + 1, std::move(description),
-        TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());
+    auto targetInfo = std::make_shared<TColumnTableInfo>(
+        tableInfo->AlterVersion + 1,
+        std::move(description),
+        TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(),
+        context.GetModification()->GetAlterColumnTable()
+    );
 
     TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(original.GetPathId(), targetInfo, eContext);
@@ -69,7 +73,8 @@ NKikimr::TConclusionStatus TInStoreShardsUpdate::DoFinishImpl(const TUpdateFinis
     if (conclusion.IsFail()) {
         return conclusion;
     }
-    auto alter = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(TargetInStoreTable->GetPathId())->AlterData;
+    auto alter =
+        context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(TargetInStoreTable->GetPathId())->AlterData;
     for (auto&& i : Alter.GetModification().GetOpenWriteIds()) {
         AFL_VERIFY(!!alter);
         Sharding->SetShardingOpenSnapshotVerified(i, context.GetSnapshotVerified());
@@ -79,4 +84,4 @@ NKikimr::TConclusionStatus TInStoreShardsUpdate::DoFinishImpl(const TUpdateFinis
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

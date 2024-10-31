@@ -5,13 +5,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TFinalizeBuildIndexUnit : public TExecutionUnit {
+class TFinalizeBuildIndexUnit: public TExecutionUnit {
     THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
 
 public:
     TFinalizeBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::FinalizeBuildIndex, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::FinalizeBuildIndex, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -40,7 +39,9 @@ public:
         if (params.HasOutcome() && params.GetOutcome().HasApply()) {
             const auto indexPathId = PathIdFromPathId(params.GetOutcome().GetApply().GetIndexPathId());
 
-            tableInfo = DataShard.AlterTableSwitchIndexState(ctx, txc, pathId, version, indexPathId, NKikimrSchemeOp::EIndexStateReady);
+            tableInfo = DataShard.AlterTableSwitchIndexState(
+                ctx, txc, pathId, version, indexPathId, NKikimrSchemeOp::EIndexStateReady
+            );
         } else if (params.HasOutcome() && params.GetOutcome().HasCancel()) {
             const auto indexPathId = PathIdFromPathId(params.GetOutcome().GetCancel().GetIndexPathId());
 
@@ -87,10 +88,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateFinalizeBuildIndexUnit(
-    TDataShard& dataShard,
-    TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateFinalizeBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TFinalizeBuildIndexUnit(dataShard, pipeline));
 }
 

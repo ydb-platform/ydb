@@ -37,8 +37,8 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{blob_bytes=" << BlobBytes << ";raw_bytes=" << RawBytes << ";count=" << Count << ";records=" << RecordsCount
-                                << "}";
+        return TStringBuilder() << "{blob_bytes=" << BlobBytes << ";raw_bytes=" << RawBytes << ";count=" << Count
+                                << ";records=" << RecordsCount << "}";
     }
 
     TSimplePortionsGroupInfo operator+(const TSimplePortionsGroupInfo& item) const {
@@ -104,8 +104,7 @@ public:
         , RecordsCount(TBase::GetValueAutoAggregations("ByGranule/Portions/RecordsCount"))
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
         , BlobBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Blob/Bytes"))
-        , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes")) {
-    }
+        , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes")) {}
 };
 
 class TPortionCategoryCounters {

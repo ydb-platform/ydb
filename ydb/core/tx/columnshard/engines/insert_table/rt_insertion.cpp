@@ -161,4 +161,4 @@ const TInsertedData* TInsertionSummary::AddInserted(TInsertedData&& data, const 
     return insertInfo;
 }
 
-}
+} // namespace NKikimr::NOlap

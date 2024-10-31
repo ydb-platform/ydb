@@ -12,6 +12,7 @@ protected:
     virtual bool DoDeserializeFromProto(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const = 0;
     virtual std::set<ui32> DoGetIndexIds() const = 0;
+
 public:
     using TFactory = NObjectFactory::TObjectFactory<IIndexChecker, TString>;
     using TProto = NKikimrSSA::TProgram::TOlapIndexChecker;
@@ -38,6 +39,7 @@ public:
 class TIndexCheckerContainer: public NBackgroundTasks::TInterfaceProtoContainer<IIndexChecker> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IIndexChecker>;
+
 public:
     TIndexCheckerContainer() = default;
     TIndexCheckerContainer(const std::shared_ptr<IIndexChecker>& object)

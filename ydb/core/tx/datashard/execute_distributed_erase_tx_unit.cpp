@@ -13,14 +13,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TExecuteDistributedEraseTxUnit : public TExecutionUnit {
+class TExecuteDistributedEraseTxUnit: public TExecutionUnit {
     using IChangeCollector = NMiniKQL::IChangeCollector;
 
 public:
     TExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::ExecuteDistributedEraseTx, true, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::ExecuteDistributedEraseTx, true, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
         if (DataShard.IsStopping()) {
@@ -46,14 +44,32 @@ public:
 
         if (eraseTx->HasDependents()) {
             NMiniKQL::TEngineHostCounters engineHostCounters;
-            TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+            TDataShardUserDb userDb(
+                DataShard,
+                txc.DB,
+                op->GetGlobalTxId(),
+                readVersion,
+                writeVersion,
+                engineHostCounters,
+                TAppData::TimeProvider->Now()
+            );
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
-            THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
+            THolder<IDataShardChangeCollector> changeCollector{
+                CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())
+            };
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
-            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, op->GetGlobalTxId(),
-                    &userDb, &groupProvider, changeCollector.Get()))
-            {
+            if (!Execute(
+                    txc,
+                    request,
+                    presentRows,
+                    eraseTx->GetConfirmedRows(),
+                    writeVersion,
+                    op->GetGlobalTxId(),
+                    &userDb,
+                    &groupProvider,
+                    changeCollector.Get()
+                )) {
                 return EExecutionStatus::Restart;
             }
 
@@ -84,7 +100,9 @@ public:
             THashMap<ui64, TDynBitMap> presentRows;
             for (const auto& dependency : eraseTx->GetDependencies()) {
                 Y_ABORT_UNLESS(!presentRows.contains(dependency.GetShardId()));
-                presentRows.emplace(dependency.GetShardId(), DeserializeBitMap<TDynBitMap>(dependency.GetPresentRows()));
+                presentRows.emplace(
+                    dependency.GetShardId(), DeserializeBitMap<TDynBitMap>(dependency.GetPresentRows())
+                );
             }
 
             for (const auto& [_, readSets] : op->InReadSets()) {
@@ -94,7 +112,9 @@ public:
                     Y_ABORT_UNLESS(presentRows.contains(rs.Origin));
 
                     auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
-                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId())) {
+                    if (!Execute(
+                            txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId()
+                        )) {
                         return EExecutionStatus::Restart;
                     }
                 }
@@ -118,13 +138,17 @@ public:
         return EExecutionStatus::ExecutedNoMoreRestarts;
     }
 
-    bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-            const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& writeVersion,
-            ui64 globalTxId,
-            TDataShardUserDb* userDb = nullptr,
-            TDataShardChangeGroupProvider* groupProvider = nullptr,
-            IDataShardChangeCollector* changeCollector = nullptr)
-    {
+    bool Execute(
+        TTransactionContext& txc,
+        const NKikimrTxDataShard::TEvEraseRowsRequest& request,
+        const TDynBitMap& presentRows,
+        const TDynBitMap& confirmedRows,
+        const TRowVersion& writeVersion,
+        ui64 globalTxId,
+        TDataShardUserDb* userDb = nullptr,
+        TDataShardChangeGroupProvider* groupProvider = nullptr,
+        IDataShardChangeCollector* changeCollector = nullptr
+    ) {
         const ui64 tableId = request.GetTableId();
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
 
@@ -172,11 +196,15 @@ public:
 
             if (changeCollector) {
                 if (!volatileDependencies.empty() || volatileOrdered) {
-                    if (!changeCollector->OnUpdateTx(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId)) {
+                    if (!changeCollector->OnUpdateTx(
+                            fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId
+                        )) {
                         pageFault = true;
                     }
                 } else {
-                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion)) {
+                    if (!changeCollector->OnUpdate(
+                            fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion
+                        )) {
                         pageFault = true;
                     }
                 }
@@ -190,7 +218,9 @@ public:
 
             if (!volatileDependencies.empty() || volatileOrdered) {
                 txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);
-                DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
+                DataShard.GetConflictsCache()
+                    .GetTableCache(tableInfo.LocalTid)
+                    .AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
                 if (!commitAdded && userDb) {
                     // Make sure we see our own changes on further iterations
                     userDb->AddCommitTxId(fullTableId, globalTxId, writeVersion);
@@ -198,7 +228,9 @@ public:
                 }
             } else {
                 txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
-                DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
+                DataShard.GetConflictsCache()
+                    .GetTableCache(tableInfo.LocalTid)
+                    .RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
             }
         }
 
@@ -210,21 +242,21 @@ public:
             DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                 globalTxId,
                 writeVersion,
-                /* commitTxIds */ { globalTxId },
+                /* commitTxIds */ {globalTxId},
                 volatileDependencies,
-                /* participants */ { },
+                /* participants */ {},
                 groupProvider ? groupProvider->GetCurrentChangeGroup() : std::nullopt,
                 volatileOrdered,
                 /* arbiter */ false,
-                txc);
+                txc
+            );
             // Note: transaction is already committed, no additional waiting needed
         }
 
         return !pageFault;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override {}
 };
 
 THolder<TExecutionUnit> CreateExecuteDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {

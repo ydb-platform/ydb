@@ -16,21 +16,31 @@ class TBlobManagerDb;
 class IBlobsGCAction: public ICommonBlobsAction {
 private:
     using TBase = ICommonBlobsAction;
+
 protected:
     TBlobsCategories BlobsToRemove;
     std::shared_ptr<NBlobOperations::TRemoveGCCounters> Counters;
+
 protected:
     bool AbortedFlag = false;
     bool FinishedFlag = false;
 
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
-    virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) = 0;
+    virtual bool DoOnCompleteTxAfterCleaning(
+        NColumnShard::TColumnShard& self,
+        const std::shared_ptr<IBlobsGCAction>& taskAction
+    ) = 0;
 
     virtual void DoOnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
-    virtual bool DoOnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) = 0;
+    virtual bool DoOnCompleteTxBeforeCleaning(
+        NColumnShard::TColumnShard& self,
+        const std::shared_ptr<IBlobsGCAction>& taskAction
+    ) = 0;
 
-    virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) = 0;
+    virtual void
+    RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) = 0;
     virtual bool DoIsEmpty() const = 0;
+
 public:
     void AddSharedBlobToNextIteration(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
         AFL_VERIFY(BlobsToRemove.RemoveBorrowed(ownerTabletId, blobId));
@@ -40,7 +50,8 @@ public:
     void OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction);
 
     void OnExecuteTxBeforeCleaning(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs);
-    void OnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction);
+    void
+    OnCompleteTxBeforeCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction);
 
     const TBlobsCategories& GetBlobsToRemove() const {
         return BlobsToRemove;
@@ -54,11 +65,14 @@ public:
         return !AbortedFlag && !FinishedFlag;
     }
 
-    IBlobsGCAction(const TString& storageId, TBlobsCategories&& blobsToRemove, const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters)
+    IBlobsGCAction(
+        const TString& storageId,
+        TBlobsCategories&& blobsToRemove,
+        const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters
+    )
         : TBase(storageId)
         , BlobsToRemove(std::move(blobsToRemove))
-        , Counters(counters)
-    {
+        , Counters(counters) {
         for (auto i = BlobsToRemove.GetIterator(); i.IsValid(); ++i) {
             Counters->OnRequest(i.GetBlobId().BlobSize());
         }
@@ -68,4 +82,4 @@ public:
     void OnFinished();
 };
 
-}
+} // namespace NKikimr::NOlap

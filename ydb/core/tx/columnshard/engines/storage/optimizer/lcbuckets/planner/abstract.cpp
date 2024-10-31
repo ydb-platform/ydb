@@ -2,11 +2,13 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositions(
-    const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved) {
+NArrow::NMerger::TIntervalPositions
+TCompactionTaskData::GetCheckPositions(const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved) {
     NArrow::NMerger::TIntervalPositions result;
     for (auto&& i : GetFinishPoints(withMoved)) {
-        result.AddPosition(NArrow::NMerger::TSortableBatchPosition(i.ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false), false);
+        result.AddPosition(
+            NArrow::NMerger::TSortableBatchPosition(i.ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false), false
+        );
     }
     return result;
 }
@@ -54,4 +56,4 @@ std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool
     return points;
 }
 
-}
+} // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

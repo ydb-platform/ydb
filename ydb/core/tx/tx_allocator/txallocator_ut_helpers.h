@@ -13,7 +13,6 @@ namespace NTxAllocatorUT_Private {
 
 using namespace NKikimr;
 
-
 // Sets up everything needed for the tests (actually we need only boot txallocator tablet)
 class TTestEnv {
 public:
@@ -21,19 +20,18 @@ public:
     static const TDuration SimTimeOut;
 
 public:
-    TTestEnv(TTestActorRuntime &runtime)
-    {
+    TTestEnv(TTestActorRuntime& runtime) {
         Setup(runtime);
         Boot(runtime);
     }
 
 private:
-    void Boot(TTestActorRuntime &runtime);
-    void SetupLogging(TTestActorRuntime &runtime);
-    void Setup(TTestActorRuntime &runtime);
+    void Boot(TTestActorRuntime& runtime);
+    void SetupLogging(TTestActorRuntime& runtime);
+    void Setup(TTestActorRuntime& runtime);
 
 public:
-    void Reboot(TTestActorRuntime &runtime);
+    void Reboot(TTestActorRuntime& runtime);
 };
 
 class TIntersectionChecker {
@@ -49,14 +47,14 @@ public:
     void AssertIntersection(bool continuous = true);
 };
 
-    typedef NKikimrTx::TEvTxAllocateResult::EStatus TResultStatus;
-    void CheckExpectedStatus(const TVector<TResultStatus> &expected, TResultStatus result);
-    void CheckExpectedStatus(TResultStatus expected, TResultStatus result);
-    void CheckExpectedCookie(NKikimrTx::TEvTxAllocateResult result, ui64 cockie);
+typedef NKikimrTx::TEvTxAllocateResult::EStatus TResultStatus;
+void CheckExpectedStatus(const TVector<TResultStatus>& expected, TResultStatus result);
+void CheckExpectedStatus(TResultStatus expected, TResultStatus result);
+void CheckExpectedCookie(NKikimrTx::TEvTxAllocateResult result, ui64 cockie);
 
-    typedef std::pair<NKikimrTx::TEvTxAllocateResult, ui64> TAnswerWithCookie;
-    TAnswerWithCookie GrabAnswer(TTestActorRuntime &runtime);
-    void AllocateAndCheck(TTestActorRuntime &runtime, ui64 size, const TVector<TResultStatus> &expected);
-    void AllocateAndCheck(TTestActorRuntime &runtime, ui64 size, TResultStatus expected);
-    void AsyncAllocate(TTestActorRuntime &runtime, ui64 size);
-}
+typedef std::pair<NKikimrTx::TEvTxAllocateResult, ui64> TAnswerWithCookie;
+TAnswerWithCookie GrabAnswer(TTestActorRuntime& runtime);
+void AllocateAndCheck(TTestActorRuntime& runtime, ui64 size, const TVector<TResultStatus>& expected);
+void AllocateAndCheck(TTestActorRuntime& runtime, ui64 size, TResultStatus expected);
+void AsyncAllocate(TTestActorRuntime& runtime, ui64 size);
+} // namespace NTxAllocatorUT_Private

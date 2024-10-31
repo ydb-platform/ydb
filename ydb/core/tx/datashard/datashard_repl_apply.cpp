@@ -9,15 +9,16 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxApplyReplicationChanges : public TTransactionBase<TDataShard> {
+class TDataShard::TTxApplyReplicationChanges: public TTransactionBase<TDataShard> {
 public:
-    explicit TTxApplyReplicationChanges(TDataShard* self, TPipeline& pipeline,
-            TEvDataShard::TEvApplyReplicationChanges::TPtr&& ev)
+    explicit TTxApplyReplicationChanges(
+        TDataShard* self,
+        TPipeline& pipeline,
+        TEvDataShard::TEvApplyReplicationChanges::TPtr&& ev
+    )
         : TTransactionBase(self)
         , Pipeline(pipeline)
-        , Ev(std::move(ev))
-    {
-    }
+        , Ev(std::move(ev)) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_APPLY_REPLICATION_CHANGES;
@@ -33,7 +34,8 @@ public:
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_WRONG_STATE,
-                TStringBuilder() << "DataShard is not ready");
+                TStringBuilder() << "DataShard is not ready"
+            );
             return true;
         }
 
@@ -41,7 +43,8 @@ public:
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                TStringBuilder() << "Table is nor replicated nor under incremental restore");
+                TStringBuilder() << "Table is nor replicated nor under incremental restore"
+            );
             return true;
         }
 
@@ -53,29 +56,29 @@ public:
         const auto& userTables = Self->GetUserTables();
         auto it = userTables.find(fullTableId.PathId.LocalPathId);
         if (fullTableId.PathId.OwnerId != Self->GetPathOwnerId() || it == userTables.end()) {
-            TString error = TStringBuilder()
-                << "DataShard " << Self->TabletID() << " does not have a table "
-                << tableId.GetOwnerId() << ":" << tableId.GetTableId();
+            TString error = TStringBuilder() << "DataShard " << Self->TabletID() << " does not have a table "
+                                             << tableId.GetOwnerId() << ":" << tableId.GetTableId();
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR,
-                std::move(error));
+                std::move(error)
+            );
             return true;
         }
 
         const auto& userTable = *it->second;
         if (tableId.GetSchemaVersion() != 0 && userTable.GetTableSchemaVersion() != tableId.GetSchemaVersion()) {
             TString error = TStringBuilder()
-                << "DataShard " << Self->TabletID() << " has table "
-                << tableId.GetOwnerId() << ":" << tableId.GetTableId()
-                << " with schema version " << userTable.GetTableSchemaVersion()
-                << " and cannot apply changes for schema version " << tableId.GetSchemaVersion();
+                            << "DataShard " << Self->TabletID() << " has table " << tableId.GetOwnerId() << ":"
+                            << tableId.GetTableId() << " with schema version " << userTable.GetTableSchemaVersion()
+                            << " and cannot apply changes for schema version " << tableId.GetSchemaVersion();
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 tableId.GetSchemaVersion() < userTable.GetTableSchemaVersion()
                     ? NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_OUTDATED_SCHEME
                     : NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR,
-                std::move(error));
+                std::move(error)
+            );
             return true;
         }
 
@@ -89,13 +92,16 @@ public:
         }
 
         if (MvccReadWriteVersion) {
-            Self->PromoteImmediatePostExecuteEdges(*MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+            Self->PromoteImmediatePostExecuteEdges(
+                *MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc
+            );
             Pipeline.AddCommittingOp(*MvccReadWriteVersion);
         }
 
         if (!Result) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
-                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
+                NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK
+            );
         }
 
         Self->SysLocksTable().ApplyLocks();
@@ -110,21 +116,26 @@ public:
     }
 
     bool ApplyChange(
-            TTransactionContext& txc, const TTableId& tableId, const TUserTable& userTable,
-            TReplicationSourceState& source, const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change)
-    {
+        TTransactionContext& txc,
+        const TTableId& tableId,
+        const TUserTable& userTable,
+        TReplicationSourceState& source,
+        const NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& change
+    ) {
         Y_ABORT_UNLESS(userTable.IsReplicated() || Self->IsIncrementalRestore());
 
         // TODO: check source and offset, persist new values
         i64 sourceOffset = change.GetSourceOffset();
 
         ui64 writeTxId = change.GetWriteTxId();
-        if (userTable.ReplicationConfig.HasWeakConsistency() || userTable.IncrementalBackupConfig.HasWeakConsistency()) {
+        if (userTable.ReplicationConfig.HasWeakConsistency() ||
+            userTable.IncrementalBackupConfig.HasWeakConsistency()) {
             if (writeTxId) {
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    "WriteTxId cannot be specified for weak consistency");
+                    "WriteTxId cannot be specified for weak consistency"
+                );
                 return false;
             }
         } else {
@@ -132,19 +143,21 @@ public:
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    "Non-zero WriteTxId must be specified for strong consistency");
+                    "Non-zero WriteTxId must be specified for strong consistency"
+                );
                 return false;
             }
         }
 
         TSerializedCellVec keyCellVec;
         if (!TSerializedCellVec::TryParse(change.GetKey(), keyCellVec) ||
-            keyCellVec.GetCells().size() != userTable.KeyColumnTypes.size())
-        {
+            keyCellVec.GetCells().size() != userTable.KeyColumnTypes.size()) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                TStringBuilder() << "Key at " << EscapeC(source.Name) << ":" << sourceOffset << " is not a valid primary key");
+                TStringBuilder() << "Key at " << EscapeC(source.Name) << ":" << sourceOffset
+                                 << " is not a valid primary key"
+            );
             return false;
         }
 
@@ -186,14 +199,18 @@ public:
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_UNEXPECTED_ROW_OPERATION,
-                    TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " has an unexpected row operation");
+                    TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset
+                                     << " has an unexpected row operation"
+                );
                 return false;
             }
         }
 
         if (writeTxId) {
             txc.DB.UpdateTx(userTable.LocalTid, rop, key, update, writeTxId);
-            Self->GetConflictsCache().GetTableCache(userTable.LocalTid).AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
+            Self->GetConflictsCache()
+                .GetTableCache(userTable.LocalTid)
+                .AddUncommittedWrite(keyCellVec.GetCells(), writeTxId, txc.DB);
         } else {
             if (!MvccReadWriteVersion) {
                 auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
@@ -203,28 +220,30 @@ public:
 
             Self->SysLocksTable().BreakLocks(tableId, keyCellVec.GetCells());
             txc.DB.Update(userTable.LocalTid, rop, key, update, *MvccReadWriteVersion);
-            Self->GetConflictsCache().GetTableCache(userTable.LocalTid).RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
+            Self->GetConflictsCache()
+                .GetTableCache(userTable.LocalTid)
+                .RemoveUncommittedWrites(keyCellVec.GetCells(), txc.DB);
         }
 
         return true;
     }
 
     bool ParseUpdatesProto(
-            const TUserTable& userTable,
-            TReplicationSourceState& source, ui64 sourceOffset,
-            const NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates& proto,
-            TSerializedCellVec& updateCellVec,
-            TVector<NTable::TUpdateOp>& update)
-    {
+        const TUserTable& userTable,
+        TReplicationSourceState& source,
+        ui64 sourceOffset,
+        const NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates& proto,
+        TSerializedCellVec& updateCellVec,
+        TVector<NTable::TUpdateOp>& update
+    ) {
         const auto& tags = proto.GetTags();
         size_t count = tags.size();
-        if (!TSerializedCellVec::TryParse(proto.GetData(), updateCellVec) ||
-            updateCellVec.GetCells().size() != count)
-        {
+        if (!TSerializedCellVec::TryParse(proto.GetData(), updateCellVec) || updateCellVec.GetCells().size() != count) {
             Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                 NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " has invalid data");
+                TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " has invalid data"
+            );
             return false;
         }
         update.reserve(count);
@@ -235,17 +254,25 @@ public:
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " is updating an unknown column " << tag);
+                    TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset
+                                     << " is updating an unknown column " << tag
+                );
                 return false;
             }
             if (it->second.IsKey) {
                 Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
                     NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " is updating a primary key column " << tag);
+                    TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset
+                                     << " is updating a primary key column " << tag
+                );
                 return false;
             }
-            update.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type.GetTypeId()));
+            update.emplace_back(
+                tag,
+                NTable::ECellOp::Set,
+                TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type.GetTypeId())
+            );
         }
         return true;
     }
@@ -273,5 +300,5 @@ void TDataShard::Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, cons
     Execute(new TTxApplyReplicationChanges(this, Pipeline, std::move(ev)), ctx);
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

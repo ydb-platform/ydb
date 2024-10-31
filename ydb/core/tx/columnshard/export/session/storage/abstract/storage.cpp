@@ -5,11 +5,15 @@
 
 namespace NKikimr::NOlap::NExport {
 
-NKikimr::TConclusion<TStorageInitializerContainer> TStorageInitializerContainer::BuildFromProto(const NKikimrTxColumnShard::TBackupTxBody& proto) {
+NKikimr::TConclusion<TStorageInitializerContainer> TStorageInitializerContainer::BuildFromProto(
+    const NKikimrTxColumnShard::TBackupTxBody& proto
+) {
     if (!proto.GetBackupTask().HasS3Settings()) {
         return TConclusionStatus::Fail("s3 settings not found in backup task");
     }
-    return TStorageInitializerContainer(std::make_shared<TS3StorageInitializer>("BACKUP", proto.GetBackupTask().GetS3Settings()));
+    return TStorageInitializerContainer(
+        std::make_shared<TS3StorageInitializer>("BACKUP", proto.GetBackupTask().GetS3Settings())
+    );
 }
 
-}
+} // namespace NKikimr::NOlap::NExport

@@ -33,12 +33,12 @@ class TTenantResolver: public TActorBootstrapped<TTenantResolver> {
             << ": entry# " << entry.ToString());
 
         switch (entry.Status) {
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-            break;
-        default:
-            LOG_W("Unexpected status"
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                break;
+            default:
+                LOG_W("Unexpected status"
                 << ": entry# " << entry.ToString());
-            return Reply(false);
+                return Reply(false);
         }
 
         if (!DomainKey) {
@@ -70,9 +70,7 @@ public:
         : Parent(parent)
         , ReplicationId(rid)
         , PathId(pathId)
-        , LogPrefix("TenantResolver", ReplicationId)
-    {
-    }
+        , LogPrefix("TenantResolver", ReplicationId) {}
 
     void Bootstrap() {
         Resolve(PathId);
@@ -100,4 +98,4 @@ IActor* CreateTenantResolver(const TActorId& parent, ui64 rid, const TPathId& pa
     return new TTenantResolver(parent, rid, pathId);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

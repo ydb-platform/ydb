@@ -4,22 +4,22 @@
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/defs.h>
 
-
 namespace NKikimr::NColumnShard {
-    class TTablesManager;
+class TTablesManager;
 }
 
 namespace NKikimr::NOlap {
 
-class TPortionsNormalizer : public TPortionsNormalizerBase {
+class TPortionsNormalizer: public TPortionsNormalizerBase {
 public:
     static TString GetClassNameStatic() {
         return "PortionsMetadata";
     }
 
 private:
-    static inline TFactory::TRegistrator<TPortionsNormalizer> Registrator = TFactory::TRegistrator<TPortionsNormalizer>(
-        GetClassNameStatic());
+    static inline TFactory::TRegistrator<TPortionsNormalizer> Registrator =
+        TFactory::TRegistrator<TPortionsNormalizer>(GetClassNameStatic());
+
 public:
     class TNormalizerResult;
     class TTask;
@@ -34,17 +34,22 @@ public:
     }
 
     TPortionsNormalizer(const TNormalizationController::TInitContext& info)
-        : TPortionsNormalizerBase(info)
-    {}
+        : TPortionsNormalizerBase(info) {}
 
-    virtual INormalizerTask::TPtr BuildTask(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const override;
-    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual INormalizerTask::TPtr BuildTask(
+        std::vector<TPortionDataAccessor>&& portions,
+        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+    ) const override;
+    virtual TConclusion<bool>
+    DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
-    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const override;
+    virtual bool CheckPortion(
+        const NColumnShard::TTablesManager& tablesManager,
+        const TPortionDataAccessor& portionInfo
+    ) const override;
 
 private:
     THashSet<TPortionAddress> KnownPortions;
-
 };
 
-}
+} // namespace NKikimr::NOlap

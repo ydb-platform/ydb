@@ -9,6 +9,7 @@ class TInsertTableCacheController {
 private:
     TAtomicCounter BlobsCacheSize = 0;
     const i64 BlobsCacheLimit = (i64)1 << 30;
+
 public:
     void Return(const ui64 size) {
         const i64 val = BlobsCacheSize.Sub(size);
@@ -25,14 +26,19 @@ public:
     }
 };
 
-}
+} // namespace
 
 TUserData::TBlobStorageGuard::~TBlobStorageGuard() {
     Singleton<TInsertTableCacheController>()->Return(Data.size());
 }
 
- TUserData::TUserData(const ui64 pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto,
-    const ui64 schemaVersion, const std::optional<TString>& blobData)
+TUserData::TUserData(
+    const ui64 pathId,
+    const TBlobRange& blobRange,
+    const NKikimrTxColumnShard::TLogicalMetadata& proto,
+    const ui64 schemaVersion,
+    const std::optional<TString>& blobData
+)
     : Meta(proto)
     , BlobRange(blobRange)
     , PathId(pathId)
@@ -42,4 +48,4 @@ TUserData::TBlobStorageGuard::~TBlobStorageGuard() {
     }
 }
 
-}
+} // namespace NKikimr::NOlap

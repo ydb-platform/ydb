@@ -22,19 +22,24 @@ TString TCommonCountersOwner::NormalizeSignalName(const TString& name) const {
     return TFsPath(name).Fix().GetPath();
 }
 
-TCommonCountersOwner::TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
-    : ModuleId(module)
-{
+TCommonCountersOwner::TCommonCountersOwner(
+    const TString& module,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals
+)
+    : ModuleId(module) {
     if (baseSignals) {
         SubGroup = baseSignals->GetSubgroup("module_id", module);
     } else if (NActors::TlsActivationContext) {
-        SubGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id", module);
+        SubGroup = GetServiceCounters(AppData()->Counters, "tablets")
+                       ->GetSubgroup("subsystem", "columnshard")
+                       ->GetSubgroup("module_id", module);
     } else {
         SubGroup = new NMonitoring::TDynamicCounters();
     }
 }
 
-NMonitoring::THistogramPtr TCommonCountersOwner::GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const {
+NMonitoring::THistogramPtr
+TCommonCountersOwner::GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const {
     return SubGroup->GetHistogram(NormalizeSignalName("Histogram/" + name), std::move(hCollector));
 }
 
@@ -42,7 +47,8 @@ std::shared_ptr<TValueAggregationAgent> TCommonCountersOwner::GetValueAutoAggreg
     return NPrivate::TAggregationsController::GetAggregation(name, *this);
 }
 
-std::shared_ptr<TValueAggregationClient> TCommonCountersOwner::GetValueAutoAggregationsClient(const TString& name) const {
+std::shared_ptr<TValueAggregationClient> TCommonCountersOwner::GetValueAutoAggregationsClient(const TString& name
+) const {
     std::shared_ptr<TValueAggregationAgent> agent = NPrivate::TAggregationsController::GetAggregation(name, *this);
     return agent->GetClient();
 }
@@ -67,4 +73,4 @@ TString TCommonCountersOwner::GetAggregationPathInfo() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NColumnShard

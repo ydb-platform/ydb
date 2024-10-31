@@ -4,19 +4,19 @@
 #include <util/string/printf.h>
 
 namespace NKikimrSchemeOp {
-    class TBackupTask;
+class TBackupTask;
 }
 
 namespace NKikimr {
 namespace NDataShard {
 namespace NBackupRestoreTraits {
 
-enum class EDataFormat: int {
+enum class EDataFormat : int {
     Invalid /* "invalid" */,
     Csv /* "csv" */,
 };
 
-enum class ECompressionCodec: int {
+enum class ECompressionCodec : int {
     Invalid /* "invalid" */,
     None /* "none" */,
     Zstd /* "zstd" */,
@@ -47,6 +47,6 @@ inline TString DataKey(const TString& objKeyPattern, ui32 n, EDataFormat format,
     return Sprintf("%s/data_%02d%s", objKeyPattern.c_str(), n, ext.c_str());
 }
 
-} // NBackupRestoreTraits
-} // NDataShard
-} // NKikimr
+} // namespace NBackupRestoreTraits
+} // namespace NDataShard
+} // namespace NKikimr

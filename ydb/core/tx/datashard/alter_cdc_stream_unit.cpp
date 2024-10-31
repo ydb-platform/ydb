@@ -5,12 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TAlterCdcStreamUnit : public TExecutionUnit {
+class TAlterCdcStreamUnit: public TExecutionUnit {
 public:
     TAlterCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::AlterCdcStream, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::AlterCdcStream, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -40,31 +38,34 @@ public:
 
         TUserTable::TPtr tableInfo;
         switch (state) {
-        case NKikimrSchemeOp::ECdcStreamStateDisabled:
-            tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
-            DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
-            break;
+            case NKikimrSchemeOp::ECdcStreamStateDisabled:
+                tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
+                DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
+                break;
 
-        case NKikimrSchemeOp::ECdcStreamStateReady:
-            tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
+            case NKikimrSchemeOp::ECdcStreamStateReady:
+                tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
 
-            if (params.HasDropSnapshot()) {
-                const auto& snapshot = params.GetDropSnapshot();
-                Y_ABORT_UNLESS(snapshot.GetStep() != 0);
+                if (params.HasDropSnapshot()) {
+                    const auto& snapshot = params.GetDropSnapshot();
+                    Y_ABORT_UNLESS(snapshot.GetStep() != 0);
 
-                const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
-                DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
-            } else {
-                Y_DEBUG_ABORT("Absent snapshot");
-            }
+                    const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
+                    DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+                } else {
+                    Y_DEBUG_ABORT("Absent snapshot");
+                }
 
-            if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
-                DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
-            }
-            break;
+                if (const auto heartbeatInterval =
+                        TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
+                    DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(
+                        txc.DB, pathId, streamPathId, heartbeatInterval
+                    );
+                }
+                break;
 
-        default:
-            Y_FAIL_S("Unexpected alter cdc stream"
+            default:
+                Y_FAIL_S("Unexpected alter cdc stream"
                 << ": params# " << params.ShortDebugString());
         }
 

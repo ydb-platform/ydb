@@ -14,12 +14,10 @@ private:
         Agent->ResendStatus();
         Schedule(TDuration::Seconds(13), new NActors::TEvents::TEvWakeup);
     }
+
 public:
     TRegularSignalBuilderActor(std::shared_ptr<TValueAggregationAgent> agent)
-        : Agent(agent)
-    {
-
-    }
+        : Agent(agent) {}
 
     void Bootstrap() {
         Agent->ResendStatus();
@@ -35,15 +33,16 @@ public:
         }
     }
 };
-}
-
+} // namespace
 
 class TAggregationsControllerImpl {
 private:
     TMutex Mutex;
     THashMap<TString, std::shared_ptr<TValueAggregationAgent>> Agents;
+
 public:
-    std::shared_ptr<TValueAggregationAgent> GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner) {
+    std::shared_ptr<TValueAggregationAgent>
+    GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner) {
         TGuard<TMutex> g(Mutex);
         const TString agentId = TFsPath(signalsOwner.GetAggregationPathInfo() + "/" + signalName).Fix().GetPath();
         auto it = Agents.find(agentId);
@@ -57,8 +56,9 @@ public:
     }
 };
 
-std::shared_ptr<TValueAggregationAgent> TAggregationsController::GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner) {
+std::shared_ptr<TValueAggregationAgent>
+TAggregationsController::GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner) {
     return Singleton<TAggregationsControllerImpl>()->GetAggregation(signalName, signalsOwner);
 }
 
-}
+} // namespace NKikimr::NColumnShard::NPrivate

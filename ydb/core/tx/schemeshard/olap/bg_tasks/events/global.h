@@ -4,7 +4,8 @@
 
 namespace NKikimr::NSchemeShard::NBackground {
 
-struct TEvListRequest: public TEventPB<TEvListRequest, NKikimrSchemeShardTxBackgroundProto::TEvListRequest, EvListRequest> {
+struct TEvListRequest
+    : public TEventPB<TEvListRequest, NKikimrSchemeShardTxBackgroundProto::TEvListRequest, EvListRequest> {
     TEvListRequest() = default;
 
     explicit TEvListRequest(const TString& dbName, ui64 pageSize, TString pageToken) {
@@ -14,17 +15,15 @@ struct TEvListRequest: public TEventPB<TEvListRequest, NKikimrSchemeShardTxBackg
     }
 };
 
-struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrSchemeShardTxBackgroundProto::TEvListResponse, EvListResponse> {
+struct TEvListResponse
+    : public TEventPB<TEvListResponse, NKikimrSchemeShardTxBackgroundProto::TEvListResponse, EvListResponse> {
 private:
     using TBase = TEventPB<TEvListResponse, NKikimrSchemeShardTxBackgroundProto::TEvListResponse, EvListResponse>;
+
 public:
     using TBase::TBase;
     TEvListResponse(const NKikimrSchemeShardTxBackgroundProto::TEvListResponse& proto)
-        : TBase(proto)
-    {
-
-    }
+        : TBase(proto) {}
 };
 
-
-}
+} // namespace NKikimr::NSchemeShard::NBackground

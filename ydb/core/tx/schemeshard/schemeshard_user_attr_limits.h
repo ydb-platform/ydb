@@ -11,5 +11,5 @@ struct TUserAttributesLimits {
     static constexpr ui32 MaxBytes = 10 * 1024;
 };
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

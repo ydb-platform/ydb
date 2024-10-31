@@ -22,7 +22,8 @@ private:
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) = 0;
 
     bool IsAlterCompression(const TUpdateInitializationContext& context) const {
-        for (const auto& alterColumn : context.GetModification()->GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
+        for (const auto& alterColumn :
+             context.GetModification()->GetAlterColumnTable().GetAlterSchema().GetAlterColumns()) {
             if (alterColumn.HasSerializer()) {
                 return true;
             }
@@ -68,8 +69,10 @@ protected:
 
     bool CheckTargetSchema(const TOlapSchema& targetSchema) {
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-            for (auto& [_, column]: targetSchema.GetColumns().GetColumns()) {
-                if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+            for (auto& [_, column] : targetSchema.GetColumns().GetColumns()) {
+                if (column.GetDefaultValue().GetValue() ||
+                    (column.GetAccessorConstructor().GetClassName() ==
+                     NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
                     return false;
                 }
             }
@@ -80,4 +83,4 @@ protected:
 public:
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

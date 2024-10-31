@@ -23,6 +23,7 @@ struct TExternalTableColumn {
 struct TColumnUnboxedPlaceInfo: public TExternalTableColumn {
 private:
     using TBase = TExternalTableColumn;
+
 public:
     const ui32 Idx;
     const TString Name;
@@ -30,23 +31,32 @@ public:
     TColumnUnboxedPlaceInfo(const TExternalTableColumn& baseInfo, const ui32 idx, const TString& name)
         : TBase(baseInfo)
         , Idx(idx)
-        , Name(name) {
-
-    }
+        , Name(name) {}
 };
 
 class TUnboxedValueReader {
 private:
     YDB_READONLY_DEF(std::vector<TColumnUnboxedPlaceInfo>, ColumnsInfo);
     template <class T>
-    static void FieldToHashString(const NYql::NUdf::TUnboxedValue& value, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
+    static void FieldToHashString(
+        const NYql::NUdf::TUnboxedValue& value,
+        NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer
+    ) {
         static_assert(std::is_arithmetic<T>::value);
         const T result = value.Get<T>();
         hashCalcer.Update((const ui8*)&result, sizeof(result));
     }
+
 public:
-    void BuildStringForHash(const NKikimr::NUdf::TUnboxedValue& value, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) const;
-    TUnboxedValueReader(const NMiniKQL::TStructType* structInfo, const TMap<TString, TExternalTableColumn>& columnsRemap, const std::vector<TString>& shardingColumns);
+    void BuildStringForHash(
+        const NKikimr::NUdf::TUnboxedValue& value,
+        NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer
+    ) const;
+    TUnboxedValueReader(
+        const NMiniKQL::TStructType* structInfo,
+        const TMap<TString, TExternalTableColumn>& columnsRemap,
+        const std::vector<TString>& shardingColumns
+    );
 };
 
-}
+} // namespace NKikimr::NSharding

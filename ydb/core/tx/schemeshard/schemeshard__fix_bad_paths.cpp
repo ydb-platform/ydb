@@ -11,11 +11,9 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
-    explicit TTxFixBadPaths(TSelf *self)
-        : TBase(self)
-    {
-    }
+struct TSchemeShard::TTxFixBadPaths: public TTransactionBase<TSchemeShard> {
+    explicit TTxFixBadPaths(TSelf* self)
+        : TBase(self) {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
@@ -55,5 +53,5 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxFixBadPaths() {
     return new TTxFixBadPaths(this);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

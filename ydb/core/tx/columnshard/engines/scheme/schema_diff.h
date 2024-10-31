@@ -15,12 +15,18 @@ private:
 public:
     TSchemaDiffView() = default;
 
-    void ApplyForColumns(const std::vector<ui32>& originalColumnIds, 
+    void ApplyForColumns(
+        const std::vector<ui32>& originalColumnIds,
         const std::function<void(const ui32 originalIndex)>& addFromOriginal,
-        const std::function<void(const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex)>& addFromDiff) const;
+        const std::function<
+            void(const NKikimrSchemeOp::TOlapColumnDescription& col, const std::optional<ui32> originalIndex)>&
+            addFromDiff
+    ) const;
 
     static NKikimrSchemeOp::TColumnTableSchemaDiff MakeSchemasDiff(
-        const NKikimrSchemeOp::TColumnTableSchema& current, const NKikimrSchemeOp::TColumnTableSchema& next);
+        const NKikimrSchemeOp::TColumnTableSchema& current,
+        const NKikimrSchemeOp::TColumnTableSchema& next
+    );
 
     const NKikimrSchemeOp::TColumnTableSchemeOptions& GetSchemaOptions() const;
     const NKikimrSchemeOp::TCompressionOptions* GetCompressionOptions() const {
@@ -33,7 +39,8 @@ public:
         return ModifiedIndexes;
     }
 
-    ui64 GetVersion() const;;
+    ui64 GetVersion() const;
+    ;
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
 };

@@ -3,11 +3,16 @@
 
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
-TEvApplyLinksModification::TEvApplyLinksModification(const TTabletId initiatorTabletId, const TString& sessionId, const ui64 packIdx, const TTaskForTablet& task) {
+TEvApplyLinksModification::TEvApplyLinksModification(
+    const TTabletId initiatorTabletId,
+    const TString& sessionId,
+    const ui64 packIdx,
+    const TTaskForTablet& task
+) {
     Record.SetInitiatorTabletId((ui64)initiatorTabletId);
     Record.SetSessionId(sessionId);
     Record.SetPackIdx(packIdx);
     *Record.MutableTask() = task.SerializeToProto();
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing::NEvents

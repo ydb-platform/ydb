@@ -9,11 +9,14 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-class TFetcherCheckUserTieringPermissionsResult: public NBackgroundTasks::IProtoStringSerializable<
-    NKikimrScheme::TFetcherCheckUserTieringPermissionsResult, NBackgroundTasks::IStringSerializable> {
+class TFetcherCheckUserTieringPermissionsResult
+    : public NBackgroundTasks::IProtoStringSerializable<
+          NKikimrScheme::TFetcherCheckUserTieringPermissionsResult,
+          NBackgroundTasks::IStringSerializable> {
 private:
     using TProtoClass = NKikimrScheme::TFetcherCheckUserTieringPermissionsResult;
     YDB_ACCESSOR_DEF(TProtoClass, Content);
+
 protected:
     virtual TProtoClass DoSerializeToProto() const override {
         return Content;
@@ -22,6 +25,7 @@ protected:
         Content = protoData;
         return true;
     }
+
 public:
     void Deny(const TString& reason) {
         Content.SetOperationAllow(false);
@@ -29,22 +33,29 @@ public:
     }
 };
 
-class TFetcherCheckUserTieringPermissions: public NBackgroundTasks::IProtoStringSerializable<
-    NKikimrScheme::TFetcherCheckUserTieringPermissions, NSchemeShard::ISSDataProcessor> {
+class TFetcherCheckUserTieringPermissions
+    : public NBackgroundTasks::
+          IProtoStringSerializable<NKikimrScheme::TFetcherCheckUserTieringPermissions, NSchemeShard::ISSDataProcessor> {
 private:
-    using TBase = NBackgroundTasks::IProtoStringSerializable<
-        NKikimrScheme::TFetcherCheckUserTieringPermissions, NSchemeShard::ISSDataProcessor>;
+    using TBase = NBackgroundTasks::
+        IProtoStringSerializable<NKikimrScheme::TFetcherCheckUserTieringPermissions, NSchemeShard::ISSDataProcessor>;
     using TBase::TFactory;
     using TProtoClass = NKikimrScheme::TFetcherCheckUserTieringPermissions;
     static TFactory::TRegistrator<TFetcherCheckUserTieringPermissions> Registrator;
     YDB_ACCESSOR_DEF(std::set<TString>, TieringRuleIds);
     YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
-    YDB_ACCESSOR(NMetadata::NModifications::IOperationsManager::EActivityType, ActivityType,
-        NMetadata::NModifications::IOperationsManager::EActivityType::Undefined);
+    YDB_ACCESSOR(
+        NMetadata::NModifications::IOperationsManager::EActivityType,
+        ActivityType,
+        NMetadata::NModifications::IOperationsManager::EActivityType::Undefined
+    );
+
 protected:
     virtual TProtoClass DoSerializeToProto() const override;
     virtual bool DoDeserializeFromProto(const TProtoClass& protoData) override;
-    virtual void DoProcess(NSchemeShard::TSchemeShard& schemeShard, NKikimrScheme::TEvProcessingResponse& result) const override;
+    virtual void DoProcess(NSchemeShard::TSchemeShard& schemeShard, NKikimrScheme::TEvProcessingResponse& result)
+        const override;
+
 public:
     using TResult = TFetcherCheckUserTieringPermissionsResult;
     std::optional<TFetcherCheckUserTieringPermissionsResult> UnpackResult(const TString& content) const {
@@ -76,4 +87,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

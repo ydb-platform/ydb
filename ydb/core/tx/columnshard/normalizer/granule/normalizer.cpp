@@ -6,18 +6,18 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-    struct TChunkData {
-        ui64 Index = 0;
-        ui64 GranuleId = 0;
-        ui64 PlanStep = 0;
-        ui64 TxId = 0;
-        ui64 PortionId = 0;
-        ui32 Chunk = 0;
-        ui64 ColumnIdx = 0;
-    };
-}
+struct TChunkData {
+    ui64 Index = 0;
+    ui64 GranuleId = 0;
+    ui64 PlanStep = 0;
+    ui64 TxId = 0;
+    ui64 PortionId = 0;
+    ui32 Chunk = 0;
+    ui64 ColumnIdx = 0;
+};
+} // namespace
 
-class TGranulesNormalizer::TNormalizerResult : public INormalizerChanges {
+class TGranulesNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<TChunkData> Chunks;
     THashMap<ui64, ui64> Granule2Path;
 
@@ -27,23 +27,24 @@ private:
     }
 
     TNormalizerResult(const THashMap<ui64, ui64>& g2p)
-        : Granule2Path(g2p)
-    {}
+        : Granule2Path(g2p) {}
 
 public:
-    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool
+    ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */)
+        const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << "apply " << Chunks.size() << " chunks");
+        ACFL_INFO("normalizer", "TGranulesNormalizer")
+        ("message", TStringBuilder() << "apply " << Chunks.size() << " chunks");
 
         for (auto&& key : Chunks) {
             auto granuleIt = Granule2Path.find(key.GranuleId);
             Y_ABORT_UNLESS(granuleIt != Granule2Path.end());
 
-            db.Table<Schema::IndexColumns>().Key(key.Index, key.GranuleId, key.ColumnIdx,
-            key.PlanStep, key.TxId, key.PortionId, key.Chunk).Update(
-                NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second)
-            );
+            db.Table<Schema::IndexColumns>()
+                .Key(key.Index, key.GranuleId, key.ColumnIdx, key.PlanStep, key.TxId, key.PortionId, key.Chunk)
+                .Update(NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second));
         }
         return true;
     }
@@ -52,7 +53,8 @@ public:
         return Chunks.size();
     }
 
-    static std::optional<std::vector<INormalizerChanges::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    static std::optional<std::vector<INormalizerChanges::TPtr>>
+    Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
@@ -92,7 +94,8 @@ public:
             ui64 chunksCount = 0;
 
             while (!rowset.EndOfSet()) {
-                if (!rowset.HaveValue<Schema::IndexColumns::PathId>() || rowset.GetValue<Schema::IndexColumns::PathId>() == 0) {
+                if (!rowset.HaveValue<Schema::IndexColumns::PathId>() ||
+                    rowset.GetValue<Schema::IndexColumns::PathId>() == 0) {
                     TChunkData key;
                     key.PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
                     key.TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
@@ -124,16 +127,18 @@ public:
                 controller.GetCounters().CountObjects(chunksCount);
             }
         }
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << fullChunksCount << " chunks found");
+        ACFL_INFO("normalizer", "TGranulesNormalizer")
+        ("message", TStringBuilder() << fullChunksCount << " chunks found");
         return tasks;
     }
-
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>>
+TGranulesNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(controller, txc);
     if (!changes) {
-        return TConclusionStatus::Fail("Not ready");;
+        return TConclusionStatus::Fail("Not ready");
+        ;
     }
     std::vector<INormalizerTask::TPtr> tasks;
     for (auto&& c : *changes) {
@@ -142,4 +147,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::DoInit(cons
     return tasks;
 }
 
-}
+} // namespace NKikimr::NOlap

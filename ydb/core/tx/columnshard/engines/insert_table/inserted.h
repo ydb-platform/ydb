@@ -22,8 +22,7 @@ public:
 
     TInsertedData(const TInsertWriteId writeId, const std::shared_ptr<TUserData>& userData)
         : TBase(userData)
-        , InsertWriteId(writeId) {
-    }
+        , InsertWriteId(writeId) {}
 
     /// We commit many writeIds in one txId. There could be several blobs with same WriteId and different DedupId.
     /// One of them wins and becomes committed. Original DedupId would be lost then.

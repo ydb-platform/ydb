@@ -8,48 +8,37 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TStoreAndSendWriteOutRSUnit : public TExecutionUnit {
+class TStoreAndSendWriteOutRSUnit: public TExecutionUnit {
 public:
-    TStoreAndSendWriteOutRSUnit(TDataShard &dataShard,
-                           TPipeline &pipeline);
+    TStoreAndSendWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TStoreAndSendWriteOutRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TStoreAndSendWriteOutRSUnit::TStoreAndSendWriteOutRSUnit(TDataShard &dataShard,
-                                               TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::StoreAndSendWriteOutRS, false, dataShard, pipeline)
-{
-}
+TStoreAndSendWriteOutRSUnit::TStoreAndSendWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::StoreAndSendWriteOutRS, false, dataShard, pipeline) {}
 
-TStoreAndSendWriteOutRSUnit::~TStoreAndSendWriteOutRSUnit()
-{
-}
+TStoreAndSendWriteOutRSUnit::~TStoreAndSendWriteOutRSUnit() {}
 
-bool TStoreAndSendWriteOutRSUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TStoreAndSendWriteOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TStoreAndSendWriteOutRSUnit::Execute(TOperation::TPtr op,
-                                                 TTransactionContext &txc,
-                                                 const TActorContext &ctx)
-{
+EExecutionStatus
+TStoreAndSendWriteOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     bool newArtifact = false;
     // TODO: move artifact flags into operation flags.
     if (!writeOp->IsOutRSStored() && !op->OutReadSets().empty()) {
-        DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(),
-                                            op->PreparedOutReadSets(), txc, ctx);
+        DataShard.PrepareAndSaveOutReadSets(
+            op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx
+        );
         writeOp->MarkOutRSStored();
         newArtifact = true;
     }
@@ -87,16 +76,12 @@ EExecutionStatus TStoreAndSendWriteOutRSUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TStoreAndSendWriteOutRSUnit::Complete(TOperation::TPtr op,
-                                      const TActorContext &ctx)
-{
+void TStoreAndSendWriteOutRSUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
     if (!op->PreparedOutReadSets().empty())
         DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
 }
 
-THolder<TExecutionUnit> CreateStoreAndSendWriteOutRSUnit(TDataShard &dataShard,
-                                                    TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateStoreAndSendWriteOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TStoreAndSendWriteOutRSUnit(dataShard, pipeline));
 }
 

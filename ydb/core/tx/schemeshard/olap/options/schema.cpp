@@ -19,7 +19,9 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
         ExternalGuaranteeExclusivePK = tableSchema.GetOptions().GetExternalGuaranteeExclusivePK();
     }
     if (tableSchema.GetOptions().HasCompactionPlannerConstructor()) {
-        AFL_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetCompactionPlannerConstructor()));
+        AFL_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(
+            tableSchema.GetOptions().GetCompactionPlannerConstructor()
+        ));
     }
 }
 
@@ -29,12 +31,15 @@ void TOlapOptionsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
         tableSchema.MutableOptions()->SetExternalGuaranteeExclusivePK(ExternalGuaranteeExclusivePK);
     }
     if (CompactionPlannerConstructor.HasObject()) {
-        CompactionPlannerConstructor.SerializeToProto(*tableSchema.MutableOptions()->MutableCompactionPlannerConstructor());
+        CompactionPlannerConstructor.SerializeToProto(
+            *tableSchema.MutableOptions()->MutableCompactionPlannerConstructor()
+        );
     }
 }
 
-bool TOlapOptionsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& /*opSchema*/, IErrorCollector& /*errors*/) const {
+bool TOlapOptionsDescription::
+    Validate(const NKikimrSchemeOp::TColumnTableSchema& /*opSchema*/, IErrorCollector& /*errors*/) const {
     return true;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

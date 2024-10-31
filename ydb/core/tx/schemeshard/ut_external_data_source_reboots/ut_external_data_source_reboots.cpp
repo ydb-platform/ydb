@@ -25,20 +25,23 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
                     }
                 )");
 
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId - 1});
 
             {
                 TInactiveZone inactive(activeZone);
-                auto describeResult =  DescribePath(runtime, "/MyRoot/DirExternalDataSource/MyExternalDataSource");
+                auto describeResult = DescribePath(runtime, "/MyRoot/DirExternalDataSource/MyExternalDataSource");
                 TestDescribeResult(describeResult, {NLs::Finished});
 
                 UNIT_ASSERT(describeResult.GetPathDescription().HasExternalDataSourceDescription());
-                const auto& externalDataSourceDescription = describeResult.GetPathDescription().GetExternalDataSourceDescription();
+                const auto& externalDataSourceDescription =
+                    describeResult.GetPathDescription().GetExternalDataSourceDescription();
                 UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetName(), "MyExternalDataSource");
                 UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetSourceType(), "ObjectStorage");
                 UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetVersion(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(externalDataSourceDescription.GetLocation(), "https://s3.cloud.net/my_bucket");
-                UNIT_ASSERT_EQUAL(externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone);
+                UNIT_ASSERT_EQUAL(
+                    externalDataSourceDescription.GetAuth().identity_case(), NKikimrSchemeOp::TAuth::kNone
+                );
             }
         });
     }
@@ -56,16 +59,14 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
                     }
                 )");
             AsyncDropExternalDataSource(runtime, ++t.TxId, "/MyRoot", "DropMe");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
-
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             TestDropExternalDataSource(runtime, ++t.TxId, "/MyRoot", "DropMe");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DropMe"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DropMe"), {NLs::PathNotExist});
             }
         });
     }
@@ -75,7 +76,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateExternalDataSource(runtime, ++t.TxId, "/MyRoot",R"(
+                TestCreateExternalDataSource(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalDataSource"
                         SourceType: "ObjectStorage"
                         Location: "https://s3.cloud.net/my_bucket"
@@ -92,8 +93,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"), {NLs::PathNotExist});
             }
         });
     }
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateExternalDataSource(runtime, ++t.TxId, "/MyRoot",R"(
+                TestCreateExternalDataSource(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalDataSource"
                         SourceType: "ObjectStorage"
                         Location: "https://s3.cloud.net/my_bucket"
@@ -120,19 +120,17 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"), {NLs::PathNotExist});
             }
         });
     }
-
 
     Y_UNIT_TEST(DropExternalDataSourceWithReboots) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateExternalDataSource(runtime, t.TxId, "/MyRoot",R"(
+                TestCreateExternalDataSource(runtime, t.TxId, "/MyRoot", R"(
                         Name: "ExternalDataSource"
                         SourceType: "ObjectStorage"
                         Location: "https://s3.cloud.net/my_bucket"
@@ -149,8 +147,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"), {NLs::PathNotExist});
 
                 TestCreateExternalDataSource(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalDataSource"
@@ -166,12 +163,10 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
                 TestDropExternalDataSource(runtime, ++t.TxId, "/MyRoot", "ExternalDataSource");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"), {NLs::PathNotExist});
             }
         });
     }
-
 
     Y_UNIT_TEST(CreateDroppedExternalDataSourceWithReboots) {
         TTestWithReboots t;
@@ -249,8 +244,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"), {NLs::PathNotExist});
             }
         });
     }

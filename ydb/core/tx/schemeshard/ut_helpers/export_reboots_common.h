@@ -13,5 +13,5 @@ void Run(const TVector<TString>& tables, const TString& request, TTestWithReboot
 void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReboots& t);
 void Forget(const TVector<TString>& tables, const TString& request, TTestWithReboots& t);
 
-} // NExportReboots
-} // NSchemeShardUT_Private
+} // namespace NExportReboots
+} // namespace NSchemeShardUT_Private

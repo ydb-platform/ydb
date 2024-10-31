@@ -5,7 +5,9 @@
 
 namespace NKikimr::NOlap::NExport {
 
-NKikimr::TConclusion<TSelectorContainer> TSelectorContainer::BuildFromProto(const NKikimrTxColumnShard::TBackupTxBody& proto) {
+NKikimr::TConclusion<TSelectorContainer> TSelectorContainer::BuildFromProto(
+    const NKikimrTxColumnShard::TBackupTxBody& proto
+) {
     auto parsed = TBackupSelector::BuildFromProto(proto.GetBackupTask());
     if (!parsed) {
         return parsed.GetError();
@@ -13,4 +15,4 @@ NKikimr::TConclusion<TSelectorContainer> TSelectorContainer::BuildFromProto(cons
     return TSelectorContainer(std::make_shared<TBackupSelector>(parsed.DetachResult()));
 }
 
-}
+} // namespace NKikimr::NOlap::NExport

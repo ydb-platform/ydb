@@ -30,8 +30,7 @@ private:
         TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
-        }
+            , Cookie(cookie) {}
 
         void DoSendReply(const TActorContext& ctx) {
             ctx.Send(DestinationForReply, Event.release(), 0, Cookie);
@@ -41,9 +40,13 @@ private:
     std::vector<TReplyInfo> Results;
 
 public:
-    TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
-        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
-        const std::vector<TFailedWrite>& fails);
+    TTxBlobsWritingFinished(
+        TColumnShard* self,
+        const NKikimrProto::EReplyStatus writeStatus,
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions,
+        std::vector<TInsertedPortions>&& packs,
+        const std::vector<TFailedWrite>& fails
+    );
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;

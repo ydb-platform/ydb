@@ -12,6 +12,7 @@ private:
     bool Initialized = false;
     bool Finished = false;
     std::optional<ui64> Generation;
+
 protected:
     virtual std::shared_ptr<IBlobsStorageOperator> DoBuildOperator(const TString& storageId) = 0;
     THashMap<TString, std::shared_ptr<IBlobsStorageOperator>> Constructed;
@@ -69,5 +70,4 @@ public:
     std::shared_ptr<IBlobsStorageOperator> GetOperatorOptional(const TString& storageIdExt) const;
 };
 
-
-}
+} // namespace NKikimr::NOlap

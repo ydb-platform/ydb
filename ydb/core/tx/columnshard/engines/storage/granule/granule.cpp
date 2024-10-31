@@ -10,9 +10,11 @@
 namespace NKikimr::NOlap {
 
 void TGranuleMeta::AppendPortion(const TPortionInfo::TPtr& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+    ("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
     auto it = Portions.find(info->GetPortionId());
-    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
+    AFL_VERIFY(info->GetPathId() == GetPathId())
+    ("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
 
     AFL_VERIFY(info->ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info->DebugString());
 
@@ -25,10 +27,12 @@ void TGranuleMeta::AppendPortion(const TPortionInfo::TPtr& info) {
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", PathId);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "portion_erased_already")("portion_id", portion)("pathId", PathId);
         return false;
     } else {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
     }
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
@@ -37,7 +41,9 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
 }
 
 void TGranuleMeta::OnAfterChangePortion(
-    const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {
+    const std::shared_ptr<TPortionInfo> portionAfter,
+    NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard
+) {
     if (portionAfter) {
         PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
@@ -47,7 +53,9 @@ void TGranuleMeta::OnAfterChangePortion(
             } else {
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
             }
-            NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+            NActualizer::TAddExternalContext context(
+                HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions
+            );
             ActualizationIndex->AddPortion(portionAfter, context);
         }
         Stats->OnAddPortion(*portionAfter);
@@ -119,7 +127,11 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
 }
 
 TGranuleMeta::TGranuleMeta(
-    const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+    const ui64 pathId,
+    const TGranulesStorage& owner,
+    const NColumnShard::TGranuleDataCounters& counters,
+    const TVersionedIndex& versionedIndex
+)
     : PathId(pathId)
     , Counters(counters)
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
@@ -127,8 +139,13 @@ TGranuleMeta::TGranuleMeta(
     , StoragesManager(owner.GetStoragesManager())
     , PortionsIndex(*this, Counters.GetPortionsIndexCounters()) {
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
-        PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
-    OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
+        PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey()
+    );
+    OptimizerPlanner = versionedIndex.GetLastSchema()
+                           ->GetIndexInfo()
+                           .GetCompactionPlannerConstructor()
+                           ->BuildPlanner(context)
+                           .DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_shared<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
@@ -144,7 +161,10 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& por
     }
 }
 
-void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
+void TGranuleMeta::BuildActualizationTasks(
+    NActualizer::TTieringProcessContext& context,
+    const TDuration actualizationLag
+) const {
     if (context.GetActualInstant() < NextActualizations) {
         return;
     }
@@ -153,8 +173,11 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
     NextActualizations = context.GetActualInstant() + actualizationLag;
 }
 
-void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
-    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
+void TGranuleMeta::ResetOptimizer(
+    const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
+    std::shared_ptr<IStoragesManager>& storages,
+    const std::shared_ptr<arrow::Schema>& pkSchema
+) {
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
         return;
     }
@@ -179,7 +202,10 @@ void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, I
 }
 
 void TGranuleMeta::CommitImmediateOnExecute(
-    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const TSnapshot& snapshot,
+    const TPortionDataAccessor& portion
+) const {
     AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
     portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);

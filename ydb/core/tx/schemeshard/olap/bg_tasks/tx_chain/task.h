@@ -9,14 +9,20 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NBackground {
 
-class TTxChainTask: public NBackgroundTasks::TInterfaceProtoAdapter<NKikimrSchemeShardTxBackgroundProto::TTxChainTask, NKikimr::NOlap::NBackground::ITaskDescription> {
+class TTxChainTask
+    : public NBackgroundTasks::TInterfaceProtoAdapter<
+          NKikimrSchemeShardTxBackgroundProto::TTxChainTask,
+          NKikimr::NOlap::NBackground::ITaskDescription> {
 private:
     TTxChainData TxData;
-    using TBase = NBackgroundTasks::TInterfaceProtoAdapter<TProtoStorage, NKikimr::NOlap::NBackground::ITaskDescription>;
+    using TBase =
+        NBackgroundTasks::TInterfaceProtoAdapter<TProtoStorage, NKikimr::NOlap::NBackground::ITaskDescription>;
+
 public:
     static TString GetStaticClassName() {
         return "SS::BG::TX_CHAIN";
     }
+
 private:
     virtual TConclusionStatus DoDeserializeFromProto(const TProtoStorage& proto) override {
         return TxData.DeserializeFromProto(proto.GetCommonData());
@@ -27,18 +33,17 @@ private:
         return result;
     }
     virtual std::shared_ptr<NKikimr::NOlap::NBackground::ISessionLogic> DoBuildSession() const override;
-    static const inline TFactory::TRegistrator<TTxChainTask> Registrator = TFactory::TRegistrator<TTxChainTask>(GetStaticClassName());
+    static const inline TFactory::TRegistrator<TTxChainTask> Registrator =
+        TFactory::TRegistrator<TTxChainTask>(GetStaticClassName());
+
 public:
     TTxChainTask() = default;
 
     TTxChainTask(const TTxChainData& data)
-        : TxData(data)
-    {
-
-    }
+        : TxData(data) {}
     virtual TString GetClassName() const override {
         return GetStaticClassName();
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NBackground

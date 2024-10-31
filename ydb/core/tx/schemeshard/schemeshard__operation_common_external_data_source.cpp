@@ -4,32 +4,28 @@
 
 namespace NKikimr::NSchemeShard::NExternalDataSource {
 
-constexpr uint32_t MAX_FIELD_SIZE    = 1000;
+constexpr uint32_t MAX_FIELD_SIZE = 1000;
 constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
 
-bool ValidateLocationAndInstallation(const TString& location,
-                                     const TString& installation,
-                                     TString& errStr) {
+bool ValidateLocationAndInstallation(const TString& location, const TString& installation, TString& errStr) {
     if (location.size() > MAX_FIELD_SIZE) {
-        errStr =
-            Sprintf("Maximum length of location must be less or equal equal to %u but got %lu",
-                    MAX_FIELD_SIZE,
-                    location.size());
+        errStr = Sprintf(
+            "Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.size()
+        );
         return false;
     }
     if (installation.size() > MAX_FIELD_SIZE) {
         errStr = Sprintf(
             "Maximum length of installation must be less or equal equal to %u but got %lu",
             MAX_FIELD_SIZE,
-            installation.size());
+            installation.size()
+        );
         return false;
     }
     return true;
 }
 
-bool CheckAuth(const TString& authMethod,
-               const TVector<TString>& availableAuthMethods,
-               TString& errStr) {
+bool CheckAuth(const TString& authMethod, const TVector<TString>& availableAuthMethods, TString& errStr) {
     if (Find(availableAuthMethods, authMethod) == availableAuthMethods.end()) {
         errStr = TStringBuilder{} << authMethod << " isn't supported for this source type";
         return false;
@@ -38,26 +34,29 @@ bool CheckAuth(const TString& authMethod,
     return true;
 }
 
-bool ValidateProperties(const NKikimrSchemeOp::TExternalDataSourceProperties& properties,
-                        TString& errStr) {
+bool ValidateProperties(const NKikimrSchemeOp::TExternalDataSourceProperties& properties, TString& errStr) {
     if (properties.ByteSizeLong() > MAX_PROTOBUF_SIZE) {
-        errStr =
-            Sprintf("Maximum size of properties must be less or equal equal to %u but got %lu",
-                    MAX_PROTOBUF_SIZE,
-                    properties.ByteSizeLong());
+        errStr = Sprintf(
+            "Maximum size of properties must be less or equal equal to %u but got %lu",
+            MAX_PROTOBUF_SIZE,
+            properties.ByteSizeLong()
+        );
         return false;
     }
     return true;
 }
 
-bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
-                  const NExternalSource::IExternalSource::TPtr& source,
-                  TString& errStr) {
+bool ValidateAuth(
+    const NKikimrSchemeOp::TAuth& auth,
+    const NExternalSource::IExternalSource::TPtr& source,
+    TString& errStr
+) {
     if (auth.ByteSizeLong() > MAX_PROTOBUF_SIZE) {
         errStr = Sprintf(
             "Maximum size of authorization information must be less or equal equal to %u but got %lu",
             MAX_PROTOBUF_SIZE,
-            auth.ByteSizeLong());
+            auth.ByteSizeLong()
+        );
         return false;
     }
     const auto availableAuthMethods = source->GetAuthMethods();
@@ -82,30 +81,29 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
     return false;
 }
 
-bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
-              const NExternalSource::IExternalSourceFactory::TPtr& factory,
-              TString& errStr) {
+bool Validate(
+    const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
+    const NExternalSource::IExternalSourceFactory::TPtr& factory,
+    TString& errStr
+) {
     try {
         const auto source = factory->GetOrCreate(desc.GetSourceType());
         source->ValidateExternalDataSource(desc.SerializeAsString());
-        return ValidateLocationAndInstallation(desc.GetLocation(),
-                                               desc.GetInstallation(),
-                                               errStr) &&
-               ValidateAuth(desc.GetAuth(), source, errStr) &&
-               ValidateProperties(desc.GetProperties(), errStr);
+        return ValidateLocationAndInstallation(desc.GetLocation(), desc.GetInstallation(), errStr) &&
+               ValidateAuth(desc.GetAuth(), source, errStr) && ValidateProperties(desc.GetProperties(), errStr);
     } catch (...) {
         errStr = CurrentExceptionMessage();
         return false;
     }
 }
 
-TExternalDataSourceInfo::TPtr CreateExternalDataSource(
-    const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion) {
+TExternalDataSourceInfo::TPtr
+CreateExternalDataSource(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion) {
     TExternalDataSourceInfo::TPtr externalDataSoureInfo = new TExternalDataSourceInfo;
-    externalDataSoureInfo->SourceType                   = desc.GetSourceType();
-    externalDataSoureInfo->Location                     = desc.GetLocation();
-    externalDataSoureInfo->Installation                 = desc.GetInstallation();
-    externalDataSoureInfo->AlterVersion                 = alterVersion;
+    externalDataSoureInfo->SourceType = desc.GetSourceType();
+    externalDataSoureInfo->Location = desc.GetLocation();
+    externalDataSoureInfo->Installation = desc.GetInstallation();
+    externalDataSoureInfo->AlterVersion = alterVersion;
     externalDataSoureInfo->Auth.CopyFrom(desc.GetAuth());
     externalDataSoureInfo->Properties.CopyFrom(desc.GetProperties());
     return externalDataSoureInfo;

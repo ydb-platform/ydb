@@ -17,6 +17,7 @@ namespace NKikimr::NLimiter {
 class TCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+
 public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueCount;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueVolume;
@@ -37,8 +38,7 @@ public:
         , InProgressCount(TBase::GetValue("InProgress/Count"))
         , InProgressVolume(TBase::GetValue("InProgress/Volume"))
         , InProgressStart(TBase::GetDeriviative("InProgress"))
-        , WaitingHistogram(TBase::GetHistogram("Waiting", NMonitoring::ExponentialHistogram(20, 2))) {
-    }
+        , WaitingHistogram(TBase::GetHistogram("Waiting", NMonitoring::ExponentialHistogram(20, 2))) {}
 };
 
 class TLimiterActor: public NActors::TActorBootstrapped<TLimiterActor> {
@@ -50,24 +50,22 @@ private:
     private:
         YDB_READONLY(TMonotonic, Instant, TMonotonic::Zero());
         YDB_READONLY_DEF(std::shared_ptr<IResourceRequest>, Request);
+
     public:
         TResourceRequest(const TMonotonic instant, const std::shared_ptr<IResourceRequest>& req)
             : Instant(instant)
-            , Request(req) {
-
-        }
+            , Request(req) {}
     };
 
     class TResourceRequestInFlight {
     private:
         YDB_READONLY(TMonotonic, Instant, TMonotonic::Zero());
         YDB_READONLY(ui64, Volume, 0);
+
     public:
         TResourceRequestInFlight(const TMonotonic instant, const ui64 volume)
             : Instant(instant)
-            , Volume(volume) {
-
-        }
+            , Volume(volume) {}
     };
 
     ui64 VolumeInFlight = 0;
@@ -79,23 +77,27 @@ private:
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
 
 public:
-
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternal::TEvAskResource, HandleMain);
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
-        default:
-            AFL_ERROR(NKikimrServices::TX_LIMITER)("limiter", LimiterName)("problem", "unexpected event")("type", ev->GetTypeRewrite());
-            AFL_VERIFY_DEBUG(false)("type", ev->GetTypeRewrite());
-            break;
+            default:
+                AFL_ERROR(NKikimrServices::TX_LIMITER)
+                ("limiter", LimiterName)("problem", "unexpected event")("type", ev->GetTypeRewrite());
+                AFL_VERIFY_DEBUG(false)("type", ev->GetTypeRewrite());
+                break;
         }
     }
 
-    TLimiterActor(const TConfig& config, const TString& limiterName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseCounters);
+    TLimiterActor(
+        const TConfig& config,
+        const TString& limiterName,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> baseCounters
+    );
 
     void Bootstrap() {
         Become(&TLimiterActor::StateMain);
     }
 };
 
-}
+} // namespace NKikimr::NLimiter

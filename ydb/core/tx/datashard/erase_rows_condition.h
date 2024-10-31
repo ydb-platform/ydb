@@ -25,5 +25,5 @@ public:
 IEraseRowsCondition* CreateEraseRowsCondition(const NKikimrTxDataShard::TEvEraseRowsRequest& request);
 IEraseRowsCondition* CreateEraseRowsCondition(const NKikimrTxDataShard::TEvConditionalEraseRowsRequest& request);
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

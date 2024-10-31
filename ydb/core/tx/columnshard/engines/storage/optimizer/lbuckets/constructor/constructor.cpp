@@ -3,7 +3,8 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
+NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>>
+TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
     return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema());
 }
 
@@ -27,7 +28,8 @@ void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
 
 bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     if (!proto.HasLBuckets()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse l-buckets optimizer from proto")("proto", proto.DebugString());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "cannot parse l-buckets optimizer from proto")("proto", proto.DebugString());
         return false;
     }
     return true;

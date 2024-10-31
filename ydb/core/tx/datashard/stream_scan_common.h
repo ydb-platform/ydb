@@ -27,10 +27,7 @@ struct TLimits {
 class TBuffer {
 public:
     inline void AddRow(TArrayRef<const TCell> key, TArrayRef<const TCell> value) {
-        const auto& [k, v] = Data.emplace_back(
-            TSerializedCellVec(key),
-            TSerializedCellVec(value)
-        );
+        const auto& [k, v] = Data.emplace_back(TSerializedCellVec(key), TSerializedCellVec(value));
         ByteSize += k.GetBuffer().size() + v.GetBuffer().size();
     }
 

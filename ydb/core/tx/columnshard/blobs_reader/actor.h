@@ -13,6 +13,7 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 class TActor: public TActorBootstrapped<TActor> {
 private:
     std::shared_ptr<ITask> Task;
+
 public:
     static TAtomicCounter WaitingBlobsCount;
     TActor(const std::shared_ptr<ITask>& task);
@@ -22,7 +23,8 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event_type", ev->GetTypeName());
+        TLogContextGuard gLogging =
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event_type", ev->GetTypeName());
         switch (ev->GetTypeRewrite()) {
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
             default:
@@ -33,4 +35,4 @@ public:
     ~TActor();
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NRead

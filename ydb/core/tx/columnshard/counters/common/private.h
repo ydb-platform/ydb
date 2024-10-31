@@ -6,7 +6,8 @@
 namespace NKikimr::NColumnShard::NPrivate {
 class TAggregationsController {
 public:
-    static std::shared_ptr<TValueAggregationAgent> GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner);
+    static std::shared_ptr<TValueAggregationAgent>
+    GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner);
 };
 
-}
+} // namespace NKikimr::NColumnShard::NPrivate

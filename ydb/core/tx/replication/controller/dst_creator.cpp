@@ -39,8 +39,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     STATEFN(StateResolveDatabase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -54,12 +54,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             << ": entry# " << entry.ToString());
 
         switch (entry.Status) {
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-            break;
-        default:
-            LOG_W("Unexpected status"
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                break;
+            default:
+                LOG_W("Unexpected status"
                 << ": entry# " << entry.ToString());
-            return Error(NKikimrScheme::StatusSchemeError, "Cannot resolve domain info");
+                return Error(NKikimrScheme::StatusSchemeError, "Cannot resolve domain info");
         }
 
         if (!DomainKey) {
@@ -95,8 +95,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             sFunc(TEvents::TEvUndelivered, DescribeSrcPath);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -110,16 +110,20 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Become(&TThis::StateDescribeSrcPath);
 
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-            if (bootstrap) {
-                GetTableProfiles();
-            } else {
-                Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()
-                    .WithKeyShardBoundary(true)));
-            }
-            break;
-        case TReplication::ETargetKind::IndexTable:
-            Y_ABORT("unreachable");
+            case TReplication::ETargetKind::Table:
+                if (bootstrap) {
+                    GetTableProfiles();
+                } else {
+                    Send(
+                        YdbProxy,
+                        new TEvYdbProxy::TEvDescribeTableRequest(
+                            SrcPath, NYdb::NTable::TDescribeTableSettings().WithKeyShardBoundary(true)
+                        )
+                    );
+                }
+                break;
+            case TReplication::ETargetKind::IndexTable:
+                Y_ABORT("unreachable");
         }
     }
 
@@ -127,27 +131,27 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DescribeSrcPath);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
     static NKikimrScheme::EStatus ConvertStatus(NYdb::EStatus status) {
         switch (status) {
-        case NYdb::EStatus::SUCCESS:
-            return NKikimrScheme::StatusSuccess;
-        case NYdb::EStatus::BAD_REQUEST:
-            return NKikimrScheme::StatusInvalidParameter;
-        case NYdb::EStatus::UNAUTHORIZED:
-            return NKikimrScheme::StatusAccessDenied;
-        case NYdb::EStatus::SCHEME_ERROR:
-            return NKikimrScheme::StatusSchemeError;
-        case NYdb::EStatus::PRECONDITION_FAILED:
-            return NKikimrScheme::StatusPreconditionFailed;
-        case NYdb::EStatus::ALREADY_EXISTS:
-            return NKikimrScheme::StatusAlreadyExists;
-        default:
-            return NKikimrScheme::StatusNotAvailable;
+            case NYdb::EStatus::SUCCESS:
+                return NKikimrScheme::StatusSuccess;
+            case NYdb::EStatus::BAD_REQUEST:
+                return NKikimrScheme::StatusInvalidParameter;
+            case NYdb::EStatus::UNAUTHORIZED:
+                return NKikimrScheme::StatusAccessDenied;
+            case NYdb::EStatus::SCHEME_ERROR:
+                return NKikimrScheme::StatusSchemeError;
+            case NYdb::EStatus::PRECONDITION_FAILED:
+                return NKikimrScheme::StatusPreconditionFailed;
+            case NYdb::EStatus::ALREADY_EXISTS:
+                return NKikimrScheme::StatusAlreadyExists;
+            default:
+                return NKikimrScheme::StatusNotAvailable;
         }
     }
 
@@ -162,9 +166,12 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return Retry();
             }
 
-            return Error(ConvertStatus(result.GetStatus()), TStringBuilder() << "Cannot describe table"
-                << ": status: " << result.GetStatus()
-                << ", issue: " << result.GetIssues().ToOneLineString());
+            return Error(
+                ConvertStatus(result.GetStatus()),
+                TStringBuilder() << "Cannot describe table"
+                                 << ": status: " << result.GetStatus()
+                                 << ", issue: " << result.GetIssues().ToOneLineString()
+            );
         }
 
         Ydb::Table::CreateTableRequest scheme;
@@ -174,13 +181,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         auto& indexes = *scheme.mutable_indexes();
         for (auto it = indexes.begin(); it != indexes.end();) {
             switch (it->type_case()) {
-            case Ydb::Table::TableIndex::kGlobalIndex:
-            case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-                ++it;
-                continue;
-            default:
-                it = indexes.erase(it);
-                break;
+                case Ydb::Table::TableIndex::kGlobalIndex:
+                case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                    ++it;
+                    continue;
+                default:
+                    it = indexes.erase(it);
+                    break;
             }
         }
 
@@ -239,8 +246,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     STATEFN(StateAllocateTxId) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -269,8 +276,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             sFunc(TEvents::TEvWakeup, AllocateTxId);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -279,24 +286,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
-        case NKikimrScheme::StatusAccepted:
-            if (!NeedToCheck) {
-                DstPathId = TPathId(SchemeShardId, record.GetPathId());
-            }
-            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
-            return SubscribeTx(record.GetTxId());
-        case NKikimrScheme::StatusMultipleModifications:
-            if (record.HasPathCreateTxId()) {
-                NeedToCheck = true;
-                return SubscribeTx(record.GetPathCreateTxId());
-            } else {
+            case NKikimrScheme::StatusAccepted:
+                if (!NeedToCheck) {
+                    DstPathId = TPathId(SchemeShardId, record.GetPathId());
+                }
+                Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
+                return SubscribeTx(record.GetTxId());
+            case NKikimrScheme::StatusMultipleModifications:
+                if (record.HasPathCreateTxId()) {
+                    NeedToCheck = true;
+                    return SubscribeTx(record.GetPathCreateTxId());
+                } else {
+                    return Error(record.GetStatus(), record.GetReason());
+                }
+                break;
+            case NKikimrScheme::StatusAlreadyExists:
+                return DescribeDstPath();
+            default:
                 return Error(record.GetStatus(), record.GetReason());
-            }
-            break;
-        case NKikimrScheme::StatusAlreadyExists:
-            return DescribeDstPath();
-        default:
-            return Error(record.GetStatus(), record.GetReason());
         }
     }
 
@@ -325,8 +332,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(TEvents::TEvWakeup, DescribeDstPath);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -361,10 +368,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     bool CheckScheme(const NKikimrSchemeOp::TPathDescription& desc, TString& error) const {
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-            return CheckTableScheme(desc.GetTable(), error);
-        case TReplication::ETargetKind::IndexTable:
-            Y_ABORT("unreachable");
+            case TReplication::ETargetKind::Table:
+                return CheckTableScheme(desc.GetTable(), error);
+            case TReplication::ETargetKind::IndexTable:
+                Y_ABORT("unreachable");
         }
     }
 
@@ -377,20 +384,20 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto& replicationConfig = got.GetReplicationConfig();
 
         switch (replicationConfig.GetMode()) {
-        case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
-            break;
-        default:
-            error = "Unsupported replication mode";
-            return false;
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
+                break;
+            default:
+                error = "Unsupported replication mode";
+                return false;
         }
 
         switch (replicationConfig.GetConsistency()) {
-        case NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK:
-            break;
-        default:
-            error = TStringBuilder() << "Unsupported replication consistency"
-                << ": " << static_cast<int>(replicationConfig.GetConsistency());
-            return false;
+            case NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK:
+                break;
+            default:
+                error = TStringBuilder() << "Unsupported replication consistency"
+                                         << ": " << static_cast<int>(replicationConfig.GetConsistency());
+                return false;
         }
 
         const NKikimrSchemeOp::TIndexedTableCreationConfig* indexedDesc = nullptr;
@@ -407,17 +414,16 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         // check key
         if (tableDesc->KeyColumnNamesSize() != got.KeyColumnNamesSize()) {
             error = TStringBuilder() << "Key columns size mismatch"
-                << ": expected: " << tableDesc->KeyColumnNamesSize()
-                << ", got: " << got.KeyColumnNamesSize();
+                                     << ": expected: " << tableDesc->KeyColumnNamesSize()
+                                     << ", got: " << got.KeyColumnNamesSize();
             return false;
         }
 
         for (ui32 i = 0; i < tableDesc->KeyColumnNamesSize(); ++i) {
             if (tableDesc->GetKeyColumnNames(i) != got.GetKeyColumnNames(i)) {
                 error = TStringBuilder() << "Key column name mismatch"
-                    << ": position: " << i
-                    << ", expected: " << tableDesc->GetKeyColumnNames(i)
-                    << ", got: " << got.GetKeyColumnNames(i);
+                                         << ": position: " << i << ", expected: " << tableDesc->GetKeyColumnNames(i)
+                                         << ", got: " << got.GetKeyColumnNames(i);
                 return false;
             }
         }
@@ -430,8 +436,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         if (tableDesc->ColumnsSize() != columns.size()) {
             error = TStringBuilder() << "Columns size mismatch"
-                << ": expected: " << tableDesc->ColumnsSize()
-                << ", got: " << columns.size();
+                                     << ": expected: " << tableDesc->ColumnsSize() << ", got: " << columns.size();
             return false;
         }
 
@@ -439,15 +444,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             auto it = columns.find(column.GetName());
             if (it == columns.end()) {
                 error = TStringBuilder() << "Cannot find column"
-                    << ": name: " << column.GetName();
+                                         << ": name: " << column.GetName();
                 return false;
             }
 
             if (column.GetType() != it->second) {
                 error = TStringBuilder() << "Column type mismatch"
-                    << ": name: " << column.GetName()
-                    << ", expected: " << column.GetType()
-                    << ", got: " << it->second;
+                                         << ": name: " << column.GetName() << ", expected: " << column.GetType()
+                                         << ", got: " << it->second;
                 return false;
             }
         }
@@ -461,8 +465,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         if (!indexedDesc) {
             if (!indexes.empty()) {
                 error = TStringBuilder() << "Indexes size mismatch"
-                    << ": expected: " << 0
-                    << ", got: " << indexes.size();
+                                         << ": expected: " << 0 << ", got: " << indexes.size();
                 return false;
             }
 
@@ -471,8 +474,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         if (indexedDesc->IndexDescriptionSize() != indexes.size()) {
             error = TStringBuilder() << "Indexes size mismatch"
-                << ": expected: " << indexedDesc->IndexDescriptionSize()
-                << ", got: " << indexes.size();
+                                     << ": expected: " << indexedDesc->IndexDescriptionSize()
+                                     << ", got: " << indexes.size();
             return false;
         }
 
@@ -480,52 +483,50 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             auto it = indexes.find(index.GetName());
             if (it == indexes.end()) {
                 error = TStringBuilder() << "Cannot find index"
-                    << ": name: " << index.GetName();
+                                         << ": name: " << index.GetName();
                 return false;
             }
 
             if (index.GetType() != it->second->GetType()) {
                 error = TStringBuilder() << "Index type mismatch"
-                    << ": name: " << index.GetName()
-                    << ", expected: " << NKikimrSchemeOp::EIndexType_Name(index.GetType())
-                    << ", got: " << NKikimrSchemeOp::EIndexType_Name(it->second->GetType());
+                                         << ": name: " << index.GetName()
+                                         << ", expected: " << NKikimrSchemeOp::EIndexType_Name(index.GetType())
+                                         << ", got: " << NKikimrSchemeOp::EIndexType_Name(it->second->GetType());
                 return false;
             }
 
             if (index.KeyColumnNamesSize() != it->second->KeyColumnNamesSize()) {
                 error = TStringBuilder() << "Index key columns size mismatch"
-                    << ": name: " << index.GetName()
-                    << ", expected: " << index.KeyColumnNamesSize()
-                    << ", got: " << it->second->KeyColumnNamesSize();
+                                         << ": name: " << index.GetName()
+                                         << ", expected: " << index.KeyColumnNamesSize()
+                                         << ", got: " << it->second->KeyColumnNamesSize();
                 return false;
             }
 
             for (ui32 i = 0; i < index.KeyColumnNamesSize(); ++i) {
                 if (index.GetKeyColumnNames(i) != it->second->GetKeyColumnNames(i)) {
                     error = TStringBuilder() << "Index key column name mismatch"
-                        << ": name: " << index.GetName()
-                        << ", position: " << i
-                        << ", expected: " << index.GetKeyColumnNames(i)
-                        << ", got: " << it->second->GetKeyColumnNames(i);
+                                             << ": name: " << index.GetName() << ", position: " << i
+                                             << ", expected: " << index.GetKeyColumnNames(i)
+                                             << ", got: " << it->second->GetKeyColumnNames(i);
                     return false;
                 }
             }
 
             if (index.DataColumnNamesSize() != it->second->DataColumnNamesSize()) {
                 error = TStringBuilder() << "Index data columns size mismatch"
-                    << ": name: " << index.GetName()
-                    << ", expected: " << index.DataColumnNamesSize()
-                    << ", got: " << it->second->DataColumnNamesSize();
+                                         << ": name: " << index.GetName()
+                                         << ", expected: " << index.DataColumnNamesSize()
+                                         << ", got: " << it->second->DataColumnNamesSize();
                 return false;
             }
 
             for (ui32 i = 0; i < index.DataColumnNamesSize(); ++i) {
                 if (index.GetDataColumnNames(i) != it->second->GetDataColumnNames(i)) {
                     error = TStringBuilder() << "Index data column name mismatch"
-                        << ": name: " << index.GetName()
-                        << ", position: " << i
-                        << ", expected: " << index.GetDataColumnNames(i)
-                        << ", got: " << it->second->GetDataColumnNames(i);
+                                             << ": name: " << index.GetName() << ", position: " << i
+                                             << ", expected: " << index.GetDataColumnNames(i)
+                                             << ", got: " << it->second->GetDataColumnNames(i);
                     return false;
                 }
             }
@@ -542,8 +543,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     STATEFN(StateSubscribeDstPath) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardEvents::TEvNotifyUpdate, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -614,15 +615,16 @@ public:
     }
 
     explicit TDstCreator(
-            const TActorId& parent,
-            ui64 schemeShardId,
-            const TActorId& proxy,
-            const TPathId& pathId,
-            ui64 rid,
-            ui64 tid,
-            TReplication::ETargetKind kind,
-            const TString& srcPath,
-            const TString& dstPath)
+        const TActorId& parent,
+        ui64 schemeShardId,
+        const TActorId& proxy,
+        const TPathId& pathId,
+        ui64 rid,
+        ui64 tid,
+        TReplication::ETargetKind kind,
+        const TString& srcPath,
+        const TString& dstPath
+    )
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -632,17 +634,15 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , DstPath(dstPath)
-        , LogPrefix("DstCreator", ReplicationId, TargetId)
-    {
-    }
+        , LogPrefix("DstCreator", ReplicationId, TargetId) {}
 
     void Bootstrap() {
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-            return Resolve(PathId);
-        case TReplication::ETargetKind::IndexTable:
+            case TReplication::ETargetKind::Table:
+                return Resolve(PathId);
+            case TReplication::ETargetKind::IndexTable:
             // indexed table will be created along with its indexes
-            return SubscribeDstPath();
+                return SubscribeDstPath();
         }
     }
 
@@ -682,14 +682,31 @@ private:
 IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath());
+    return CreateDstCreator(
+        ctx.SelfID,
+        replication->GetSchemeShardId(),
+        replication->GetYdbProxy(),
+        replication->GetPathId(),
+        replication->GetId(),
+        target->GetId(),
+        target->GetKind(),
+        target->GetSrcPath(),
+        target->GetDstPath()
+    );
 }
 
-IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TPathId& pathId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath)
-{
+IActor* CreateDstCreator(
+    const TActorId& parent,
+    ui64 schemeShardId,
+    const TActorId& proxy,
+    const TPathId& pathId,
+    ui64 rid,
+    ui64 tid,
+    TReplication::ETargetKind kind,
+    const TString& srcPath,
+    const TString& dstPath
+) {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

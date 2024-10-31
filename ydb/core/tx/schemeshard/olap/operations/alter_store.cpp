@@ -10,10 +10,11 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TOlapStoreInfo::TPtr ParseParams(const TOlapStoreInfo::TPtr& storeInfo,
-        const NKikimrSchemeOp::TAlterColumnStore& alter,
-        IErrorCollector& errors)
-{
+TOlapStoreInfo::TPtr ParseParams(
+    const TOlapStoreInfo::TPtr& storeInfo,
+    const NKikimrSchemeOp::TAlterColumnStore& alter,
+    IErrorCollector& errors
+) {
     if (!alter.GetRemoveSchemaPresets().empty()) {
         errors.AddError(NKikimrScheme::StatusInvalidParameter, "Removing schema presets is not supported yet");
         return nullptr;
@@ -48,12 +49,18 @@ TOlapStoreInfo::TPtr ParseParams(const TOlapStoreInfo::TPtr& storeInfo,
     for (const auto& alterProto : alter.GetAlterSchemaPresets()) {
         const TString& presetName = alterProto.GetName();
         if (alteredSchemaPresets.contains(presetName)) {
-            errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Cannot alter schema preset '" << presetName << "' multiple times");
+            errors.AddError(
+                NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "Cannot alter schema preset '" << presetName << "' multiple times"
+            );
             return nullptr;
         }
 
         if (!storeInfo->SchemaPresetByName.contains(presetName)) {
-            errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Cannot alter unknown schema preset '" << presetName << "'");
+            errors.AddError(
+                NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "Cannot alter unknown schema preset '" << presetName << "'"
+            );
         }
 
         TOlapSchemaUpdate schemaUpdate;
@@ -72,20 +79,18 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterOlapStore TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterOlapStore TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -152,8 +157,10 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody, seqNo,
-                    context.SS->SelectProcessingParams(txState->TargetPathId));
+                    columnShardTxBody,
+                    seqNo,
+                    context.SS->SelectProcessingParams(txState->TargetPathId)
+                );
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
@@ -176,18 +183,17 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterOlapStore TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterOlapStore TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType}
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -271,19 +277,19 @@ private:
     bool TablesInitialized = false;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterOlapStore TProposedWaitParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TProposedWaitParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
             {TEvHive::TEvCreateTabletReply::EventType,
              TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
@@ -317,7 +323,8 @@ public:
                 TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
                 switch (shard.TabletType) {
                     case ETabletType::ColumnShard: {
-                        auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                        auto event =
+                            std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
 
                         context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
                         txState->ShardsInProgress.insert(shard.Idx);
@@ -411,29 +418,29 @@ class TAlterOlapStore: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -466,7 +473,8 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!alter.HasName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "No store name in Alter");
@@ -482,8 +490,7 @@ public:
         TPath path = parentPath.Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -526,7 +533,7 @@ public:
             return result;
         }
 
-        for (auto&& tPathId: alterData->ColumnTables) {
+        for (auto&& tPathId : alterData->ColumnTables) {
             auto table = context.SS->ColumnTables.GetVerifiedPtr(tPathId);
             if (!table->Description.HasTtlSettings()) {
                 continue;
@@ -539,10 +546,14 @@ public:
         }
 
         if (!AppData()->FeatureFlags.GetEnableSparsedColumns()) {
-            for (auto& [_, preset]: alterData->SchemaPresets) {
-                for (auto& [_, column]: preset.GetColumns().GetColumns()) {
-                    if (column.GetDefaultValue().GetValue() || (column.GetAccessorConstructor().GetClassName() == NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
-                        result->SetError(NKikimrScheme::StatusSchemeError,"schema update error: sparsed columns are disabled");
+            for (auto& [_, preset] : alterData->SchemaPresets) {
+                for (auto& [_, column] : preset.GetColumns().GetColumns()) {
+                    if (column.GetDefaultValue().GetValue() ||
+                        (column.GetAccessorConstructor().GetClassName() ==
+                         NKikimr::NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName)) {
+                        result->SetError(
+                            NKikimrScheme::StatusSchemeError, "schema update error: sparsed columns are disabled"
+                        );
                         return result;
                     }
                 }
@@ -566,7 +577,9 @@ public:
 
         for (auto shardIdx : storeInfo->GetColumnShards()) {
             Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
-            txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
+            txState.Shards.emplace_back(
+                shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts
+            );
 
             context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
             context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
@@ -600,7 +613,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -613,4 +626,4 @@ ISubOperation::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState sta
     return MakeSubOperation<TAlterOlapStore>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

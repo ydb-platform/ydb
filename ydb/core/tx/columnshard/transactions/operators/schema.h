@@ -7,12 +7,15 @@
 
 namespace NKikimr::NColumnShard {
 
-class TSchemaTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TSchemaTransactionOperator> {
+class TSchemaTransactionOperator
+    : public IProposeTxOperator
+    , public TMonitoringObjectsCounter<TSchemaTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;
 
     using TProposeResult = TTxController::TProposeResult;
-    static inline auto Registrator = TFactory::TRegistrator<TSchemaTransactionOperator>(NKikimrTxColumnShard::TX_KIND_SCHEMA);
+    static inline auto Registrator =
+        TFactory::TRegistrator<TSchemaTransactionOperator>(NKikimrTxColumnShard::TX_KIND_SCHEMA);
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
@@ -37,12 +40,12 @@ private:
         return result;
     }
 
-    virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual TTxController::TProposeResult
+    DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) override;
-    virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
-    }
-    virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
-    }
+    virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/)
+        override {}
+    virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {}
     virtual TString DoGetOpType() const override {
         switch (SchemaTxBody.TxBody_case()) {
             case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
@@ -73,7 +76,11 @@ private:
                 return false;
             }
             TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
-                owner, SchemaTxBody.GetGranuleShardingInfo().GetPathId(), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+                owner,
+                SchemaTxBody.GetGranuleShardingInfo().GetPathId(),
+                SchemaTxBody.GetGranuleShardingInfo().GetVersionId(),
+                infoContainer
+            );
         }
         return true;
     }
@@ -82,7 +89,10 @@ public:
     using TBase::TBase;
 
     virtual bool ProgressOnExecute(
-        TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
+        TColumnShard& owner,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    ) override {
         if (!!TxAddSharding) {
             auto* tx = dynamic_cast<TTxAddShardingInfo*>(TxAddSharding.get());
             AFL_VERIFY(tx);
@@ -105,7 +115,9 @@ public:
             ctx.Send(subscriber, event.Release(), 0, 0);
         }
 
-        auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, TxInfo.TxId, NKikimrTxColumnShard::SUCCESS);
+        auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
+            owner.TabletID(), TxInfo.TxKind, TxInfo.TxId, NKikimrTxColumnShard::SUCCESS
+        );
         result->Record.SetStep(TxInfo.PlanStep);
         ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         return true;
@@ -123,13 +135,16 @@ public:
     }
 
 private:
-    TConclusionStatus ValidateTables(::google::protobuf::RepeatedPtrField<::NKikimrTxColumnShard::TCreateTable> tables) const;
+    TConclusionStatus ValidateTables(::google::protobuf::RepeatedPtrField<::NKikimrTxColumnShard::TCreateTable> tables
+    ) const;
 
     TConclusionStatus ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const;
 
     TConclusionStatus ValidateTablePreset(const NKikimrSchemeOp::TColumnTableSchemaPreset& preset) const {
         if (preset.HasName() && preset.GetName() != "default") {
-            return TConclusionStatus::Fail("Preset name must be empty or 'default', but '" + preset.GetName() + "' got");
+            return TConclusionStatus::Fail(
+                "Preset name must be empty or 'default', but '" + preset.GetName() + "' got"
+            );
         }
         return ValidateTableSchema(preset.GetSchema());
     }

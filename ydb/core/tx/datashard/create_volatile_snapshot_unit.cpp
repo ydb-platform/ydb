@@ -5,11 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCreateVolatileSnapshotUnit : public TExecutionUnit {
+class TCreateVolatileSnapshotUnit: public TExecutionUnit {
 public:
     TCreateVolatileSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CreateVolatileSnapshot, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::CreateVolatileSnapshot, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -43,8 +42,7 @@ public:
             timeout = TDuration::MilliSeconds(params.GetTimeoutMs());
         }
 
-        bool added = DataShard.GetSnapshotManager().AddSnapshot(
-                txc.DB, key, params.GetName(), flags, timeout);
+        bool added = DataShard.GetSnapshotManager().AddSnapshot(txc.DB, key, params.GetName(), flags, timeout);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
@@ -64,10 +62,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateCreateVolatileSnapshotUnit(
-        TDataShard& dataShard,
-        TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateCreateVolatileSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TCreateVolatileSnapshotUnit(dataShard, pipeline));
 }
 

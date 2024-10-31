@@ -8,11 +8,11 @@ using namespace NTabletFlatExecutor;
 ////////////////////////////////////////////////////////////////////////////////
 
 TDataShard::TTxRefreshVolatileSnapshot::TTxRefreshVolatileSnapshot(
-        TDataShard* ds,
-        TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev)
+    TDataShard* ds,
+    TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev
+)
     : TBase(ds)
-    , Ev(std::move(ev))
-{ }
+    , Ev(std::move(ev)) {}
 
 bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const TActorContext& ctx) {
     using TResponse = NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse;
@@ -20,10 +20,8 @@ bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const
     const auto& record = Ev->Get()->Record;
 
     const auto key = Self->GetSnapshotManager().ExpandSnapshotKey(
-            record.GetOwnerId(),
-            record.GetPathId(),
-            record.GetStep(),
-            record.GetTxId());
+        record.GetOwnerId(), record.GetPathId(), record.GetStep(), record.GetTxId()
+    );
 
     Reply.Reset(new TEvDataShard::TEvRefreshVolatileSnapshotResponse);
     Reply->Record.SetOrigin(Self->TabletID());
@@ -32,17 +30,14 @@ bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const
     Reply->Record.SetStep(key.Step);
     Reply->Record.SetTxId(key.TxId);
 
-    if (Self->State == TShardState::WaitScheme ||
-        Self->State == TShardState::SplitDstReceivingSnapshot)
-    {
+    if (Self->State == TShardState::WaitScheme || Self->State == TShardState::SplitDstReceivingSnapshot) {
         Reply->Record.SetStatus(TResponse::SNAPSHOT_NOT_READY);
         return true;
     }
 
-    const bool refreshAllowed = (
-        Self->State == TShardState::Ready ||
-        Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-        Self->State == TShardState::SplitSrcMakeSnapshot);
+    const bool refreshAllowed =
+        (Self->State == TShardState::Ready || Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
+         Self->State == TShardState::SplitSrcMakeSnapshot);
 
     if (Self->SrcSplitDescription && !refreshAllowed) {
         Reply->Record.SetStatus(TResponse::SNAPSHOT_TRANSFERRED);
@@ -77,11 +72,11 @@ void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) 
 ////////////////////////////////////////////////////////////////////////////////
 
 TDataShard::TTxDiscardVolatileSnapshot::TTxDiscardVolatileSnapshot(
-        TDataShard* ds,
-        TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr ev)
+    TDataShard* ds,
+    TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr ev
+)
     : TBase(ds)
-    , Ev(std::move(ev))
-{ }
+    , Ev(std::move(ev)) {}
 
 bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, const TActorContext&) {
     using TResponse = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse;
@@ -89,10 +84,8 @@ bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, c
     const auto& record = Ev->Get()->Record;
 
     const auto key = Self->GetSnapshotManager().ExpandSnapshotKey(
-            record.GetOwnerId(),
-            record.GetPathId(),
-            record.GetStep(),
-            record.GetTxId());
+        record.GetOwnerId(), record.GetPathId(), record.GetStep(), record.GetTxId()
+    );
 
     Reply.Reset(new TEvDataShard::TEvDiscardVolatileSnapshotResponse);
     Reply->Record.SetOrigin(Self->TabletID());
@@ -101,17 +94,14 @@ bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, c
     Reply->Record.SetStep(key.Step);
     Reply->Record.SetTxId(key.TxId);
 
-    if (Self->State == TShardState::WaitScheme ||
-        Self->State == TShardState::SplitDstReceivingSnapshot)
-    {
+    if (Self->State == TShardState::WaitScheme || Self->State == TShardState::SplitDstReceivingSnapshot) {
         Reply->Record.SetStatus(TResponse::SNAPSHOT_NOT_READY);
         return true;
     }
 
-    const bool discardAllowed = (
-        Self->State == TShardState::Ready ||
-        Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-        Self->State == TShardState::SplitSrcMakeSnapshot);
+    const bool discardAllowed =
+        (Self->State == TShardState::Ready || Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
+         Self->State == TShardState::SplitSrcMakeSnapshot);
 
     if (Self->SrcSplitDescription && !discardAllowed) {
         Reply->Record.SetStatus(TResponse::SNAPSHOT_TRANSFERRED);
@@ -148,8 +138,7 @@ void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) 
 ////////////////////////////////////////////////////////////////////////////////
 
 TDataShard::TTxCleanupRemovedSnapshots::TTxCleanupRemovedSnapshots(TDataShard* ds)
-    : TBase(ds)
-{ }
+    : TBase(ds) {}
 
 bool TDataShard::TTxCleanupRemovedSnapshots::Execute(TTransactionContext& txc, const TActorContext&) {
     Self->GetSnapshotManager().CleanupRemovedSnapshots(txc.DB);

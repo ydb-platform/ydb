@@ -10,11 +10,12 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-void PrepareChanges(TOperationId operationId,
-                    TPathElement::TPtr item,
-                    TKesusInfo::TPtr kesus,
-                    TOperationContext& context)
-{
+void PrepareChanges(
+    TOperationId operationId,
+    TPathElement::TPtr item,
+    TKesusInfo::TPtr kesus,
+    TOperationContext& context
+) {
     NIceDb::TNiceDb db(context.GetDB());
 
     item->LastTxId = operationId.GetTxId();
@@ -36,9 +37,13 @@ void PrepareChanges(TOperationId operationId,
         context.SS->PersistShardTx(db, shardIdx, operationId.GetTxId());
     }
 
-    LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "AlterKesus txid# %" PRIu64 ", AlterVersion %" PRIu64,
-            operationId.GetTxId(), kesus->AlterVersion);
+    LOG_DEBUG(
+        context.Ctx,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "AlterKesus txid# %" PRIu64 ", AlterVersion %" PRIu64,
+        operationId.GetTxId(),
+        kesus->AlterVersion
+    );
 
     context.SS->PersistAddKesusAlter(db, item->PathId, kesus);
 
@@ -51,15 +56,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterKesus TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterKesus TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -71,7 +74,7 @@ public:
                     << ", operationId: " << OperationId
                     << ", at schemeshard: " << ssId);
 
-        TTabletId tabletId =TTabletId(ev->Get()->Record.GetTabletId());
+        TTabletId tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         auto status = ev->Get()->Record.GetError().GetStatus();
 
         // SetConfig may fail if schemeshard tries to downgrade configuration
@@ -129,7 +132,9 @@ public:
             auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::Kesus);
 
-            auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), *kesus->AlterConfig, kesus->AlterVersion);
+            auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(
+                ui64(OperationId.GetTxId()), *kesus->AlterConfig, kesus->AlterVersion
+            );
             event->Record.MutableConfig()->set_path(kesusPath.PathString()); // TODO: remove legacy field eventually
             event->Record.SetPath(kesusPath.PathString());
 
@@ -148,15 +153,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterKesus TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterKesus TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -217,32 +220,30 @@ class TAlterKesus: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
 public:
     using TSubOperation::TSubOperation;
 
-    const Ydb::Coordination::Config* ParseParams(
-            const NKikimrSchemeOp::TKesusDescription& alter,
-            TString& errStr) {
+    const Ydb::Coordination::Config* ParseParams(const NKikimrSchemeOp::TKesusDescription& alter, TString& errStr) {
         if (alter.HasKesusTabletId() || alter.HasVersion()) {
             errStr = "Setting schemeshard owned properties is not allowed";
             return nullptr;
@@ -277,7 +278,8 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TString errStr;
         if (!alter.HasName() && !alter.HasPathId()) {
@@ -286,14 +288,12 @@ public:
             return result;
         }
 
-        TPath path = alter.HasPathId()
-            ? TPath::Init(pathId, context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path =
+            alter.HasPathId() ? TPath::Init(pathId, context.SS) : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -319,9 +319,7 @@ public:
         Y_ABORT_UNLESS(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation
 
         if (kesus->AlterConfig) {
-            result->SetError(
-                NKikimrScheme::StatusMultipleModifications,
-                "There's another alter in flight");
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another alter in flight");
             return result;
         }
 
@@ -358,7 +356,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -371,4 +369,4 @@ ISubOperation::TPtr CreateAlterKesus(TOperationId id, TTxState::ETxState state) 
     return MakeSubOperation<TAlterKesus>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

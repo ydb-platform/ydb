@@ -5,35 +5,25 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TPlanQueueUnit : public TExecutionUnit {
+class TPlanQueueUnit: public TExecutionUnit {
 public:
-    TPlanQueueUnit(TDataShard &dataShard,
-                   TPipeline &pipeline);
+    TPlanQueueUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TPlanQueueUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
     TOperation::TPtr FindReadyOperation() const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TPlanQueueUnit::TPlanQueueUnit(TDataShard &dataShard,
-                               TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::PlanQueue, false, dataShard, pipeline)
-{
-}
+TPlanQueueUnit::TPlanQueueUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::PlanQueue, false, dataShard, pipeline) {}
 
-TPlanQueueUnit::~TPlanQueueUnit()
-{
-}
+TPlanQueueUnit::~TPlanQueueUnit() {}
 
-bool TPlanQueueUnit::IsReadyToExecute(TOperation::TPtr op) const
-{
+bool TPlanQueueUnit::IsReadyToExecute(TOperation::TPtr op) const {
     if (Pipeline.OutOfOrderLimits())
         return false;
     if (!Pipeline.CanRunOp(*op))
@@ -44,8 +34,7 @@ bool TPlanQueueUnit::IsReadyToExecute(TOperation::TPtr op) const
     return op == Pipeline.GetNextPlannedOp(step, txId);
 }
 
-TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
-{
+TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const {
     if (Pipeline.OutOfOrderLimits()) {
         LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                     "TPlanQueueUnit at " << DataShard.TabletID()
@@ -97,22 +86,14 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     return op;
 }
 
-EExecutionStatus TPlanQueueUnit::Execute(TOperation::TPtr op,
-                                         TTransactionContext &,
-                                         const TActorContext &)
-{
+EExecutionStatus TPlanQueueUnit::Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext&) {
     DataShard.IncCounter(COUNTER_PLAN_QUEUE_LATENCY_MS, op->GetCurrentElapsedAndReset().MilliSeconds());
     return EExecutionStatus::Executed;
 }
 
-void TPlanQueueUnit::Complete(TOperation::TPtr,
-                              const TActorContext &)
-{
-}
+void TPlanQueueUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard &dataShard,
-                                            TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreatePlanQueueUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TPlanQueueUnit(dataShard, pipeline));
 }
 

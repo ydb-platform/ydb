@@ -31,11 +31,14 @@ bool TOlapIndexesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& a
         TOlapIndexUpsert index;
         AFL_VERIFY(index.DeserializeFromProto(indexSchema));
         if (!upsertIndexNames.emplace(index.GetName()).second) {
-            errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "index '" << index.GetName() << "' duplication for add");
+            errors.AddError(
+                NKikimrScheme::StatusAlreadyExists,
+                TStringBuilder() << "index '" << index.GetName() << "' duplication for add"
+            );
             return false;
         }
         UpsertIndexes.emplace_back(std::move(index));
     }
     return true;
 }
-}
+} // namespace NKikimr::NSchemeShard

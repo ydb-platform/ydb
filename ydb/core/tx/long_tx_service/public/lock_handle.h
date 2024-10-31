@@ -5,73 +5,70 @@
 namespace NActors {
 
     // Avoid include dependency by forward declaring TActorSystem
-    class TActorSystem;
+class TActorSystem;
 
 } // namespace NActors
 
 namespace NKikimr {
 namespace NLongTxService {
 
-    class TLockHandle {
-    public:
-        TLockHandle() noexcept
-            : LockId(0)
-            , ActorSystem(nullptr)
-        { }
+class TLockHandle {
+public:
+    TLockHandle() noexcept
+        : LockId(0)
+        , ActorSystem(nullptr) {}
 
-        TLockHandle(ui64 lockId, NActors::TActorSystem* as) noexcept
-            : LockId(lockId)
-            , ActorSystem(as)
-        {
-            if (LockId) {
-                Register(LockId, ActorSystem);
-            }
+    TLockHandle(ui64 lockId, NActors::TActorSystem* as) noexcept
+        : LockId(lockId)
+        , ActorSystem(as) {
+        if (LockId) {
+            Register(LockId, ActorSystem);
         }
+    }
 
-        TLockHandle(TLockHandle&& rhs) noexcept
-            : LockId(rhs.LockId)
-            , ActorSystem(rhs.ActorSystem)
-        {
+    TLockHandle(TLockHandle&& rhs) noexcept
+        : LockId(rhs.LockId)
+        , ActorSystem(rhs.ActorSystem) {
+        rhs.LockId = 0;
+        rhs.ActorSystem = nullptr;
+    }
+
+    ~TLockHandle() noexcept {
+        if (LockId) {
+            Unregister(LockId, ActorSystem);
+            LockId = 0;
+        }
+    }
+
+    TLockHandle& operator=(TLockHandle&& rhs) noexcept {
+        if (Y_LIKELY(this != &rhs)) {
+            if (LockId) {
+                Unregister(LockId, ActorSystem);
+            }
+            LockId = rhs.LockId;
+            ActorSystem = rhs.ActorSystem;
             rhs.LockId = 0;
             rhs.ActorSystem = nullptr;
         }
+        return *this;
+    }
 
-        ~TLockHandle() noexcept {
-            if (LockId) {
-                Unregister(LockId, ActorSystem);
-                LockId = 0;
-            }
-        }
+    explicit operator bool() const noexcept {
+        return bool(LockId);
+    }
 
-        TLockHandle& operator=(TLockHandle&& rhs) noexcept {
-            if (Y_LIKELY(this != &rhs)) {
-                if (LockId) {
-                    Unregister(LockId, ActorSystem);
-                }
-                LockId = rhs.LockId;
-                ActorSystem = rhs.ActorSystem;
-                rhs.LockId = 0;
-                rhs.ActorSystem = nullptr;
-            }
-            return *this;
-        }
+    ui64 GetLockId() const noexcept {
+        return LockId;
+    }
 
-        explicit operator bool() const noexcept {
-            return bool(LockId);
-        }
+private:
+    static void Register(ui64 lockId, NActors::TActorSystem* as) noexcept;
+    static void Unregister(ui64 lockId, NActors::TActorSystem* as) noexcept;
 
-        ui64 GetLockId() const noexcept {
-            return LockId;
-        }
-
-    private:
-        static void Register(ui64 lockId, NActors::TActorSystem* as) noexcept;
-        static void Unregister(ui64 lockId, NActors::TActorSystem* as) noexcept;
-
-    private:
-        ui64 LockId;
-        NActors::TActorSystem* ActorSystem;
-    };
+private:
+    ui64 LockId;
+    NActors::TActorSystem* ActorSystem;
+};
 
 } // namespace NLongTxService
 } // namespace NKikimr

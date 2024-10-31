@@ -4,7 +4,10 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo::TConstPtr& portionPtr) const {
+void TStatsIterator::AppendStats(
+    const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders,
+    const TPortionInfo::TConstPtr& portionPtr
+) const {
     const TPortionInfo& portion = *portionPtr;
     auto portionSchema = ReadMetadata->GetLoadSchemaVerified(portion);
     auto it = PortionType.find(portion.GetMeta().Produced);
@@ -44,17 +47,24 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
                 {
                     auto it = ColumnNamesById.find(r->GetColumnId());
                     if (it == ColumnNamesById.end()) {
-                        it =
-                            ColumnNamesById.emplace(r->GetColumnId(), portionSchema->GetFieldByColumnIdVerified(r->GetColumnId())->name()).first;
+                        it = ColumnNamesById
+                                 .emplace(
+                                     r->GetColumnId(),
+                                     portionSchema->GetFieldByColumnIdVerified(r->GetColumnId())->name()
+                                 )
+                                 .first;
                     }
                     lastColumnName = it->second.GetView();
                 }
                 {
                     auto it = entityStorages.find(r->GetColumnId());
                     if (it == entityStorages.end()) {
-                        it =
-                            entityStorages.emplace(r->GetColumnId(), portion.GetEntityStorageId(r->GetColumnId(), portionSchema->GetIndexInfo()))
-                                .first;
+                        it = entityStorages
+                                 .emplace(
+                                     r->GetColumnId(),
+                                     portion.GetEntityStorageId(r->GetColumnId(), portionSchema->GetIndexInfo())
+                                 )
+                                 .first;
                     }
                     lastTierName = it->second.GetView();
                 }
@@ -65,17 +75,24 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             {
                 auto itBlobIdString = blobsIds.find(r->GetBlobRange().GetBlobIdxVerified());
                 if (itBlobIdString == blobsIds.end()) {
-                    itBlobIdString = blobsIds.emplace(
-                        r->GetBlobRange().GetBlobIdxVerified(), portion.GetBlobId(r->GetBlobRange().GetBlobIdxVerified()).ToStringLegacy()).first;
+                    itBlobIdString = blobsIds
+                                         .emplace(
+                                             r->GetBlobRange().GetBlobIdxVerified(),
+                                             portion.GetBlobId(r->GetBlobRange().GetBlobIdxVerified()).ToStringLegacy()
+                                         )
+                                         .first;
                 }
                 NArrow::Append<arrow::StringType>(
-                    *builders[9], arrow::util::string_view(itBlobIdString->second.data(), itBlobIdString->second.size()));
+                    *builders[9], arrow::util::string_view(itBlobIdString->second.data(), itBlobIdString->second.size())
+                );
             }
             NArrow::Append<arrow::UInt64Type>(*builders[10], r->BlobRange.Offset);
             NArrow::Append<arrow::UInt64Type>(*builders[11], r->BlobRange.Size);
             NArrow::Append<arrow::UInt8Type>(*builders[12], activity);
 
-            NArrow::Append<arrow::StringType>(*builders[13], arrow::util::string_view(lastTierName.data(), lastTierName.size()));
+            NArrow::Append<arrow::StringType>(
+                *builders[13], arrow::util::string_view(lastTierName.data(), lastTierName.size())
+            );
             NArrow::Append<arrow::StringType>(*builders[14], ConstantEntityIsColumnView);
         }
     }
@@ -95,7 +112,9 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
             NArrow::Append<arrow::UInt64Type>(*builders[6], r->GetChunkIdx());
-            NArrow::Append<arrow::StringType>(*builders[7], ReadMetadata->GetEntityName(r->GetIndexId()).value_or("undefined"));
+            NArrow::Append<arrow::StringType>(
+                *builders[7], ReadMetadata->GetEntityName(r->GetIndexId()).value_or("undefined")
+            );
             NArrow::Append<arrow::UInt32Type>(*builders[8], r->GetIndexId());
             if (auto bRange = r->GetBlobRangeOptional()) {
                 std::string blobIdString = portion.GetBlobId(bRange->GetBlobIdxVerified()).ToStringLegacy();
@@ -116,7 +135,8 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     }
 }
 
-std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
+std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext
+) const {
     return std::make_unique<TStatsIterator>(readContext->GetReadMetadataPtrVerifiedAs<TReadStatsMetadata>());
 }
 
@@ -124,17 +144,27 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
     return GetColumns(TStatsIterator::StatsSchema, TStatsIterator::StatsSchema.KeyColumns);
 }
 
-std::shared_ptr<NKikimr::NOlap::NReader::NSysView::NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+std::shared_ptr<NKikimr::NOlap::NReader::NSysView::NAbstract::TReadStatsMetadata>
+TConstructor::BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
+    return std::make_shared<TReadStatsMetadata>(
+        index ? index->CopyVersionedIndexPtr() : nullptr,
+        self->TabletID(),
         IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-        read.GetProgram(), index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
+        read.GetProgram(),
+        index ? index->GetVersionedIndex().GetLastSchema() : nullptr,
+        read.GetSnapshot()
+    );
 }
 
-bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
+bool TStatsIterator::AppendStats(
+    const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders,
+    NAbstract::TGranuleMetaView& granule
+) const {
     ui64 recordsCount = 0;
     while (auto portion = granule.PopFrontPortion()) {
-        recordsCount += TPortionDataAccessor(portion).GetRecords().size() + TPortionDataAccessor(portion).GetIndexes().size();
+        recordsCount +=
+            TPortionDataAccessor(portion).GetRecords().size() + TPortionDataAccessor(portion).GetIndexes().size();
         AppendStats(builders, portion);
         if (recordsCount > 10000) {
             break;
@@ -146,7 +176,8 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
 ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {
     ui32 recordsCount = 0;
     for (auto&& portion : granule.GetPortions()) {
-        recordsCount += TPortionDataAccessor(portion).GetRecords().size() + TPortionDataAccessor(portion).GetIndexes().size();
+        recordsCount +=
+            TPortionDataAccessor(portion).GetRecords().size() + TPortionDataAccessor(portion).GetIndexes().size();
         if (recordsCount > 10000) {
             break;
         }
@@ -154,4 +185,4 @@ ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& gran
     return recordsCount;
 }
 
-}
+} // namespace NKikimr::NOlap::NReader::NSysView::NChunks

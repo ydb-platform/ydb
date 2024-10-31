@@ -7,8 +7,7 @@ using namespace NTabletFlatExecutor;
 
 TDataShard::TTxGetShardState::TTxGetShardState(TDataShard* ds, TEvDataShard::TEvGetShardState::TPtr ev)
     : TBase(ds)
-    , Ev(ev)
-{}
+    , Ev(ev) {}
 
 bool TDataShard::TTxGetShardState::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_UNUSED(txc);
@@ -24,4 +23,5 @@ void TDataShard::TTxGetShardState::Complete(const TActorContext& ctx) {
     ctx.Send(Ev->Get()->GetSource(), Result.Release());
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

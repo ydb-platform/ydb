@@ -3,13 +3,14 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDataShard::TTxCleanupTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxCleanupTransaction: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxCleanupTransaction(TDataShard* self)
-        : TTransactionBase(self)
-    { }
+        : TTransactionBase(self) {}
 
-    TTxType GetTxType() const override { return TXTYPE_CLEANUP; }
+    TTxType GetTxType() const override {
+        return TXTYPE_CLEANUP;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
@@ -44,10 +45,9 @@ public:
         // Allow scheduling of new cleanup transactions
         Self->CleanupQueue.Reset(ctx);
 
-        const bool expireSnapshotsAllowed = (
-                Self->State == TShardState::Ready ||
-                Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-                Self->State == TShardState::SplitSrcMakeSnapshot);
+        const bool expireSnapshotsAllowed =
+            (Self->State == TShardState::Ready || Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
+             Self->State == TShardState::SplitSrcMakeSnapshot);
 
         if (expireSnapshotsAllowed && Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -95,14 +95,15 @@ void TDataShard::Handle(TEvPrivate::TEvCleanupTransaction::TPtr&, const TActorCo
     ExecuteCleanupTx(ctx);
 }
 
-class TDataShard::TTxCleanupVolatileTransaction : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxCleanupVolatileTransaction: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxCleanupVolatileTransaction(TDataShard* self, ui64 txId)
         : TTransactionBase(self)
-        , TxId(txId)
-    {}
+        , TxId(txId) {}
 
-    TTxType GetTxType() const override { return TXTYPE_CLEANUP_VOLATILE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_CLEANUP_VOLATILE;
+    }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {

@@ -5,7 +5,8 @@
 
 namespace NKikimr::NOlap::NExport {
 
-std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildRequestInitiator(const TCursor& cursor) const {
+std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildRequestInitiator(const TCursor& cursor
+) const {
     auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
     ev->Record.SetLocalPathId(TablePathId);
 
@@ -13,7 +14,8 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildReque
 
     if (cursor.HasLastKey()) {
         auto* newRange = protoRanges->Add();
-        TSerializedTableRange(TSerializedCellVec::Serialize(*cursor.GetLastKey()), {}, false, false).Serialize(*newRange);
+        TSerializedTableRange(TSerializedCellVec::Serialize(*cursor.GetLastKey()), {}, false, false)
+            .Serialize(*newRange);
     }
 
     ev->Record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
@@ -29,4 +31,4 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TBackupSelector::DoBuildReque
     return ev;
 }
 
-}
+} // namespace NKikimr::NOlap::NExport

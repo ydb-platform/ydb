@@ -4,13 +4,16 @@
 
 namespace NKikimr::NOlap::NChunks {
 
-void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const {
+void TPortionIndexChunk::DoAddIntoPortionBeforeBlob(
+    const TBlobRangeLink16& bRange,
+    TPortionInfoConstructor& portionInfo
+) const {
     AFL_VERIFY(!bRange.IsValid());
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, bRange));
 }
 
-std::shared_ptr<IPortionDataChunk> TPortionIndexChunk::DoCopyWithAnotherBlob(
-    TString&& data, const TSimpleColumnInfo& /*columnInfo*/) const {
+std::shared_ptr<IPortionDataChunk>
+TPortionIndexChunk::DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& /*columnInfo*/) const {
     return std::make_shared<TPortionIndexChunk>(GetChunkAddressVerified(), RecordsCount, RawBytes, std::move(data));
 }
 
@@ -18,4 +21,4 @@ void TPortionIndexChunk::DoAddInplaceIntoPortion(TPortionInfoConstructor& portio
     portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdxVerified(), RecordsCount, RawBytes, GetData()));
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NChunks

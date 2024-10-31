@@ -13,7 +13,8 @@ private:
     virtual TConclusionStatus DoStartInStoreImpl(const TUpdateStartContext& /*context*/) {
         return TConclusionStatus::Success();
     }
+
 public:
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

@@ -11,64 +11,61 @@ LWTRACE_USING(DATASHARD_PROVIDER)
 namespace NKikimr {
 namespace NDataShard {
 
-class TFinishProposeWriteUnit : public TExecutionUnit {
+class TFinishProposeWriteUnit: public TExecutionUnit {
 public:
-    TFinishProposeWriteUnit(TDataShard &dataShard, TPipeline &pipeline);
+    TFinishProposeWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TFinishProposeWriteUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op, const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
-    TDataShard::TPromotePostExecuteEdges PromoteImmediatePostExecuteEdges(const TOperation* op, TTransactionContext& txc);
-    void CompleteRequest(TOperation::TPtr op, const TActorContext &ctx);
+    TDataShard::TPromotePostExecuteEdges
+    PromoteImmediatePostExecuteEdges(const TOperation* op, TTransactionContext& txc);
+    void CompleteRequest(TOperation::TPtr op, const TActorContext& ctx);
     void AddDiagnosticsResult(NEvents::TDataEvents::TEvWriteResult& res);
     void UpdateCounters(const TWriteOperation* writeOp, const TActorContext& ctx);
-
-
 };
 
-TFinishProposeWriteUnit::TFinishProposeWriteUnit(TDataShard &dataShard,
-                                       TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::FinishProposeWrite, false, dataShard, pipeline)
-{
-}
+TFinishProposeWriteUnit::TFinishProposeWriteUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::FinishProposeWrite, false, dataShard, pipeline) {}
 
-TFinishProposeWriteUnit::~TFinishProposeWriteUnit()
-{
-}
+TFinishProposeWriteUnit::~TFinishProposeWriteUnit() {}
 
-bool TFinishProposeWriteUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TFinishProposeWriteUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-TDataShard::TPromotePostExecuteEdges TFinishProposeWriteUnit::PromoteImmediatePostExecuteEdges(
-        const TOperation* op,
-        TTransactionContext& txc)
-{
+TDataShard::TPromotePostExecuteEdges
+TFinishProposeWriteUnit::PromoteImmediatePostExecuteEdges(const TOperation* op, TTransactionContext& txc) {
     if (op->IsMvccSnapshotRead()) {
         if (op->IsMvccSnapshotRepeatable() && op->GetPerformedUserReads()) {
-            return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(
+                op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc
+            );
         } else {
-            return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(
+                op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc
+            );
         }
     } else if (op->MvccReadWriteVersion) {
         if (op->IsReadOnly() || op->LockTxId()) {
-            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(
+                *op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc
+            );
         } else {
-            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+            return DataShard.PromoteImmediatePostExecuteEdges(
+                *op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc
+            );
         }
     } else {
-        return { };
+        return {};
     }
 }
 
-EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
-                                             TTransactionContext &txc,
-                                             const TActorContext &ctx)
-{
+EExecutionStatus
+TFinishProposeWriteUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     if (writeOp->GetWriteResult())
         UpdateCounters(writeOp, ctx);
@@ -127,8 +124,7 @@ EExecutionStatus TFinishProposeWriteUnit::Execute(TOperation::TPtr op,
     return status;
 }
 
-void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext &ctx)
-{
+void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     if (!op->HasResultSentFlag() && !op->IsProposeResultSentEarly()) {
@@ -150,8 +146,7 @@ void TFinishProposeWriteUnit::Complete(TOperation::TPtr op, const TActorContext 
     DataShard.SendRegistrationRequestTimeCast(ctx);
 }
 
-void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorContext &ctx)
-{
+void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto res = writeOp->ReleaseWriteResult();
 
@@ -163,13 +158,20 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
                 << duration.MilliSeconds() << " ms, status: " << res->GetStatus());
 
     if (res->IsError()) {
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
-                    "Errors while proposing transaction txid " << op->GetTxId()
-                    << " at tablet " << DataShard.TabletID() << " " << res->GetError());
+        LOG_LOG_S_THROTTLE(
+            DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest),
+            ctx,
+            NActors::NLog::PRI_ERROR,
+            NKikimrServices::TX_DATASHARD,
+            "Errors while proposing transaction txid " << op->GetTxId() << " at tablet " << DataShard.TabletID() << " "
+                                                       << res->GetError()
+        );
     }
 
     if (op->IsImmediate() && !op->IsReadOnly()) {
-        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrDataEvents::TEvWriteResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus());
+        NDataIntegrity::LogIntegrityTrailsFinish<NKikimrDataEvents::TEvWriteResult>(
+            ctx, DataShard.TabletID(), op->GetGlobalTxId(), res->GetStatus()
+        );
     }
 
     if (res->IsPrepared()) {
@@ -191,18 +193,21 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
         }
 
         if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
-            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.release(), op->GetCookie(), {}, op->GetTraceId());
+            DataShard.SendImmediateWriteResult(
+                *op->MvccReadWriteVersion, op->GetTarget(), res.release(), op->GetCookie(), {}, op->GetTraceId()
+            );
         } else if (op->HasVolatilePrepareFlag() && !op->IsDirty()) {
-            DataShard.SendWithConfirmedReadOnlyLease(op->GetFinishProposeTs(), op->GetTarget(), res.release(), op->GetCookie(), {}, op->GetTraceId());
+            DataShard.SendWithConfirmedReadOnlyLease(
+                op->GetFinishProposeTs(), op->GetTarget(), res.release(), op->GetCookie(), {}, op->GetTraceId()
+            );
         } else {
             ctx.Send(op->GetTarget(), res.release(), 0, op->GetCookie(), op->GetTraceId());
         }
     }
 }
 
-void TFinishProposeWriteUnit::AddDiagnosticsResult(NEvents::TDataEvents::TEvWriteResult& res)
-{
-    auto &tabletInfo = *res.Record.MutableTabletInfo();
+void TFinishProposeWriteUnit::AddDiagnosticsResult(NEvents::TDataEvents::TEvWriteResult& res) {
+    auto& tabletInfo = *res.Record.MutableTabletInfo();
     ActorIdToProto(DataShard.SelfId(), tabletInfo.MutableActorId());
 
     tabletInfo.SetTabletId(DataShard.TabletID());
@@ -211,8 +216,7 @@ void TFinishProposeWriteUnit::AddDiagnosticsResult(NEvents::TDataEvents::TEvWrit
     tabletInfo.SetIsFollower(DataShard.IsFollower());
 }
 
-void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, const TActorContext& ctx)
-{
+void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, const TActorContext& ctx) {
     const auto& res = writeOp->GetWriteResult();
     auto execLatency = TAppData::TimeProvider->Now() - writeOp->GetReceivedAt();
     DataShard.IncCounter(COUNTER_WRITE_EXEC_LATENCY, execLatency);
@@ -221,19 +225,21 @@ void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, con
     } else {
         if (res->IsError()) {
             DataShard.IncCounter(COUNTER_WRITE_ERROR);
-            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
-                        "Prepare transaction failed. txid " << writeOp->GetTxId() 
-                        << " at tablet " << DataShard.TabletID() << " errors: " << res->GetError());
+            LOG_LOG_S_THROTTLE(
+                DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters),
+                ctx,
+                NActors::NLog::PRI_ERROR,
+                NKikimrServices::TX_DATASHARD,
+                "Prepare transaction failed. txid " << writeOp->GetTxId() << " at tablet " << DataShard.TabletID()
+                                                    << " errors: " << res->GetError()
+            );
         } else {
             DataShard.IncCounter(COUNTER_WRITE_IMMEDIATE);
         }
     }
 }
 
-
-
-THolder<TExecutionUnit> CreateFinishProposeWriteUnit(TDataShard &dataShard, TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateFinishProposeWriteUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TFinishProposeWriteUnit(dataShard, pipeline));
 }
 

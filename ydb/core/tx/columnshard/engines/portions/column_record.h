@@ -35,8 +35,7 @@ private:
 
 public:
     TChunkMeta(TSimpleChunkMeta&& baseMeta)
-        : TBase(baseMeta) {
-    }
+        : TBase(baseMeta) {}
 
     [[nodiscard]] static TConclusion<TChunkMeta> BuildFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto) {
         TChunkMeta result;
@@ -68,8 +67,7 @@ class TColumnRecord {
 private:
     TChunkMeta Meta;
     TColumnRecord(TChunkMeta&& meta)
-        : Meta(std::move(meta)) {
-    }
+        : Meta(std::move(meta)) {}
 
     TColumnRecord() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto);
@@ -96,12 +94,18 @@ public:
         : Meta(std::move(meta))
         , ColumnId(address.GetColumnId())
         , Chunk(address.GetChunk())
-        , BlobRange(range) {
-    }
+        , BlobRange(range) {}
 
     class TTestInstanceBuilder {
     public:
-        static TColumnRecord Build(const ui32 columnId, const ui16 chunkId, const ui64 offset, const ui64 size, const ui64 recordsCount, const ui64 rawBytes) {
+        static TColumnRecord Build(
+            const ui32 columnId,
+            const ui16 chunkId,
+            const ui64 offset,
+            const ui64 size,
+            const ui64 recordsCount,
+            const ui64 rawBytes
+        ) {
             TColumnRecord result(TChunkMeta::TTestInstanceBuilder::Build(recordsCount, rawBytes));
             result.ColumnId = columnId;
             result.Chunk = chunkId;

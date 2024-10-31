@@ -19,11 +19,11 @@ using namespace NUdf;
 
 namespace {
 
-class TKqpEffectsWrapper : public TMutableComputationNode<TKqpEffectsWrapper> {
+class TKqpEffectsWrapper: public TMutableComputationNode<TKqpEffectsWrapper> {
     using TBase = TMutableComputationNode<TKqpEffectsWrapper>;
 
 public:
-    class TEffectsValue : public TComputationValue<TEffectsValue> {
+    class TEffectsValue: public TComputationValue<TEffectsValue> {
     public:
         using TBase = TComputationValue<TEffectsValue>;
 
@@ -60,7 +60,10 @@ public:
     TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValueVector values;
         values.reserve(Effects.size());
-        std::transform(Effects.cbegin(), Effects.cend(), std::back_inserter(values),
+        std::transform(
+            Effects.cbegin(),
+            Effects.cend(),
+            std::back_inserter(values),
             std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx))
         );
 
@@ -74,8 +77,9 @@ public:
 
 private:
     void RegisterDependencies() const final {
-        std::for_each(Effects.cbegin(), Effects.cend(),
-            std::bind(&TKqpEffectsWrapper::DependsOn, this, std::placeholders::_1));
+        std::for_each(
+            Effects.cbegin(), Effects.cend(), std::bind(&TKqpEffectsWrapper::DependsOn, this, std::placeholders::_1)
+        );
     }
 
 private:
@@ -84,9 +88,11 @@ private:
 
 } // namespace
 
-IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
-{
+IComputationNode* WrapKqpEffects(
+    TCallable& callable,
+    const TComputationNodeFactoryContext& ctx,
+    TKqpDatashardComputeContext& computeCtx
+) {
     Y_UNUSED(computeCtx);
 
     TComputationNodePtrVector effectNodes;
@@ -98,5 +104,5 @@ IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFact
     return new TKqpEffectsWrapper(ctx.Mutables, std::move(effectNodes));
 }
 
-} // namspace NMiniKQL
+} // namespace NMiniKQL
 } // namespace NKikimr

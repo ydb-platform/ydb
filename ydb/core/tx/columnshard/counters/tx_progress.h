@@ -38,10 +38,16 @@ private:
             , FinishProposeOnComplete(TBase::GetDeriviative("FinishProposeOnComplete"))
             , FinishPlannedTx(TBase::GetDeriviative("FinishPlannedTx"))
             , AbortTx(TBase::GetDeriviative("AbortTx"))
-            , HistogramTxExecuteDuration(TBase::GetHistogram("TxProgress/Execution/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
-            , HistogramTxLiveDuration(TBase::GetHistogram("TxProgress/Live/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5)))
-            , HistogramTxProgressLag(TBase::GetHistogram("TxProgress/LagOnComplete/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5))) {
-        }
+            , HistogramTxExecuteDuration(
+                  TBase::GetHistogram("TxProgress/Execution/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5))
+              )
+            , HistogramTxLiveDuration(
+                  TBase::GetHistogram("TxProgress/Live/DurationMs", NMonitoring::ExponentialHistogram(18, 2, 5))
+              )
+            , HistogramTxProgressLag(TBase::GetHistogram(
+                  "TxProgress/LagOnComplete/DurationMs",
+                  NMonitoring::ExponentialHistogram(18, 2, 5)
+              )) {}
     };
 
     THashMap<TOpType, TProgressCounters> CountersByOpType;
@@ -92,8 +98,7 @@ public:
     }
 
     TTxProgressCounters(TCommonCountersOwner& owner)
-        : TBase(owner, "TxProgress") {
-    }
+        : TBase(owner, "TxProgress") {}
 
 private:
     TProgressCounters& GetSubGroup(const TOpType& opType) {
@@ -107,4 +112,4 @@ private:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

@@ -6,10 +6,10 @@
 #include <util/generic/vector.h>
 
 namespace NKikimrSchemeOp {
-    class TColumnDescription;
-    class TTableDescription;
-    class TTableReplicationConfig;
-}
+class TColumnDescription;
+class TTableDescription;
+class TTableReplicationConfig;
+} // namespace NKikimrSchemeOp
 
 namespace NKikimr::NReplication::NTestHelpers {
 
@@ -51,4 +51,4 @@ struct TTestTableDescription {
 
 THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTableDescription& desc);
 
-}
+} // namespace NKikimr::NReplication::NTestHelpers

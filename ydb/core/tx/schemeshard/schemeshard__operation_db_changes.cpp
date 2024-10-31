@@ -73,7 +73,6 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistTxState(db, opId);
     }
 
-
     for (const auto& pId : AlterSubDomains) {
         auto subdomainInfo = ss->SubDomains.at(pId);
         ss->PersistSubDomainAlter(db, pId, *subdomainInfo->GetAlter());
@@ -99,4 +98,4 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     }
 }
 
-}
+} // namespace NKikimr::NSchemeShard

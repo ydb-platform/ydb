@@ -9,10 +9,9 @@ class TDeclareRemovingAction: public IBlobsDeclareRemovingAction {
 private:
     using TBase = IBlobsDeclareRemovingAction;
     TBlobManager* Manager;
-protected:
-    virtual void DoDeclareRemove(const TTabletId /*tabletId*/, const TUnifiedBlobId& /*blobId*/) {
 
-    }
+protected:
+    virtual void DoDeclareRemove(const TTabletId /*tabletId*/, const TUnifiedBlobId& /*blobId*/) {}
 
     virtual void DoOnExecuteTxAfterRemoving(TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
         if (blobsWroteSuccessfully) {
@@ -28,13 +27,15 @@ protected:
             }
         }
     }
-public:
-    TDeclareRemovingAction(const TString& storageId, const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters, TBlobManager& manager)
-        : TBase(storageId, manager.GetSelfTabletId(), counters)
-        , Manager(&manager)
-    {
 
-    }
+public:
+    TDeclareRemovingAction(
+        const TString& storageId,
+        const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters,
+        TBlobManager& manager
+    )
+        : TBase(storageId, manager.GetSelfTabletId(), counters)
+        , Manager(&manager) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

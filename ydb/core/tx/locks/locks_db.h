@@ -6,13 +6,12 @@
 
 namespace NKikimr::NLocks {
 
-template<class TShard, class TSchemaDescription>
-class TShardLocksDb : public NKikimr::NDataShard::ILocksDb {
+template <class TShard, class TSchemaDescription>
+class TShardLocksDb: public NKikimr::NDataShard::ILocksDb {
 public:
     TShardLocksDb(TShard& self, NTabletFlatExecutor::TTransactionContext& txc)
         : Self(self)
-        , DB(txc.DB)
-    { }
+        , DB(txc.DB) {}
 
     bool HasChanges() const {
         return HasChanges_;
@@ -113,7 +112,8 @@ public:
         return true;
     }
 
-    void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) override {
+    void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0)
+        override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
         db.Table<typename Schema::Locks>().Key(lockId).Update(
@@ -121,43 +121,48 @@ public:
             NIceDb::TUpdate<typename Schema::Locks::Generation>(generation),
             NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
             NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
-            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
+            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags)
+        );
         HasChanges_ = true;
     }
 
     void PersistLockCounter(ui64 lockId, ui64 counter) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::Locks>().Key(lockId).Update(
-            NIceDb::TUpdate<typename Schema::Locks::Counter>(counter));
+        db.Table<typename Schema::Locks>().Key(lockId).Update(NIceDb::TUpdate<typename Schema::Locks::Counter>(counter)
+        );
         HasChanges_ = true;
     }
 
     void PersistLockFlags(ui64 lockId, ui64 flags) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::Locks>().Key(lockId).Update(
-            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
+        db.Table<typename Schema::Locks>().Key(lockId).Update(NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
         HasChanges_ = true;
     }
 
     // Persist adding/removing info on locked ranges
-    void PersistAddRange(ui64 lockId, ui64 rangeId, const TPathId& tableId, ui64 flags = 0, const TString& data = {}) override {
+    void PersistAddRange(ui64 lockId, ui64 rangeId, const TPathId& tableId, ui64 flags = 0, const TString& data = {})
+        override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::LockRanges>().Key(lockId, rangeId).Update(
-            NIceDb::TUpdate<typename Schema::LockRanges::PathOwnerId>(tableId.OwnerId),
-            NIceDb::TUpdate<typename Schema::LockRanges::LocalPathId>(tableId.LocalPathId),
-            NIceDb::TUpdate<typename Schema::LockRanges::Flags>(flags),
-            NIceDb::TUpdate<typename Schema::LockRanges::Data>(data));
+        db.Table<typename Schema::LockRanges>()
+            .Key(lockId, rangeId)
+            .Update(
+                NIceDb::TUpdate<typename Schema::LockRanges::PathOwnerId>(tableId.OwnerId),
+                NIceDb::TUpdate<typename Schema::LockRanges::LocalPathId>(tableId.LocalPathId),
+                NIceDb::TUpdate<typename Schema::LockRanges::Flags>(flags),
+                NIceDb::TUpdate<typename Schema::LockRanges::Data>(data)
+            );
         HasChanges_ = true;
     }
 
     void PersistRangeFlags(ui64 lockId, ui64 rangeId, ui64 flags) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::LockRanges>().Key(lockId, rangeId).Update(
-            NIceDb::TUpdate<typename Schema::LockRanges::Flags>(flags));
+        db.Table<typename Schema::LockRanges>()
+            .Key(lockId, rangeId)
+            .Update(NIceDb::TUpdate<typename Schema::LockRanges::Flags>(flags));
         HasChanges_ = true;
     }
 
@@ -203,4 +208,4 @@ protected:
     NTable::TDatabase& DB;
     bool HasChanges_ = false;
 };
-}
+} // namespace NKikimr::NLocks

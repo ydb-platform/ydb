@@ -4,33 +4,30 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
-
 namespace NKikimr::NSchemeShard::NCdcStreamState {
 
 namespace {
 
 bool IsExpectedTxType(TTxState::ETxType txType) {
     switch (txType) {
-    case TTxState::TxCreateCdcStreamAtTable:
-    case TTxState::TxCreateCdcStreamAtTableWithInitialScan:
-    case TTxState::TxAlterCdcStreamAtTable:
-    case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
-    case TTxState::TxDropCdcStreamAtTable:
-    case TTxState::TxDropCdcStreamAtTableDropSnapshot:
-        return true;
-    default:
-        return false;
+        case TTxState::TxCreateCdcStreamAtTable:
+        case TTxState::TxCreateCdcStreamAtTableWithInitialScan:
+        case TTxState::TxAlterCdcStreamAtTable:
+        case TTxState::TxAlterCdcStreamAtTableDropSnapshot:
+        case TTxState::TxDropCdcStreamAtTable:
+        case TTxState::TxDropCdcStreamAtTableDropSnapshot:
+            return true;
+        default:
+            return false;
     }
 }
 
-}  // namespace anonymous
-
+}  // namespace
 
 // NCdcStreamState::TConfigurePartsAtTable
 //
 TConfigurePartsAtTable::TConfigurePartsAtTable(TOperationId id)
-    : OperationId(id)
-{
+    : OperationId(id) {
     IgnoreMessages(DebugHint(), {});
 }
 
@@ -66,7 +63,10 @@ bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
     return false;
 }
 
-bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) {
+bool TConfigurePartsAtTable::HandleReply(
+    TEvDataShard::TEvProposeTransactionResult::TPtr& ev,
+    TOperationContext& context
+) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " HandleReply " << ev->Get()->ToString()
                             << ", at schemeshard: " << context.SS->SelfTabletId());
@@ -78,12 +78,10 @@ bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResu
     return true;
 }
 
-
 // NCdcStreamState::TProposeAtTable
 //
 TProposeAtTable::TProposeAtTable(TOperationId id)
-    : OperationId(id)
-{
+    : OperationId(id) {
     IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
 }
 
@@ -145,7 +143,6 @@ bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOpe
     return false;
 }
 
-
 // NCdcStreamState::TProposeAtTableDropSnapshot
 //
 bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
@@ -176,4 +173,4 @@ bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr
     return true;
 }
 
-}  // NKikimr::NSchemeShard::NCdcStreamState
+}  // namespace NKikimr::NSchemeShard::NCdcStreamState

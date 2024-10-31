@@ -11,7 +11,6 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(Sharding) {
-
     Y_UNIT_TEST(XXUsage) {
         NArrow::NHash::NXX64::TStreamStringHashCalcer hCalcer(0);
         for (ui32 a = 1; a < 10; ++a) {
@@ -29,4 +28,4 @@ Y_UNIT_TEST_SUITE(Sharding) {
         }
     }
 }
-}
+} // namespace NKikimr

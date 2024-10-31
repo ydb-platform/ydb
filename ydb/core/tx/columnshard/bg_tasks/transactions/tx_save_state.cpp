@@ -10,11 +10,13 @@ bool TTxSaveSessionState::Execute(NTabletFlatExecutor::TTransactionContext& txc,
 
 void TTxSaveSessionState::DoComplete(const TActorContext& ctx) {
     if (Session->GetLogicContainer()->IsFinished() && Session->GetLogicContainer()->IsReadyForRemoveOnFinished()) {
-        ctx.Send(Adapter->GetTabletActorId(), new TEvRemoveSession(Session->GetLogicClassName(), Session->GetIdentifier()));
+        ctx.Send(
+            Adapter->GetTabletActorId(), new TEvRemoveSession(Session->GetLogicClassName(), Session->GetIdentifier())
+        );
     } else if (!Session->IsRunning() && Session->GetLogicContainer()->IsReadyForStart()) {
         TStartContext context(Session, Adapter);
         Session->StartActor(context);
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

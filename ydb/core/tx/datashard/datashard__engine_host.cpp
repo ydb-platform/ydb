@@ -27,9 +27,8 @@ using namespace NTabletFlatExecutor;
 
 namespace {
 
-NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
-                              const TVector<NScheme::TTypeInfo>& inType,
-                              const THolderFactory& holderFactory) {
+NUdf::TUnboxedValue
+CreateRow(const TVector<TCell>& inRow, const TVector<NScheme::TTypeInfo>& inType, const THolderFactory& holderFactory) {
     NUdf::TUnboxedValue* rowItems = nullptr;
     auto row = holderFactory.CreateDirectArrayHolder(inRow.size(), rowItems);
 
@@ -51,10 +50,11 @@ struct ItemInfo {
     ItemInfo(ui32 colId, NScheme::TTypeInfo schemeType, TOptionalType* optType)
         : ColumnId(colId)
         , SchemeType(schemeType)
-        , OptType(optType)
-    {}
+        , OptType(optType) {}
 
-    TType* ItemType() const { return OptType->GetItemType(); }
+    TType* ItemType() const {
+        return OptType->GetItemType();
+    }
 };
 
 ///
@@ -63,19 +63,21 @@ struct TRowResultInfo {
     TStructType* RowType;
     TSmallVec<ItemInfo> ItemInfos;
 
-    TRowResultInfo(const TStructLiteral* columnIds, const THashMap<ui32, TSysTables::TTableColumnInfo>& columns,
-                   TOptionalType* returnType)
-    {
+    TRowResultInfo(
+        const TStructLiteral* columnIds,
+        const THashMap<ui32, TSysTables::TTableColumnInfo>& columns,
+        TOptionalType* returnType
+    ) {
         ResultType = AS_TYPE(TOptionalType, returnType);
         RowType = AS_TYPE(TStructType, ResultType->GetItemType());
 
         ItemInfos.reserve(columnIds->GetValuesCount());
         for (ui32 i = 0; i < columnIds->GetValuesCount(); ++i) {
-            TOptionalType * optType = AS_TYPE(TOptionalType, RowType->GetMemberType(i));
+            TOptionalType* optType = AS_TYPE(TOptionalType, RowType->GetMemberType(i));
             TDataLiteral* literal = AS_VALUE(TDataLiteral, columnIds->GetValue(i));
             ui32 colId = literal->AsValue().Get<ui32>();
 
-            const TSysTables::TTableColumnInfo * colInfo = columns.FindPtr(colId);
+            const TSysTables::TTableColumnInfo* colInfo = columns.FindPtr(colId);
             Y_ABORT_UNLESS(colInfo && (colInfo->Id == colId), "No column info for column");
             ItemInfos.emplace_back(ItemInfo(colId, colInfo->PType, optType));
         }
@@ -108,23 +110,26 @@ public:
 
     TDataShardSysTable(const TTableId& tableId, TDataShard* self)
         : TableId(tableId)
-        , Self(self)
-    {
+        , Self(self) {
         switch (TableId.PathId.LocalPathId) {
-        case TSysTables::SysTableLocks:
-            TSysTables::TLocksTable::GetInfo(Columns, KeyTypes, false);
-            break;
-        case TSysTables::SysTableLocks2:
-            TSysTables::TLocksTable::GetInfo(Columns, KeyTypes, true);
-            break;
-        default:
-            Y_ASSERT("Unexpected system table id");
+            case TSysTables::SysTableLocks:
+                TSysTables::TLocksTable::GetInfo(Columns, KeyTypes, false);
+                break;
+            case TSysTables::SysTableLocks2:
+                TSysTables::TLocksTable::GetInfo(Columns, KeyTypes, true);
+                break;
+            default:
+                Y_ASSERT("Unexpected system table id");
         }
     }
 
-    NUdf::TUnboxedValue SelectRow(const TArrayRef<const TCell>& row, TStructLiteral* columnIds,
-        TOptionalType* returnType, const TReadTarget& readTarget, const THolderFactory& holderFactory) const
-    {
+    NUdf::TUnboxedValue SelectRow(
+        const TArrayRef<const TCell>& row,
+        TStructLiteral* columnIds,
+        TOptionalType* returnType,
+        const TReadTarget& readTarget,
+        const THolderFactory& holderFactory
+    ) const {
         Y_UNUSED(readTarget);
 
         TRowResultInfo result(columnIds, Columns, returnType);
@@ -139,8 +144,7 @@ public:
         return result.CreateResult(lock.MakeRow(false), holderFactory);
     }
 
-    void UpdateRow(const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) const
-    {
+    void UpdateRow(const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) const {
         Y_UNUSED(row);
         Y_UNUSED(commands);
 
@@ -167,15 +171,14 @@ private:
     TVector<NScheme::TTypeInfo> KeyTypes;
 };
 
-
-class TDataShardSysTables : public TThrRefBase {
+class TDataShardSysTables: public TThrRefBase {
     TDataShardSysTable Locks;
     TDataShardSysTable Locks2;
+
 public:
-    TDataShardSysTables(TDataShard *self)
+    TDataShardSysTables(TDataShard* self)
         : Locks(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks), self)
-        , Locks2(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2), self)
-    {}
+        , Locks2(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2), self) {}
 
     const TDataShardSysTable& Get(const TTableId& tableId) const {
         if (tableId.PathId.LocalPathId == TSysTables::SysTableLocks2)
@@ -196,39 +199,48 @@ TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
 class TDataShardEngineHost final
     : public TEngineHost
     , public IDataShardUserDb
-    , public IDataShardChangeGroupProvider
-{
+    , public IDataShardChangeGroupProvider {
 public:
-    TDataShardEngineHost(TDataShard* self, TEngineBay& engineBay, NTable::TDatabase& db, ui64 globalTxId, TEngineHostCounters& counters, TInstant now)
-        : TEngineHost(db, counters,
-            TEngineHostSettings(self->TabletID(),
-                (self->State == TShardState::Readonly || self->State == TShardState::Frozen || self->IsReplicated()),
-                self->ByKeyFilterDisabled(),
-                self->GetKeyAccessSampler()))
+    TDataShardEngineHost(
+        TDataShard* self,
+        TEngineBay& engineBay,
+        NTable::TDatabase& db,
+        ui64 globalTxId,
+        TEngineHostCounters& counters,
+        TInstant now
+    )
+        : TEngineHost(
+              db,
+              counters,
+              TEngineHostSettings(
+                  self->TabletID(),
+                  (self->State == TShardState::Readonly || self->State == TShardState::Frozen || self->IsReplicated()),
+                  self->ByKeyFilterDisabled(),
+                  self->GetKeyAccessSampler()
+              )
+          )
         , Self(self)
         , EngineBay(engineBay)
-        , UserDb(*self, db, globalTxId, TRowVersion::Min(), TRowVersion::Max(), counters, now)        
-    {
-    }
+        , UserDb(*self, db, globalTxId, TRowVersion::Min(), TRowVersion::Max(), counters, now) {}
 
     NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            NTable::TSelectStats& stats,
-            const TMaybe<TRowVersion>& readVersion) override
-    {
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        NTable::TSelectStats& stats,
+        const TMaybe<TRowVersion>& readVersion
+    ) override {
         return UserDb.SelectRow(tableId, key, tags, row, stats, readVersion);
     }
 
     NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            const TMaybe<TRowVersion>& readVersion) override
-    {
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        const TMaybe<TRowVersion>& readVersion
+    ) override {
         return UserDb.SelectRow(tableId, key, tags, row, readVersion);
     }
 
@@ -314,16 +326,20 @@ public:
             UserDb.GetLockNodeId(),
             UserDb.GetUsesMvccSnapshot(),
             UserDb.GetIsImmediateTx(),
-            UserDb.GetIsWriteTx(), 
+            UserDb.GetIsWriteTx(),
             Scheme
         );
         return GetKeyValidator().IsValidKey(key, options);
     }
 
-    NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
-        const THolderFactory& holderFactory) override
-    {
+    NUdf::TUnboxedValue SelectRow(
+        const TTableId& tableId,
+        const TArrayRef<const TCell>& row,
+        TStructLiteral* columnIds,
+        TOptionalType* returnType,
+        const TReadTarget& readTarget,
+        const THolderFactory& holderFactory
+    ) override {
         if (TSysTables::IsSystemTable(tableId)) {
             return DataShardSysTable(tableId).SelectRow(row, columnIds, returnType, readTarget, holderFactory);
         }
@@ -338,11 +354,19 @@ public:
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
     }
 
-    NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
-        TStructLiteral* columnIds,  TListLiteral* skipNullKeys, TStructType* returnType,
-        const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
-        std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override
-    {
+    NUdf::TUnboxedValue SelectRange(
+        const TTableId& tableId,
+        const TTableRange& range,
+        TStructLiteral* columnIds,
+        TListLiteral* skipNullKeys,
+        TStructType* returnType,
+        const TReadTarget& readTarget,
+        ui64 itemsLimit,
+        ui64 bytesLimit,
+        bool reverse,
+        std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs,
+        const THolderFactory& holderFactory
+    ) override {
         Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
 
         if (UserDb.GetLockTxId()) {
@@ -352,11 +376,26 @@ public:
         UserDb.SetPerformedUserReads(true);
 
         Self->SetTableAccessTime(tableId, UserDb.GetNow());
-        return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
-            itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
+        return TEngineHost::SelectRange(
+            tableId,
+            range,
+            columnIds,
+            skipNullKeys,
+            returnType,
+            readTarget,
+            itemsLimit,
+            bytesLimit,
+            reverse,
+            forbidNullArgs,
+            holderFactory
+        );
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override {
+    void UpdateRow(
+        const TTableId& tableId,
+        const TArrayRef<const TCell>& row,
+        const TArrayRef<const TUpdateCommand>& commands
+    ) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
             return;
@@ -373,19 +412,35 @@ public:
         UserDb.UpsertRow(tableId, key, ops);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+    void UpsertRow(
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override {
         UserDb.UpsertRow(tableId, key, ops);
     }
 
-    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+    void ReplaceRow(
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override {
         UserDb.ReplaceRow(tableId, key, ops);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+    void InsertRow(
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override {
         UserDb.InsertRow(tableId, key, ops);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+    void UpdateRow(
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override {
         UserDb.UpdateRow(tableId, key, ops);
     }
 
@@ -403,10 +458,9 @@ public:
         UserDb.EraseRow(tableId, key);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) override
-    {
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) override {
         UserDb.EraseRow(tableId, key);
-    }    
+    }
 
     // Returns whether row belong this shard.
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
@@ -496,13 +550,18 @@ private:
 
 TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId)
     : StepTxId(stepTxId)
-    , KeyValidator(*self)
-{
+    , KeyValidator(*self) {
     auto now = TAppData::TimeProvider->Now();
     EngineHost = MakeHolder<TDataShardEngineHost>(self, *this, txc.DB, stepTxId.TxId, EngineHostCounters, now);
 
-    EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
-        *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
+    EngineSettings = MakeHolder<TEngineFlatSettings>(
+        IEngineFlat::EProtocol::V1,
+        AppData(ctx)->FunctionRegistry,
+        *TAppData::RandomProvider,
+        *TAppData::TimeProvider,
+        EngineHost.Get(),
+        self->AllocCounters
+    );
 
     auto tabletId = self->TabletID();
     auto txId = stepTxId.TxId;
@@ -514,12 +573,17 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
 
     if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, txId)) {
         EngineSettings->BacktraceWriter =
-            [actorSystem, tabletId, txId](const char * operation, ui32 line, const TBackTrace* backtrace)
-            {
-                LOG_DEBUG(*actorSystem, NKikimrServices::MINIKQL_ENGINE,
+            [actorSystem, tabletId, txId](const char* operation, ui32 line, const TBackTrace* backtrace) {
+                LOG_DEBUG(
+                    *actorSystem,
+                    NKikimrServices::MINIKQL_ENGINE,
                     "Shard %" PRIu64 ", txid %, %s (%" PRIu32 ")\n%s",
-                    tabletId, txId, operation, line,
-                    backtrace ? backtrace->PrintToString().data() : "");
+                    tabletId,
+                    txId,
+                    operation,
+                    line,
+                    backtrace ? backtrace->PrintToString().data() : ""
+                );
             };
     }
 
@@ -528,10 +592,13 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
             "Shard %" << tabletId << ", txid %" << txId << ": " << message);
     };
 
-    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, GetUserDb(), EngineHost->GetSettings().DisableByKeyFilter);
+    ComputeCtx =
+        MakeHolder<TKqpDatashardComputeContext>(self, GetUserDb(), EngineHost->GetSettings().DisableByKeyFilter);
     ComputeCtx->Database = &txc.DB;
 
-    KqpAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+    KqpAlloc = std::make_shared<TScopedAlloc>(
+        __LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators()
+    );
     KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
     KqpAlloc->Release();
 
@@ -681,7 +748,7 @@ bool TEngineBay::GetPerformedUserReads() const {
     return host->GetPerformedUserReads();
 }
 
-IEngineFlat * TEngineBay::GetEngine() {
+IEngineFlat* TEngineBay::GetEngine() {
     if (!Engine) {
         Engine = CreateEngineFlat(*EngineSettings);
         Engine->SetStepTxId(StepTxId.ToPair());
@@ -729,7 +796,8 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTra
         settings.TerminateOnError = false;
         Y_ABORT_UNLESS(KqpAlloc);
         KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc);
+        KqpTasksRunner =
+            NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc);
     }
 
     return *KqpTasksRunner;
@@ -740,5 +808,5 @@ TKqpDatashardComputeContext& TEngineBay::GetKqpComputeCtx() {
     return *ComputeCtx;
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

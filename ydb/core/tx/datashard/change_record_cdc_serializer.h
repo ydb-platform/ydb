@@ -3,7 +3,7 @@
 #include "datashard_user_table.h"
 
 namespace NKikimrClient {
-    class TPersQueuePartitionRequest_TCmdWrite;
+class TPersQueuePartitionRequest_TCmdWrite;
 }
 
 namespace NKikimr::NDataShard {
@@ -34,4 +34,4 @@ struct TChangeRecordSerializerOpts {
 IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSerializerOpts& opts);
 IChangeRecordSerializer* CreateChangeRecordDebugSerializer();
 
-}
+} // namespace NKikimr::NDataShard

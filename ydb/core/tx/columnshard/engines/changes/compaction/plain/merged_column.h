@@ -18,8 +18,7 @@ private:
 public:
     TMergedColumn(const TColumnMergeContext& context, const TChunkMergeContext& chunkContext)
         : Context(context)
-        , ChunkContext(chunkContext)
-    {
+        , ChunkContext(chunkContext) {
         NewPortion();
     }
 

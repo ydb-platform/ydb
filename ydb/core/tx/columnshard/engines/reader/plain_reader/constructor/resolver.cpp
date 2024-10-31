@@ -1,5 +1,3 @@
 #include "resolver.h"
 
-namespace NKikimr::NOlap::NReader::NPlain {
-
-}
+namespace NKikimr::NOlap::NReader::NPlain {}

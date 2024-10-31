@@ -22,8 +22,7 @@ private:
 public:
     TColumnTablesCounters()
         : LastAccessTime(std::make_shared<TInstant>())
-        , LastUpdateTime(std::make_shared<TInstant>()) {
-    }
+        , LastUpdateTime(std::make_shared<TInstant>()) {}
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
         output.SetLastAccessTime(LastAccessTime->MilliSeconds());
@@ -44,8 +43,7 @@ private:
 public:
     TSingleColumnTableCounters(TColumnTablesCounters& owner)
         : TotalLastAccessTime(owner.LastAccessTime)
-        , TotalLastUpdateTime(owner.LastUpdateTime) {
-    }
+        , TotalLastUpdateTime(owner.LastUpdateTime) {}
 
     void OnReadEvent() {
         UpdateLastAccessTime(TAppData::TimeProvider->Now());

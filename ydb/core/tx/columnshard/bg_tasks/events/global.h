@@ -5,7 +5,11 @@
 
 namespace NKikimr::NOlap::NBackground {
 
-struct TEvSessionControl: public TEventPB<TEvSessionControl, NKikimrTxBackgroundProto::TSessionControlContainer, TEvents::EvSessionControl> {
+struct TEvSessionControl
+    : public TEventPB<
+          TEvSessionControl,
+          NKikimrTxBackgroundProto::TSessionControlContainer,
+          TEvents::EvSessionControl> {
     TEvSessionControl() = default;
 
     TEvSessionControl(const TSessionControlContainer& container) {
@@ -13,4 +17,4 @@ struct TEvSessionControl: public TEventPB<TEvSessionControl, NKikimrTxBackground
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

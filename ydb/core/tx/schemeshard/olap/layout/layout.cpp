@@ -4,7 +4,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss) {
+std::vector<ui64>
+TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss) {
     std::vector<ui64> result;
     for (const auto& shardIdx : shards) {
         auto* shardInfo = ss.ShardInfos.FindPtr(shardIdx);
@@ -16,12 +17,11 @@ std::vector<ui64> TColumnTablesLayout::ShardIdxToTabletId(const std::vector<TSha
 
 TColumnTablesLayout TColumnTablesLayout::BuildTrivial(const std::vector<ui64>& tabletIds) {
     std::set<ui64> ids(tabletIds.begin(), tabletIds.end());
-    return TColumnTablesLayout({ TTablesGroup(&Default<TTableIdsGroup>(), std::move(ids)) });
+    return TColumnTablesLayout({TTablesGroup(&Default<TTableIdsGroup>(), std::move(ids))});
 }
 
 TColumnTablesLayout::TColumnTablesLayout(std::vector<TTablesGroup>&& groups)
-    : Groups(std::move(groups))
-{
+    : Groups(std::move(groups)) {
     AFL_VERIFY(std::is_sorted(Groups.begin(), Groups.end()));
 }
 
@@ -43,9 +43,8 @@ const TColumnTablesLayout::TTableIdsGroup& TColumnTablesLayout::TTablesGroup::Ge
 
 TColumnTablesLayout::TTablesGroup::TTablesGroup(const TTableIdsGroup* tableIds, std::set<ui64>&& shardIds)
     : TableIds(tableIds)
-    , ShardIds(std::move(shardIds))
-{
+    , ShardIds(std::move(shardIds)) {
     AFL_VERIFY(TableIds);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

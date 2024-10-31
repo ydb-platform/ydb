@@ -7,7 +7,10 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 class TConverterModifyToAlter {
 private:
-    TConclusionStatus ParseFromDSRequest(const NKikimrSchemeOp::TTableDescription& dsDescription, NKikimrSchemeOp::TAlterColumnTable& olapDescription) const {
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TTableDescription& dsDescription,
+        NKikimrSchemeOp::TAlterColumnTable& olapDescription
+    ) const {
         olapDescription.SetName(dsDescription.GetName());
 
         if (dsDescription.HasTTLSettings()) {
@@ -53,7 +56,10 @@ private:
         return TConclusionStatus::Success();
     }
 
-    TConclusionStatus ParseFromDSRequest(const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn) const {
+    TConclusionStatus ParseFromDSRequest(
+        const NKikimrSchemeOp::TColumnDescription& dsColumn,
+        NKikimrSchemeOp::TOlapColumnDescription& olapColumn
+    ) const {
         olapColumn.SetName(dsColumn.GetName());
         olapColumn.SetType(dsColumn.GetType());
         if (dsColumn.HasTypeId()) {
@@ -76,12 +82,15 @@ private:
         }
         return TConclusionStatus::Success();
     }
+
 public:
     TConclusion<NKikimrSchemeOp::TAlterColumnTable> Convert(const NKikimrSchemeOp::TModifyScheme& modify) {
         NKikimrSchemeOp::TAlterColumnTable result;
         if (modify.HasAlterColumnTable()) {
             if (modify.GetOperationType() != NKikimrSchemeOp::ESchemeOpAlterColumnTable) {
-                return TConclusionStatus::Fail("Invalid operation type: " + NKikimrSchemeOp::EOperationType_Name(modify.GetOperationType()));
+                return TConclusionStatus::Fail(
+                    "Invalid operation type: " + NKikimrSchemeOp::EOperationType_Name(modify.GetOperationType())
+                );
             }
             result = modify.GetAlterColumnTable();
         } else {
@@ -107,4 +116,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

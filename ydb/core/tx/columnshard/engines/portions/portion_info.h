@@ -40,12 +40,16 @@ public:
         return Address;
     }
 
-    TEntityChunk(const TChunkAddress& address, const ui32 recordsCount, const ui64 rawBytesSize, const TBlobRangeLink16& blobRange)
+    TEntityChunk(
+        const TChunkAddress& address,
+        const ui32 recordsCount,
+        const ui64 rawBytesSize,
+        const TBlobRangeLink16& blobRange
+    )
         : Address(address)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytesSize)
-        , BlobRange(blobRange) {
-    }
+        , BlobRange(blobRange) {}
 };
 
 class TPortionInfoConstructor;
@@ -125,7 +129,10 @@ public:
     }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
+        const TString& specialTier,
+        const IStoragesManager& storages,
+        const TIndexInfo& indexInfo
+    ) const;
 
     const std::optional<ui64>& GetShardingVersionOptional() const {
         return ShardingVersion;
@@ -159,7 +166,8 @@ public:
     }
 
     bool CrossSSWith(const TPortionInfo& p) const {
-        return std::min(RecordSnapshotMax(), p.RecordSnapshotMax()) <= std::max(RecordSnapshotMin(), p.RecordSnapshotMin());
+        return std::min(RecordSnapshotMax(), p.RecordSnapshotMax()) <=
+               std::max(RecordSnapshotMin(), p.RecordSnapshotMin());
     }
 
     ui64 GetShardingVersionDef(const ui64 verDefault) const {
@@ -213,7 +221,8 @@ public:
             if ((RuntimeFeatures & (TRuntimeFeatures)feature)) {
                 return true;
             } else {
-                return GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId) != NOlap::NBlobOperations::TGlobal::DefaultStorageId;
+                return GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId) !=
+                       NOlap::NBlobOperations::TGlobal::DefaultStorageId;
             }
         }
         return (RuntimeFeatures & (TRuntimeFeatures)feature);
@@ -236,7 +245,7 @@ public:
     const TString& GetIndexStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
     const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
 
-    ui64 GetTxVolume() const;   // fake-correct method for determ volume on rewrite this portion in transaction progress
+    ui64 GetTxVolume() const; // fake-correct method for determ volume on rewrite this portion in transaction progress
     ui64 GetMetadataMemorySize() const;
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
@@ -367,11 +376,13 @@ public:
     }
 
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) &&
+        const bool visible = (Meta.RecordSnapshotMin <= snapshot) &&
+                             (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) &&
                              (!checkCommitSnapshot || !CommitSnapshot || *CommitSnapshot <= snapshot);
 
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
-            "snapshot", snapshot.DebugString());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+        ("event",
+         "IsVisible")("analyze_portion", DebugString())("visible", visible)("snapshot", snapshot.DebugString());
         return visible;
     }
 
@@ -416,8 +427,7 @@ public:
 
     public:
         TSchemaCursor(const NOlap::TVersionedIndex& versionedIndex)
-            : VersionedIndex(versionedIndex) {
-        }
+            : VersionedIndex(versionedIndex) {}
 
         ISnapshotSchema::TPtr GetSchema(const TPortionInfoConstructor& portion);
 
@@ -468,4 +478,4 @@ static_assert(std::is_nothrow_move_assignable<TPortionInfo>::value);
 /// Ensure that TPortionInfo can be effectively constructed by moving the value.
 static_assert(std::is_nothrow_move_constructible<TPortionInfo>::value);
 
-}   // namespace NKikimr::NOlap
+} // namespace NKikimr::NOlap

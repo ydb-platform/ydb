@@ -7,19 +7,20 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoordinator> {
+struct TTxCoordinator::TTxMediatorConfirmations: public TTransactionBase<TTxCoordinator> {
     std::unique_ptr<TMediatorConfirmations> Confirmations;
     i64 CompleteTransactions;
 
-    TTxMediatorConfirmations(std::unique_ptr<TMediatorConfirmations> &&confirmations, TSelf *coordinator)
+    TTxMediatorConfirmations(std::unique_ptr<TMediatorConfirmations>&& confirmations, TSelf* coordinator)
         : TBase(coordinator)
         , Confirmations(std::move(confirmations))
-        , CompleteTransactions(0)
-    {}
+        , CompleteTransactions(0) {}
 
-    TTxType GetTxType() const override { return TXTYPE_MEDIATOR_CONFIRMATIONS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_MEDIATOR_CONFIRMATIONS;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const TTabletId mediatorId = Confirmations->MediatorId;
         Y_UNUSED(ctx);
         CompleteTransactions = 0;
@@ -28,34 +29,41 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
         ui64 internalTxGen = txc.Generation;
         ui64 internalTxStep = txc.Step;
 
-        for (const auto &pr : Confirmations->Acks) {
+        for (const auto& pr : Confirmations->Acks) {
             const TTxId txid = pr.first;
-            const THashSet<TTabletId> &confirmed = pr.second;
+            const THashSet<TTabletId>& confirmed = pr.second;
 
             // Volatile transactions are confirmed purely in memory
             if (auto it = Self->VolatileTransactions.find(txid); it != Self->VolatileTransactions.end()) {
-                auto &unconfirmed = it->second.UnconfirmedAffectedSet[mediatorId];
+                auto& unconfirmed = it->second.UnconfirmedAffectedSet[mediatorId];
                 for (TTabletId tabletId : confirmed) {
                     auto removed = unconfirmed.erase(tabletId);
-                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                        "at tablet# " << Self->TabletID()
-                        << " [" << internalTxGen << ":" << internalTxStep << "]"
-                        << " volatile tx " << txid << " for mediator " << mediatorId << " tablet " << tabletId << " removed=" << removed);
+                    FLOG_DEBUG_S(
+                        ctx,
+                        NKikimrServices::TX_COORDINATOR,
+                        "at tablet# " << Self->TabletID() << " [" << internalTxGen << ":" << internalTxStep << "]"
+                                      << " volatile tx " << txid << " for mediator " << mediatorId << " tablet "
+                                      << tabletId << " removed=" << removed
+                    );
                 }
 
                 if (unconfirmed.empty()) {
-                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                        "at tablet# " << Self->TabletID()
-                        << " [" << internalTxGen << ":" << internalTxStep << "]"
-                        << " volatile tx " << txid << " for mediator " << mediatorId << " acknowledged");
+                    FLOG_DEBUG_S(
+                        ctx,
+                        NKikimrServices::TX_COORDINATOR,
+                        "at tablet# " << Self->TabletID() << " [" << internalTxGen << ":" << internalTxStep << "]"
+                                      << " volatile tx " << txid << " for mediator " << mediatorId << " acknowledged"
+                    );
                     it->second.UnconfirmedAffectedSet.erase(mediatorId);
                 }
 
                 if (it->second.UnconfirmedAffectedSet.empty()) {
-                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                        "at tablet# " << Self->TabletID()
-                        << " [" << internalTxGen << ":" << internalTxStep << "]"
-                        << " volatile tx " << txid << " acknowledged");
+                    FLOG_DEBUG_S(
+                        ctx,
+                        NKikimrServices::TX_COORDINATOR,
+                        "at tablet# " << Self->TabletID() << " [" << internalTxGen << ":" << internalTxStep << "]"
+                                      << " volatile tx " << txid << " acknowledged"
+                    );
                     Self->VolatileTransactions.erase(it);
                     ++CompleteTransactions;
                 }
@@ -65,38 +73,47 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
             auto it = Self->Transactions.find(txid);
             if (it == Self->Transactions.end()) {
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                    "at tablet# " << Self->TabletID()
-                    << " [" << internalTxGen << ":" << internalTxStep << "]"
-                    << " persistent tx " << txid << " for mediator " << mediatorId << " not found");
+                FLOG_DEBUG_S(
+                    ctx,
+                    NKikimrServices::TX_COORDINATOR,
+                    "at tablet# " << Self->TabletID() << " [" << internalTxGen << ":" << internalTxStep << "]"
+                                  << " persistent tx " << txid << " for mediator " << mediatorId << " not found"
+                );
                 continue;
             }
 
-            auto &unconfirmed = it->second.UnconfirmedAffectedSet[mediatorId];
+            auto& unconfirmed = it->second.UnconfirmedAffectedSet[mediatorId];
             for (TTabletId tabletId : confirmed) {
                 auto removed = unconfirmed.erase(tabletId);
                 if (removed) {
                     db.Table<Schema::AffectedSet>().Key(mediatorId, txid, tabletId).Delete();
                 }
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                    "at tablet# " << Self->TabletID()
-                    << " [" << internalTxGen << ":" << internalTxStep << "]"
-                    << " persistent tx " << txid << " for mediator " << mediatorId << " tablet " << tabletId << " removed=" << removed);
+                FLOG_DEBUG_S(
+                    ctx,
+                    NKikimrServices::TX_COORDINATOR,
+                    "at tablet# " << Self->TabletID() << " [" << internalTxGen << ":" << internalTxStep << "]"
+                                  << " persistent tx " << txid << " for mediator " << mediatorId << " tablet "
+                                  << tabletId << " removed=" << removed
+                );
             }
 
             if (unconfirmed.empty()) {
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                    "at tablet# " << Self->TabletID()
-                    << " [" << internalTxGen << ":" << internalTxStep << "]"
-                    << " persistent tx " << txid << " for mediator " << mediatorId << " acknowledged");
+                FLOG_DEBUG_S(
+                    ctx,
+                    NKikimrServices::TX_COORDINATOR,
+                    "at tablet# " << Self->TabletID() << " [" << internalTxGen << ":" << internalTxStep << "]"
+                                  << " persistent tx " << txid << " for mediator " << mediatorId << " acknowledged"
+                );
                 it->second.UnconfirmedAffectedSet.erase(mediatorId);
             }
 
             if (it->second.UnconfirmedAffectedSet.empty()) {
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                    "at tablet# " << Self->TabletID()
-                    << " [" << internalTxGen << ":" << internalTxStep << "]"
-                    << " persistent tx " << txid << " acknowledged");
+                FLOG_DEBUG_S(
+                    ctx,
+                    NKikimrServices::TX_COORDINATOR,
+                    "at tablet# " << Self->TabletID() << " [" << internalTxGen << ":" << internalTxStep << "]"
+                                  << " persistent tx " << txid << " acknowledged"
+                );
                 db.Table<Schema::Transaction>().Key(txid).Delete();
                 Self->Transactions.erase(it);
                 ++CompleteTransactions;
@@ -106,7 +123,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         *Self->MonCounters.TxInFly -= CompleteTransactions;
         Self->MonCounters.CurrentTxInFly -= CompleteTransactions;
 
@@ -114,9 +131,9 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxMediatorConfirmations(std::unique_ptr<TMediatorConfirmations> &&confirmations) {
+ITransaction* TTxCoordinator::CreateTxMediatorConfirmations(std::unique_ptr<TMediatorConfirmations>&& confirmations) {
     return new TTxMediatorConfirmations(std::move(confirmations), this);
 }
 
-}
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

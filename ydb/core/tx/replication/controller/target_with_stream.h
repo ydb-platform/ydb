@@ -10,8 +10,7 @@ class TTargetWithStream: public TTargetBase {
 public:
     template <typename... Args>
     explicit TTargetWithStream(Args&&... args)
-        : TTargetBase(std::forward<Args>(args)...)
-    {
+        : TTargetBase(std::forward<Args>(args)...) {
         SetStreamState(EStreamState::Creating);
     }
 
@@ -25,4 +24,4 @@ private:
 
 }; // TTargetWithStream
 
-}
+} // namespace NKikimr::NReplication::NController

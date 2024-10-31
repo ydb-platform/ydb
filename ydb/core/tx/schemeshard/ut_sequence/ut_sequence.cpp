@@ -7,7 +7,6 @@ using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSequence) {
-
     Y_UNIT_TEST(CreateSequence) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -35,14 +34,22 @@ Y_UNIT_TEST_SUITE(TSequence) {
         // Make two passes, so we test parallel creation both when
         // sequenceshard doesn't exist yet, and when it exists already
         for (int j = 0; j < 2; ++j) {
-            for (int i = 4*j + 1; i <= 4*j + 4; ++i) {
-                TestCreateSequence(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            for (int i = 4 * j + 1; i <= 4 * j + 4; ++i) {
+                TestCreateSequence(
+                    runtime,
+                    ++txId,
+                    "/MyRoot",
+                    Sprintf(
+                        R"(
                     Name: "seq%d"
-                )", i));
+                )",
+                        i
+                    )
+                );
             }
-            env.TestWaitNotification(runtime, {txId-3, txId-2, txId-1, txId});
+            env.TestWaitNotification(runtime, {txId - 3, txId - 2, txId - 1, txId});
 
-            for (int i = 4*j + 1; i <= 4*j + 4; ++i) {
+            for (int i = 4 * j + 1; i <= 4 * j + 4; ++i) {
                 TestLs(runtime, Sprintf("/MyRoot/seq%d", i), false, NLs::PathExist);
             }
         }
@@ -57,9 +64,17 @@ Y_UNIT_TEST_SUITE(TSequence) {
         runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
         for (int i = 1; i <= 4; ++i) {
-            TestCreateSequence(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TestCreateSequence(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                Sprintf(
+                    R"(
                 Name: "seq%d"
-            )", i));
+            )",
+                    i
+                )
+            );
             env.TestWaitNotification(runtime, txId);
 
             TestLs(runtime, Sprintf("/MyRoot/seq%d", i), false, NLs::PathExist);
@@ -107,9 +122,15 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateSequence(runtime, ++txId, "/MyRoot/seq", R"(
+        TestCreateSequence(
+            runtime,
+            ++txId,
+            "/MyRoot/seq",
+            R"(
             Name: "seq"
-        )", {NKikimrScheme::StatusPathIsNotDirectory});
+        )",
+            {NKikimrScheme::StatusPathIsNotDirectory}
+        );
     }
 
     Y_UNIT_TEST(CreateSequenceInsideTableThenDropSequence) {
@@ -192,9 +213,15 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateSequence(runtime, ++txId, "/MyRoot/Table/ValueIndex/indexImplTable", R"(
+        TestCreateSequence(
+            runtime,
+            ++txId,
+            "/MyRoot/Table/ValueIndex/indexImplTable",
+            R"(
             Name: "seq"
-        )", {NKikimrScheme::StatusNameConflict});
+        )",
+            {NKikimrScheme::StatusNameConflict}
+        );
     }
 
     Y_UNIT_TEST(CreateSequencesWithIndexedTable) {
@@ -243,17 +270,27 @@ Y_UNIT_TEST_SUITE(TSequence) {
         runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
 
         // Cannot use default from sequence that doesn't exist
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateIndexedTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             TableDescription {
                 Name: "Table"
                 Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "/MyRoot/myseq" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )",
+            {NKikimrScheme::StatusInvalidParameter}
+        );
 
         // Cannot use default from sequence that doesn't match local sequences
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateIndexedTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             TableDescription {
                 Name: "Table"
                 Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
@@ -263,7 +300,9 @@ Y_UNIT_TEST_SUITE(TSequence) {
             SequenceDescription {
                 Name: "someseq"
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )",
+            {NKikimrScheme::StatusInvalidParameter}
+        );
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -295,8 +334,7 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestLs(runtime, "/MyRoot/Table2/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
 
         // Cannot drop sequence used by a column
-        TestDropSequence(runtime, ++txId, "/MyRoot/Table2", "myseq",
-            {NKikimrScheme::StatusNameConflict});
+        TestDropSequence(runtime, ++txId, "/MyRoot/Table2", "myseq", {NKikimrScheme::StatusNameConflict});
 
         TestDropTable(runtime, ++txId, "/MyRoot", "Table2");
         env.TestWaitNotification(runtime, txId);
@@ -329,7 +367,9 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/Table/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        TestLs(
+            runtime, "/MyRoot/Table/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist
+        );
         TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
 
         TestDropTable(runtime, ++txId, "/MyRoot", "Table");
@@ -384,14 +424,13 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/seq", true),
-            {
-                NLs::SequenceIncrement(1),
-                NLs::SequenceMinValue(1),
-                NLs::SequenceCache(1),
-                NLs::SequenceStartValue(1),
-                NLs::SequenceCycle(false)
-            }
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/seq", true),
+            {NLs::SequenceIncrement(1),
+             NLs::SequenceMinValue(1),
+             NLs::SequenceCache(1),
+             NLs::SequenceStartValue(1),
+             NLs::SequenceCycle(false)}
         );
 
         auto value = DoNextVal(runtime, "/MyRoot/seq");
@@ -411,15 +450,14 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/seq", true),
-                {
-                    NLs::SequenceIncrement(2),
-                    NLs::SequenceMaxValue(5),
-                    NLs::SequenceMinValue(2),
-                    NLs::SequenceCache(1),
-                    NLs::SequenceStartValue(2),
-                    NLs::SequenceCycle(true)
-                }
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/seq", true),
+            {NLs::SequenceIncrement(2),
+             NLs::SequenceMaxValue(5),
+             NLs::SequenceMinValue(2),
+             NLs::SequenceCache(1),
+             NLs::SequenceStartValue(2),
+             NLs::SequenceCycle(true)}
         );
 
         value = DoNextVal(runtime, "/MyRoot/seq");
@@ -443,17 +481,29 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         DoNextVal(runtime, "/MyRoot/seq", Ydb::StatusIds::SCHEME_ERROR);
 
-        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+        TestAlterSequence(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "seq"
             Cycle: false
             MinValue: 7
-        )", {{NKikimrScheme::StatusInvalidParameter, "MINVALUE (7) must be less than MAXVALUE (4)"}});
+        )",
+            {{NKikimrScheme::StatusInvalidParameter, "MINVALUE (7) must be less than MAXVALUE (4)"}}
+        );
 
-        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+        TestAlterSequence(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "seq"
             Cycle: false
             MinValue: 3
-        )", {{NKikimrScheme::StatusInvalidParameter, "START value (2) cannot be less than MINVALUE (3)"}});
+        )",
+            {{NKikimrScheme::StatusInvalidParameter, "START value (2) cannot be less than MINVALUE (3)"}}
+        );
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -463,12 +513,18 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+        TestAlterSequence(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "seq"
             Cycle: false
             MinValue: 3
             MaxValue: 2
-        )", {{NKikimrScheme::StatusInvalidParameter, "MINVALUE (3) must be less than MAXVALUE (2)"}});
+        )",
+            {{NKikimrScheme::StatusInvalidParameter, "MINVALUE (3) must be less than MAXVALUE (2)"}}
+        );
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -478,10 +534,16 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+        TestAlterSequence(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "seq"
             DataType: "Int16"
-        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (65000) is out of range for sequence data type Int16"}});
+        )",
+            {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (65000) is out of range for sequence data type Int16"}}
+        );
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -513,15 +575,29 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+        TestAlterSequence(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "seq"
             DataType: "Int32"
-        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (2147483648) is out of range for sequence data type Int32"}});
+        )",
+            {{NKikimrScheme::StatusInvalidParameter,
+              "MAXVALUE (2147483648) is out of range for sequence data type Int32"}}
+        );
 
-        TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
+        TestAlterSequence(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "seq"
             DataType: "Int16"
-        )", {{NKikimrScheme::StatusInvalidParameter, "MAXVALUE (2147483648) is out of range for sequence data type Int16"}});
+        )",
+            {{NKikimrScheme::StatusInvalidParameter,
+              "MAXVALUE (2147483648) is out of range for sequence data type Int16"}}
+        );
 
         TestAlterSequence(runtime, ++txId, "/MyRoot", R"(
             Name: "seq"
@@ -612,38 +688,42 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "Table2"
             Columns { Name: "value1" DefaultFromSequence: "/MyRoot/seq3" }
-        )", {TEvSchemeShard::EStatus::StatusPathDoesNotExist});
+        )",
+            {TEvSchemeShard::EStatus::StatusPathDoesNotExist}
+        );
 
-        auto table1 = DescribePath(runtime, "/MyRoot/Table1")
-            .GetPathDescription()
-            .GetTable();
+        auto table1 = DescribePath(runtime, "/MyRoot/Table1").GetPathDescription().GetTable();
 
-        for (const auto& column: table1.GetColumns()) {
+        for (const auto& column : table1.GetColumns()) {
             UNIT_ASSERT(column.HasDefaultFromSequence());
             UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
 
-            TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+            TestDescribeResult(
+                DescribePath(runtime, column.GetDefaultFromSequence()),
                 {
                     NLs::SequenceName("seq1"),
                 }
             );
         }
 
-        auto table2 = DescribePath(runtime, "/MyRoot/Table2")
-            .GetPathDescription()
-            .GetTable();
+        auto table2 = DescribePath(runtime, "/MyRoot/Table2").GetPathDescription().GetTable();
 
-        for (const auto& column: table2.GetColumns()) {
+        for (const auto& column : table2.GetColumns()) {
             if (column.GetName() == "key") {
                 continue;
             }
             UNIT_ASSERT(column.HasDefaultFromSequence());
             UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
 
-            TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+            TestDescribeResult(
+                DescribePath(runtime, column.GetDefaultFromSequence()),
                 {
                     NLs::SequenceName("seq1"),
                 }
@@ -656,11 +736,9 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        table2 = DescribePath(runtime, "/MyRoot/Table2")
-            .GetPathDescription()
-            .GetTable();
+        table2 = DescribePath(runtime, "/MyRoot/Table2").GetPathDescription().GetTable();
 
-        for (const auto& column: table2.GetColumns()) {
+        for (const auto& column : table2.GetColumns()) {
             if (column.GetName() == "key") {
                 continue;
             }
@@ -668,7 +746,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 UNIT_ASSERT(column.HasDefaultFromSequence());
                 UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq2");
 
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                TestDescribeResult(
+                    DescribePath(runtime, column.GetDefaultFromSequence()),
                     {
                         NLs::SequenceName("seq2"),
                     }
@@ -677,7 +756,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 UNIT_ASSERT(column.HasDefaultFromSequence());
                 UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
 
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                TestDescribeResult(
+                    DescribePath(runtime, column.GetDefaultFromSequence()),
                     {
                         NLs::SequenceName("seq1"),
                     }
@@ -692,16 +772,15 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        table2 = DescribePath(runtime, "/MyRoot/Table2")
-            .GetPathDescription()
-            .GetTable();
+        table2 = DescribePath(runtime, "/MyRoot/Table2").GetPathDescription().GetTable();
 
-        for (const auto& column: table2.GetColumns()) {
+        for (const auto& column : table2.GetColumns()) {
             if (column.GetName() == "key") {
                 UNIT_ASSERT(column.HasDefaultFromSequence());
                 UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq2");
 
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                TestDescribeResult(
+                    DescribePath(runtime, column.GetDefaultFromSequence()),
                     {
                         NLs::SequenceName("seq2"),
                     }
@@ -714,7 +793,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 UNIT_ASSERT(column.HasDefaultFromSequence());
                 UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
 
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                TestDescribeResult(
+                    DescribePath(runtime, column.GetDefaultFromSequence()),
                     {
                         NLs::SequenceName("seq1"),
                     }
@@ -728,11 +808,9 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        table1 = DescribePath(runtime, "/MyRoot/Table1")
-            .GetPathDescription()
-            .GetTable();
+        table1 = DescribePath(runtime, "/MyRoot/Table1").GetPathDescription().GetTable();
 
-        for (const auto& column: table1.GetColumns()) {
+        for (const auto& column : table1.GetColumns()) {
             if (column.GetName() == "key") {
                 UNIT_ASSERT(!column.HasDefaultFromSequence());
                 UNIT_ASSERT(!column.HasDefaultFromLiteral());
@@ -741,7 +819,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 UNIT_ASSERT(column.HasDefaultFromSequence());
                 UNIT_ASSERT_VALUES_EQUAL(column.GetDefaultFromSequence(), "/MyRoot/seq1");
 
-                TestDescribeResult(DescribePath(runtime, column.GetDefaultFromSequence()),
+                TestDescribeResult(
+                    DescribePath(runtime, column.GetDefaultFromSequence()),
                     {
                         NLs::SequenceName("seq1"),
                     }
@@ -757,10 +836,17 @@ Y_UNIT_TEST_SUITE(TSequence) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "Table3"
             Columns { Name: "value" DefaultFromSequence: "/MyRoot/seq1" }
-        )", {{NKikimrScheme::StatusInvalidParameter, "Column 'value' is of type Bool but default expression is of type Int64"}});
+        )",
+            {{NKikimrScheme::StatusInvalidParameter,
+              "Column 'value' is of type Bool but default expression is of type Int64"}}
+        );
     }
 
 } // Y_UNIT_TEST_SUITE(TSequence)

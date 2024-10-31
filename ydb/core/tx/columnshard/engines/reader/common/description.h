@@ -11,6 +11,7 @@ struct TReadDescription {
 private:
     TSnapshot Snapshot;
     TProgramContainer Program;
+
 public:
     // Table
     ui64 TxId = 0;
@@ -27,11 +28,10 @@ public:
     // List of columns
     std::vector<ui32> ColumnIds;
     std::vector<TString> ColumnNames;
-    
+
     TReadDescription(const TSnapshot& snapshot, const bool isReverse)
         : Snapshot(snapshot)
-        , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>(isReverse)) {
-    }
+        , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>(isReverse)) {}
 
     void SetProgram(TProgramContainer&& value) {
         Program = std::move(value);
@@ -46,4 +46,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader

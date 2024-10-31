@@ -5,6 +5,4 @@
 
 #include <ydb/core/tx/columnshard/blob.h>
 
-namespace NKikimr::NOlap {
-
-}
+namespace NKikimr::NOlap {}

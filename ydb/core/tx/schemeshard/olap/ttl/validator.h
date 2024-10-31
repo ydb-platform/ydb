@@ -3,13 +3,15 @@
 #include <ydb/core/tx/schemeshard/olap/indexes/schema.h>
 
 namespace NKikimr::NSchemeShard {
-    class TTTLValidator {
-    public:
-        static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes,
-            const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
-            const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
-            const THashMap<TString, ui32>& colName2Id,
-            IErrorCollector& errors);
-
-    };
-}
+class TTTLValidator {
+public:
+    static bool ValidateColumnTableTtl(
+        const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl,
+        const TOlapIndexesDescription& indexes,
+        const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
+        const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
+        const THashMap<TString, ui32>& colName2Id,
+        IErrorCollector& errors
+    );
+};
+} // namespace NKikimr::NSchemeShard

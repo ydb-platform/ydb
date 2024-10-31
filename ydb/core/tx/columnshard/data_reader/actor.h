@@ -35,10 +35,7 @@ public:
 
     IRestoreTask(const ui64 tabletId, const NActors::TActorId& tabletActorId)
         : TabletId(tabletId)
-        , TabletActorId(tabletActorId)
-    {
-
-    }
+        , TabletActorId(tabletActorId) {}
 
     virtual ~IRestoreTask() = default;
 };
@@ -71,13 +68,13 @@ protected:
 
 public:
     TActor(const std::shared_ptr<IRestoreTask>& rTask)
-        : RestoreTask(rTask)
-    {
+        : RestoreTask(rTask) {
         AFL_VERIFY(RestoreTask);
     }
 
     STATEFN(StateFunc) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", RestoreTask->GetTabletId());
+        NActors::TLogContextGuard lGuard =
+            NActors::TLogContextBuilder::Build()("tablet_id", RestoreTask->GetTabletId());
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, HandleExecute);
@@ -94,4 +91,4 @@ public:
     void Bootstrap(const TActorContext& ctx);
 };
 
-}   // namespace NKikimr::NOlap::NExport
+}   // namespace NKikimr::NOlap::NDataReader

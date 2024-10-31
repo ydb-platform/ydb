@@ -13,7 +13,9 @@ namespace NKikimr::NReplication::NController {
 Y_UNIT_TEST_SUITE(DstCreator) {
     using namespace NTestHelpers;
 
-    void CheckTableReplica(const TTestTableDescription& tableDesc, const NKikimrSchemeOp::TTableDescription& replicatedDesc) {
+    void CheckTableReplica(
+        const TTestTableDescription& tableDesc, const NKikimrSchemeOp::TTableDescription& replicatedDesc
+    ) {
         UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.KeyColumnNamesSize(), tableDesc.KeyColumns.size());
         for (ui32 i = 0; i < replicatedDesc.KeyColumnNamesSize(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.GetKeyColumnNames(i), tableDesc.KeyColumns[i]);
@@ -29,7 +31,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
 
         const auto& replCfg = replicatedDesc.GetReplicationConfig();
-        UNIT_ASSERT_VALUES_EQUAL(replCfg.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(
+            replCfg.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY
+        );
         UNIT_ASSERT_VALUES_EQUAL(replCfg.GetConsistency(), NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
     }
 
@@ -40,17 +44,25 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto tableDesc = TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
+            .Columns =
+                {
+                    {.Name = "key", .Type = "Uint32"},
+                    {.Name = "value", .Type = "Utf8"},
+                },
             .ReplicationConfig = Nothing(),
         };
 
         env.CreateTable("/Root", *MakeTableDescription(tableDesc));
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath
+            env.GetSender(),
+            env.GetSchemeshardId("/Root/Table"),
+            env.GetYdbProxy(),
+            env.GetPathId("/Root"),
+            1 /* rid */,
+            1 /* tid */,
+            TReplication::ETargetKind::Table,
+            "/Root/Table",
+            replicatedPath
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -77,20 +89,29 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         const auto tableDesc = TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Uint32"},
-            },
+            .Columns =
+                {
+                    {.Name = "key", .Type = "Uint32"},
+                    {.Name = "value", .Type = "Uint32"},
+                },
             .ReplicationConfig = Nothing(),
         };
 
         const TString indexName = "index_by_value";
 
-        env.CreateTableWithIndex("/Root", *MakeTableDescription(tableDesc),
-             indexName, TVector<TString>{"value"}, indexType);
+        env.CreateTableWithIndex(
+            "/Root", *MakeTableDescription(tableDesc), indexName, TVector<TString>{"value"}, indexType
+        );
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", replicatedPath
+            env.GetSender(),
+            env.GetSchemeshardId("/Root/Table"),
+            env.GetYdbProxy(),
+            env.GetPathId("/Root"),
+            1 /* rid */,
+            1 /* tid */,
+            TReplication::ETargetKind::Table,
+            "/Root/Table",
+            replicatedPath
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -103,19 +124,25 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         CheckTableReplica(tableDesc, replicatedDesc);
 
         switch (indexType) {
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 1);
-            break;
-        default:
-            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 0);
-            return;
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 1);
+                break;
+            default:
+                UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 0);
+                return;
         }
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 2 /* tid */, TReplication::ETargetKind::IndexTable,
-            "/Root/Table/" + indexName + "/indexImplTable", replicatedPath + "/" + indexName + "/indexImplTable"
+            env.GetSender(),
+            env.GetSchemeshardId("/Root/Table"),
+            env.GetYdbProxy(),
+            env.GetPathId("/Root"),
+            1 /* rid */,
+            2 /* tid */,
+            TReplication::ETargetKind::IndexTable,
+            "/Root/Table/" + indexName + "/indexImplTable",
+            replicatedPath + "/" + indexName + "/indexImplTable"
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -153,19 +180,30 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.ModifyOwner("/", "Root", "user@builtin");
-        env.CreateTable("/Root", *MakeTableDescription({
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-            .ReplicationConfig = Nothing(),
-        }));
+        env.CreateTable(
+            "/Root",
+            *MakeTableDescription({
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+                .ReplicationConfig = Nothing(),
+            })
+        );
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
+            env.GetSender(),
+            env.GetSchemeshardId("/Root/Table"),
+            env.GetYdbProxy(),
+            env.GetPathId("/Root"),
+            1 /* rid */,
+            1 /* tid */,
+            TReplication::ETargetKind::Table,
+            "/Root/Table",
+            "/Root/Replicated"
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -180,20 +218,31 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
-        env.CreateTable("/Root", *MakeTableDescription({
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-            .ReplicationConfig = Nothing(),
-            .UniformPartitions = 2,
-        }));
+        env.CreateTable(
+            "/Root",
+            *MakeTableDescription({
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+                .ReplicationConfig = Nothing(),
+                .UniformPartitions = 2,
+            })
+        );
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
+            env.GetSender(),
+            env.GetSchemeshardId("/Root/Table"),
+            env.GetYdbProxy(),
+            env.GetPathId("/Root"),
+            1 /* rid */,
+            1 /* tid */,
+            TReplication::ETargetKind::Table,
+            "/Root/Table",
+            "/Root/Replicated"
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -213,8 +262,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replicated"
+            env.GetSender(),
+            env.GetSchemeshardId("/Root"),
+            env.GetYdbProxy(),
+            env.GetPathId("/Root"),
+            1 /* rid */,
+            1 /* tid */,
+            TReplication::ETargetKind::Table,
+            "/Root/Table",
+            "/Root/Replicated"
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -242,8 +298,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         env.CreateTable("/Root", *MakeTableDescription(mod(changeName(desc, "Dst"))));
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root"), env.GetYdbProxy(), env.GetPathId("/Root"),
-            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Src", "/Root/Dst"
+            env.GetSender(),
+            env.GetSchemeshardId("/Root"),
+            env.GetYdbProxy(),
+            env.GetPathId("/Root"),
+            1 /* rid */,
+            1 /* tid */,
+            TReplication::ETargetKind::Table,
+            "/Root/Src",
+            "/Root/Dst"
         ));
 
         auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
@@ -258,14 +321,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return desc;
         };
 
-        ExistingDst(NKikimrScheme::StatusSuccess, "", nop, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSuccess,
+            "",
+            nop,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(KeyColumnsSizeMismatch) {
@@ -275,14 +344,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Key columns size mismatch", addKeyColumn, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Key columns size mismatch",
+            addKeyColumn,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(KeyColumnNameMismatch) {
@@ -292,14 +367,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Key column name mismatch", changeKeyColumn, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Key column name mismatch",
+            changeKeyColumn,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(ColumnsSizeMismatch) {
@@ -309,14 +390,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Columns size mismatch", addColumn, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Columns size mismatch",
+            addColumn,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(CannotFindColumn) {
@@ -326,14 +413,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Cannot find column", changeColumnName, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Cannot find column",
+            changeColumnName,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(ColumnTypeMismatch) {
@@ -343,14 +436,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Column type mismatch", changeColumnType, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Column type mismatch",
+            changeColumnType,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(EmptyReplicationConfig) {
@@ -360,14 +459,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Empty replication config", clearConfig, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Empty replication config",
+            clearConfig,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(UnsupportedReplicationMode) {
@@ -378,14 +483,20 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication mode", changeMode, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Unsupported replication mode",
+            changeMode,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 
     Y_UNIT_TEST(UnsupportedReplicationConsistency) {
@@ -395,15 +506,21 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Unsupported replication consistency", changeConsistency, TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        });
+        ExistingDst(
+            NKikimrScheme::StatusSchemeError,
+            "Unsupported replication consistency",
+            changeConsistency,
+            TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            }
+        );
     }
 }
 
-}
+} // namespace NKikimr::NReplication::NController

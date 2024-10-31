@@ -5,23 +5,26 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TMoveIndexUnit : public TExecutionUnit {
+class TMoveIndexUnit: public TExecutionUnit {
     TVector<IDataShardChangeCollector::TChange> ChangeRecords;
 
 public:
     TMoveIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::MoveIndex, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::MoveIndex, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
     }
 
-    void MoveChangeRecords(NIceDb::TNiceDb& db, const NKikimrTxDataShard::TMoveIndex& move, TVector<IDataShardChangeCollector::TChange>& changeRecords) {
+    void MoveChangeRecords(
+        NIceDb::TNiceDb& db,
+        const NKikimrTxDataShard::TMoveIndex& move,
+        TVector<IDataShardChangeCollector::TChange>& changeRecords
+    ) {
         const auto remapPrevId = PathIdFromPathId(move.GetReMapIndex().GetSrcPathId());
         const auto remapNewId = PathIdFromPathId(move.GetReMapIndex().GetDstPathId());
 
-        for (auto& record: changeRecords) {
+        for (auto& record : changeRecords) {
             if (record.PathId == remapPrevId) {
                 record.PathId = remapNewId;
                 if (record.LockId) {

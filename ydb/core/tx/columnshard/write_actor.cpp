@@ -8,7 +8,9 @@ namespace NKikimr::NColumnShard {
 
 namespace {
 
-class TWriteActor: public TActorBootstrapped<TWriteActor>, public TMonitoringObjectsCounter<TWriteActor> {
+class TWriteActor
+    : public TActorBootstrapped<TWriteActor>
+    , public TMonitoringObjectsCounter<TWriteActor> {
     ui64 TabletId;
     IWriteController::TPtr WriteController;
 
@@ -20,8 +22,7 @@ public:
     TWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline)
         : TabletId(tabletId)
         , WriteController(writeController)
-        , Deadline(deadline) {
-    }
+        , Deadline(deadline) {}
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
         TEvBlobStorage::TEvPutResult* msg = ev->Get();
@@ -35,8 +36,12 @@ public:
         }
 
         if (status != NKikimrProto::OK) {
-            ACFL_ERROR("event", "TEvPutResult")("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
-            WriteController->Abort("cannot write blob " + msg->Id.ToString() + ", status: " + ::ToString(status) + ". reason: " + msg->ErrorReason);
+            ACFL_ERROR("event", "TEvPutResult")
+            ("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
+            WriteController->Abort(
+                "cannot write blob " + msg->Id.ToString() + ", status: " + ::ToString(status) +
+                ". reason: " + msg->ErrorReason
+            );
             return SendResultAndDie(ctx, status);
         }
 
@@ -60,9 +65,8 @@ public:
             }
         }
 
-        auto putResult = std::make_shared<TBlobPutResult>(putStatus,
-            std::move(YellowMoveChannels),
-            std::move(YellowStopChannels));
+        auto putResult =
+            std::make_shared<TBlobPutResult>(putStatus, std::move(YellowMoveChannels), std::move(YellowStopChannels));
 
         WriteController->OnReadyResult(ctx, putResult);
         Die(ctx);
@@ -91,7 +95,8 @@ public:
     }
 
     STFUNC(StateWait) {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId);
+        NActors::TLogContextGuard logGuard =
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvPutResult, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
@@ -107,4 +112,4 @@ IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, 
     return new TWriteActor(tabletId, writeController, deadline);
 }
 
-}
+} // namespace NKikimr::NColumnShard

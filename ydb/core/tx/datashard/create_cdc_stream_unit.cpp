@@ -5,14 +5,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCreateCdcStreamUnit : public TExecutionUnit {
+class TCreateCdcStreamUnit: public TExecutionUnit {
     THolder<TEvChangeExchange::TEvAddSender> AddSender;
 
 public:
     TCreateCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CreateCdcStream, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::CreateCdcStream, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -29,10 +27,9 @@ public:
             return EExecutionStatus::Executed;
         }
 
-        const auto& params =
-            schemeTx.HasCreateCdcStreamNotice() ?
-            schemeTx.GetCreateCdcStreamNotice() :
-            schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
+        const auto& params = schemeTx.HasCreateCdcStreamNotice()
+                                 ? schemeTx.GetCreateCdcStreamNotice()
+                                 : schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
         const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
 
@@ -53,12 +50,17 @@ public:
             Y_ABORT_UNLESS(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateScan);
             Y_ABORT_UNLESS(tx->GetStep() != 0);
 
-            DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
+            DataShard.GetSnapshotManager().AddSnapshot(
+                txc.DB,
                 TSnapshotKey(pathId, tx->GetStep(), tx->GetTxId()),
-                params.GetSnapshotName(), TSnapshot::FlagScheme, TDuration::Zero());
+                params.GetSnapshotName(),
+                TSnapshot::FlagScheme,
+                TDuration::Zero()
+            );
 
-            DataShard.GetCdcStreamScanManager().Add(txc.DB,
-                pathId, streamPathId, TRowVersion(tx->GetStep(), tx->GetTxId()));
+            DataShard.GetCdcStreamScanManager().Add(
+                txc.DB, pathId, streamPathId, TRowVersion(tx->GetStep(), tx->GetTxId())
+            );
         }
 
         if (streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
@@ -67,9 +69,9 @@ public:
             }
         }
 
-        AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-            pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
-        ));
+        AddSender.Reset(
+            new TEvChangeExchange::TEvAddSender(pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId)
+        );
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

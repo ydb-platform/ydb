@@ -15,16 +15,13 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardVolatile) {
-
     Y_UNIT_TEST(DistributedWrite) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -60,7 +57,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }"
+        );
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         RebootTablet(runtime, shards1.at(0), sender);
@@ -76,18 +74,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteBrokenLock) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -111,7 +108,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
             )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }"
+        );
 
         // Break lock using a blind write to table-1
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);");
@@ -124,7 +122,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3);
                 UPSERT INTO `/Root/table-2` (key, value) VALUES (30, 30);
             )"),
-            "ERROR: ABORTED");
+            "ERROR: ABORTED"
+        );
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
@@ -138,18 +137,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteShardRestartBeforePlan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -182,12 +180,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
         Cerr << "!!! distributed write begin" << Endl;
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedPlans.size() >= 2; }, "both captured plans");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedPlans.size() >= 2;
+            },
+            "both captured plans"
+        );
 
         runtime.SetObserverFunc(prevObserverFunc);
 
@@ -201,9 +214,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
         capturedPlans.clear();
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "ERROR: UNDETERMINED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(future))), "ERROR: UNDETERMINED");
         Cerr << "!!! distributed write end" << Endl;
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -217,18 +228,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteShardRestartAfterExpectation) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -277,21 +287,34 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
         Cerr << "!!! distributed write begin" << Endl;
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedPlans.size() >= 1 && capturedReadSets.size() >= 2; }, "captured plan and readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedPlans.size() >= 1 && capturedReadSets.size() >= 2;
+            },
+            "captured plan and readsets"
+        );
 
         runtime.SetObserverFunc(prevObserverFunc);
 
         // Restart the first table shard
         RebootTablet(runtime, shard1, sender);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "ERROR: UNDETERMINED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(future))), "ERROR: UNDETERMINED");
         Cerr << "!!! distributed write end" << Endl;
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -305,18 +328,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteEarlierSnapshotNotBlocked) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -339,7 +361,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
             )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }"
+        );
 
         runtime.GetAppData(0).FeatureFlags.SetEnableDataShardVolatileTransactions(true);
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_DEBUG);
@@ -349,8 +372,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
-                    Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest()
-                        << " with flags " << msg->Record.GetFlags() << Endl;
+                    Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << " with flags "
+                         << msg->Record.GetFlags() << Endl;
                     capturedReadSets.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -362,12 +385,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
         Cerr << "!!! distributed write begin" << Endl;
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
 
         runtime.SetObserverFunc(prevObserverFunc);
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -381,20 +419,18 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
             )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+            "{ items { uint32_value: 10 } items { uint32_value: 10 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000).SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -416,8 +452,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
-                    Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest()
-                        << " with flags " << msg->Record.GetFlags() << Endl;
+                    Cerr << "... captured TEvReadSet for " << msg->Record.GetTabletDest() << " with flags "
+                         << msg->Record.GetFlags() << Endl;
                     capturedReadSets.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -429,23 +465,47 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
         Cerr << "!!! distributed write begin" << Endl;
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
 
         runtime.SetObserverFunc(prevObserverFunc);
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         TString sessionIdSnapshot = CreateSessionRPC(runtime, "/Root");
-        auto snapshotReadFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto snapshotReadFuture = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             SELECT key, value FROM `/Root/table-1`
             UNION ALL
             SELECT key, value FROM `/Root/table-2`
             ORDER BY key
-        )", sessionIdSnapshot, "", false /* commitTx */), "/Root");
+        )",
+                sessionIdSnapshot,
+                "",
+                false /* commitTx */
+            ),
+            "/Root"
+        );
 
         // Let some virtual time pass
         SimulateSleep(runtime, TDuration::Seconds(1));
@@ -462,28 +522,24 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         // We expect successful commit and read including that data
         UNIT_ASSERT(snapshotReadFuture.HasValue());
         UNIT_ASSERT(future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(future.ExtractValue()),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(future.ExtractValue()), "<empty>");
         UNIT_ASSERT_VALUES_EQUAL(
             FormatResult(snapshotReadFuture.ExtractValue()),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000).SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -524,12 +580,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
         Cerr << "!!! distributed write begin" << Endl;
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return observedPlans >= 2; }, "observed both plans");
+        WaitFor(
+            runtime,
+            [&] {
+                return observedPlans >= 2;
+            },
+            "observed both plans"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedPlans.size(), 1u);
 
         runtime.SetObserverFunc(prevObserverFunc);
@@ -537,10 +608,19 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Start reading from table-2
         TString sessionIdSnapshot = CreateSessionRPC(runtime, "/Root");
-        auto snapshotReadFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto snapshotReadFuture = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             SELECT key, value FROM `/Root/table-2`
             ORDER BY key
-        )", sessionIdSnapshot, "", false /* commitTx */), "/Root");
+        )",
+                sessionIdSnapshot,
+                "",
+                false /* commitTx */
+            ),
+            "/Root"
+        );
 
         // Let some virtual time pass
         SimulateSleep(runtime, TDuration::Seconds(1));
@@ -556,23 +636,19 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         // We expect aborted commit and read without that data
         UNIT_ASSERT(snapshotReadFuture.HasValue());
         UNIT_ASSERT(future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(future.ExtractValue()), "ERROR: UNDETERMINED");
         UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(future.ExtractValue()),
-            "ERROR: UNDETERMINED");
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(snapshotReadFuture.ExtractValue()),
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+            FormatResult(snapshotReadFuture.ExtractValue()), "{ items { uint32_value: 10 } items { uint32_value: 10 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteAsymmetricExecute) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -611,12 +687,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return observedPlans >= 2; }, "observed plans");
+        WaitFor(
+            runtime,
+            [&] {
+                return observedPlans >= 2;
+            },
+            "observed plans"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedPlans.size(), 1u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -630,21 +721,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(future))), "<empty>");
         Cerr << "!!! distributed write end" << Endl;
     }
 
     Y_UNIT_TEST(DistributedWriteThenDropTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -682,19 +769,40 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         observedPropose = 0;
         ui64 txId = AsyncDropTable(server, sender, "/Root", "table-1");
-        WaitFor(runtime, [&]{ return observedPropose > 0; }, "observed propose");
+        WaitFor(
+            runtime,
+            [&] {
+                return observedPropose > 0;
+            },
+            "observed propose"
+        );
 
         SimulateSleep(runtime, TDuration::Seconds(1));
 
@@ -709,12 +817,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(DistributedWriteThenImmediateUpsert) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -722,11 +828,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false},
-                            {"value2", "Uint32", false, false}});
+        auto opts = TShardedTableOptions().Columns(
+            {{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}
+        );
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -754,12 +858,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -777,9 +896,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(future))), "<empty>");
 
         // Verify the result
         UNIT_ASSERT_VALUES_EQUAL(
@@ -792,18 +909,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 2 } items { uint32_value: 51 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } items { null_flag_value: NULL_VALUE } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteThenCopyTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -841,19 +957,40 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         observedPropose = 0;
         ui64 txId = AsyncCreateCopyTable(server, sender, "/Root", "table-1-copy", "/Root/table-1");
-        WaitFor(runtime, [&]{ return observedPropose > 0; }, "observed propose");
+        WaitFor(
+            runtime,
+            [&] {
+                return observedPropose > 0;
+            },
+            "observed propose"
+        );
 
         SimulateSleep(runtime, TDuration::Seconds(1));
 
@@ -872,18 +1009,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteThenSplit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -921,12 +1057,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -934,7 +1085,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
         auto shards1before = GetTableShards(server, sender, "/Root/table-1");
         ui64 txId = AsyncSplitTable(server, sender, "/Root/table-1", shards1before.at(0), 2);
-        WaitFor(runtime, [&]{ return observedSplit > 0; }, "observed split");
+        WaitFor(
+            runtime,
+            [&] {
+                return observedSplit > 0;
+            },
+            "observed split"
+        );
 
         SimulateSleep(runtime, TDuration::Seconds(1));
 
@@ -953,18 +1110,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteThenReadIterator) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -972,11 +1128,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false},
-                            {"value2", "Uint32", false, false}});
+        auto opts = TShardedTableOptions().Columns(
+            {{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}
+        );
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -1007,12 +1161,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -1048,8 +1217,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.AddColumns(2);
             msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
 
-            TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
-            TVector<TCell> toKeyCells = { TCell::Make(ui32(10)) };
+            TVector<TCell> fromKeyCells = {TCell::Make(ui32(0))};
+            TVector<TCell> toKeyCells = {TCell::Make(ui32(10))};
             auto fromBuf = TSerializedCellVec::Serialize(fromKeyCells);
             auto toBuf = TSerializedCellVec::Serialize(toKeyCells);
             msg->Ranges.emplace_back(fromBuf, toBuf, true, true);
@@ -1066,13 +1235,20 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        WaitFor(runtime, [&]{ return readResults.size() > 0; }, "read result");
+        WaitFor(
+            runtime,
+            [&] {
+                return readResults.size() > 0;
+            },
+            "read result"
+        );
         UNIT_ASSERT_VALUES_EQUAL(readResults.size(), 1u);
 
         {
             auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
+            UNIT_ASSERT_VALUES_EQUAL(
+                msg->GetArrowBatch()->ToString(),
                 "key:   [\n"
                 "    1,\n"
                 "    2\n"
@@ -1080,7 +1256,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 "value:   [\n"
                 "    1,\n"
                 "    2\n"
-                "  ]\n");
+                "  ]\n"
+            );
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetFinished(), true);
         }
     }
@@ -1088,12 +1265,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(DistributedWriteThenReadIteratorStream) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1101,11 +1276,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false},
-                            {"value2", "Uint32", false, false}});
+        auto opts = TShardedTableOptions().Columns(
+            {{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}
+        );
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -1136,12 +1309,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -1178,8 +1366,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             msg->Record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
             msg->Record.SetMaxRowsInResult(1);
 
-            TVector<TCell> fromKeyCells = { TCell::Make(ui32(0)) };
-            TVector<TCell> toKeyCells = { TCell::Make(ui32(10)) };
+            TVector<TCell> fromKeyCells = {TCell::Make(ui32(0))};
+            TVector<TCell> toKeyCells = {TCell::Make(ui32(10))};
             auto fromBuf = TSerializedCellVec::Serialize(fromKeyCells);
             auto toBuf = TSerializedCellVec::Serialize(toKeyCells);
             msg->Ranges.emplace_back(fromBuf, toBuf, true, true);
@@ -1196,13 +1384,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         {
             auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
+            UNIT_ASSERT_VALUES_EQUAL(
+                msg->GetArrowBatch()->ToString(),
                 "key:   [\n"
                 "    1\n"
                 "  ]\n"
                 "value:   [\n"
                 "    1\n"
-                "  ]\n");
+                "  ]\n"
+            );
             readResults.clear();
         }
 
@@ -1212,19 +1402,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        WaitFor(runtime, [&]{ return readResults.size() > 0; }, "read result");
+        WaitFor(
+            runtime,
+            [&] {
+                return readResults.size() > 0;
+            },
+            "read result"
+        );
         UNIT_ASSERT_GE(readResults.size(), 1u);
 
         {
             auto* msg = readResults[0]->Get<TEvDataShard::TEvReadResult>();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(msg->GetArrowBatch()->ToString(),
+            UNIT_ASSERT_VALUES_EQUAL(
+                msg->GetArrowBatch()->ToString(),
                 "key:   [\n"
                 "    2\n"
                 "  ]\n"
                 "value:   [\n"
                 "    2\n"
-                "  ]\n");
+                "  ]\n"
+            );
         }
 
         SimulateSleep(runtime, TDuration::MilliSeconds(0));
@@ -1241,13 +1439,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000).SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1287,12 +1482,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -1349,19 +1559,18 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT_VALUES_EQUAL(
             observedResults[0],
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }"
+        );
         UNIT_ASSERT_VALUES_EQUAL(observedStatus, Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(DistributedWriteWithAsyncIndex) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1369,10 +1578,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-            .Indexes({
-                {"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
-            });
+        auto opts = TShardedTableOptions().Indexes({
+            {"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+        });
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -1396,7 +1604,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
             )"),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 2 } items { uint32_value: 3 } }");
+            "{ items { uint32_value: 2 } items { uint32_value: 3 } }"
+        );
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleStaleRoExec(runtime, R"(
@@ -1405,18 +1614,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 ORDER BY key
             )"),
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 30 } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 30 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteThenBulkUpsert) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1424,11 +1632,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false},
-                            {"value2", "Uint32", false, false}});
+        auto opts = TShardedTableOptions().Columns(
+            {{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}
+        );
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
@@ -1459,12 +1665,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -1489,10 +1710,11 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             row1->add_items()->set_uint32_value(2);
             row1->add_items()->set_uint32_value(22);
 
-            using TEvBulkUpsertRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<
-                Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
+            using TEvBulkUpsertRequest = NKikimr::NGRpcService::
+                TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
             bulkUpsertFuture = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
-                std::move(request), "/Root", "", runtime.GetActorSystem(0));
+                std::move(request), "/Root", "", runtime.GetActorSystem(0)
+            );
 
             auto response = AwaitResponse(runtime, std::move(bulkUpsertFuture));
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
@@ -1510,9 +1732,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(future))), "<empty>");
 
         // Verify the result
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1525,40 +1745,46 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 22 } items { uint32_value: 42 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } items { null_flag_value: NULL_VALUE } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }"
+        );
     }
 
     namespace {
-        using TCdcStream = TShardedTableOptions::TCdcStream;
+    using TCdcStream = TShardedTableOptions::TCdcStream;
 
-        TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
-            return TCdcStream{
-                .Name = name,
-                .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
-                .Format = format,
-            };
-        }
+    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+        return TCdcStream{
+            .Name = name,
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            .Format = format,
+        };
+    }
 
-        TCdcStream WithInitialScan(TCdcStream streamDesc) {
-            streamDesc.InitialState = NKikimrSchemeOp::ECdcStreamStateScan;
-            return streamDesc;
-        }
+    TCdcStream WithInitialScan(TCdcStream streamDesc) {
+        streamDesc.InitialState = NKikimrSchemeOp::ECdcStreamStateScan;
+        return streamDesc;
+    }
 
-        void WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<TString>& expected) {
-            while (true) {
-                const auto records = GetPqRecords(*server->GetRuntime(), sender, path, 0);
-                if (records.size() >= expected.size()) {
-                    for (ui32 i = 0; i < expected.size(); ++i) {
-                        UNIT_ASSERT_VALUES_EQUAL(records.at(i).second, expected.at(i));
-                    }
-
-                    UNIT_ASSERT_VALUES_EQUAL(records.size(), expected.size());
-                    break;
+    void WaitForContent(
+        TServer::TPtr server,
+        const TActorId& sender,
+        const TString& path,
+        const TVector<TString>& expected
+    ) {
+        while (true) {
+            const auto records = GetPqRecords(*server->GetRuntime(), sender, path, 0);
+            if (records.size() >= expected.size()) {
+                for (ui32 i = 0; i < expected.size(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(records.at(i).second, expected.at(i));
                 }
 
-                SimulateSleep(server, TDuration::Seconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(records.size(), expected.size());
+                break;
             }
+
+            SimulateSleep(server, TDuration::Seconds(1));
         }
+    }
     } // namespace
 
     Y_UNIT_TEST(DistributedWriteThenBulkUpsertWithCdc) {
@@ -1570,7 +1796,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableChangefeedInitialScan(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1578,23 +1804,31 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false},
-                            {"value2", "Uint32", false, false}});
+        auto opts = TShardedTableOptions().Columns(
+            {{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}}
+        );
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         CreateShardedTable(server, sender, "/Root", "table-2", opts);
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10);");
 
-        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "table-1",
-            WithInitialScan(NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitTxNotification(
+            server,
+            sender,
+            AsyncAlterAddStream(
+                server, "/Root", "table-1", WithInitialScan(NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson))
+            )
+        );
 
-        WaitForContent(server, sender, "/Root/table-1/Stream", {
-            R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
-        });
+        WaitForContent(
+            server,
+            sender,
+            "/Root/table-1/Stream",
+            {
+                R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
+            }
+        );
 
         ui64 maxReadSetStep = 0;
         bool captureReadSets = true;
@@ -1620,12 +1854,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (2, 2, 42);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", true /* commitTx */), "/Root");
+        )",
+                sessionId,
+                "",
+                true /* commitTx */
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
@@ -1650,10 +1899,11 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             row1->add_items()->set_uint32_value(2);
             row1->add_items()->set_uint32_value(22);
 
-            using TEvBulkUpsertRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<
-                Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
+            using TEvBulkUpsertRequest = NKikimr::NGRpcService::
+                TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
             bulkUpsertFuture = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
-                std::move(request), "/Root", "", runtime.GetActorSystem(0));
+                std::move(request), "/Root", "", runtime.GetActorSystem(0)
+            );
 
             // Note: we expect bulk upsert to block until key 2 outcome is decided
             SimulateSleep(runtime, TDuration::Seconds(1));
@@ -1665,9 +1915,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(future))), "<empty>");
 
         SimulateSleep(runtime, TDuration::Seconds(1));
 
@@ -1682,13 +1930,19 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 22 } items { uint32_value: 42 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } items { null_flag_value: NULL_VALUE } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } items { null_flag_value: NULL_VALUE } }"
+        );
 
-        WaitForContent(server, sender, "/Root/table-1/Stream", {
-            R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
-            R"({"update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
-            R"({"update":{},"newImage":{"value2":42,"value":22},"key":[2],"oldImage":{"value2":42,"value":2}})",
-        });
+        WaitForContent(
+            server,
+            sender,
+            "/Root/table-1/Stream",
+            {
+                R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
+                R"({"update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
+                R"({"update":{},"newImage":{"value2":42,"value":22},"key":[2],"oldImage":{"value2":42,"value":2}})",
+            }
+        );
 
         UNIT_ASSERT(bulkUpsertFuture.HasValue());
     }
@@ -1704,7 +1958,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1741,12 +1995,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", /* commitTx */ true), "/Root");
+        )",
+                sessionId,
+                "",
+                /* commitTx */ true
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return capturedReadSets.size() >= 4; }, "captured readsets");
+        WaitFor(
+            runtime,
+            [&] {
+                return capturedReadSets.size() >= 4;
+            },
+            "captured readsets"
+        );
         UNIT_ASSERT_VALUES_EQUAL(capturedReadSets.size(), 4u);
 
         // Make an uncommitted write and read it to make sure it's flushed to datashard
@@ -1756,12 +2025,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             KqpSimpleBegin(runtime, sessionId2, txId2, R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 22);
             )"),
-            "<empty>");
+            "<empty>"
+        );
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleContinue(runtime, sessionId2, txId2, R"(
                 SELECT key, value FROM `/Root/table-1` WHERE key = 2;
             )"),
-            "{ items { uint32_value: 2 } items { uint32_value: 22 } }");
+            "{ items { uint32_value: 2 } items { uint32_value: 22 } }"
+        );
 
         // Unblock readsets and let it commit
         runtime.SetObserverFunc(prevObserverFunc);
@@ -1769,14 +2040,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(future))), "<empty>");
 
         // Commit the transaction, it should succeed without crashing
-        UNIT_ASSERT_VALUES_EQUAL(
-            CommitTransactionRPC(runtime, sessionId2, txId2),
-            "");
+        UNIT_ASSERT_VALUES_EQUAL(CommitTransactionRPC(runtime, sessionId2, txId2), "");
 
         // Verify the result
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1789,7 +2056,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 22 } }, "
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
-            "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+            "{ items { uint32_value: 20 } items { uint32_value: 20 } }"
+        );
     }
 
     Y_UNIT_TEST(DistributedWriteLostPlanThenDrop) {
@@ -1801,7 +2069,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1837,7 +2105,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                         // Acknowledge transactions to coordinator and remove them
                         // It would be as if shard missed them for some reason
                         for (auto& pr : acks) {
-                            auto* ack = new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
+                            auto* ack =
+                                new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
                             runtime.Send(new IEventHandle(pr.first, recipient, ack), 0, true);
                         }
                         auto* accept = new TEvTxProcessing::TEvPlanStepAccepted(tabletId, step);
@@ -1863,12 +2132,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", /* commitTx */ true), "/Root");
+        )",
+                sessionId,
+                "",
+                /* commitTx */ true
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return removedTransactions > 0 && receivedReadSets >= 2; }, "readset exchange start");
+        WaitFor(
+            runtime,
+            [&] {
+                return removedTransactions > 0 && receivedReadSets >= 2;
+            },
+            "readset exchange start"
+        );
         UNIT_ASSERT_VALUES_EQUAL(removedTransactions, 1u);
         UNIT_ASSERT_VALUES_EQUAL(receivedReadSets, 2u);
 
@@ -1893,7 +2177,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -1930,7 +2214,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                         // Acknowledge transactions to coordinator and remove them
                         // It would be as if shard missed them for some reason
                         for (auto& pr : acks) {
-                            auto* ack = new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
+                            auto* ack =
+                                new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
                             runtime.Send(new IEventHandle(pr.first, recipient, ack), 0, true);
                         }
                         auto* accept = new TEvTxProcessing::TEvPlanStepAccepted(tabletId, step);
@@ -1956,12 +2241,27 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         TString sessionId = CreateSessionRPC(runtime, "/Root");
 
-        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        auto future = SendRequest(
+            runtime,
+            MakeSimpleRequestRPC(
+                R"(
             UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2);
             UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
-        )", sessionId, "", /* commitTx */ true), "/Root");
+        )",
+                sessionId,
+                "",
+                /* commitTx */ true
+            ),
+            "/Root"
+        );
 
-        WaitFor(runtime, [&]{ return removedTransactions > 0 && receivedReadSets >= 2; }, "readset exchange start");
+        WaitFor(
+            runtime,
+            [&] {
+                return removedTransactions > 0 && receivedReadSets >= 2;
+            },
+            "readset exchange start"
+        );
         UNIT_ASSERT_VALUES_EQUAL(removedTransactions, 1u);
         UNIT_ASSERT_VALUES_EQUAL(receivedReadSets, 2u);
 
@@ -1987,7 +2287,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2009,20 +2309,33 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Block readset exchange
         std::vector<std::unique_ptr<IEventHandle>> readSets;
-        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
-            readSets.emplace_back(ev.Release());
-        });
+        auto blockReadSets =
+            runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+                readSets.emplace_back(ev.Release());
+            });
 
         // Start a distributed write to both tables
         TString sessionId = CreateSessionRPC(runtime, "/Root");
         auto upsertResult = SendRequest(
             runtime,
-            MakeSimpleRequestRPC(R"(
+            MakeSimpleRequestRPC(
+                R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3);
                 UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 4);
-                )", sessionId, /* txId */ "", /* commitTx */ true),
-            "/Root");
-        WaitFor(runtime, [&]{ return readSets.size() >= 4; }, "readsets");
+                )",
+                sessionId,
+                /* txId */ "",
+                /* commitTx */ true
+            ),
+            "/Root"
+        );
+        WaitFor(
+            runtime,
+            [&] {
+                return readSets.size() >= 4;
+            },
+            "readsets"
+        );
 
         // Stop blocking further readsets
         blockReadSets.Remove();
@@ -2044,19 +2357,29 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Check tables, they shouldn't see inconsistent results with the latest write
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleStaleRoExec(runtime, Q_(R"(
+            KqpSimpleStaleRoExec(
+                runtime,
+                Q_(R"(
                 SELECT key, value
                 FROM `/Root/table-1`
                 ORDER BY key
-                )"), "/Root"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }");
+                )"),
+                "/Root"
+            ),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }"
+        );
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleStaleRoExec(runtime, Q_(R"(
+            KqpSimpleStaleRoExec(
+                runtime,
+                Q_(R"(
                 SELECT key, value
                 FROM `/Root/table-2`
                 ORDER BY key
-                )"), "/Root"),
-            "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+                )"),
+                "/Root"
+            ),
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }"
+        );
 
         // Unblock readsets
         for (auto& ev : readSets) {
@@ -2077,7 +2400,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 )")),
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
-            "{ items { uint32_value: 5 } items { uint32_value: 5 } }");
+            "{ items { uint32_value: 5 } items { uint32_value: 5 } }"
+        );
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleStaleRoExec(runtime, Q_(R"(
                 SELECT key, value
@@ -2086,7 +2410,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 )")),
             "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
             "{ items { uint32_value: 4 } items { uint32_value: 4 } }, "
-            "{ items { uint32_value: 6 } items { uint32_value: 6 } }");
+            "{ items { uint32_value: 6 } items { uint32_value: 6 } }"
+        );
     }
 
     // Regression test for KIKIMR-21060
@@ -2099,7 +2424,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2115,21 +2440,34 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Block readset exchange
         std::vector<std::unique_ptr<IEventHandle>> readSets;
-        auto blockReadSets = runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
-            Cerr << "... blocking readset" << Endl;
-            readSets.emplace_back(ev.Release());
-        });
+        auto blockReadSets =
+            runtime.AddObserver<TEvTxProcessing::TEvReadSet>([&](TEvTxProcessing::TEvReadSet::TPtr& ev) {
+                Cerr << "... blocking readset" << Endl;
+                readSets.emplace_back(ev.Release());
+            });
 
         // Start a distributed write to both tables
         TString sessionId = CreateSessionRPC(runtime, "/Root");
         auto upsertResult = SendRequest(
             runtime,
-            MakeSimpleRequestRPC(R"(
+            MakeSimpleRequestRPC(
+                R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 30);
                 UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
-                )", sessionId, /* txId */ "", /* commitTx */ true),
-            "/Root");
-        WaitFor(runtime, [&]{ return readSets.size() >= 4; }, "readsets");
+                )",
+                sessionId,
+                /* txId */ "",
+                /* commitTx */ true
+            ),
+            "/Root"
+        );
+        WaitFor(
+            runtime,
+            [&] {
+                return readSets.size() >= 4;
+            },
+            "readsets"
+        );
 
         // Stop blocking further readsets
         blockReadSets.Remove();
@@ -2151,7 +2489,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                     ev->GetRecipientRewrite(),
                     msg->MakeErrorResponse(NKikimrProto::BLOCKED, "Fake blocked response", TGroupId::Zero()).release(),
                     0,
-                    ev->Cookie));
+                    ev->Cookie
+                ));
                 Cerr << "... dropping put " << msg->Id << Endl;
                 ev.Reset();
             }
@@ -2169,9 +2508,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Transaction will return success even when commits are blocked at this point
         Cerr << "... awaiting upsert result" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(upsertResult))),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(upsertResult))), "<empty>");
 
         // Now we stop blocking commits and gracefully restart the tablet, all pending commits will be lost
         blockCommits.Remove();
@@ -2193,7 +2530,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
-            "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
+            "{ items { uint32_value: 4 } items { uint32_value: 40 } }"
+        );
     }
 
     Y_UNIT_TEST(TwoAppendsMustBeVolatile) {
@@ -2206,7 +2544,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2224,12 +2562,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 20);"));
 
         size_t volatileTxs = 0;
-        auto proposeObserver = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](TEvDataShard::TEvProposeTransaction::TPtr& ev) {
-            auto* msg = ev->Get();
-            if (msg->Record.GetFlags() & TTxFlags::VolatilePrepare) {
-                ++volatileTxs;
-            }
-        });
+        auto proposeObserver =
+            runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](TEvDataShard::TEvProposeTransaction::TPtr& ev
+                                                                     ) {
+                auto* msg = ev->Get();
+                if (msg->Record.GetFlags() & TTxFlags::VolatilePrepare) {
+                    ++volatileTxs;
+                }
+            });
 
         // This simulates a jepsen transaction that appends two values at different shards
         TString sessionId, txId;
@@ -2245,7 +2585,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 );
                 UPSERT INTO `/Root/table-1` (key, value) VALUES ($next_index, 30u);
                 )")),
-            "<empty>");
+            "<empty>"
+        );
 
         UNIT_ASSERT_VALUES_EQUAL(
             KqpSimpleCommit(runtime, sessionId, txId, Q_(R"(
@@ -2259,7 +2600,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 );
                 UPSERT INTO `/Root/table-2` (key, value) VALUES ($next_index, 40u);
                 )")),
-            "<empty>");
+            "<empty>"
+        );
 
         // There should have been volatile transactions at both shards
         UNIT_ASSERT_VALUES_EQUAL(volatileTxs, 2u);
@@ -2275,7 +2617,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2297,7 +2639,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 SELECT key, value FROM `/Root/table-2`
                 ORDER BY key
                 )"),
-            "");
+            ""
+        );
 
         // Insert initial values
         ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);"));
@@ -2323,7 +2666,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             )");
 
         // Wait until puts are blocked
-        WaitFor(runtime, [&]{ return blockedPuts.size() > 0; }, "blocked puts");
+        WaitFor(
+            runtime,
+            [&] {
+                return blockedPuts.size() > 0;
+            },
+            "blocked puts"
+        );
         auto firstUpsertPuts = std::move(blockedPuts);
         UNIT_ASSERT(blockedPuts.empty());
 
@@ -2337,7 +2686,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             )");
 
         // Wait until it also tries to commit
-        WaitFor(runtime, [&]{ return blockedPuts.size() > 0; }, "blocked puts");
+        WaitFor(
+            runtime,
+            [&] {
+                return blockedPuts.size() > 0;
+            },
+            "blocked puts"
+        );
 
         // Now unblock the first upsert puts
         blockCommits.Remove();
@@ -2348,15 +2703,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // And wait for it to finish successfully
         Cerr << "... waiting for first upsert result" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(firstUpsertFuture))),
-            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(firstUpsertFuture))), "<empty>");
 
         // Reply to everything previously blocked with an error, the shard will restart
         for (auto& ev : blockedPuts) {
             auto proxy = ev->Recipient;
             ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
-            auto res = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
+            auto res =
+                ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
             runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 0, true);
         }
 
@@ -2372,7 +2726,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                     )"),
                 "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
                 "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
-                "{ items { uint32_value: 4 } items { uint32_value: 22 } }");
+                "{ items { uint32_value: 4 } items { uint32_value: 22 } }"
+            );
         } else {
             // Otherwise the result must be undetermined
             UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: UNDETERMINED");
@@ -2388,7 +2743,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2405,8 +2760,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Block propose to coordinator
         std::vector<TEvTxProxy::TEvProposeTransaction::TPtr> coordinatorProposes;
-        auto blockCoordinatorProposes = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>(
-            [&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
+        auto blockCoordinatorProposes =
+            runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>([&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
                 Cerr << "... blocked propose to coordinator" << Endl;
                 coordinatorProposes.emplace_back(ev.Release());
             });
@@ -2417,7 +2772,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
         )");
 
-        WaitFor(runtime, [&]{ return coordinatorProposes.size() > 0; }, "coordinator propose");
+        WaitFor(
+            runtime,
+            [&] {
+                return coordinatorProposes.size() > 0;
+            },
+            "coordinator propose"
+        );
         UNIT_ASSERT_VALUES_EQUAL(coordinatorProposes.size(), 1u);
         blockCoordinatorProposes.Remove();
         coordinatorProposes.clear();
@@ -2434,9 +2795,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT_C(splitLatency < TDuration::Seconds(5), "split latency: " << splitLatency);
 
         Cerr << "... waiting for upsert result" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(upsertFuture))),
-            "ERROR: ABORTED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(upsertFuture))), "ERROR: ABORTED");
         auto upsertLatency = runtime.GetCurrentTime() - upsertStartTs;
         Cerr << "... upsert finished in " << upsertLatency << Endl;
         UNIT_ASSERT_C(upsertLatency < TDuration::Seconds(5), "upsert latency: " << upsertLatency);
@@ -2451,7 +2810,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2468,8 +2827,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         // Block propose to coordinator
         std::vector<TEvTxProxy::TEvProposeTransaction::TPtr> coordinatorProposes;
-        auto blockCoordinatorProposes = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>(
-            [&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
+        auto blockCoordinatorProposes =
+            runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>([&](TEvTxProxy::TEvProposeTransaction::TPtr& ev) {
                 Cerr << "... blocked propose to coordinator" << Endl;
                 coordinatorProposes.emplace_back(ev.Release());
             });
@@ -2480,7 +2839,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 40);
         )");
 
-        WaitFor(runtime, [&]{ return coordinatorProposes.size() > 0; }, "coordinator propose");
+        WaitFor(
+            runtime,
+            [&] {
+                return coordinatorProposes.size() > 0;
+            },
+            "coordinator propose"
+        );
         UNIT_ASSERT_VALUES_EQUAL(coordinatorProposes.size(), 1u);
         blockCoordinatorProposes.Remove();
         coordinatorProposes.clear();
@@ -2494,9 +2859,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT_C(dropLatency < TDuration::Seconds(5), "drop latency: " << dropLatency);
 
         Cerr << "... waiting for upsert result" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(upsertFuture))),
-            "ERROR: ABORTED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(upsertFuture))), "ERROR: ABORTED");
         auto upsertLatency = runtime.GetCurrentTime() - upsertStartTs;
         Cerr << "... upsert finished in " << upsertLatency << Endl;
         UNIT_ASSERT_C(upsertLatency < TDuration::Seconds(5), "upsert latency: " << upsertLatency);
@@ -2506,11 +2869,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     public:
         TForceVolatileProposeArbiter(TTestActorRuntime& runtime, ui64 arbiterShard)
             : ArbiterShard(arbiterShard)
-            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>(
-                [this](auto& ev) {
-                    this->OnEvent(ev);
-                }))
-        {}
+            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([this](auto& ev) {
+                this->OnEvent(ev);
+            })) {}
 
         void Remove() {
             Observer.Remove();
@@ -2521,17 +2882,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             auto* msg = ev->Get();
             int kind = msg->Record.GetTxKind();
             if (kind != NKikimrTxDataShard::TX_KIND_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kind " << kind
-                    << " (expected " << int(NKikimrTxDataShard::TX_KIND_DATA) << ")"
-                    << Endl;
+                Cerr << "... skipping TEvProposeTransaction with kind " << kind << " (expected "
+                     << int(NKikimrTxDataShard::TX_KIND_DATA) << ")" << Endl;
                 return;
             }
 
             ui32 flags = msg->Record.GetFlags();
             if (!(flags & TTxFlags::VolatilePrepare)) {
-                Cerr << "... skipping TEvProposeTransaction with flags " << flags
-                    << " (missing VolatilePrepare flag)"
-                    << Endl;
+                Cerr << "... skipping TEvProposeTransaction with flags " << flags << " (missing VolatilePrepare flag)"
+                     << Endl;
                 return;
             }
 
@@ -2547,9 +2906,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
             int kqpType = kqpTx->GetType();
             if (kqpType != NKikimrTxDataShard::KQP_TX_TYPE_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kqp type " << kqpType
-                    << " (expected " << int(NKikimrTxDataShard::KQP_TX_TYPE_DATA) << ")"
-                    << Endl;
+                Cerr << "... skipping TEvProposeTransaction with kqp type " << kqpType << " (expected "
+                     << int(NKikimrTxDataShard::KQP_TX_TYPE_DATA) << ")" << Endl;
                 return;
             }
 
@@ -2592,11 +2950,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             : TableId(tableId)
             , Shard(shard)
             , ShardActor(ResolveTablet(runtime, shard))
-            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>(
-                [this](auto& ev) {
-                    this->OnEvent(ev);
-                }))
-        {}
+            , Observer(runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([this](auto& ev) {
+                this->OnEvent(ev);
+            })) {}
 
     private:
         void OnEvent(TEvDataShard::TEvProposeTransaction::TPtr& ev) {
@@ -2607,17 +2963,15 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             auto* msg = ev->Get();
             int kind = msg->Record.GetTxKind();
             if (kind != NKikimrTxDataShard::TX_KIND_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kind " << kind
-                    << " (expected " << int(NKikimrTxDataShard::TX_KIND_DATA) << ")"
-                    << Endl;
+                Cerr << "... skipping TEvProposeTransaction with kind " << kind << " (expected "
+                     << int(NKikimrTxDataShard::TX_KIND_DATA) << ")" << Endl;
                 return;
             }
 
             ui32 flags = msg->Record.GetFlags();
             if (!(flags & TTxFlags::VolatilePrepare)) {
-                Cerr << "... skipping TEvProposeTransaction with flags " << flags
-                    << " (missing VolatilePrepare flag)"
-                    << Endl;
+                Cerr << "... skipping TEvProposeTransaction with flags " << flags << " (missing VolatilePrepare flag)"
+                     << Endl;
                 return;
             }
 
@@ -2633,9 +2987,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
             int kqpType = kqpTx->GetType();
             if (kqpType != NKikimrTxDataShard::KQP_TX_TYPE_DATA) {
-                Cerr << "... skipping TEvProposeTransaction with kqp type " << kqpType
-                    << " (expected " << int(NKikimrTxDataShard::KQP_TX_TYPE_DATA) << ")"
-                    << Endl;
+                Cerr << "... skipping TEvProposeTransaction with kqp type " << kqpType << " (expected "
+                     << int(NKikimrTxDataShard::KQP_TX_TYPE_DATA) << ")" << Endl;
                 return;
             }
 
@@ -2670,15 +3023,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TTestActorRuntime::TEventObserverHolder Observer;
     };
 
-    class TBlockReadSets : public std::vector<TEvTxProcessing::TEvReadSet::TPtr> {
+    class TBlockReadSets: public std::vector<TEvTxProcessing::TEvReadSet::TPtr> {
     public:
         TBlockReadSets(TTestActorRuntime& runtime)
             : Runtime(runtime)
-            , Observer(runtime.AddObserver<TEvTxProcessing::TEvReadSet>(
-                [this](auto& ev) {
-                    this->OnEvent(ev);
-                }))
-        {}
+            , Observer(runtime.AddObserver<TEvTxProcessing::TEvReadSet>([this](auto& ev) {
+                this->OnEvent(ev);
+            })) {}
 
         void Remove() {
             Observer.Remove();
@@ -2706,11 +3057,9 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     class TCountReadSets {
     public:
         TCountReadSets(TTestActorRuntime& runtime)
-            : Observer(runtime.AddObserver<TEvTxProcessing::TEvReadSet>(
-                [this](auto& ev) {
-                    this->OnEvent(ev);
-                }))
-        {}
+            : Observer(runtime.AddObserver<TEvTxProcessing::TEvReadSet>([this](auto& ev) {
+                this->OnEvent(ev);
+            })) {}
 
     private:
         void OnEvent(TEvTxProcessing::TEvReadSet::TPtr&) {
@@ -2727,12 +3076,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     Y_UNIT_TEST(UpsertNoLocksArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2744,7 +3091,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
                 WITH (PARTITION_AT_KEYS = (10, 20, 30));
             )"),
-            "SUCCESS");
+            "SUCCESS"
+        );
 
         const auto shards = GetTableShards(server, sender, "/Root/table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 4u);
@@ -2758,7 +3106,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 UPSERT INTO `/Root/table` (key, value)
                 VALUES (1, 11), (11, 111), (21, 211), (31, 311);
             )"),
-            "<empty>");
+            "<empty>"
+        );
 
         // arbiter will send 6 readsets (3 decisions + 3 expectations)
         // shards will send 2 readsets each (decision + expectation)
@@ -2776,18 +3125,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { int32_value: 1 } items { int32_value: 11 } }, "
             "{ items { int32_value: 11 } items { int32_value: 111 } }, "
             "{ items { int32_value: 21 } items { int32_value: 211 } }, "
-            "{ items { int32_value: 31 } items { int32_value: 311 } }");
+            "{ items { int32_value: 31 } items { int32_value: 311 } }"
+        );
     }
 
     Y_UNIT_TEST(UpsertBrokenLockArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2799,7 +3147,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
                 WITH (PARTITION_AT_KEYS = (10, 20, 30));
             )"),
-            "SUCCESS");
+            "SUCCESS"
+        );
 
         const auto tableId = ResolveTableId(server, sender, "/Root/table");
         const auto shards = GetTableShards(server, sender, "/Root/table");
@@ -2814,15 +3163,18 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             int value = key * 10 + key;
             TString query = Sprintf(
                 R"(UPSERT INTO `/Root/table` (key, value) VALUES (%d, %d), (%d, %d), (%d, %d), (%d, %d);)",
-                key, value,
-                key + 10, value + 100,
-                key + 20, value + 200,
-                key + 30, value + 300);
+                key,
+                value,
+                key + 10,
+                value + 100,
+                key + 20,
+                value + 200,
+                key + 30,
+                value + 300
+            );
 
             Cerr << "========= Starting query " << query << " =========" << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(
-                KqpSimpleExec(runtime, query),
-                "ERROR: ABORTED");
+            UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, query), "ERROR: ABORTED");
 
             // Note: kqp stops gathering responses early on abort, allow everyone to settle
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
@@ -2842,18 +3194,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 SELECT key, value FROM `/Root/table`
                 ORDER BY key;
             )"),
-            "");
+            ""
+        );
     }
 
     Y_UNIT_TEST(UpsertNoLocksArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2866,7 +3217,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
                 WITH (PARTITION_AT_KEYS = (10, 20, 30));
             )"),
-            "SUCCESS");
+            "SUCCESS"
+        );
 
         const auto shards = GetTableShards(server, sender, "/Root/table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 4u);
@@ -2910,22 +3262,19 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { int32_value: 1 } items { int32_value: 11 } }, "
             "{ items { int32_value: 11 } items { int32_value: 111 } }, "
             "{ items { int32_value: 21 } items { int32_value: 211 } }, "
-            "{ items { int32_value: 31 } items { int32_value: 311 } }");
+            "{ items { int32_value: 31 } items { int32_value: 311 } }"
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(upsertFuture))),
-            "ERROR: UNDETERMINED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(upsertFuture))), "ERROR: UNDETERMINED");
     }
 
     Y_UNIT_TEST(UpsertBrokenLockArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -2938,7 +3287,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
                 WITH (PARTITION_AT_KEYS = (10, 20, 30));
             )"),
-            "SUCCESS");
+            "SUCCESS"
+        );
 
         const auto tableId = ResolveTableId(server, sender, "/Root/table");
         const auto shards = GetTableShards(server, sender, "/Root/table");
@@ -2983,22 +3333,19 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 SELECT key, value FROM `/Root/table`
                 ORDER BY key;
             )"),
-            "");
+            ""
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(upsertFuture))),
-            "ERROR: ABORTED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(AwaitResponse(runtime, std::move(upsertFuture))), "ERROR: ABORTED");
     }
 
     Y_UNIT_TEST(UpsertDependenciesShardsRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -3011,7 +3358,8 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                 CREATE TABLE `/Root/table` (key uint32, value uint32, PRIMARY KEY (key))
                 WITH (PARTITION_AT_KEYS = (10));
             )"),
-            "SUCCESS");
+            "SUCCESS"
+        );
 
         const auto shards = GetTableShards(server, sender, "/Root/table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
@@ -3024,10 +3372,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             )");
 
         TForceVolatileProposeArbiter forceArbiter(runtime, shards.at(0));
-        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime,
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(
+            runtime,
             [actor = ResolveTablet(runtime, shards.at(0))](const auto& ev) {
                 return ev->GetRecipientRewrite() == actor;
-            });
+            }
+        );
 
         Cerr << "========= Starting upsert 1 =========" << Endl;
         auto upsertFuture1 = KqpSimpleSend(runtime, R"(
@@ -3055,19 +3405,17 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         for (auto& shardActor : shardActors) {
             Cerr << "... killing actor " << shardActor << Endl;
             // Perform a synchronous send, this makes sure both shards handle TEvPoison before anything else
-            runtime.Send(new IEventHandle(shardActor, TActorId(), new TEvents::TEvPoison), 0, /* viaActorSystem */ false);
+            runtime.Send(
+                new IEventHandle(shardActor, TActorId(), new TEvents::TEvPoison), 0, /* viaActorSystem */ false
+            );
         }
 
         blockedPlan.Stop().clear();
 
         // Both queries should abort with UNDETERMINED
         Cerr << "... waiting for query results" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
-            "ERROR: UNDETERMINED");
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(runtime.WaitFuture(std::move(upsertFuture2))),
-            "ERROR: UNDETERMINED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(runtime.WaitFuture(std::move(upsertFuture1))), "ERROR: UNDETERMINED");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResult(runtime.WaitFuture(std::move(upsertFuture2))), "ERROR: UNDETERMINED");
 
         // Split the second shard, which makes sure it's not stuck
         Cerr << "========= Splitting shard 2 =========" << Endl;

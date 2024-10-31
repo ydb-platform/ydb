@@ -29,9 +29,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     explicit TTxCreate(TSelf* self, TEvImport::TEvCreateImportRequest::TPtr& ev)
         : TXxport::TTxBase(self)
         , Request(ev)
-        , Progress(false)
-    {
-    }
+        , Progress(false) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CREATE_IMPORT;
@@ -73,12 +71,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
             TPath::TChecker checks = domainPath.Check();
-            checks
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsLikeDirectory();
+            checks.IsResolved().NotDeleted().NotUnderDeleting().IsCommonSensePath().IsLikeDirectory();
 
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
@@ -96,14 +89,15 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         TImportInfo::TPtr importInfo = nullptr;
 
         switch (request.GetRequest().GetSettingsCase()) {
-        case NKikimrImport::TCreateImportRequest::kImportFromS3Settings:
-            {
+            case NKikimrImport::TCreateImportRequest::kImportFromS3Settings: {
                 auto settings = request.GetRequest().GetImportFromS3Settings();
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
                 }
 
-                importInfo = new TImportInfo(id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
+                importInfo = new TImportInfo(
+                    id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName()
+                );
 
                 if (request.HasUserSID()) {
                     importInfo->UserSID = request.GetUserSID();
@@ -113,11 +107,10 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (!FillItems(importInfo, settings, explain)) {
                     return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
                 }
-            }
-            break;
+            } break;
 
-        default:
-            Y_DEBUG_ABORT("Unknown import kind");
+            default:
+                Y_DEBUG_ABORT("Unknown import kind");
         }
 
         Y_ABORT_UNLESS(importInfo != nullptr);
@@ -188,26 +181,16 @@ private:
             const TPath path = TPath::Resolve(dstPath, Self);
             {
                 TPath::TChecker checks = path.Check();
-                checks
-                    .IsAtLocalSchemeShard()
-                    .HasResolvedPrefix()
-                    .FailOnRestrictedCreateInTempZone();
+                checks.IsAtLocalSchemeShard().HasResolvedPrefix().FailOnRestrictedCreateInTempZone();
 
                 if (path.IsResolved()) {
-                    checks
-                        .IsResolved()
-                        .IsDeleted();
+                    checks.IsResolved().IsDeleted();
                 } else {
-                    checks
-                        .NotEmpty()
-                        .NotResolved();
+                    checks.NotEmpty().NotResolved();
                 }
 
                 if (checks) {
-                    checks
-                        .IsValidLeafName()
-                        .DepthLimit()
-                        .PathsLimit();
+                    checks.IsValidLeafName().DepthLimit().PathsLimit();
 
                     if (path.Parent().IsResolved()) {
                         checks.DirChildrenLimit();
@@ -245,39 +228,27 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
         : TXxport::TTxBase(self)
         , Id(id)
-        , ItemIdx(itemIdx)
-    {
-    }
+        , ItemIdx(itemIdx) {}
 
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemeReady::TPtr& ev)
         : TXxport::TTxBase(self)
-        , SchemeResult(ev)
-    {
-    }
+        , SchemeResult(ev) {}
 
     explicit TTxProgress(TSelf* self, TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev)
         : TXxport::TTxBase(self)
-        , AllocateResult(ev)
-    {
-    }
+        , AllocateResult(ev) {}
 
     explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
         : TXxport::TTxBase(self)
-        , ModifyResult(ev)
-    {
-    }
+        , ModifyResult(ev) {}
 
     explicit TTxProgress(TSelf* self, TEvIndexBuilder::TEvCreateResponse::TPtr& ev)
         : TXxport::TTxBase(self)
-        , CreateIndexResult(ev)
-    {
-    }
+        , CreateIndexResult(ev) {}
 
     explicit TTxProgress(TSelf* self, TTxId completedTxId)
         : TXxport::TTxBase(self)
-        , CompletedTxId(completedTxId)
-    {
-    }
+        , CompletedTxId(completedTxId) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_IMPORT_PROGRESS;
@@ -387,7 +358,9 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), BuildIndexPropose(Self, txId, importInfo, itemIdx, MakeIndexBuildUid(importInfo, itemIdx)));
+        Send(
+            Self->SelfId(), BuildIndexPropose(Self, txId, importInfo, itemIdx, MakeIndexBuildUid(importInfo, itemIdx))
+        );
     }
 
     bool CancelIndexBuilding(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -497,16 +470,16 @@ private:
             }
 
             switch (importInfo->Items.at(i).State) {
-            case EState::Transferring:
-                CancelTransferring(importInfo, i);
-                break;
+                case EState::Transferring:
+                    CancelTransferring(importInfo, i);
+                    break;
 
-            case EState::BuildIndexes:
-                CancelIndexBuilding(importInfo, i);
-                break;
+                case EState::BuildIndexes:
+                    CancelIndexBuilding(importInfo, i);
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
         }
 
@@ -602,48 +575,47 @@ private:
         switch (importInfo->State) {
             case EState::Waiting: {
                 switch (item.State) {
-                case EState::GetScheme:
-                    if (!Self->TableProfilesLoaded) {
-                        Self->WaitForTableProfiles(Id, itemIdx);
-                    } else {
-                        GetScheme(importInfo, itemIdx, ctx);
-                    }
-                    break;
+                    case EState::GetScheme:
+                        if (!Self->TableProfilesLoaded) {
+                            Self->WaitForTableProfiles(Id, itemIdx);
+                        } else {
+                            GetScheme(importInfo, itemIdx, ctx);
+                        }
+                        break;
 
-                case EState::CreateTable:
-                case EState::Transferring:
-                case EState::BuildIndexes:
-                    if (item.WaitTxId == InvalidTxId) {
-                        AllocateTxId(importInfo, itemIdx);
-                    } else {
-                        SubscribeTx(importInfo, itemIdx);
-                    }
-                    break;
+                    case EState::CreateTable:
+                    case EState::Transferring:
+                    case EState::BuildIndexes:
+                        if (item.WaitTxId == InvalidTxId) {
+                            AllocateTxId(importInfo, itemIdx);
+                        } else {
+                            SubscribeTx(importInfo, itemIdx);
+                        }
+                        break;
 
-                default:
-                    break;
+                    default:
+                        break;
                 }
-            }
-            break;
+            } break;
 
             case EState::Cancellation: {
                 TTxId txId = InvalidTxId;
 
                 switch (item.State) {
-                case EState::Transferring:
-                    if (!CancelTransferring(importInfo, itemIdx)) {
-                        txId = GetActiveRestoreTxId(importInfo, itemIdx);
-                    }
-                    break;
+                    case EState::Transferring:
+                        if (!CancelTransferring(importInfo, itemIdx)) {
+                            txId = GetActiveRestoreTxId(importInfo, itemIdx);
+                        }
+                        break;
 
-                case EState::BuildIndexes:
-                    if (!CancelIndexBuilding(importInfo, itemIdx)) {
-                        txId = GetActiveBuildIndexId(importInfo, itemIdx);
-                    }
-                    break;
+                    case EState::BuildIndexes:
+                        if (!CancelIndexBuilding(importInfo, itemIdx)) {
+                            txId = GetActiveBuildIndexId(importInfo, itemIdx);
+                        }
+                        break;
 
-                default:
-                    break;
+                    default:
+                        break;
                 }
 
                 if (txId != InvalidTxId) {
@@ -651,23 +623,22 @@ private:
                     Self->PersistImportItemState(db, importInfo, itemIdx);
 
                     switch (item.State) {
-                    case EState::Transferring:
-                        CancelTransferring(importInfo, itemIdx);
-                        break;
+                        case EState::Transferring:
+                            CancelTransferring(importInfo, itemIdx);
+                            break;
 
-                    case EState::BuildIndexes:
-                        CancelIndexBuilding(importInfo, itemIdx);
-                        break;
+                        case EState::BuildIndexes:
+                            CancelIndexBuilding(importInfo, itemIdx);
+                            break;
 
-                    default:
-                        break;
+                        default:
+                            break;
                     }
                 }
-            }
-            break;
+            } break;
 
-        default:
-            break;
+            default:
+                break;
         }
     }
 
@@ -748,27 +719,27 @@ private:
             }
 
             switch (item.State) {
-            case EState::CreateTable:
-                if (!Self->TableProfilesLoaded) {
-                    Self->WaitForTableProfiles(id, i);
-                } else {
-                    CreateTable(importInfo, i, txId);
+                case EState::CreateTable:
+                    if (!Self->TableProfilesLoaded) {
+                        Self->WaitForTableProfiles(id, i);
+                    } else {
+                        CreateTable(importInfo, i, txId);
+                        itemIdx = i;
+                    }
+                    break;
+
+                case EState::Transferring:
+                    TransferData(importInfo, i, txId);
                     itemIdx = i;
-                }
-                break;
+                    break;
 
-            case EState::Transferring:
-                TransferData(importInfo, i, txId);
-                itemIdx = i;
-                break;
+                case EState::BuildIndexes:
+                    BuildIndex(importInfo, i, txId);
+                    itemIdx = i;
+                    break;
 
-            case EState::BuildIndexes:
-                BuildIndex(importInfo, i, txId);
-                itemIdx = i;
-                break;
-
-            default:
-                break;
+                default:
+                    break;
             }
 
             if (itemIdx) {
@@ -969,40 +940,40 @@ private:
         }
 
         switch (item.State) {
-        case EState::CreateTable:
-            item.State = EState::Transferring;
-            AllocateTxId(importInfo, itemIdx);
-            break;
+            case EState::CreateTable:
+                item.State = EState::Transferring;
+                AllocateTxId(importInfo, itemIdx);
+                break;
 
-        case EState::Transferring:
-            if (const auto issue = GetIssues(item.DstPathId, txId)) {
-                item.Issue = *issue;
-                Cancel(importInfo, itemIdx, "issues during restore");
-            } else {
-                if (item.NextIndexIdx < item.Scheme.indexes_size()) {
-                    item.State = EState::BuildIndexes;
-                    AllocateTxId(importInfo, itemIdx);
+            case EState::Transferring:
+                if (const auto issue = GetIssues(item.DstPathId, txId)) {
+                    item.Issue = *issue;
+                    Cancel(importInfo, itemIdx, "issues during restore");
                 } else {
-                    item.State = EState::Done;
+                    if (item.NextIndexIdx < item.Scheme.indexes_size()) {
+                        item.State = EState::BuildIndexes;
+                        AllocateTxId(importInfo, itemIdx);
+                    } else {
+                        item.State = EState::Done;
+                    }
                 }
-            }
-            break;
+                break;
 
-        case EState::BuildIndexes:
-            if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
-                item.Issue = *issue;
-                Cancel(importInfo, itemIdx, "issues during index building");
-            } else {
-                if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
-                    AllocateTxId(importInfo, itemIdx);
+            case EState::BuildIndexes:
+                if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
+                    item.Issue = *issue;
+                    Cancel(importInfo, itemIdx, "issues during index building");
                 } else {
-                    item.State = EState::Done;
+                    if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
+                        AllocateTxId(importInfo, itemIdx);
+                    } else {
+                        item.State = EState::Done;
+                    }
                 }
-            }
-            break;
+                break;
 
-        default:
-            return SendNotificationsIfFinished(importInfo);
+            default:
+                return SendNotificationsIfFinished(importInfo);
         }
 
         if (AllOf(importInfo->Items, &TImportInfo::TItem::IsDone)) {
@@ -1050,5 +1021,5 @@ ITransaction* TSchemeShard::CreateTxProgressImport(TTxId completedTxId) {
     return new TImport::TTxProgress(this, completedTxId);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

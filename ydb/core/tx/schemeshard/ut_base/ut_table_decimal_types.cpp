@@ -5,7 +5,6 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
-
     Y_UNIT_TEST(Parameterless) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -27,11 +26,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusAccepted)});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
-            NLs::PathExist,
-            NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal(22,9)")
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table1"),
+            {NLs::PathExist, NLs::Finished, NLs::CheckColumnType(0, "Decimal(22,9)")}
+        );
     }
 
     Y_UNIT_TEST_FLAG(Parameters_22_9, EnableParameterizedDecimal) {
@@ -55,11 +53,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusAccepted)});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
-            NLs::PathExist,
-            NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal(22,9)")
-        });        
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table1"),
+            {NLs::PathExist, NLs::Finished, NLs::CheckColumnType(0, "Decimal(22,9)")}
+        );
     }
 
     Y_UNIT_TEST_FLAG(Parameters_35_6, EnableParameterizedDecimal) {
@@ -71,7 +68,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
             if constexpr (EnableParameterizedDecimal) {
                 return TExpectedResult(NKikimrScheme::StatusAccepted);
             } else {
-                return TExpectedResult(NKikimrScheme::StatusSchemeError, "Type 'Decimal(35,6)' specified for column 'key', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)");
+                return TExpectedResult(
+                    NKikimrScheme::StatusSchemeError,
+                    "Type 'Decimal(35,6)' specified for column 'key', but support for parametrized decimal is disabled "
+                    "(EnableParameterizedDecimal feature flag is off)"
+                );
             }
         }();
 
@@ -87,11 +88,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         if constexpr (!EnableParameterizedDecimal)
             return;
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
-            NLs::PathExist,
-            NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal(35,6)")
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table1"),
+            {NLs::PathExist, NLs::Finished, NLs::CheckColumnType(0, "Decimal(35,6)")}
+        );
 
         AsyncAlterTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table1"
@@ -100,11 +100,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusAccepted)});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
-            NLs::PathExist,
-            NLs::Finished,
-            NLs::CheckColumnType(0, "Decimal(35,6)")
-        });        
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table1"),
+            {NLs::PathExist, NLs::Finished, NLs::CheckColumnType(0, "Decimal(35,6)")}
+        );
     }
 
     Y_UNIT_TEST(CreateWithWrongParameters) {
@@ -118,8 +117,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
             Columns { Name: "value" Type: "Decimal(99,6)" }
             KeyColumnNames: ["key"]
         )_");
-        TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusSchemeError, 
-            "Type 'Decimal(99,6)' specified for column 'key' is not supported by storage")});
+        TestModificationResults(
+            runtime,
+            txId,
+            {TExpectedResult(
+                NKikimrScheme::StatusSchemeError,
+                "Type 'Decimal(99,6)' specified for column 'key' is not supported by storage"
+            )}
+        );
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -137,18 +142,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardDecimalTypesInTables) {
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {
-            NLs::PathExist,
-            NLs::Finished
-        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist, NLs::Finished});
 
         AsyncAlterTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table1"
             Columns { Name: "added" Type: "Decimal(99,6)" }
         )_");
-        TestModificationResults(runtime, txId, {TExpectedResult(NKikimrScheme::StatusInvalidParameter, 
-            "Type 'Decimal(99,6)' specified for column 'added' is not supported by storage")});
+        TestModificationResults(
+            runtime,
+            txId,
+            {TExpectedResult(
+                NKikimrScheme::StatusInvalidParameter,
+                "Type 'Decimal(99,6)' specified for column 'added' is not supported by storage"
+            )}
+        );
         env.TestWaitNotification(runtime, txId);
-
-    }    
+    }
 }

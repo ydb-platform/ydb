@@ -9,8 +9,12 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
 
 public:
-    TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
-        std::shared_ptr<NColumnShard::TSplitterCounters> counters, const NSplitter::TSplitSettings& settings);
+    TBatchSerializedSlice(
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
+        std::shared_ptr<NColumnShard::TSplitterCounters> counters,
+        const NSplitter::TSplitSettings& settings
+    );
 
     explicit TBatchSerializedSlice(NArrow::NSplitter::TVectorView<TBatchSerializedSlice>&& objects) {
         Y_ABORT_UNLESS(objects.size());
@@ -20,12 +24,15 @@ public:
         }
     }
     void MergeSlice(TBatchSerializedSlice&& slice) {
-        Batch = NArrow::CombineBatches({ Batch, slice.Batch });
+        Batch = NArrow::CombineBatches({Batch, slice.Batch});
         TBase::MergeSlice(std::move(slice));
     }
 
-    static std::vector<TBatchSerializedSlice> BuildSimpleSlices(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const NSplitter::TSplitSettings& settings, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
-        const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schemaInfo);
+    static std::vector<TBatchSerializedSlice> BuildSimpleSlices(
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        const NSplitter::TSplitSettings& settings,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+        const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schemaInfo
+    );
 };
-}
+} // namespace NKikimr::NOlap

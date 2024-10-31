@@ -14,15 +14,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TConfigureDestination"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TSplitMerge TConfigureDestination"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureDestination(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -45,9 +43,13 @@ public:
         TTabletId tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
         if (!idx) {
-            LOG_ERROR(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
-                      tabletId, OperationId.GetTxId());
+            LOG_ERROR(
+                context.Ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
+                tabletId,
+                OperationId.GetTxId()
+            );
             return false;
         }
 
@@ -91,7 +93,7 @@ public:
         // A helper hash map translating tablet id to destination range index
         THashMap<TTabletId, ui32> dstTabletToRangeIdx;
 
-        auto getDstRangeIdx = [&dstTabletToRangeIdx] (TTabletId tabletId) -> ui32 {
+        auto getDstRangeIdx = [&dstTabletToRangeIdx](TTabletId tabletId) -> ui32 {
             auto it = dstTabletToRangeIdx.find(tabletId);
             Y_VERIFY_S(it != dstTabletToRangeIdx.end(),
                        "Cannot find range info for destination tablet " << tabletId);
@@ -113,8 +115,9 @@ public:
         bool serializeRes = txState->SplitDescription->SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
         NIceDb::TNiceDb db(context.GetDB());
-        db.Table<Schema::TxInFlightV2>().Key(OperationId.GetTxId(), OperationId.GetSubTxId()).Update(
-                    NIceDb::TUpdate<Schema::TxInFlightV2::ExtraBytes>(extraData));
+        db.Table<Schema::TxInFlightV2>()
+            .Key(OperationId.GetTxId(), OperationId.GetSubTxId())
+            .Update(NIceDb::TUpdate<Schema::TxInFlightV2::ExtraBytes>(extraData));
 
         const auto tableInfo = context.SS->Tables.FindPtr(txState->TargetPathId);
         Y_ABORT_UNLESS(tableInfo);
@@ -123,7 +126,7 @@ public:
 
         const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
 
-        for (const auto& shard: txState->Shards) {
+        for (const auto& shard : txState->Shards) {
             // Skip src shard
             if (shard.Operation != TTxState::CreateParts) {
                 continue;
@@ -153,7 +156,8 @@ public:
                 context.SS->TabletID(),
                 subDomainPathId,
                 splitDescForShard,
-                context.SS->SelectProcessingParams(txState->TargetPathId));
+                context.SS->SelectProcessingParams(txState->TargetPathId)
+            );
 
             // Add a new-style CreateTable with correct per-shard settings
             // WARNING: legacy datashard will ignore this and use the schema
@@ -168,7 +172,9 @@ public:
                 tableDesc,
                 rangeDescr.GetKeyRangeBegin(),
                 rangeDescr.GetKeyRangeEnd(),
-                true, false);
+                true,
+                false
+            );
             context.SS->FillTableSchemaVersion(alterVersion, tableDesc);
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
@@ -184,16 +190,17 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TTransferData"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TSplitMerge TTransferData"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TTransferData(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvInitSplitMergeDestinationAck::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvInitSplitMergeDestinationAck::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSplitAck::TPtr& ev, TOperationContext& context) override {
@@ -214,9 +221,13 @@ public:
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         auto srcShardIdx = context.SS->GetShardIdx(tabletId);
         if (!srcShardIdx) {
-            LOG_ERROR(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
-                      tabletId, OperationId.GetTxId());
+            LOG_ERROR(
+                context.Ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
+                tabletId,
+                OperationId.GetTxId()
+            );
             return false;
         }
 
@@ -254,7 +265,8 @@ public:
         for (const auto& shard : tableInfo->GetPartitions()) {
             if (allSrcShardIdxs.contains(shard.ShardIdx)) {
                 if (auto& lag = shard.LastCondEraseLag) {
-                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds()
+                    );
                     lag.Clear();
                 }
 
@@ -275,7 +287,9 @@ public:
                         Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
                         lag = now - dst.LastCondErase;
-                        context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+                        context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(
+                            lag->Seconds()
+                        );
                     }
 
                     newPartitioning.push_back(dst);
@@ -363,17 +377,20 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TNotifySrc"
-                << ", operationId: " << OperationId;
-    }
-public:
-    TNotifySrc(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvInitSplitMergeDestinationAck::EventType,  TEvDataShard::TEvSplitAck::EventType});
+        return TStringBuilder() << "TSplitMerge TNotifySrc"
+                                << ", operationId: " << OperationId;
     }
 
+public:
+    TNotifySrc(TOperationId id)
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvDataShard::TEvInitSplitMergeDestinationAck::EventType,
+             TEvDataShard::TEvSplitAck::EventType}
+        );
+    }
 
     bool HandleReply(TEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
@@ -389,7 +406,6 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
         Y_ABORT_UNLESS(txState->State == TTxState::NotifyPartitioningChanged);
 
-
         auto idx = context.SS->GetShardIdx(tabletId);
         if (!idx) {
             LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -401,8 +417,13 @@ public:
 
         if (!txState->ShardsInProgress.contains(idx)) {
             // TODO: verify that this is a repeated event from known Src shard, not a random one
-            LOG_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "Got SplitPartitioningChangedAck from shard %" PRIu64 " that is not a  part ot Tx %" PRIu64, tabletId, OperationId.GetTxId());
+            LOG_INFO(
+                context.Ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Got SplitPartitioningChangedAck from shard %" PRIu64 " that is not a  part ot Tx %" PRIu64,
+                tabletId,
+                OperationId.GetTxId()
+            );
             return false;
         }
 
@@ -434,7 +455,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxSplitTablePartition || txState->TxType == TTxState::TxMergeTablePartition);
         Y_ABORT_UNLESS(txState->State == TTxState::NotifyPartitioningChanged);
 
-//        Y_ABORT_UNLESS(txState->Notify.Empty(), "All notifications for split op shouldn't have been sent before switching to NotifyPartitioningChanged state");
+        //        Y_ABORT_UNLESS(txState->Notify.Empty(), "All notifications for split op shouldn't have been sent before switching to NotifyPartitioningChanged state");
 
         txState->ClearShardsInProgress();
 
@@ -447,20 +468,32 @@ public:
             }
 
             if (!context.SS->ShardInfos.contains(shard.Idx) || context.SS->ShardDeleter.Has(shard.Idx)) {
-                LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                          "Src datashard idx %" PRIu64 " for splitOp# %" PRIu64 " is already deleted or is intended to at tablet %" PRIu64,
-                          shard.Idx, OperationId.GetTxId(), context.SS->TabletID());
+                LOG_DEBUG(
+                    context.Ctx,
+                    NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Src datashard idx %" PRIu64 " for splitOp# %" PRIu64
+                    " is already deleted or is intended to at tablet %" PRIu64,
+                    shard.Idx,
+                    OperationId.GetTxId(),
+                    context.SS->TabletID()
+                );
                 continue;
             }
 
             auto datashardId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             needToNotifySrc = true;
-            LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Notify src datashard %" PRIu64 " on partitioning changed splitOp# %" PRIu64 " at tablet %" PRIu64,
-                      datashardId, OperationId.GetTxId(), context.SS->TabletID());
+            LOG_DEBUG(
+                context.Ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Notify src datashard %" PRIu64 " on partitioning changed splitOp# %" PRIu64 " at tablet %" PRIu64,
+                datashardId,
+                OperationId.GetTxId(),
+                context.SS->TabletID()
+            );
 
-            THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
+            THolder<TEvDataShard::TEvSplitPartitioningChanged> event =
+                MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shard.Idx, event.Release());
 
@@ -487,31 +520,31 @@ class TSplitMerge: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::TransferData;
-        case TTxState::TransferData:
-            return TTxState::NotifyPartitioningChanged;
-        case TTxState::NotifyPartitioningChanged:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::TransferData;
+            case TTxState::TransferData:
+                return TTxState::NotifyPartitioningChanged;
+            case TTxState::NotifyPartitioningChanged:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureDestination>(OperationId);
-        case TTxState::TransferData:
-            return MakeHolder<TTransferData>(OperationId);
-        case TTxState::NotifyPartitioningChanged:
-            return MakeHolder<TNotifySrc>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureDestination>(OperationId);
+            case TTxState::TransferData:
+                return MakeHolder<TTransferData>(OperationId);
+            case TTxState::NotifyPartitioningChanged:
+                return MakeHolder<TNotifySrc>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -519,16 +552,16 @@ public:
     using TSubOperation::TSubOperation;
 
     bool AllocateDstForMerge(
-            const NKikimrSchemeOp::TSplitMergeTablePartitions& info,
-            TTxId txId,
-            const TPathId& pathId,
-            const TVector<ui64>& srcPartitionIdxs,
-            const TTableInfo::TCPtr tableInfo,
-            TTxState& op,
-            const TChannelsBindings& channels,
-            TString& errStr,
-            TOperationContext& context)
-    {
+        const NKikimrSchemeOp::TSplitMergeTablePartitions& info,
+        TTxId txId,
+        const TPathId& pathId,
+        const TVector<ui64>& srcPartitionIdxs,
+        const TTableInfo::TCPtr tableInfo,
+        TTxState& op,
+        const TChannelsBindings& channels,
+        TString& errStr,
+        TOperationContext& context
+    ) {
         // N source shards are merged into 1
         Y_ABORT_UNLESS(srcPartitionIdxs.size() > 1);
         Y_ABORT_UNLESS(info.SplitBoundarySize() == 0);
@@ -541,15 +574,15 @@ public:
         // Check that partitions for merge are consecutive in tableInfo->Partitions (e.g. don't allow to merge #1 with #3 tree and leave #2)
         for (ui32 i = 1; i < srcPartitionIdxs.size(); ++i) {
             ui64 pi = srcPartitionIdxs[i];
-            ui64 piPrev = srcPartitionIdxs[i-1];
+            ui64 piPrev = srcPartitionIdxs[i - 1];
 
             if (pi != piPrev + 1) {
                 auto shardIdx = tableInfo->GetPartitions()[pi].ShardIdx;
                 auto shardIdxPrev = tableInfo->GetPartitions()[piPrev].ShardIdx;
 
-                errStr = TStringBuilder()
-                    << "Partitions are not consecutive at index " << i << " : #" << piPrev << "(" << context.SS->ShardInfos[shardIdxPrev].TabletID << ")"
-                    << " then #" << pi << "(" << context.SS->ShardInfos[shardIdx].TabletID << ")";
+                errStr = TStringBuilder() << "Partitions are not consecutive at index " << i << " : #" << piPrev << "("
+                                          << context.SS->ShardInfos[shardIdxPrev].TabletID << ")"
+                                          << " then #" << pi << "(" << context.SS->ShardInfos[shardIdx].TabletID << ")";
                 return false;
             }
         }
@@ -557,7 +590,7 @@ public:
         TString firstRangeBegin;
         if (srcPartitionIdxs[0] != 0) {
             // Take the end of previous shard
-            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0]-1].EndOfRange;
+            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0] - 1].EndOfRange;
         } else {
             TVector<TCell> firstKey;
             ui32 keyColCount = 0;
@@ -607,16 +640,16 @@ public:
     }
 
     bool AllocateDstForSplit(
-            const NKikimrSchemeOp::TSplitMergeTablePartitions& info,
-            TTxId txId,
-            const TPathId& pathId,
-            ui64 srcPartitionIdx,
-            const TTableInfo::TCPtr tableInfo,
-            TTxState& op,
-            const TChannelsBindings& channels,
-            TString& errStr,
-            TOperationContext& context)
-    {
+        const NKikimrSchemeOp::TSplitMergeTablePartitions& info,
+        TTxId txId,
+        const TPathId& pathId,
+        ui64 srcPartitionIdx,
+        const TTableInfo::TCPtr tableInfo,
+        TTxState& op,
+        const TChannelsBindings& channels,
+        TString& errStr,
+        TOperationContext& context
+    ) {
         // n split points produce n+1 parts
         ui64 count = info.SplitBoundarySize() + 1;
         if (count == 1) {
@@ -628,8 +661,7 @@ public:
         const auto forceShardSplitSettings = context.SS->SplitSettings.GetForceShardSplitSettings();
 
         if (tableInfo->GetExpectedPartitionCount() + count - 1 > tableInfo->GetMaxPartitionsCount() &&
-            !tableInfo->IsForceSplitBySizeShardIdx(srcShardIdx, forceShardSplitSettings))
-        {
+            !tableInfo->IsForceSplitBySizeShardIdx(srcShardIdx, forceShardSplitSettings)) {
             errStr = "Reached MaxPartitionsCount limit: " + ToString(tableInfo->GetMaxPartitionsCount());
             return false;
         }
@@ -643,7 +675,7 @@ public:
             if (!col.second.IsKey())
                 continue;
             size_t keyIdx = col.second.KeyOrder;
-            keyColTypeIds.resize(Max(keyColTypeIds.size(), keyIdx+1));
+            keyColTypeIds.resize(Max(keyColTypeIds.size(), keyIdx + 1));
             keyColTypeIds[keyIdx] = col.second.PType;
         }
 
@@ -665,7 +697,7 @@ public:
         TVector<TCell> prevKey;
         if (srcPartitionIdx != 0) {
             // Take the end of previous shard
-            TSerializedCellVec key(tableInfo->GetPartitions()[srcPartitionIdx-1].EndOfRange);
+            TSerializedCellVec key(tableInfo->GetPartitions()[srcPartitionIdx - 1].EndOfRange);
             prevKey.assign(key.GetCells().begin(), key.GetCells().end());
         } else {
             // Or start from (NULL, NULL, .., NULL)
@@ -713,8 +745,7 @@ public:
 
         TPathId pathId = InvalidPathId;
         if (info.HasTableOwnerId()) {
-            pathId = TPathId(TOwnerId(info.GetTableOwnerId()),
-                             TLocalPathId(info.GetTableLocalId()));
+            pathId = TPathId(TOwnerId(info.GetTableOwnerId()), TLocalPathId(info.GetTableLocalId()));
         } else if (info.HasTableLocalId()) {
             pathId = context.SS->MakeLocalId(TLocalPathId(info.GetTableLocalId()));
         }
@@ -726,7 +757,8 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;
 
         if (!info.HasTablePath() && !info.HasTableLocalId()) {
@@ -735,13 +767,10 @@ public:
             return result;
         }
 
-        TPath path = pathId
-            ? TPath::Init(pathId, context.SS)
-            : TPath::Resolve(info.GetTablePath(), context.SS);
+        TPath path = pathId ? TPath::Init(pathId, context.SS) : TPath::Resolve(info.GetTablePath(), context.SS);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -751,9 +780,7 @@ public:
 
             if (checks) {
                 if (dstCount >= srcCount) { //allow over commit for merge
-                    checks
-                        .ShardsLimit(dstCount)
-                        .PathShardsLimit(dstCount);
+                    checks.ShardsLimit(dstCount).PathShardsLimit(dstCount);
                 }
             }
 
@@ -778,8 +805,7 @@ public:
         Y_ABORT_UNLESS(tableInfo);
 
         if (tableInfo->IsBackup) {
-            TString errMsg = TStringBuilder()
-                << "cannot split/merge backup table " << info.GetTablePath();
+            TString errMsg = TStringBuilder() << "cannot split/merge backup table " << info.GetTablePath();
             result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
             return result;
         }
@@ -798,31 +824,28 @@ public:
             }
 
             if (!context.SS->ShardInfos.contains(srcShardIdx)) {
-                TString errMsg = TStringBuilder()
-                    << "shard doesn't present at schemeshard at all"
-                    << ", tablet: " << srcTabletId
-                    << ", srcShardIdx: " << srcShardIdx
-                    << ", pathId: " << path.Base()->PathId;
+                TString errMsg = TStringBuilder() << "shard doesn't present at schemeshard at all"
+                                                  << ", tablet: " << srcTabletId << ", srcShardIdx: " << srcShardIdx
+                                                  << ", pathId: " << path.Base()->PathId;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
             }
 
             if (!shardIdx2partition.contains(srcShardIdx)) {
-                TString errMsg = TStringBuilder()
-                    << "shard doesn't present at schemeshard at table"
-                    << ", tablet: " << srcTabletId
-                    << ", srcShardIdx: " << srcShardIdx
-                    << ", pathId: " << path.Base()->PathId;
+                TString errMsg = TStringBuilder() << "shard doesn't present at schemeshard at table"
+                                                  << ", tablet: " << srcTabletId << ", srcShardIdx: " << srcShardIdx
+                                                  << ", pathId: " << path.Base()->PathId;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
             }
 
-            if (context.SS->ShardInfos.FindPtr(srcShardIdx)->PathId != path.Base()->PathId || !shardIdx2partition.contains(srcShardIdx)) {
-                TString errMsg = TStringBuilder() << "TabletId " << srcTabletId << " is not a partition of table " << info.GetTablePath();
+            if (context.SS->ShardInfos.FindPtr(srcShardIdx)->PathId != path.Base()->PathId ||
+                !shardIdx2partition.contains(srcShardIdx)) {
+                TString errMsg = TStringBuilder() << "TabletId " << srcTabletId << " is not a partition of table "
+                                                  << info.GetTablePath();
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
             }
-
 
             if (context.SS->ShardIsUnderSplitMergeOp(srcShardIdx)) {
                 TString errMsg = TStringBuilder() << "TabletId " << srcTabletId << " is already in process of split";
@@ -847,10 +870,11 @@ public:
         }
 
         if (context.SS->SplitSettings.SplitMergePartCountLimit != -1 &&
-            totalSrcPartCount >= context.SS->SplitSettings.SplitMergePartCountLimit)
-        {
-            result->SetError(NKikimrScheme::StatusNotAvailable,
-                             Sprintf("Split/Merge operation involves too many parts: %" PRIu64, totalSrcPartCount));
+            totalSrcPartCount >= context.SS->SplitSettings.SplitMergePartCountLimit) {
+            result->SetError(
+                NKikimrScheme::StatusNotAvailable,
+                Sprintf("Split/Merge operation involves too many parts: %" PRIu64, totalSrcPartCount)
+            );
 
             LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "Cannot start split/merge operation"
@@ -861,7 +885,10 @@ public:
         }
 
         if (srcPartitionIdxs.empty()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "No source partitions specified for split/merge TxId " << OperationId.GetTxId());
+            result->SetError(
+                NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "No source partitions specified for split/merge TxId " << OperationId.GetTxId()
+            );
             return result;
         }
 
@@ -875,8 +902,19 @@ public:
             THashMap<ui32, ui32> familyRooms;
             storageRooms.emplace_back(0);
 
-            if (!context.SS->GetBindingsRooms(path.GetPathIdForDomain(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
-                errStr = TString("database doesn't have required storage pools to create tablet with storage config, details: ") + errStr;
+            if (!context.SS->GetBindingsRooms(
+                    path.GetPathIdForDomain(),
+                    tableInfo->PartitionConfig(),
+                    storageRooms,
+                    familyRooms,
+                    channelsBinding,
+                    errStr
+                )) {
+                errStr =
+                    TString(
+                        "database doesn't have required storage pools to create tablet with storage config, details: "
+                    ) +
+                    errStr;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
@@ -911,13 +949,33 @@ public:
 
         if (srcPartitionIdxs.size() == 1 && dstCount > 1) {
             // This is Split operation, allocate new shards for split Dsts
-            if (!AllocateDstForSplit(info, OperationId.GetTxId(), path.Base()->PathId, srcPartitionIdxs[0], tableInfo, op, channelsBinding, errStr, context)) {
+            if (!AllocateDstForSplit(
+                    info,
+                    OperationId.GetTxId(),
+                    path.Base()->PathId,
+                    srcPartitionIdxs[0],
+                    tableInfo,
+                    op,
+                    channelsBinding,
+                    errStr,
+                    context
+                )) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
         } else if (dstCount == 1 && srcPartitionIdxs.size() > 1) {
             // This is merge, allocate 1 Dst shard
-            if (!AllocateDstForMerge(info, OperationId.GetTxId(), path.Base()->PathId, srcPartitionIdxs, tableInfo, op, channelsBinding, errStr, context)) {
+            if (!AllocateDstForMerge(
+                    info,
+                    OperationId.GetTxId(),
+                    path.Base()->PathId,
+                    srcPartitionIdxs,
+                    tableInfo,
+                    op,
+                    channelsBinding,
+                    errStr,
+                    context
+                )) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
@@ -1001,7 +1059,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -1014,4 +1072,4 @@ ISubOperation::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state) 
     return MakeSubOperation<TSplitMerge>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

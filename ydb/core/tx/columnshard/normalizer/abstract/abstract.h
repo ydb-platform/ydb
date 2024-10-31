@@ -9,7 +9,7 @@
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NIceDb {
-    class TNiceDb;
+class TNiceDb;
 }
 
 namespace NKikimr::NOlap {
@@ -21,6 +21,7 @@ class TNormalizerCounters: public NColumnShard::TCommonCountersOwner {
     NMonitoring::TDynamicCounters::TCounterPtr StartedCount;
     NMonitoring::TDynamicCounters::TCounterPtr FinishedCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailedCount;
+
 public:
     TNormalizerCounters(const TString& normalizerName)
         : TBase("Normalizer") {
@@ -49,7 +50,7 @@ public:
     }
 };
 
-enum class ENormalizerSequentialId: ui32 {
+enum class ENormalizerSequentialId : ui32 {
     Granules = 1,
     Chunks,
     TablesCleaner,
@@ -67,12 +68,12 @@ class TNormalizationContext {
     YDB_ACCESSOR_DEF(TActorId, ResourceSubscribeActor);
     YDB_ACCESSOR_DEF(TActorId, ShardActor);
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+
 public:
     void SetResourcesGuard(std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> rg) {
         ResourcesGuard = rg;
     }
 };
-
 
 class TNormalizationController;
 
@@ -89,7 +90,10 @@ public:
     using TPtr = std::shared_ptr<INormalizerChanges>;
     virtual ~INormalizerChanges() {}
 
-    virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normalizationContext) const = 0;
+    virtual bool ApplyOnExecute(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TNormalizationController& normalizationContext
+    ) const = 0;
     virtual void ApplyOnComplete(const TNormalizationController& normalizationContext) const {
         Y_UNUSED(normalizationContext);
     }
@@ -99,6 +103,7 @@ public:
 
 class TTrivialNormalizerTask: public INormalizerTask {
     INormalizerChanges::TPtr Changes;
+
 public:
     TTrivialNormalizerTask(const INormalizerChanges::TPtr& changes)
         : Changes(changes) {
@@ -112,10 +117,10 @@ class TNormalizationController {
 public:
     class TInitContext {
         TIntrusiveConstPtr<TTabletStorageInfo> StorageInfo;
+
     public:
         TInitContext(TTabletStorageInfo* info)
-            : StorageInfo(info) {
-        }
+            : StorageInfo(info) {}
 
         TIntrusiveConstPtr<TTabletStorageInfo> GetStorageInfo() const {
             return StorageInfo;
@@ -126,6 +131,7 @@ public:
     private:
         YDB_READONLY_DEF(TString, ClassName);
         YDB_READONLY_DEF(TString, Description);
+
     public:
         bool operator<(const TNormalizerFullId& item) const {
             if (ClassName == item.ClassName) {
@@ -136,10 +142,7 @@ public:
 
         TNormalizerFullId(const TString& className, const TString& description)
             : ClassName(className)
-            , Description(description)
-        {
-
-        }
+            , Description(description) {}
     };
 
     class INormalizerComponent {
@@ -147,7 +150,7 @@ public:
         YDB_ACCESSOR(bool, IsRepair, false);
         YDB_ACCESSOR_DEF(TString, UniqueDescription);
         YDB_ACCESSOR(TString, UniqueId, TGUID::CreateTimebased().AsUuidString());
-        
+
         virtual TString DoDebugString() const {
             return "";
         }
@@ -218,10 +221,12 @@ public:
             }
         }
 
-        TConclusion<std::vector<INormalizerTask::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc);
+        TConclusion<std::vector<INormalizerTask::TPtr>>
+        Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc);
 
     private:
-        virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        virtual TConclusion<std::vector<INormalizerTask::TPtr>>
+        DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
         TAtomic ActiveTasksCount = 0;
     };
@@ -236,14 +241,17 @@ private:
     std::set<TNormalizerFullId> FinishedNormalizers;
     std::map<TNormalizerFullId, TString> StartedNormalizers;
     YDB_READONLY_DEF(std::optional<ui32>, LastSavedNormalizerId);
+
 private:
     INormalizerComponent::TPtr RegisterNormalizer(INormalizerComponent::TPtr normalizer);
 
 public:
-    TNormalizationController(std::shared_ptr<IStoragesManager> storagesManager, const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters)
+    TNormalizationController(
+        std::shared_ptr<IStoragesManager> storagesManager,
+        const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& counters
+    )
         : StoragesManager(storagesManager)
-        , TaskSubscription("CS::NORMALIZER", counters) {
-    }
+        , TaskSubscription("CS::NORMALIZER", counters) {}
 
     const NOlap::NResourceBroker::NSubscribe::TTaskContext& GetTaskSubscription() const {
         return TaskSubscription;
@@ -260,8 +268,8 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "normalizers_count=" << Normalizers.size()
-            << ";current_normalizer=" << (Normalizers.size() ? Normalizers.front()->DebugString() : "NO_DATA");
+        return TStringBuilder() << "normalizers_count=" << Normalizers.size() << ";current_normalizer="
+                                << (Normalizers.size() ? Normalizers.front()->DebugString() : "NO_DATA");
     }
 
     const INormalizerComponent::TPtr& GetNormalizer() const;
@@ -269,4 +277,4 @@ public:
     bool SwitchNormalizer();
     const TNormalizerCounters& GetCounters() const;
 };
-}
+} // namespace NKikimr::NOlap

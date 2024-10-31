@@ -45,7 +45,11 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 public:
     ~TStorageChanges() = default;
 
-    void PersistPersQueue(const TPathId& pathId, const TShardIdx& shardIdx, const TTopicTabletInfo::TTopicPartitionInfo& pqInfo) {
+    void PersistPersQueue(
+        const TPathId& pathId,
+        const TShardIdx& shardIdx,
+        const TTopicTabletInfo::TTopicPartitionInfo& pqInfo
+    ) {
         PersQueue.emplace_back(pathId, shardIdx, pqInfo);
     }
 
@@ -117,7 +121,7 @@ public:
         Views.emplace_back(pathId);
     }
 
-    void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+    void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
 };
 
-}
+} // namespace NKikimr::NSchemeShard

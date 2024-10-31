@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-enum class EExecutionUnitKind: ui32 {
+enum class EExecutionUnitKind : ui32 {
     CheckDataTx,
     CheckSchemeTx,
     CheckSnapshotTx,

@@ -12,8 +12,10 @@ class TSchemeShard::TIndexBuilder::TTxBase: public NTabletFlatExecutor::TTransac
 private:
     TSideEffects SideEffects;
     const NKikimr::NSchemeShard::ETxTypes TxType;
+
 public:
     const TString LogPrefix;
+
 private:
     using TChangeStateRec = std::tuple<TIndexBuildId, TIndexBuildInfo::EState>;
     TDeque<TChangeStateRec> StateChanges;
@@ -36,13 +38,19 @@ protected:
     void Progress(TIndexBuildId id);
     void Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo);
     void Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo& indexInfo);
-    void AddIssue(::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage>* issues,
-                  const TString& message,
-                  NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR);
+    void AddIssue(
+        ::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>* issues,
+        const TString& message,
+        NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR
+    );
     void SendNotificationsIfFinished(TIndexBuildInfo& indexInfo);
     void EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo);
     Ydb::StatusIds::StatusCode TranslateStatusCode(NKikimrScheme::EStatus status);
-    void Bill(const TIndexBuildInfo& indexBuildInfo, TInstant startPeriod = TInstant::Zero(), TInstant endPeriod = TInstant::Zero());
+    void Bill(
+        const TIndexBuildInfo& indexBuildInfo,
+        TInstant startPeriod = TInstant::Zero(),
+        TInstant endPeriod = TInstant::Zero()
+    );
     void AskToScheduleBilling(TIndexBuildInfo& indexBuildInfo);
     bool GotScheduledBilling(TIndexBuildInfo& indexBuildInfo);
 
@@ -50,10 +58,11 @@ public:
     explicit TTxBase(TSelf* self, NKikimr::NSchemeShard::ETxTypes txType)
         : TBase(self)
         , TxType(txType)
-        , LogPrefix(TStringBuilder() << "TIndexBuilder::" << NKikimr::NSchemeShard::ETxTypes_Name(txType) << ": ")
-    { }
+        , LogPrefix(TStringBuilder() << "TIndexBuilder::" << NKikimr::NSchemeShard::ETxTypes_Name(txType) << ": ") {}
 
-    TTxType GetTxType() const override { return TxType; }
+    TTxType GetTxType() const override {
+        return TxType;
+    }
 
     virtual ~TTxBase() = default;
 
@@ -64,21 +73,25 @@ public:
     void Complete(const TActorContext& ctx) override;
 };
 
-template<typename TRequest, typename TResponse>
-class TSchemeShard::TIndexBuilder::TTxSimple : public TSchemeShard::TIndexBuilder::TTxBase {
+template <typename TRequest, typename TResponse>
+class TSchemeShard::TIndexBuilder::TTxSimple: public TSchemeShard::TIndexBuilder::TTxBase {
 public:
     typename TRequest::TPtr Request;
     THolder<TResponse> Response;
     const bool IsMutableOperation;
 
-    explicit TTxSimple(TSelf* self, typename TRequest::TPtr& ev, NKikimr::NSchemeShard::ETxTypes txType, bool isMutableOperation = true)
+    explicit TTxSimple(
+        TSelf* self,
+        typename TRequest::TPtr& ev,
+        NKikimr::NSchemeShard::ETxTypes txType,
+        bool isMutableOperation = true
+    )
         : TTxBase(self, txType)
         , Request(ev)
-        , IsMutableOperation(isMutableOperation)
-    { }
+        , IsMutableOperation(isMutableOperation) {}
 
-    bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())
-    {
+    bool
+    Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString()) {
         Y_ABORT_UNLESS(Response);
         auto& record = Response->Record;
         record.SetStatus(status);
@@ -96,13 +109,12 @@ public:
         return true;
     }
 
-    bool Reply(const NKikimrScheme::EStatus status, const TString& errorMessage)
-    {
+    bool Reply(const NKikimrScheme::EStatus status, const TString& errorMessage) {
         Y_ABORT_UNLESS(Response);
         Response->Record.SetSchemeStatus(status);
         return Reply(TranslateStatusCode(status), errorMessage);
     }
 };
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

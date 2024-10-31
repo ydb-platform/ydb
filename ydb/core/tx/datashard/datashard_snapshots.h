@@ -42,8 +42,7 @@ public:
         : Key(key)
         , Name(std::move(name))
         , Flags(flags)
-        , Timeout(timeout)
-    { }
+        , Timeout(timeout) {}
 
     bool HasFlags(ui64 flags) const {
         return (Flags & flags) == flags;
@@ -91,11 +90,14 @@ public:
 
         TSnapshotsView(const_iterator begin, const_iterator end)
             : Begin(begin)
-            , End(end)
-        { }
+            , End(end) {}
 
-        const_iterator begin() const { return Begin; }
-        const_iterator end() const { return End; }
+        const_iterator begin() const {
+            return Begin;
+        }
+        const_iterator end() const {
+            return End;
+        }
 
     private:
         const const_iterator Begin;
@@ -103,8 +105,7 @@ public:
     };
 
     explicit TSnapshotManager(TDataShard* self)
-        : Self(self)
-    { }
+        : Self(self) {}
 
     void Reset();
 
@@ -152,11 +153,11 @@ public:
 
     TRowVersion GetLowWatermark() const;
 
-    void SetLowWatermark(NIceDb::TNiceDb &db, TRowVersion watermark);
+    void SetLowWatermark(NIceDb::TNiceDb& db, TRowVersion watermark);
 
     bool AdvanceWatermark(NTable::TDatabase& db, const TRowVersion& to);
 
-    void RemoveRowVersions(NTable::TDatabase &db, const TRowVersion &from, const TRowVersion &to);
+    void RemoveRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to);
 
     const TSnapshotMap& GetSnapshots() const {
         return Snapshots;
@@ -177,7 +178,8 @@ public:
     bool AcquireReference(const TSnapshotKey& key);
     bool ReleaseReference(const TSnapshotKey& key, NTable::TDatabase& db, TInstant now);
 
-    bool AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout);
+    bool
+    AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout);
     bool RemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
     bool CleanupRemovedSnapshots(NTable::TDatabase& db);
 
@@ -187,7 +189,13 @@ public:
     TDuration CleanupTimeout() const;
     bool RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc);
 
-    void PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout);
+    void PersistAddSnapshot(
+        NIceDb::TNiceDb& db,
+        const TSnapshotKey& key,
+        const TString& name,
+        ui64 flags,
+        TDuration timeout
+    );
     void PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
@@ -218,7 +226,8 @@ private:
 
     TSnapshotMap Snapshots;
 
-    using TSnapshotExpireQueue = TIntrusiveHeap<TSnapshot, TSnapshot::THeapIndexByExpireTime, TSnapshot::TCompareByExpireTime>;
+    using TSnapshotExpireQueue =
+        TIntrusiveHeap<TSnapshot, TSnapshot::THeapIndexByExpireTime, TSnapshot::TCompareByExpireTime>;
     TSnapshotExpireQueue ExpireQueue;
 
     THashMap<TSnapshotKey, size_t> References;

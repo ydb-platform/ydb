@@ -1,5 +1,3 @@
 #include "committed.h"
 
-namespace NKikimr::NOlap {
-
-}
+namespace NKikimr::NOlap {}

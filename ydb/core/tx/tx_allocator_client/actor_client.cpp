@@ -92,9 +92,7 @@ public:
 
     explicit TTxAllocatorClientActor(TVector<ui64> txAllocators)
         : PipeClientCache(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
-        , TxAllocatorClient(NKikimrServices::TX_ALLOCATOR_CLIENT, PipeClientCache.Get(), std::move(txAllocators))
-    {
-    }
+        , TxAllocatorClient(NKikimrServices::TX_ALLOCATOR_CLIENT, PipeClientCache.Get(), std::move(txAllocators)) {}
 
     void Bootstrap(const TActorContext& ctx) {
         TxAllocatorClient.Bootstrap(ctx);
@@ -138,10 +136,10 @@ TVector<ui64> CollectTxAllocators(const TAppData* appData) {
     return allocators;
 }
 
-}
+} // namespace
 
 IActor* CreateTxAllocatorClient(const TAppData* appData) {
     return CreateTxAllocatorClient(CollectTxAllocators(appData));
 }
 
-} // NKikimr
+} // namespace NKikimr

@@ -9,14 +9,13 @@ namespace NKikimr::NColumnShard {
 class TWritesMonitor {
 private:
     TTabletCountersBase& Stats;
-    
+
     YDB_READONLY(ui64, WritesInFlight, 0);
     YDB_READONLY(ui64, WritesSizeInFlight, 0);
 
 public:
     TWritesMonitor(TTabletCountersBase& stats)
-        : Stats(stats) {
-    }
+        : Stats(stats) {}
 
     void OnStartWrite(const ui64 dataSize) {
         ++WritesInFlight;
@@ -43,4 +42,4 @@ private:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

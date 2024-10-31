@@ -4,7 +4,10 @@
 
 namespace NKikimr::NSharding {
 
-void TUnboxedValueReader::BuildStringForHash(const NKikimr::NUdf::TUnboxedValue& value, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) const {
+void TUnboxedValueReader::BuildStringForHash(
+    const NKikimr::NUdf::TUnboxedValue& value,
+    NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer
+) const {
     for (auto&& i : ColumnsInfo) {
         auto columnValue = value.GetElement(i.Idx);
         if (columnValue.IsString()) {
@@ -37,8 +40,11 @@ void TUnboxedValueReader::BuildStringForHash(const NKikimr::NUdf::TUnboxedValue&
     }
 }
 
-TUnboxedValueReader::TUnboxedValueReader(const NMiniKQL::TStructType* structInfo,
-    const TMap<TString, TExternalTableColumn>& columnsRemap, const std::vector<TString>& shardingColumns) {
+TUnboxedValueReader::TUnboxedValueReader(
+    const NMiniKQL::TStructType* structInfo,
+    const TMap<TString, TExternalTableColumn>& columnsRemap,
+    const std::vector<TString>& shardingColumns
+) {
     YQL_ENSURE(shardingColumns.size());
     for (auto&& i : shardingColumns) {
         auto it = columnsRemap.find(i);
@@ -47,4 +53,4 @@ TUnboxedValueReader::TUnboxedValueReader(const NMiniKQL::TStructType* structInfo
     }
 }
 
-}
+} // namespace NKikimr::NSharding

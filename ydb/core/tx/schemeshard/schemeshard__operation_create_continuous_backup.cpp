@@ -15,7 +15,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup);
 
     LOG_D("CreateNewContinuousBackup"
@@ -27,7 +28,8 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     const auto& cbOp = tx.GetCreateContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
 
-    const auto checksResult = NCdc::DoNewStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME, acceptExisted);
+    const auto checksResult =
+        NCdc::DoNewStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
@@ -69,7 +71,9 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     TVector<ISubOperation::TPtr> result;
 
     NCdc::DoCreateStream(result, createCdcStreamOp, opId, workingDirPath, tablePath, acceptExisted, false);
-    NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, boundaries, acceptExisted);
+    NCdc::DoCreatePqPart(
+        result, createCdcStreamOp, opId, streamPath, NBackup::CB_CDC_STREAM_NAME, table, boundaries, acceptExisted
+    );
 
     return result;
 }

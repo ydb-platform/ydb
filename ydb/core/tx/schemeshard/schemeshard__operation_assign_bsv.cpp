@@ -24,14 +24,15 @@ public:
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -56,13 +57,8 @@ public:
             return result;
         }
 
-
-        if (version &&
-            version != volume->TokenVersion)
-        {
-            result->SetError(
-                NKikimrScheme::StatusPreconditionFailed,
-                "Wrong version in Assign Volume");
+        if (version && version != volume->TokenVersion) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Wrong version in Assign Volume");
             return result;
         }
 
@@ -97,7 +93,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -110,4 +106,4 @@ ISubOperation::TPtr CreateAssignBSV(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TAssignBlockStoreVolume>(id);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

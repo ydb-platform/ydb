@@ -7,41 +7,28 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TStoreWriteUnit : public TExecutionUnit {
+class TStoreWriteUnit: public TExecutionUnit {
 public:
-    TStoreWriteUnit(TDataShard &dataShard,
-                     TPipeline &pipeline);
+    TStoreWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TStoreWriteUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TStoreWriteUnit::TStoreWriteUnit(TDataShard &dataShard,
-                                   TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::StoreWrite, false, dataShard, pipeline)
-{
-}
+TStoreWriteUnit::TStoreWriteUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::StoreWrite, false, dataShard, pipeline) {}
 
-TStoreWriteUnit::~TStoreWriteUnit()
-{
-}
+TStoreWriteUnit::~TStoreWriteUnit() {}
 
-bool TStoreWriteUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TStoreWriteUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TStoreWriteUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &txc,
-                                           const TActorContext &ctx)
-{
+EExecutionStatus TStoreWriteUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     Y_ABORT_UNLESS(!op->IsAborted() && !op->IsInterrupted());
 
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
@@ -64,15 +51,11 @@ EExecutionStatus TStoreWriteUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TStoreWriteUnit::Complete(TOperation::TPtr op,
-                                const TActorContext &ctx)
-{
+void TStoreWriteUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
     Pipeline.ProposeComplete(op, ctx);
 }
 
-THolder<TExecutionUnit> CreateStoreWriteUnit(TDataShard &dataShard,
-                                              TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateStoreWriteUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TStoreWriteUnit>(dataShard, pipeline);
 }
 

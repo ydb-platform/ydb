@@ -54,7 +54,7 @@ TTablesStorage::TTableExtractedGuard TTablesStorage::TakeAlterVerified(const TPa
     return TTableExtractedGuard(*this, id, ExtractPtr(id), true);
 }
 
- TColumnTableInfo::TPtr TTablesStorage::GetVerifiedPtr(const TPathId& id) const {
+TColumnTableInfo::TPtr TTablesStorage::GetVerifiedPtr(const TPathId& id) const {
     auto it = Tables.find(id);
     Y_ABORT_UNLESS(it != Tables.end());
     return it->second;
@@ -133,4 +133,4 @@ std::unordered_set<TPathId> TTablesStorage::GetAllPathIds() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

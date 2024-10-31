@@ -6,7 +6,11 @@
 namespace NKikimr::NOlap::NIndexes::NMax {
 
 std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
-    const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+    const ui32 indexId,
+    const TString& indexName,
+    const NSchemeShard::TOlapSchema& currentSchema,
+    NSchemeShard::IErrorCollector& errors
+) const {
     ui32 columnId;
     {
         auto* columnInfo = currentSchema.GetColumns().GetByName(ColumnName);
@@ -20,7 +24,9 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreat
         }
         columnId = columnInfo->GetId();
     }
-    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId), columnId);
+    return std::make_shared<TIndexMeta>(
+        indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId), columnId
+    );
 }
 
 NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -33,7 +39,8 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson:
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
+NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto
+) {
     if (!proto.HasMaxIndex()) {
         const TString errorMessage = "Not found MaxIndex section in proto: \"" + proto.DebugString() + "\"";
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);

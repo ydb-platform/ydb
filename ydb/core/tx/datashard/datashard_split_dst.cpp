@@ -7,18 +7,18 @@
 namespace NKikimr {
 namespace NDataShard {
 
-
-class TDataShard::TTxInitSplitMergeDestination : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxInitSplitMergeDestination: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvInitSplitMergeDestination::TPtr Ev;
 
 public:
     TTxInitSplitMergeDestination(TDataShard* ds, TEvDataShard::TEvInitSplitMergeDestination::TPtr ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT_SPLIT_MERGE_DESTINATION; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT_SPLIT_MERGE_DESTINATION;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
@@ -63,7 +63,8 @@ public:
             }
         }
 
-        Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
+        Self->DstSplitDescription =
+            std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
 
         for (ui32 i = 0; i < Self->DstSplitDescription->SourceRangesSize(); ++i) {
             ui64 srcTabletId = Self->DstSplitDescription->GetSourceRanges(i).GetTabletID();
@@ -104,7 +105,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         // Send Ack
         TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
@@ -116,18 +117,18 @@ public:
     }
 };
 
-
-class TDataShard::TTxSplitTransferSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSplitTransferSnapshot: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplitTransferSnapshot::TPtr Ev;
 
 public:
     TTxSplitTransferSnapshot(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SPLIT_TRANSFER_SNAPSHOT;
+    }
 
     /**
      * Initialize schema based on the first received snapshot
@@ -137,7 +138,8 @@ public:
     void LegacyInitSchema(TTransactionContext& txc) {
         const auto& tableScheme = Ev->Get()->Record.GetUserTableScheme();
         TString tableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
-        if (!txc.DB.GetScheme().TableNames.contains(tableName)) { // TODO: properly check if table has already been created
+        if (!txc.DB.GetScheme().TableNames.contains(tableName
+            )) { // TODO: properly check if table has already been created
             NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme);
 
             // Get this shard's range boundaries from the split/merge description
@@ -165,7 +167,8 @@ public:
         ui64 srcTabletId = Ev->Get()->Record.GetSrcTabletId();
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
-        if (Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.contains(srcTabletId)) {
+        if (Self->State != TShardState::SplitDstReceivingSnapshot ||
+            !Self->ReceiveSnapshotsFrom.contains(srcTabletId)) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Ignoring received snapshot for split/merge TxId " << opId
                     << " from tabeltId " << srcTabletId);
             return true;
@@ -179,7 +182,7 @@ public:
             LegacyInitSchema(txc);
         }
 
-        for (ui32 i = 0 ; i < Ev->Get()->Record.TableSnapshotSize(); ++i) {
+        for (ui32 i = 0; i < Ev->Get()->Record.TableSnapshotSize(); ++i) {
             ui32 localTableId = Ev->Get()->Record.GetTableSnapshot(i).GetTableId();
             TString compressedBody = Ev->Get()->Record.GetTableSnapshot(i).GetSnapshotData();
             TString snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
@@ -220,10 +223,8 @@ public:
             }
 
             Self->GetSnapshotManager().PersistAddSnapshot(
-                db, key,
-                snapshot.GetName(),
-                snapshot.GetFlags(),
-                TDuration::MilliSeconds(snapshot.GetTimeoutMs()));
+                db, key, snapshot.GetName(), snapshot.GetFlags(), TDuration::MilliSeconds(snapshot.GetTimeoutMs())
+            );
         }
 
         // Snapshots are only valid when received from all source shards
@@ -297,7 +298,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         TActorId ackTo = Ev->Sender;
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
@@ -306,11 +307,10 @@ public:
         ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
     }
 
-    class TTxLastSnapshotReceived : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+    class TTxLastSnapshotReceived: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     public:
         TTxLastSnapshotReceived(TDataShard* self)
-            : TTransactionBase(self)
-        {}
+            : TTransactionBase(self) {}
 
         bool Execute(TTransactionContext&, const TActorContext&) override {
             return true;
@@ -347,17 +347,18 @@ public:
     };
 };
 
-class TDataShard::TTxSplitReplicationSourceOffsets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSplitReplicationSourceOffsets: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvPrivate::TEvReplicationSourceOffsets::TPtr Ev;
 
 public:
     TTxSplitReplicationSourceOffsets(TDataShard* ds, TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev)
         : TTransactionBase(ds)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SPLIT_REPLICATION_SOURCE_OFFSETS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SPLIT_REPLICATION_SOURCE_OFFSETS;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto* msg = Ev->Get();
@@ -368,8 +369,7 @@ public:
 
         auto itSrcTablets = Self->ReceiveReplicationSourceOffsetsFrom.find(msg->SrcTabletId);
         if (itSrcTablets == Self->ReceiveReplicationSourceOffsetsFrom.end() ||
-            !itSrcTablets->second.Pending.contains(msg->PathId))
-        {
+            !itSrcTablets->second.Pending.contains(msg->PathId)) {
             // Shouldn't really happen, but just ignore
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Ignoring unexpected ReplicationSourceOffsets from tablet " << msg->SrcTabletId
@@ -392,7 +392,8 @@ public:
             Self->Execute(new TTxSplitTransferSnapshot(Self, snapshot), ctx);
         }
 
-        if (Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.contains(msg->SrcTabletId)) {
+        if (Self->State != TShardState::SplitDstReceivingSnapshot ||
+            !Self->ReceiveSnapshotsFrom.contains(msg->SrcTabletId)) {
             // We may have received snapshot from an old unsupported version
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Ignoring valid ReplicationSourceOffsets from tablet " << msg->SrcTabletId
@@ -414,10 +415,8 @@ public:
             for (const auto& srcRange : Self->DstSplitDescription->GetSourceRanges()) {
                 Self->SrcTabletToRange.emplace(
                     srcRange.GetTabletID(),
-                    TSerializedTableRange(
-                        srcRange.GetKeyRangeBegin(),
-                        srcRange.GetKeyRangeEnd(),
-                        true, false));
+                    TSerializedTableRange(srcRange.GetKeyRangeBegin(), srcRange.GetKeyRangeEnd(), true, false)
+                );
             }
         }
 
@@ -440,19 +439,23 @@ public:
         bool rightFull = false;
 
         if (ComparePrefixBorders(
-            keyColumnTypes,
-            range.From.GetCells(), PrefixModeLeftBorderInclusive,
-            dstRange.From.GetCells(), PrefixModeLeftBorderInclusive) <= 0)
-        {
+                keyColumnTypes,
+                range.From.GetCells(),
+                PrefixModeLeftBorderInclusive,
+                dstRange.From.GetCells(),
+                PrefixModeLeftBorderInclusive
+            ) <= 0) {
             range.From = dstRange.From;
             leftFull = true;
         }
 
         if (ComparePrefixBorders(
-            keyColumnTypes,
-            dstRange.To.GetCells(), dstRange.To.GetCells() ? PrefixModeRightBorderNonInclusive : PrefixModeRightBorderInclusive,
-            range.To.GetCells(), range.To.GetCells() ? PrefixModeRightBorderNonInclusive : PrefixModeRightBorderInclusive) <= 0)
-        {
+                keyColumnTypes,
+                dstRange.To.GetCells(),
+                dstRange.To.GetCells() ? PrefixModeRightBorderNonInclusive : PrefixModeRightBorderInclusive,
+                range.To.GetCells(),
+                range.To.GetCells() ? PrefixModeRightBorderNonInclusive : PrefixModeRightBorderInclusive
+            ) <= 0) {
             range.To = dstRange.To;
             rightFull = true;
         }
@@ -464,12 +467,13 @@ public:
 
         // Sanity check that range.From < range.To, otherwise we won't compute split points correctly
         // This shouldn't happen in practice though
-        if (range.To.GetCells() &&
-            ComparePrefixBorders(
-                keyColumnTypes,
-                range.From.GetCells(), PrefixModeLeftBorderInclusive,
-                range.To.GetCells(), PrefixModeRightBorderNonInclusive) >= 0)
-        {
+        if (range.To.GetCells() && ComparePrefixBorders(
+                                       keyColumnTypes,
+                                       range.From.GetCells(),
+                                       PrefixModeLeftBorderInclusive,
+                                       range.To.GetCells(),
+                                       PrefixModeRightBorderNonInclusive
+                                   ) >= 0) {
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                 << " Ignoring ReplicationSourceOffsets from tablet " << msg->SrcTabletId
                 << " for table " << msg->PathId << " with an incorrect range");
@@ -478,9 +482,8 @@ public:
 
         auto keyLess = [keyColumnTypes](TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) -> bool {
             int r = ComparePrefixBorders(
-                keyColumnTypes,
-                a, PrefixModeLeftBorderInclusive,
-                b, PrefixModeLeftBorderInclusive);
+                keyColumnTypes, a, PrefixModeLeftBorderInclusive, b, PrefixModeLeftBorderInclusive
+            );
             return r < 0;
         };
 
@@ -509,9 +512,8 @@ public:
                     return true; // all keys are less than empty right border (+inf)
                 }
                 int r = ComparePrefixBorders(
-                    keyColumnTypes,
-                    aCells, PrefixModeLeftBorderInclusive,
-                    bCells, PrefixModeRightBorderNonInclusive);
+                    keyColumnTypes, aCells, PrefixModeLeftBorderInclusive, bCells, PrefixModeRightBorderNonInclusive
+                );
                 return r < 0;
             };
 
@@ -571,17 +573,16 @@ void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const 
     const ui64 srcTabletGen = msg->Record.GetSrcTabletGeneration();
 
     // We delay snapshot processing until all pending source offsets are received and processed
-    if (msg->Record.GetReplicationSourceOffsetsBytes() > 0 &&
-        ReceiveSnapshotsFrom.contains(srcTabletId) &&
-        srcTabletGen != 0)
-    {
+    if (msg->Record.GetReplicationSourceOffsetsBytes() > 0 && ReceiveSnapshotsFrom.contains(srcTabletId) &&
+        srcTabletGen != 0) {
         auto& entry = ReceiveReplicationSourceOffsetsFrom[srcTabletId];
 
         if (entry.Pending.empty()) {
             for (const auto& kv : GetUserTables()) {
                 TPathId pathId(GetPathOwnerId(), kv.first);
                 if (!entry.Received.contains(pathId)) {
-                    auto actorId = RegisterWithSameMailbox(CreateReplicationSourceOffsetsClient(SelfId(), srcTabletId, pathId));
+                    auto actorId =
+                        RegisterWithSameMailbox(CreateReplicationSourceOffsetsClient(SelfId(), srcTabletId, pathId));
                     Actors.insert(actorId);
                     entry.Pending.insert(pathId);
                 }
@@ -606,4 +607,5 @@ void TDataShard::Handle(TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev, const
     Execute(new TTxSplitReplicationSourceOffsets(this, ev), ctx);
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

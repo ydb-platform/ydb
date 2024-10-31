@@ -26,16 +26,13 @@ namespace NKikimr::NReplication::NController {
 
 class TController
     : public TActor<TController>
-    , public NTabletFlatExecutor::TTabletExecutedFlat
-{
+    , public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     class TTxBase: public NTabletFlatExecutor::TTransactionBase<TController> {
     public:
         TTxBase(const TString& name, TController* self)
             : TTransactionBase(self)
-            , LogPrefix(self, name)
-        {
-        }
+            , LogPrefix(self, name) {}
 
     protected:
         const TTabletLogPrefix LogPrefix;
@@ -196,4 +193,4 @@ private:
 
 }; // TController
 
-}
+} // namespace NKikimr::NReplication::NController

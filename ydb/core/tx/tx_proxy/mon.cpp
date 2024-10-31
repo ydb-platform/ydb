@@ -9,15 +9,15 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& c
     : Counters(counters)
     , TxGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "tx"))
     , DataReqGroup(GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "datareq"))
-    , AllocPoolCounters(counters, "tx_proxy")
-{
+    , AllocPoolCounters(counters, "tx_proxy") {
     CacheRequestLatency = TxGroup->GetHistogram("CacheRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
 
     Navigate = TxGroup->GetCounter("Navigate/Request", true);
     NavigateLatency = TxGroup->GetHistogram("Navigate/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
 
     SchemeRequest = TxGroup->GetCounter("Propose/SchemeRequest", true);
-    SchemeRequestLatency = TxGroup->GetHistogram("SchemeRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
+    SchemeRequestLatency =
+        TxGroup->GetHistogram("SchemeRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
     SchemeRequestProxyNotReady = TxGroup->GetCounter("Propose/SchemeRequestProxyNotReady", true);
     MakeRequest = TxGroup->GetCounter("Propose/MakeRequest", true);
     SnapshotRequest = TxGroup->GetCounter("Propose/SnapshotRequest", true);
@@ -34,29 +34,24 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& c
     ReportStatusNotOK = DataReqGroup->GetCounter("ReportStatus/NotOK", true);
     ReportStatusStreamData = DataReqGroup->GetCounter("ReportStatus/StreamData", true);
 
-    TxPrepareTimeHgram = DataReqGroup->GetHistogram("TxPrepareTimesMs",
-        NMonitoring::ExponentialHistogram(20, 2, 1));
-    TxExecuteTimeHgram = DataReqGroup->GetHistogram("TxExecuteTimesMs",
-        NMonitoring::ExponentialHistogram(20, 2, 1));
-    TxTotalTimeHgram = DataReqGroup->GetHistogram("TxTotalTimesMs",
-        NMonitoring::ExponentialHistogram(20, 2, 1));
-    TxPrepareSpreadHgram = DataReqGroup->GetHistogram("TxPrepareSpreadMs",
-        NMonitoring::ExponentialHistogram(10, 2, 1));
-    TxPrepareArriveSpreadHgram = DataReqGroup->GetHistogram("TxPrepareArriveSpreadMs",
-        NMonitoring::ExponentialHistogram(10, 2, 1));
-    TxPrepareCompleteSpreadHgram = DataReqGroup->GetHistogram("TxPrepareCompleteSpreadMs",
-        NMonitoring::ExponentialHistogram(10, 2, 1));
-    TxExecSpreadHgram = DataReqGroup->GetHistogram("TxExecSpreadMs",
-        NMonitoring::ExponentialHistogram(10, 2, 1));
+    TxPrepareTimeHgram = DataReqGroup->GetHistogram("TxPrepareTimesMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    TxExecuteTimeHgram = DataReqGroup->GetHistogram("TxExecuteTimesMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    TxTotalTimeHgram = DataReqGroup->GetHistogram("TxTotalTimesMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    TxPrepareSpreadHgram = DataReqGroup->GetHistogram("TxPrepareSpreadMs", NMonitoring::ExponentialHistogram(10, 2, 1));
+    TxPrepareArriveSpreadHgram =
+        DataReqGroup->GetHistogram("TxPrepareArriveSpreadMs", NMonitoring::ExponentialHistogram(10, 2, 1));
+    TxPrepareCompleteSpreadHgram =
+        DataReqGroup->GetHistogram("TxPrepareCompleteSpreadMs", NMonitoring::ExponentialHistogram(10, 2, 1));
+    TxExecSpreadHgram = DataReqGroup->GetHistogram("TxExecSpreadMs", NMonitoring::ExponentialHistogram(10, 2, 1));
 
-    TxPrepareSetProgramHgram = DataReqGroup->GetHistogram("TxPrepareSetProgramUs",
-        NMonitoring::ExponentialHistogram(10, 2, 100));
-    TxPrepareResolveHgram = DataReqGroup->GetHistogram("TxPrepareResolveUs",
-        NMonitoring::ExponentialHistogram(10, 2, 100));
-    TxPrepareBuildShardProgramsHgram = DataReqGroup->GetHistogram("TxPrepareBuildShardProgramsUs",
-        NMonitoring::ExponentialHistogram(10, 2, 100));
-    TxPrepareSendShardProgramsHgram = DataReqGroup->GetHistogram("TxPrepareSendShardProgramsUs",
-        NMonitoring::ExponentialHistogram(10, 2, 100));
+    TxPrepareSetProgramHgram =
+        DataReqGroup->GetHistogram("TxPrepareSetProgramUs", NMonitoring::ExponentialHistogram(10, 2, 100));
+    TxPrepareResolveHgram =
+        DataReqGroup->GetHistogram("TxPrepareResolveUs", NMonitoring::ExponentialHistogram(10, 2, 100));
+    TxPrepareBuildShardProgramsHgram =
+        DataReqGroup->GetHistogram("TxPrepareBuildShardProgramsUs", NMonitoring::ExponentialHistogram(10, 2, 100));
+    TxPrepareSendShardProgramsHgram =
+        DataReqGroup->GetHistogram("TxPrepareSendShardProgramsUs", NMonitoring::ExponentialHistogram(10, 2, 100));
 
     MiniKQLResolveSentToShard = DataReqGroup->GetCounter("MiniKQLResolve/SentToShard", true);
     MiniKQLWrongRequest = DataReqGroup->GetCounter("MiniKQLResolve/WrongRequest", true);
@@ -129,4 +124,5 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& c
     ResultsReceivedSize = DataReqGroup->GetCounter("ResultsReceived/Size", true);
 }
 
-}}
+} // namespace NTxProxy
+} // namespace NKikimr

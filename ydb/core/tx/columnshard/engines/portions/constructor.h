@@ -46,8 +46,7 @@ private:
 
         TAddressBlobId(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx)
             : Address(address)
-            , BlobIdx(blobIdx) {
-        }
+            , BlobIdx(blobIdx) {}
     };
     std::vector<TAddressBlobId> BlobIdxs;
     bool NeedBlobIdxsSort = false;
@@ -73,8 +72,12 @@ public:
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords,
-        const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial) {
+    void AddMetadata(
+        const ISnapshotSchema& snapshotSchema,
+        const ui32 deletionsCount,
+        const NArrow::TFirstLastSpecialKeys& firstLastRecords,
+        const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial
+    ) {
         MetaConstructor.FillMetaInfo(firstLastRecords, deletionsCount, minMaxSpecial, snapshotSchema.GetIndexInfo());
     }
 
@@ -181,14 +184,16 @@ public:
                         recordsCount = recordsCountCurrent;
                     }
                 }
-                AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
+                AFL_VERIFY(entityId < i.GetEntityId())
+                ("entity", entityId)("next", i.GetEntityId())("details", debugString());
                 AFL_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
                 recordsCountCurrent = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)(
-                                                  "details", debugString());
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)
+                ("chunkIdx",
+                 chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)("details", debugString());
                 chunkIdx = i.GetChunkIdx();
             }
             recordsCountCurrent += GetRecordsCount(i);
@@ -372,8 +377,8 @@ public:
         CheckChunksOrder(Records);
         CheckChunksOrder(Indexes);
         if (BlobIdxs.size()) {
-            AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
-                                                               "indexes", Indexes.size());
+            AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())
+            ("blobs", BlobIdxs.size())("records", Records.size())("indexes", Indexes.size());
         } else {
             std::set<ui32> blobIdxs;
             for (auto&& i : Records) {
@@ -401,11 +406,13 @@ public:
         ui32 chunkIdx = 0;
         for (auto&& i : Indexes) {
             if (i.GetIndexId() == chunk.GetIndexId()) {
-                AFL_VERIFY(chunkIdx == i.GetChunkIdx())("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", i.GetChunkIdx());
+                AFL_VERIFY(chunkIdx == i.GetChunkIdx())
+                ("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", i.GetChunkIdx());
                 ++chunkIdx;
             }
         }
-        AFL_VERIFY(chunkIdx == chunk.GetChunkIdx())("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", chunk.GetChunkIdx());
+        AFL_VERIFY(chunkIdx == chunk.GetChunkIdx())
+        ("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", chunk.GetChunkIdx());
         Indexes.emplace_back(chunk);
     }
 

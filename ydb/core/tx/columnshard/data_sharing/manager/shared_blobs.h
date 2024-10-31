@@ -40,13 +40,11 @@ private:
         }
         return doRemove;
     }
+
 public:
     TStorageSharedBlobsManager(const TString& storageId, const TTabletId tabletId)
         : StorageId(storageId)
-        , SelfTabletId(tabletId)
-    {
-
-    }
+        , SelfTabletId(tabletId) {}
 
     bool IsTrivialLinks() const {
         return BorrowedBlobIds.empty() && SharedBlobIds.IsEmpty();
@@ -95,7 +93,8 @@ public:
                     shared = true;
                 }
             }
-            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1)("b", borrowed)("d", direct)("s", shared)("blob_id", i.ToStringNew());
+            AFL_VERIFY((borrowed ? 1 : 0) + (direct ? 1 : 0) + (shared ? 1 : 0) == 1)
+            ("b", borrowed)("d", direct)("s", shared)("blob_id", i.ToStringNew());
         }
         return result;
     }
@@ -134,9 +133,15 @@ public:
         }
     }
 
-    void CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
+    void CASBorrowedBlobsDB(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TTabletId tabletIdFrom,
+        const TTabletId tabletIdTo,
+        const THashSet<TUnifiedBlobId>& blobIds
+    );
 
-    void CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
+    void
+    CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
 
     [[nodiscard]] bool UpsertSharedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
         return SharedBlobIds.Add(tabletId, blobId);
@@ -161,12 +166,10 @@ private:
     const TTabletId SelfTabletId;
     THashMap<TString, std::shared_ptr<TStorageSharedBlobsManager>> Storages;
     TAtomicCounter ExternalModificationsCount;
+
 public:
     TSharedBlobsManager(const TTabletId tabletId)
-        : SelfTabletId(tabletId)
-    {
-
-    }
+        : SelfTabletId(tabletId) {}
 
     void StartExternalModification() {
         ExternalModificationsCount.Inc();
@@ -201,7 +204,10 @@ public:
         return SelfTabletId;
     }
 
-    void WriteSharedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const THashMap<TString, TTabletsByBlob>& blobIds) {
+    void WriteSharedBlobsDB(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const THashMap<TString, TTabletsByBlob>& blobIds
+    ) {
         for (auto&& i : blobIds) {
             GetStorageManagerGuarantee(i.first)->WriteSharedBlobsDB(txc, i.second);
         }
@@ -213,7 +219,10 @@ public:
         }
     }
 
-    void WriteBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const THashMap<TString, TTabletByBlob>& blobIds) {
+    void WriteBorrowedBlobsDB(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const THashMap<TString, TTabletByBlob>& blobIds
+    ) {
         for (auto&& i : blobIds) {
             GetStorageManagerGuarantee(i.first)->WriteBorrowedBlobsDB(txc, i.second);
         }
@@ -242,7 +251,8 @@ public:
     std::shared_ptr<TStorageSharedBlobsManager> GetStorageManagerGuarantee(const TString& storageId) {
         auto it = Storages.find(storageId);
         if (it == Storages.end()) {
-            it = Storages.emplace(storageId, std::make_shared<TStorageSharedBlobsManager>(storageId, SelfTabletId)).first;
+            it = Storages.emplace(storageId, std::make_shared<TStorageSharedBlobsManager>(storageId, SelfTabletId))
+                     .first;
         }
         return it->second;
     }
@@ -250,4 +260,4 @@ public:
     bool LoadIdempotency(NTable::TDatabase& database);
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

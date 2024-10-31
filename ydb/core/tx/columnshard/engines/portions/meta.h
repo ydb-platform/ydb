@@ -30,9 +30,9 @@ private:
         , RecordSnapshotMin(min)
         , RecordSnapshotMax(max)
         , IndexKeyStart(pk.GetFirst())
-        , IndexKeyEnd(pk.GetLast())
-    {
-        AFL_VERIFY(IndexKeyStart <= IndexKeyEnd)("start", IndexKeyStart.DebugString())("end", IndexKeyEnd.DebugString());
+        , IndexKeyEnd(pk.GetLast()) {
+        AFL_VERIFY(IndexKeyStart <= IndexKeyEnd)
+        ("start", IndexKeyStart.DebugString())("end", IndexKeyEnd.DebugString());
     }
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;
@@ -72,13 +72,11 @@ class TPortionAddress {
 private:
     YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY(ui64, PortionId, 0);
+
 public:
     TPortionAddress(const ui64 pathId, const ui64 portionId)
         : PathId(pathId)
-        , PortionId(portionId)
-    {
-
-    }
+        , PortionId(portionId) {}
 
     TString DebugString() const;
 
@@ -93,10 +91,9 @@ public:
 
 } // namespace NKikimr::NOlap
 
-template<>
+template <>
 struct THash<NKikimr::NOlap::TPortionAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
         return CombineHashes(x.GetPortionId(), x.GetPathId());
     }
 };
-

@@ -37,6 +37,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TWriteCounters>, WriteCounters);
     YDB_READONLY_DEF(std::shared_ptr<TRemoveDeclareCounters>, RemoveDeclareCounters);
     YDB_READONLY_DEF(std::shared_ptr<TRemoveGCCounters>, RemoveGCCounters);
+
 public:
     TConsumerCounters(const TString& consumerId, const TStorageCounters& parent);
 };
@@ -45,11 +46,11 @@ class TStorageCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     std::vector<std::shared_ptr<TConsumerCounters>> Consumers;
+
 public:
     TStorageCounters(const TString& storageId);
 
     std::shared_ptr<TConsumerCounters> GetConsumerCounter(const EConsumer consumer);
-
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations

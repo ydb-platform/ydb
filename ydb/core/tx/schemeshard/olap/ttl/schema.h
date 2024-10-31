@@ -7,13 +7,11 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class TOlapTTL {
 private:
     NKikimrSchemeOp::TColumnDataLifeCycle Proto;
+
 public:
     TOlapTTL() = default;
     TOlapTTL(const NKikimrSchemeOp::TColumnDataLifeCycle& proto)
-        : Proto(proto)
-    {
-
-    }
+        : Proto(proto) {}
 
     const NKikimrSchemeOp::TColumnDataLifeCycle& GetData() const {
         return Proto;
@@ -31,4 +29,4 @@ public:
     TConclusionStatus Update(const TOlapTTLUpdate& update);
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

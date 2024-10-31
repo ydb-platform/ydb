@@ -1,5 +1,3 @@
 #include "events.h"
 
-namespace NKikimr::NLimiter {
-
-}
+namespace NKikimr::NLimiter {}

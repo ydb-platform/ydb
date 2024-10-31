@@ -14,7 +14,7 @@
     PROBE(AcquireReadSnapshotFailure,                                          \
         GROUPS("LongTxSnapshots"),                                             \
         TYPES(int),                                                            \
-        NAMES("status"))                                                       \
+        NAMES("status"))
 // LONG_TX_SERVICE_PROVIDER
 
 LWTRACE_DECLARE_PROVIDER(LONG_TX_SERVICE_PROVIDER)
@@ -22,7 +22,7 @@ LWTRACE_DECLARE_PROVIDER(LONG_TX_SERVICE_PROVIDER)
 namespace NKikimr {
 namespace NLongTxService {
 
-    void RegisterLongTxServiceProbes();
+void RegisterLongTxServiceProbes();
 
 }
-}
+} // namespace NKikimr

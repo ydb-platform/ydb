@@ -19,14 +19,16 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
     CurrentReadSetKeys.clear();
 
     // TODO[serxa]: this should be Range but it is not working right now
-    auto rowset = db.Table<Schema::OutReadSets>().GreaterOrEqual(0).Select<
-                                    Schema::OutReadSets::Seqno,
-                                    Schema::OutReadSets::Step,
-                                    Schema::OutReadSets::TxId,
-                                    Schema::OutReadSets::Origin,
-                                    Schema::OutReadSets::From,
-                                    Schema::OutReadSets::To,
-                                    Schema::OutReadSets::Body>();
+    auto rowset = db.Table<Schema::OutReadSets>()
+                      .GreaterOrEqual(0)
+                      .Select<
+                          Schema::OutReadSets::Seqno,
+                          Schema::OutReadSets::Step,
+                          Schema::OutReadSets::TxId,
+                          Schema::OutReadSets::Origin,
+                          Schema::OutReadSets::From,
+                          Schema::OutReadSets::To,
+                          Schema::OutReadSets::Body>();
     if (!rowset.IsReady())
         return false;
     while (!rowset.EndOfSet()) {
@@ -61,7 +63,13 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
     return true;
 }
 
-void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, const TString& body) {
+void TOutReadSets::SaveReadSet(
+    NIceDb::TNiceDb& db,
+    ui64 seqNo,
+    ui64 step,
+    const TReadSetKey& rsKey,
+    const TString& body
+) {
     using Schema = TDataShard::Schema;
 
     Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
@@ -79,7 +87,8 @@ void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const
         NIceDb::TUpdate<Schema::OutReadSets::Origin>(rsInfo.Origin),
         NIceDb::TUpdate<Schema::OutReadSets::From>(rsInfo.From),
         NIceDb::TUpdate<Schema::OutReadSets::To>(rsInfo.To),
-        NIceDb::TUpdate<Schema::OutReadSets::Body>(body));
+        NIceDb::TUpdate<Schema::OutReadSets::Body>(body)
+    );
 
     CurrentReadSetKeys[rsKey] = seqNo;
     CurrentReadSets[seqNo] = std::move(rsInfo);
@@ -104,8 +113,7 @@ TReadSetInfo TOutReadSets::ReplaceReadSet(NIceDb::TNiceDb& db, ui64 seqNo, const
 
     auto it = CurrentReadSets.find(seqNo);
     if (it != CurrentReadSets.end()) {
-        db.Table<Schema::OutReadSets>().Key(seqNo).Update(
-            NIceDb::TUpdate<Schema::OutReadSets::Body>(body));
+        db.Table<Schema::OutReadSets>().Key(seqNo).Update(NIceDb::TUpdate<Schema::OutReadSets::Body>(body));
         if (body.size() <= SmallReadSetCacheLimit) {
             it->second.Body = body;
         } else {
@@ -117,13 +125,18 @@ TReadSetInfo TOutReadSets::ReplaceReadSet(NIceDb::TNiceDb& db, ui64 seqNo, const
     }
 }
 
-void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext &ctx) {
+void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext& ctx) {
     const TReadSetKey* rsInfo = CurrentReadSets.FindPtr(seqNo);
 
     if (!rsInfo) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::TX_DATASHARD,
             "Unknown seqNo %" PRIu64 " for readset to tablet %" PRIu64 " at tablet %" PRIu64,
-            seqNo, tabletId, Self->TabletID());
+            seqNo,
+            tabletId,
+            Self->TabletID()
+        );
         return;
     }
 
@@ -138,16 +151,23 @@ void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TAc
     SaveAck(ctx, ev);
 }
 
-void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev) {
+void TOutReadSets::SaveAck(const TActorContext& ctx, TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev) {
     ui64 seqno = ev->Record.GetSeqno();
     ui64 sender = ev->Record.GetTabletSource();
     ui64 dest = ev->Record.GetTabletDest();
     ui64 consumer = ev->Record.GetTabletConsumer();
     ui64 txId = ev->Record.GetTxId();
 
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::TX_DATASHARD,
         "Receive RS Ack at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " txId %" PRIu64,
-        Self->TabletID(), sender, dest, consumer, txId);
+        Self->TabletID(),
+        sender,
+        dest,
+        consumer,
+        txId
+    );
 
     ReadSetAcks.emplace_back(ev.Release());
 
@@ -175,9 +195,18 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         ui64 consumer = ev.Record.GetTabletConsumer();
         ui64 txId = ev.Record.GetTxId();
 
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-            "Deleted RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " seqno %" PRIu64" txId %" PRIu64,
-            Self->TabletID(), sender, dest, consumer, seqno, txId);
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::TX_DATASHARD,
+            "Deleted RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " seqno %" PRIu64
+            " txId %" PRIu64,
+            Self->TabletID(),
+            sender,
+            dest,
+            consumer,
+            seqno,
+            txId
+        );
 
         RemoveReadSet(db, seqno);
     }
@@ -219,7 +248,7 @@ void TOutReadSets::ReleaseOnHoldReadSets(const std::vector<ui64>& seqNos, const 
     }
 }
 
-bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx, ui64 seqNo) {
+bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, ui64 seqNo) {
     using Schema = TDataShard::Schema;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -309,4 +338,5 @@ THashMap<ui64, ui64> TOutReadSets::RemoveExpectations(ui64 target) {
     return result;
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

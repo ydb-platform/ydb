@@ -35,7 +35,12 @@ TString PgToString(TStringBuf data, const NScheme::TTypeInfo& typeInfo) {
     return pgResult.Str;
 }
 
-bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err, const NScheme::TTypeInfo& typeInfo) {
+bool DecimalToStream(
+    const std::pair<ui64, i64>& loHi,
+    IOutputStream& out,
+    TString& err,
+    const NScheme::TTypeInfo& typeInfo
+) {
     Y_UNUSED(err);
     using namespace NYql::NDecimal;
 
@@ -68,10 +73,10 @@ bool UuidToStream(const std::pair<ui64, ui64>& loHi, IOutputStream& out, TString
     Y_UNUSED(err);
 
     NYdb::TUuidValue uuid(loHi.first, loHi.second);
-    
+
     out << uuid.ToString();
-    
+
     return true;
 }
 
-} // NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

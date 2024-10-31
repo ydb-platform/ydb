@@ -17,12 +17,10 @@ inline bool CheckStoragePoolsInQuotas(
         quotedKinds.emplace_back(storageQuota.unit_kind());
     }
     Sort(quotedKinds);
-    if (const auto equalKinds = AdjacentFind(quotedKinds);
-        equalKinds != quotedKinds.end()
-    ) {
-        error = TStringBuilder()
-            << "Malformed subdomain request: storage kinds in DatabaseQuotas must be unique, but "
-            << *equalKinds << " appears twice in the quotas definition of the " << path << " subdomain.";
+    if (const auto equalKinds = AdjacentFind(quotedKinds); equalKinds != quotedKinds.end()) {
+        error = TStringBuilder() << "Malformed subdomain request: storage kinds in DatabaseQuotas must be unique, but "
+                                 << *equalKinds << " appears twice in the quotas definition of the " << path
+                                 << " subdomain.";
         return false;
     }
 
@@ -33,15 +31,18 @@ inline bool CheckStoragePoolsInQuotas(
     }
     Sort(existingKinds);
     TVector<TString> unknownKinds;
-    SetDifference(quotedKinds.begin(), quotedKinds.end(),
-                  existingKinds.begin(), existingKinds.end(),
-                  std::back_inserter(unknownKinds)
+    SetDifference(
+        quotedKinds.begin(),
+        quotedKinds.end(),
+        existingKinds.begin(),
+        existingKinds.end(),
+        std::back_inserter(unknownKinds)
     );
     if (!unknownKinds.empty()) {
-        error = TStringBuilder()
-            << "Malformed subdomain request: cannot set storage quotas of the following kinds: " << JoinSeq(", ", unknownKinds)
-            << ", because no storage pool in the subdomain " << path << " has the specified kinds. "
-            << "Existing storage kinds are: " << JoinSeq(", ", existingKinds);
+        error = TStringBuilder() << "Malformed subdomain request: cannot set storage quotas of the following kinds: "
+                                 << JoinSeq(", ", unknownKinds) << ", because no storage pool in the subdomain " << path
+                                 << " has the specified kinds. "
+                                 << "Existing storage kinds are: " << JoinSeq(", ", existingKinds);
         return false;
     }
     return true;
@@ -54,10 +55,10 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "NSubDomainState::TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "NSubDomainState::TConfigureParts"
+                                << " operationId#" << OperationId;
     }
+
 public:
     TConfigureParts(TOperationId id);
 
@@ -71,9 +72,8 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "NSubDomainState::TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "NSubDomainState::TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:

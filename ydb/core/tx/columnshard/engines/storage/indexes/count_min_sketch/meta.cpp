@@ -47,10 +47,13 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     return result;
 }
 
-void TIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
+void TIndexMeta::DoFillIndexCheckers(
+    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info,
+    const NSchemeShard::TOlapSchema& /*schema*/
+) const {
     for (auto&& branch : info->GetBranches()) {
         branch->MutableIndexes().emplace_back(std::make_shared<TCountMinSketchChecker>(GetIndexId()));
     }
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

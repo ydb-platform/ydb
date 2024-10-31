@@ -22,9 +22,11 @@ private:
     std::shared_ptr<TFetcherCheckUserTieringPermissions> SSFetcher;
     std::optional<TFetcherCheckUserTieringPermissions::TResult> SSCheckResult;
     void StartChecker();
+
 protected:
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NSchemeShard::TEvSchemeShard::TEvProcessingResponse::TPtr& ev);
+
 public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
@@ -36,9 +38,11 @@ public:
     }
     void Bootstrap();
 
-    TRulePreparationActor(std::vector<TTieringRule>&& objects,
+    TRulePreparationActor(
+        std::vector<TTieringRule>&& objects,
         NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
-        const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context);
+        const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context
+    );
 };
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

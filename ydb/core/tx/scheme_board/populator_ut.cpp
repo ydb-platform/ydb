@@ -86,20 +86,22 @@ public:
     TTestContext::TEventObserver ObserverFunc() override {
         return [this](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TSchemeBoardEvents::EvHandshakeRequest:
-                ReplicaPopulators.emplace(ev->Sender, false);
-                Context->EnableScheduleForActor(ev->Sender, true);
-                break;
+                case TSchemeBoardEvents::EvHandshakeRequest:
+                    ReplicaPopulators.emplace(ev->Sender, false);
+                    Context->EnableScheduleForActor(ev->Sender, true);
+                    break;
 
-            case TSchemeBoardEvents::EvUpdateAck:
-                auto it = ReplicaPopulators.find(ev->Recipient);
-                if (DropFirstAcks && it != ReplicaPopulators.end() && !it->second) {
-                    it->second = true;
-                    Context->Send(ev->Recipient, ev->Sender, new TEvInterconnect::TEvNodeDisconnected(ev->Sender.NodeId()));
+                case TSchemeBoardEvents::EvUpdateAck:
+                    auto it = ReplicaPopulators.find(ev->Recipient);
+                    if (DropFirstAcks && it != ReplicaPopulators.end() && !it->second) {
+                        it->second = true;
+                        Context->Send(
+                            ev->Recipient, ev->Sender, new TEvInterconnect::TEvNodeDisconnected(ev->Sender.NodeId())
+                        );
 
-                    return TTestContext::EEventAction::DROP;
-                }
-                break;
+                        return TTestContext::EEventAction::DROP;
+                    }
+                    break;
             }
 
             return TTestContext::EEventAction::PROCESS;
@@ -125,5 +127,5 @@ private:
 UNIT_TEST_SUITE_REGISTRATION(TPopulatorTest);
 UNIT_TEST_SUITE_REGISTRATION(TPopulatorTestWithResets);
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

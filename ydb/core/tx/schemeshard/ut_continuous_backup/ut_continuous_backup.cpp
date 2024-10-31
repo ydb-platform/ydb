@@ -34,14 +34,19 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {
-            NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
-            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
-            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
-            NLs::StreamVirtualTimestamps(false),
-        });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {NLs::PathExist});
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"),
+            {
+                NLs::PathExist,
+                NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+                NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+                NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+                NLs::StreamVirtualTimestamps(false),
+            }
+        );
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {NLs::PathExist}
+        );
 
         TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -49,12 +54,15 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {
-            NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
-            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
-            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
-        });
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"),
+            {
+                NLs::PathExist,
+                NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+                NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+                NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
+            }
+        );
 
         TestDropContinuousBackup(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -62,7 +70,9 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {NLs::PathNotExist});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {NLs::PathNotExist});
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {NLs::PathNotExist}
+        );
     }
 
     Y_UNIT_TEST(TakeIncrementalBackup) {
@@ -85,17 +95,23 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"), {
-            NLs::PathExist,
-            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
-            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
-            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
-            NLs::StreamVirtualTimestamps(false),
-        });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {
-            NLs::PathExist,
-            NLs::HasNotOffloadConfig,
-        });
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl"),
+            {
+                NLs::PathExist,
+                NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+                NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+                NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+                NLs::StreamVirtualTimestamps(false),
+            }
+        );
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"),
+            {
+                NLs::PathExist,
+                NLs::HasNotOffloadConfig,
+            }
+        );
 
         TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -109,9 +125,12 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
         auto ownerId = pathInfo.GetPathOwnerId();
         auto localId = pathInfo.GetPathId();
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"), {
-            NLs::PathExist,
-            NLs::HasOffloadConfig(Sprintf(R"(
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/continuousBackupImpl/streamImpl"),
+            {
+                NLs::PathExist,
+                NLs::HasOffloadConfig(Sprintf(
+                    R"(
                     IncrementalBackup: {
                         DstPath: "/MyRoot/IncrBackupImpl"
                         DstPathId: {
@@ -119,13 +138,20 @@ Y_UNIT_TEST_SUITE(TContinuousBackupTests) {
                             LocalId: %)" PRIu64 R"(
                         }
                     }
-                )", ownerId, localId)),
-        });
+                )",
+                    ownerId,
+                    localId
+                )),
+            }
+        );
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"), {
-            NLs::PathExist,
-            NLs::IsTable,
-            NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
-        });
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl"),
+            {
+                NLs::PathExist,
+                NLs::IsTable,
+                NLs::CheckColumns("IncrBackupImpl", {"key", "value", "__ydb_incrBackupImpl_deleted"}, {}, {"key"}),
+            }
+        );
     }
 } // TCdcStreamWithInitialScanTests

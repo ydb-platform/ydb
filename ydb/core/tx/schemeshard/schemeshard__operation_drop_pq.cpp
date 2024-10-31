@@ -14,15 +14,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropPQ TDropParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropPQ TDropParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TDropParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -67,7 +65,6 @@ public:
 
         return false;
     }
-
 
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
@@ -121,11 +118,13 @@ public:
 class TDeleteParts: public ::NKikimr::NSchemeShard::TDeleteParts {
 public:
     explicit TDeleteParts(const TOperationId& id)
-        : ::NKikimr::NSchemeShard::TDeleteParts(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvPersQueue::TEvDropTabletReply::EventType,
-        });
+        : ::NKikimr::NSchemeShard::TDeleteParts(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvPersQueue::TEvDropTabletReply::EventType,
+            }
+        );
     }
 };
 
@@ -134,15 +133,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropPQ TPropose"
-                << ", operationId: " << OperationId;
+        return TStringBuilder() << "TDropPQ TPropose"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvPersQueue::TEvDropTabletReply::EventType});
     }
 
@@ -250,31 +247,31 @@ class TDropPQ: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DropParts:
-            return TTxState::DeleteParts;
-        case TTxState::DeleteParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::DropParts:
+                return TTxState::DeleteParts;
+            case TTxState::DeleteParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
-        case TTxState::DeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::DropParts:
+                return MakeHolder<TDropParts>(OperationId);
+            case TTxState::DeleteParts:
+                return MakeHolder<TDeleteParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -321,7 +318,8 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        NKikimrSchemeOp::EDropWaitPolicy dropPolicy = drop.HasWaitPolicy() ? drop.GetWaitPolicy() : NKikimrSchemeOp::EDropFailOnChanges;
+        NKikimrSchemeOp::EDropWaitPolicy dropPolicy =
+            drop.HasWaitPolicy() ? drop.GetWaitPolicy() : NKikimrSchemeOp::EDropFailOnChanges;
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TDropPQ Propose"
@@ -330,16 +328,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -367,23 +364,16 @@ public:
         TPath parent = path.Parent();
         {
             TPath::TChecker checks = parent.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotDeleted();
+            checks.NotEmpty().IsResolved().NotDeleted();
 
             if (checks) {
                 if (parent.Base()->IsCdcStream()) {
-                    checks
-                        .IsCdcStream()
+                    checks.IsCdcStream()
                         .IsInsideCdcStreamPath()
                         .IsUnderDeleting(TEvSchemeShard::EStatus::StatusNameConflict)
                         .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else {
-                    checks
-                        .IsLikeDirectory()
-                        .IsCommonSensePath()
-                        .NotUnderDeleting();
+                    checks.IsLikeDirectory().IsCommonSensePath().NotUnderDeleting();
                 }
             }
 
@@ -455,7 +445,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -468,4 +458,4 @@ ISubOperation::TPtr CreateDropPQ(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropPQ>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

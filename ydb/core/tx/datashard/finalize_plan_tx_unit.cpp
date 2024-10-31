@@ -12,9 +12,7 @@ namespace NDataShard {
 class TFinalizeDataTxPlanUnit: public TExecutionUnit {
 public:
     TFinalizeDataTxPlanUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::FinalizeDataTxPlan, false, dataShard, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::FinalizeDataTxPlan, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;

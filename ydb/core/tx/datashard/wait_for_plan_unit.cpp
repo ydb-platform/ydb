@@ -4,53 +4,35 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TWaitForPlanUnit : public TExecutionUnit {
+class TWaitForPlanUnit: public TExecutionUnit {
 public:
-    TWaitForPlanUnit(TDataShard &dataShard,
-                     TPipeline &pipeline);
+    TWaitForPlanUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TWaitForPlanUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TWaitForPlanUnit::TWaitForPlanUnit(TDataShard &dataShard,
-                                   TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::WaitForPlan, false, dataShard, pipeline)
-{
-}
+TWaitForPlanUnit::TWaitForPlanUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::WaitForPlan, false, dataShard, pipeline) {}
 
-TWaitForPlanUnit::~TWaitForPlanUnit()
-{
-}
+TWaitForPlanUnit::~TWaitForPlanUnit() {}
 
-bool TWaitForPlanUnit::IsReadyToExecute(TOperation::TPtr op) const
-{
+bool TWaitForPlanUnit::IsReadyToExecute(TOperation::TPtr op) const {
     return op->GetStep();
 }
 
-EExecutionStatus TWaitForPlanUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &,
-                                           const TActorContext &)
-{
+EExecutionStatus TWaitForPlanUnit::Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext&) {
     op->ResetCurrentTimer();
     return EExecutionStatus::Executed;
 }
 
-void TWaitForPlanUnit::Complete(TOperation::TPtr,
-                                const TActorContext &)
-{
-}
+void TWaitForPlanUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard &dataShard,
-                                              TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateWaitForPlanUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TWaitForPlanUnit>(dataShard, pipeline);
 }
 

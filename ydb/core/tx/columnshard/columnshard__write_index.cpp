@@ -21,17 +21,16 @@ private:
 
 private:
     virtual void DoOnResourceAllocated() override {
-        NActors::TActivationContext::AsActorContext().Register(CreateWriteActor(TabletId, WriteController, TInstant::Max()));
+        NActors::TActivationContext::AsActorContext().Register(
+            CreateWriteActor(TabletId, WriteController, TInstant::Max())
+        );
     }
 
 public:
     TDiskResourcesRequest(const std::shared_ptr<NOlap::TCompactedWriteController>& writeController, const ui64 tabletId)
         : TBase(writeController->GetWriteVolume())
         , WriteController(writeController)
-        , TabletId(tabletId)
-    {
-
-    }
+        , TabletId(tabletId) {}
 };
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
@@ -51,12 +50,15 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             AFL_VERIFY(ev->Get()->IndexChanges->GetWritePortionsCount());
             const bool needDiskLimiter = ev->Get()->IndexChanges->NeedDiskWriteLimiter();
             auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release());
-            const TConclusion<bool> needDraftTransaction = writeController->GetBlobsAction().NeedDraftWritingTransaction();
+            const TConclusion<bool> needDraftTransaction =
+                writeController->GetBlobsAction().NeedDraftWritingTransaction();
             AFL_VERIFY(needDraftTransaction.IsSuccess())("error", needDraftTransaction.GetErrorMessage());
             if (*needDraftTransaction) {
                 Execute(new TTxWriteDraft(this, writeController));
             } else if (needDiskLimiter) {
-                NLimiter::TCompDiskOperator::AskResource(std::make_shared<TDiskResourcesRequest>(writeController, TabletID()));
+                NLimiter::TCompDiskOperator::AskResource(
+                    std::make_shared<TDiskResourcesRequest>(writeController, TabletID())
+                );
             } else {
                 Register(CreateWriteActor(TabletID(), writeController, TInstant::Max()));
             }
@@ -73,4 +75,4 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
     }
 }
 
-}
+} // namespace NKikimr::NColumnShard

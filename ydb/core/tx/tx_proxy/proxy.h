@@ -19,23 +19,24 @@
 namespace NKikimr {
 
 namespace NMiniKQL {
-    struct TKeyDescriptionRange;
-    struct TKeyDescriptionSuffixItem;
-    struct TKeyDescription;
-}
+struct TKeyDescriptionRange;
+struct TKeyDescriptionSuffixItem;
+struct TKeyDescription;
+} // namespace NMiniKQL
 
 namespace NTxProxy {
-    struct TTxProxyServices {
-        TActorId Proxy;
-        TActorId SchemeCache;
-        TActorId LeaderPipeCache;
-        TActorId FollowerPipeCache;
-    };
-}
+struct TTxProxyServices {
+    TActorId Proxy;
+    TActorId SchemeCache;
+    TActorId LeaderPipeCache;
+    TActorId FollowerPipeCache;
+};
+} // namespace NTxProxy
 
 struct TEvTxUserProxy {
     enum EEv {
-        EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_USERPROXY), // reply would be with generic TEvTxProxy::TEvProposeTransactionStatus
+        EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_USERPROXY
+        ), // reply would be with generic TEvTxProxy::TEvProposeTransactionStatus
         EvNavigate, // --/-- TEvSchemeShard::TEvNavigateSchemePartResult
 
         EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
@@ -65,9 +66,13 @@ struct TEvTxUserProxy {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_USERPROXY)"
+    );
 
-    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTxUserProxy::TEvProposeTransaction, EvProposeTransaction> {
+    struct TEvProposeTransaction
+        : public TEventPB<TEvProposeTransaction, NKikimrTxUserProxy::TEvProposeTransaction, EvProposeTransaction> {
         enum EProxyFlags {
             ProxyTrackWallClock = 1 << 0,
             ProxyReportAccepted = 1 << 1,
@@ -76,39 +81,37 @@ struct TEvTxUserProxy {
             ProxyReportPlanned = 1 << 4,
         };
 
-        TEvProposeTransaction()
-        {}
+        TEvProposeTransaction() {}
 
-        TEvProposeTransaction(ui64 proxyFlags)
-        {
+        TEvProposeTransaction(ui64 proxyFlags) {
             Record.SetProxyFlags(proxyFlags);
         }
 
         bool HasSchemeProposal() const {
-                return HasModifyScheme() || HasTransactionalModification();
+            return HasModifyScheme() || HasTransactionalModification();
         }
 
         bool HasModifyScheme() const {
-            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
+            const NKikimrTxUserProxy::TTransaction& tx = Record.GetTransaction();
             return tx.HasModifyScheme();
         }
 
         bool HasTransactionalModification() const {
-            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
+            const NKikimrTxUserProxy::TTransaction& tx = Record.GetTransaction();
             return tx.TransactionalModificationSize();
         }
 
         bool HasMakeProposal() const {
-                const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
-                return (tx.HasMiniKQLTransaction() && tx.GetMiniKQLTransaction().HasProgram())
-                        || tx.HasReadTableTransaction();
+            const NKikimrTxUserProxy::TTransaction& tx = Record.GetTransaction();
+            return (tx.HasMiniKQLTransaction() && tx.GetMiniKQLTransaction().HasProgram()) ||
+                   tx.HasReadTableTransaction();
         }
 
         bool HasSnapshotProposal() const {
             const auto& tx = Record.GetTransaction();
-            return (tx.HasCreateVolatileSnapshot() ||
-                    tx.HasRefreshVolatileSnapshot() ||
-                    tx.HasDiscardVolatileSnapshot());
+            return (
+                tx.HasCreateVolatileSnapshot() || tx.HasRefreshVolatileSnapshot() || tx.HasDiscardVolatileSnapshot()
+            );
         }
 
         bool HasCommitWritesProposal() const {
@@ -138,18 +141,20 @@ struct TEvTxUserProxy {
         }
     };
 
-    struct TEvNavigate : public TEventPB<TEvNavigate, NKikimrTxUserProxy::TEvNavigate, EvNavigate> {
-        TEvNavigate()
-        {}
+    struct TEvNavigate: public TEventPB<TEvNavigate, NKikimrTxUserProxy::TEvNavigate, EvNavigate> {
+        TEvNavigate() {}
     };
 
     using TResultStatus = NTxProxy::TResultStatus;
 
-    struct TEvProposeTransactionStatus : public TEventPB<TEvProposeTransactionStatus, NKikimrTxUserProxy::TEvProposeTransactionStatus, EvProposeTransactionStatus> {
+    struct TEvProposeTransactionStatus
+        : public TEventPB<
+              TEvProposeTransactionStatus,
+              NKikimrTxUserProxy::TEvProposeTransactionStatus,
+              EvProposeTransactionStatus> {
         using EStatus = TResultStatus::EStatus;
 
-        TEvProposeTransactionStatus()
-        {}
+        TEvProposeTransactionStatus() {}
 
         TEvProposeTransactionStatus(EStatus status) {
             Record.SetStatus(static_cast<ui32>(status));
@@ -162,7 +167,8 @@ struct TEvTxUserProxy {
         TString ToString() const;
     };
 
-    struct TEvInvalidateTable : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> {
+    struct TEvInvalidateTable
+        : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> {
         TEvInvalidateTable() = default;
         TEvInvalidateTable(const TTableId& tableId) {
             Record.SetSchemeShardId(tableId.PathId.OwnerId);
@@ -170,45 +176,47 @@ struct TEvTxUserProxy {
         }
     };
 
-    struct TEvInvalidateTableResult : public TEventPB<TEvInvalidateTableResult, NKikimrTxUserProxy::TEvInvalidateTableResult, EvInvalidateTableResult> {};
+    struct TEvInvalidateTableResult
+        : public TEventPB<
+              TEvInvalidateTableResult,
+              NKikimrTxUserProxy::TEvInvalidateTableResult,
+              EvInvalidateTableResult> {};
 
-    struct TEvProposeKqpTransaction : public TEventLocal<TEvProposeKqpTransaction, EvProposeKqpTransaction> {
+    struct TEvProposeKqpTransaction: public TEventLocal<TEvProposeKqpTransaction, EvProposeKqpTransaction> {
         TActorId ExecuterId;
 
         TEvProposeKqpTransaction(const TActorId& executerId)
             : ExecuterId(executerId) {}
     };
 
-    struct TEvAllocateTxId : public TEventLocal<TEvAllocateTxId, EvAllocateTxId> {
+    struct TEvAllocateTxId: public TEventLocal<TEvAllocateTxId, EvAllocateTxId> {
         // empty
     };
 
-    struct TEvAllocateTxIdResult : public TEventLocal<TEvAllocateTxIdResult, EvAllocateTxIdResult> {
+    struct TEvAllocateTxIdResult: public TEventLocal<TEvAllocateTxIdResult, EvAllocateTxIdResult> {
         const ui64 TxId;
         const NTxProxy::TTxProxyServices Services;
         const TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
 
         TEvAllocateTxIdResult(
-                ui64 txId,
-                const NTxProxy::TTxProxyServices& services,
-                const TIntrusivePtr<NTxProxy::TTxProxyMon>& txProxyMon)
+            ui64 txId,
+            const NTxProxy::TTxProxyServices& services,
+            const TIntrusivePtr<NTxProxy::TTxProxyMon>& txProxyMon
+        )
             : TxId(txId)
             , Services(services)
-            , TxProxyMon(txProxyMon)
-        { }
+            , TxProxyMon(txProxyMon) {}
     };
 
-    struct TEvGetProxyServicesRequest : public TEventLocal<TEvGetProxyServicesRequest, EvGetProxyServicesRequest> {
+    struct TEvGetProxyServicesRequest: public TEventLocal<TEvGetProxyServicesRequest, EvGetProxyServicesRequest> {
         // empty
     };
 
-    struct TEvGetProxyServicesResponse : public TEventLocal<TEvGetProxyServicesResponse, EvGetProxyServicesResponse> {
+    struct TEvGetProxyServicesResponse: public TEventLocal<TEvGetProxyServicesResponse, EvGetProxyServicesResponse> {
         const NTxProxy::TTxProxyServices Services;
 
-        TEvGetProxyServicesResponse(
-                const NTxProxy::TTxProxyServices& services)
-            : Services(services)
-        { }
+        TEvGetProxyServicesResponse(const NTxProxy::TTxProxyServices& services)
+            : Services(services) {}
     };
 
     struct TEvUploadRowsResponse: public TEventLocal<TEvUploadRowsResponse, EvUploadRowsResponse> {
@@ -217,8 +225,7 @@ struct TEvTxUserProxy {
 
         TEvUploadRowsResponse(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
             : Status(status)
-            , Issues(issues)
-        {}
+            , Issues(issues) {}
     };
 };
 
@@ -231,87 +238,104 @@ struct TEvTxProxyReq {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY_REQ)"
+    );
 
-    struct TEvMakeRequest : public TEventLocal<TEvMakeRequest, EvMakeRequest> {
+    struct TEvMakeRequest: public TEventLocal<TEvMakeRequest, EvMakeRequest> {
         TEvTxUserProxy::TEvProposeTransaction::TPtr Ev;
 
-        TEvMakeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev)
-            : Ev(ev)
-        {}
+        TEvMakeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr& ev)
+            : Ev(ev) {}
     };
 
-    struct TEvSchemeRequest : public TEventLocal<TEvSchemeRequest, EvSchemeRequest> {
+    struct TEvSchemeRequest: public TEventLocal<TEvSchemeRequest, EvSchemeRequest> {
         TEvTxUserProxy::TEvProposeTransaction::TPtr Ev;
 
-        TEvSchemeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev)
-            : Ev(ev)
-        {}
+        TEvSchemeRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr& ev)
+            : Ev(ev) {}
     };
 
-    struct TEvNavigateScheme : public TEventLocal<TEvNavigateScheme, EvNavigateScheme> {
+    struct TEvNavigateScheme: public TEventLocal<TEvNavigateScheme, EvNavigateScheme> {
         TEvTxUserProxy::TEvNavigate::TPtr Ev;
 
-        TEvNavigateScheme(TEvTxUserProxy::TEvNavigate::TPtr &ev)
-            : Ev(ev)
-        {}
+        TEvNavigateScheme(TEvTxUserProxy::TEvNavigate::TPtr& ev)
+            : Ev(ev) {}
     };
 };
 
 namespace NTxProxy {
 
-    using TTableColumnInfo = TSysTables::TTableColumnInfo;
+using TTableColumnInfo = TSysTables::TTableColumnInfo;
 
-    struct TSchemeCacheConfig;
+struct TSchemeCacheConfig;
 
-    struct TRequestControls {
-    private:
-        bool Registered;
+struct TRequestControls {
+private:
+    bool Registered;
 
-    public:
-        TControlWrapper PerRequestDataSizeLimit;
-        TControlWrapper PerShardIncomingReadSetSizeLimit;
-        TControlWrapper DefaultTimeoutMs;
-        TControlWrapper MaxShardCount;
-        TControlWrapper MaxReadSetCount;
+public:
+    TControlWrapper PerRequestDataSizeLimit;
+    TControlWrapper PerShardIncomingReadSetSizeLimit;
+    TControlWrapper DefaultTimeoutMs;
+    TControlWrapper MaxShardCount;
+    TControlWrapper MaxReadSetCount;
 
-        TRequestControls()
-            : Registered(false)
-            , PerRequestDataSizeLimit(53687091200, 0, Max<i64>())
-            , PerShardIncomingReadSetSizeLimit(209715200, 0, 5368709120)
-            , DefaultTimeoutMs(600000, 0, 3600000)
-            , MaxShardCount(10000, 0, 1000000)
-            , MaxReadSetCount(1000000, 0, 100000000)
-        {}
+    TRequestControls()
+        : Registered(false)
+        , PerRequestDataSizeLimit(53687091200, 0, Max<i64>())
+        , PerShardIncomingReadSetSizeLimit(209715200, 0, 5368709120)
+        , DefaultTimeoutMs(600000, 0, 3600000)
+        , MaxShardCount(10000, 0, 1000000)
+        , MaxReadSetCount(1000000, 0, 100000000) {}
 
-        void Reqister(const TActorContext &ctx) {
-            if (Registered) {
-                return;
-            }
-
-            AppData(ctx)->Icb->RegisterSharedControl(PerRequestDataSizeLimit,
-                                                     "TxLimitControls.PerRequestDataSizeLimit");
-            AppData(ctx)->Icb->RegisterSharedControl(PerShardIncomingReadSetSizeLimit,
-                                                     "TxLimitControls.PerShardIncomingReadSetSizeLimit");
-            AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs,
-                                                     "TxLimitControls.DefaultTimeoutMs");
-            AppData(ctx)->Icb->RegisterSharedControl(MaxShardCount,
-                                                     "TxLimitControls.MaxShardCount");
-            AppData(ctx)->Icb->RegisterSharedControl(MaxReadSetCount,
-                                                     "TxLimitControls.MaxReadSetCount");
-
-            Registered = true;
+    void Reqister(const TActorContext& ctx) {
+        if (Registered) {
+            return;
         }
-    };
 
-    IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon, const TRequestControls& requestControls);
-    IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
-    IActor* CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
-    IActor* CreateTxProxySnapshotReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
-    IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
-}
+        AppData(ctx)->Icb->RegisterSharedControl(PerRequestDataSizeLimit, "TxLimitControls.PerRequestDataSizeLimit");
+        AppData(ctx)->Icb->RegisterSharedControl(
+            PerShardIncomingReadSetSizeLimit, "TxLimitControls.PerShardIncomingReadSetSizeLimit"
+        );
+        AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs, "TxLimitControls.DefaultTimeoutMs");
+        AppData(ctx)->Icb->RegisterSharedControl(MaxShardCount, "TxLimitControls.MaxShardCount");
+        AppData(ctx)->Icb->RegisterSharedControl(MaxReadSetCount, "TxLimitControls.MaxReadSetCount");
 
-IActor* CreateTxProxy(const TVector<ui64> &allocators);
+        Registered = true;
+    }
+};
+
+IActor* CreateTxProxyDataReq(
+    const TTxProxyServices& services,
+    const ui64 txid,
+    const TIntrusivePtr<TTxProxyMon>& txProxyMon,
+    const TRequestControls& requestControls
+);
+IActor* CreateTxProxyFlatSchemeReq(
+    const TTxProxyServices& services,
+    const ui64 txid,
+    TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request,
+    const TIntrusivePtr<TTxProxyMon>& txProxyMon
+);
+IActor*
+CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices& services, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
+IActor* CreateTxProxySnapshotReq(
+    const TTxProxyServices& services,
+    const ui64 txid,
+    TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
+    const TIntrusivePtr<TTxProxyMon>& mon
+);
+IActor* CreateTxProxyCommitWritesReq(
+    const TTxProxyServices& services,
+    const ui64 txid,
+    TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev,
+    const TIntrusivePtr<TTxProxyMon>& mon
+);
+} // namespace NTxProxy
+
+IActor* CreateTxProxy(const TVector<ui64>& allocators);
 TActorId MakeTxProxyID();
 
-}
+} // namespace NKikimr

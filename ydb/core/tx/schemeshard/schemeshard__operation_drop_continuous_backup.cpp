@@ -10,14 +10,16 @@
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateDropContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropContinuousBackup);
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     const auto& cbOp = tx.GetDropContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
 
-    const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
+    const auto checksResult =
+        NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }

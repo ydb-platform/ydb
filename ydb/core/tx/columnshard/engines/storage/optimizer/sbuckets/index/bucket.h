@@ -8,6 +8,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 class TLeftBucketBorder {
 private:
     std::optional<NArrow::TReplaceKey> Value;
+
 public:
     bool operator<(const TLeftBucketBorder& item) const {
         if (item.Value && Value) {
@@ -48,14 +49,13 @@ public:
 
     TLeftBucketBorder() = default;
     TLeftBucketBorder(const NArrow::TReplaceKey& value)
-        : Value(value) {
-
-    }
+        : Value(value) {}
 };
 
 class TRightBucketBorder {
 private:
     std::optional<NArrow::TReplaceKey> Value;
+
 public:
     bool IsOpen() const {
         return !Value;
@@ -96,12 +96,12 @@ public:
 
     TRightBucketBorder() = default;
     TRightBucketBorder(const NArrow::TReplaceKey& value)
-        : Value(value) {
-
-    }
+        : Value(value) {}
 };
 
-class TPortionsBucket: public TBucketInfo, public TMoveOnly {
+class TPortionsBucket
+    : public TBucketInfo
+    , public TMoveOnly {
 private:
     TLeftBucketBorder Start;
     TRightBucketBorder Finish;
@@ -157,7 +157,9 @@ public:
         AFL_VERIFY(Portions.emplace(portionInfo->GetPortionId(), TBucketPortionInfo(portionInfo)).second);
         PKPortions[portionInfo->IndexKeyStart()].AddStart(TBucketPortionInfo(portionInfo));
         PKPortions[portionInfo->IndexKeyEnd()].AddFinish(TBucketPortionInfo(portionInfo));
-        SnapshotPortions[portionInfo->RecordSnapshotMax().GetPlanInstant()].emplace(portionInfo->GetPortionId(), portionInfo);
+        SnapshotPortions[portionInfo->RecordSnapshotMax().GetPlanInstant()].emplace(
+            portionInfo->GetPortionId(), portionInfo
+        );
         NextActualizeInstant = TInstant::Zero();
         LastWeight = {};
         PortionsInfo.AddPortion(portionInfo);
@@ -216,7 +218,9 @@ public:
             if (currentPortions.empty() && currentSize >= MinBucketSize) {
                 if (partPortions.size()) {
                     AFL_VERIFY(partStart);
-                    result.emplace_back(std::make_shared<TPortionsBucket>(Counters, std::move(partPortions), Logic, TLeftBucketBorder(*partStart), TRightBucketBorder(pk)));
+                    result.emplace_back(std::make_shared<TPortionsBucket>(
+                        Counters, std::move(partPortions), Logic, TLeftBucketBorder(*partStart), TRightBucketBorder(pk)
+                    ));
                     partPortions.clear();
                 }
                 AFL_VERIFY(portions.GetStart().size());
@@ -236,7 +240,9 @@ public:
         AFL_VERIFY(currentPortions.empty());
         if (partPortions.size()) {
             AFL_VERIFY(partStart);
-            result.emplace_back(std::make_shared<TPortionsBucket>(Counters, std::move(partPortions), Logic, TLeftBucketBorder(*partStart), Finish));
+            result.emplace_back(std::make_shared<TPortionsBucket>(
+                Counters, std::move(partPortions), Logic, TLeftBucketBorder(*partStart), Finish
+            ));
         }
         return result;
     }
@@ -245,28 +251,34 @@ public:
         return Portions.empty();
     }
 
-    TPortionsBucket(const std::shared_ptr<TCounters>& counters, THashMap<ui64, TBucketPortionInfo>&& portions, const std::shared_ptr<IOptimizationLogic>& logic,
-        const TLeftBucketBorder& l, const TRightBucketBorder& r)
+    TPortionsBucket(
+        const std::shared_ptr<TCounters>& counters,
+        THashMap<ui64, TBucketPortionInfo>&& portions,
+        const std::shared_ptr<IOptimizationLogic>& logic,
+        const TLeftBucketBorder& l,
+        const TRightBucketBorder& r
+    )
         : Start(l)
         , Finish(r)
         , Logic(logic)
-        , Counters(counters)
-    {
+        , Counters(counters) {
         for (auto&& i : portions) {
             AddPortion(i.second.GetPortionInfo());
         }
     }
 
-    TPortionsBucket(const std::shared_ptr<TCounters>& counters, const std::shared_ptr<IOptimizationLogic>& logic, const TLeftBucketBorder& l, const TRightBucketBorder& r)
+    TPortionsBucket(
+        const std::shared_ptr<TCounters>& counters,
+        const std::shared_ptr<IOptimizationLogic>& logic,
+        const TLeftBucketBorder& l,
+        const TRightBucketBorder& r
+    )
         : Start(l)
         , Finish(r)
         , Logic(logic)
-        , Counters(counters) {
-    }
+        , Counters(counters) {}
 
-    ~TPortionsBucket() {
-
-    }
+    ~TPortionsBucket() {}
 
     i64 GetWeight() const {
         AFL_VERIFY(LastWeight);
@@ -275,9 +287,12 @@ public:
 
     ui64 GetMemLimit() const;
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule,
-        const std::shared_ptr<NDataLocks::TManager>& locksManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
-        const std::shared_ptr<IStoragesManager>& storagesManager) const;
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const std::shared_ptr<IStoragesManager>& storagesManager
+    ) const;
 
     bool NeedActualization(const TInstant currentInstant) const {
         return NextActualizeInstant <= currentInstant;

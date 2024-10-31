@@ -12,15 +12,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTable TConfigureParts"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TMoveTable TConfigureParts"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -90,12 +88,12 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
             auto move = tx.MutableMoveTable();
             PathIdFromPathId(srcPath->PathId, move->MutablePathId());
-            move->SetTableSchemaVersion(srcTable->AlterVersion+1);
+            move->SetTableSchemaVersion(srcTable->AlterVersion + 1);
 
             PathIdFromPathId(dstPath->PathId, move->MutableDstPathId());
             move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
 
-            for (const auto& child: srcPath->GetChildren()) {
+            for (const auto& child : srcPath->GetChildren()) {
                 auto name = child.first;
 
                 TPath srcIndexPath = srcPath.Child(name);
@@ -131,12 +129,13 @@ public:
     }
 };
 
-void MarkSrcDropped(NIceDb::TNiceDb& db,
-                    TOperationContext& context,
-                    TOperationId operationId,
-                    const TTxState& txState,
-                    TPath& srcPath)
-{
+void MarkSrcDropped(
+    NIceDb::TNiceDb& db,
+    TOperationContext& context,
+    TOperationId operationId,
+    const TTxState& txState,
+    TPath& srcPath
+) {
     const auto isBackupTable = context.SS->IsBackupTable(srcPath->PathId);
     srcPath.Parent()->DecAliveChildren(1, isBackupTable);
     srcPath.DomainInfo()->DecPathsInside(1, isBackupTable);
@@ -156,16 +155,18 @@ private:
     TTxState::ETxState& NextState;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTable TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TMoveTable TPropose"
+                                << ", operationId: " << OperationId;
     }
+
 public:
     TPropose(TOperationId id, TTxState::ETxState& nextState)
         : OperationId(id)
-        , NextState(nextState)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
+        , NextState(nextState) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -264,7 +265,9 @@ public:
             shardSet.insert(tablet);
         }
 
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, std::move(shardSet));
+        context.OnComplete.ProposeToCoordinator(
+            OperationId, txState->TargetPathId, txState->MinStep, std::move(shardSet)
+        );
         return false;
     }
 };
@@ -276,16 +279,19 @@ private:
     TPathId ActivePathId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveTable TWaitRenamedPathPublication"
-                << " operationId: " << OperationId;
+        return TStringBuilder() << "TMoveTable TWaitRenamedPathPublication"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TWaitRenamedPathPublication(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvDataShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -356,16 +362,19 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveTable TDeleteTableBarrier"
-                << " operationId: " << OperationId;
+        return TStringBuilder() << "TMoveTable TDeleteTableBarrier"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TDeleteTableBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvDataShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -442,14 +451,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTable TDone"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TMoveTable TDone"
+                                << ", operationId: " << OperationId;
     }
+
 public:
     TDone(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
     }
 
@@ -492,7 +500,9 @@ public:
         context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNotExist);
 
         TPathElement::TPtr dstPath = context.SS->PathsById.at(txState->TargetPathId);
-        context.OnComplete.ReleasePathState(OperationId, dstPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+        context.OnComplete.ReleasePathState(
+            OperationId, dstPath->PathId, TPathElement::EPathState::EPathStateNoChanges
+        );
 
         context.OnComplete.DoneOperation(OperationId);
         return true;
@@ -508,39 +518,39 @@ class TMoveTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return AfterPropose;
-        case TTxState::WaitShadowPathPublication:
-            return TTxState::DeletePathBarrier;
-        case TTxState::DeletePathBarrier:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return AfterPropose;
+            case TTxState::WaitShadowPathPublication:
+                return TTxState::DeletePathBarrier;
+            case TTxState::DeletePathBarrier:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, AfterPropose);
-        case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
-        case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeleteTableBarrier>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId, AfterPropose);
+            case TTxState::WaitShadowPathPublication:
+                return MakeHolder<TWaitRenamedPathPublication>(OperationId);
+            case TTxState::DeletePathBarrier:
+                return MakeHolder<TDeleteTableBarrier>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -565,15 +575,15 @@ public:
 
         THolder<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
-            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)
+        ));
 
         TString errStr;
 
         TPath srcPath = TPath::Resolve(srcPathStr, context.SS);
         {
             TPath::TChecker checks = srcPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -595,29 +605,20 @@ public:
 
         {
             TPath::TChecker checks = dstParent.Check();
-            checks
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
+            checks.NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved().FailOnRestrictedCreateInTempZone(
+                Transaction.GetAllowCreateInTempDir()
+            );
 
-                if (dstParent.IsUnderDeleting()) {
-                    checks
-                        .IsUnderDeleting()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else if (dstParent.IsUnderMoving()) {
+            if (dstParent.IsUnderDeleting()) {
+                checks.IsUnderDeleting().IsUnderTheSameOperation(OperationId.GetTxId());
+            } else if (dstParent.IsUnderMoving()) {
                     // it means that dstPath is free enough to be the move destination
-                    checks
-                        .IsUnderMoving()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else if (dstParent.IsUnderCreating()) {
-                    checks
-                        .IsUnderCreating()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else {
-                    checks
-                        .NotUnderOperation();
-                }
+                checks.IsUnderMoving().IsUnderTheSameOperation(OperationId.GetTxId());
+            } else if (dstParent.IsUnderCreating()) {
+                checks.IsUnderCreating().IsUnderTheSameOperation(OperationId.GetTxId());
+            } else {
+                checks.NotUnderOperation();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -633,33 +634,23 @@ public:
             TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved();
+                checks.IsResolved();
 
                 if (dstPath.IsUnderDeleting()) {
-                    checks
-                        .IsUnderDeleting()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
+                    checks.IsUnderDeleting().IsUnderTheSameOperation(OperationId.GetTxId());
                 } else if (dstPath.IsUnderMoving()) {
                     // it means that dstPath is free enough to be the move destination
-                    checks
-                        .IsUnderMoving()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
+                    checks.IsUnderMoving().IsUnderTheSameOperation(OperationId.GetTxId());
                 } else {
-                    checks
-                        .NotUnderTheSameOperation(OperationId.GetTxId())
+                    checks.NotUnderTheSameOperation(OperationId.GetTxId())
                         .FailOnExist(TPathElement::EPathType::EPathTypeTable, acceptExisted);
                 }
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .DepthLimit()
-                    .IsValidLeafName();
+                checks.DepthLimit().IsValidLeafName();
             }
 
             if (!checks) {
@@ -707,7 +698,8 @@ public:
         dstParent.Base()->IncAliveChildren();
 
         // create tx state, do not catch shards right now
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxMoveTable, dstPath.Base()->PathId, srcPath.Base()->PathId);
+        TTxState& txState =
+            context.SS->CreateTx(OperationId, TTxState::TxMoveTable, dstPath.Base()->PathId, srcPath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
         srcPath->PathState = TPathElement::EPathState::EPathStateMoving;
@@ -718,7 +710,7 @@ public:
 
         // wait splits
         TTableInfo::TPtr tableSrc = context.SS->Tables.at(srcPath.Base()->PathId);
-        for (auto splitTx: tableSrc->GetSplitOpsInFlight()) {
+        for (auto splitTx : tableSrc->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
@@ -746,7 +738,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -759,4 +751,4 @@ ISubOperation::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TMoveTable>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

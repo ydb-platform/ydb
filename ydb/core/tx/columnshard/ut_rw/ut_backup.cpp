@@ -9,17 +9,20 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
-
 namespace NKikimr {
 
 using namespace NColumnShard;
 using namespace NTxUT;
 
 Y_UNIT_TEST_SUITE(Backup) {
-
-    bool ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
-        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-            txKind, sender, txId, txBody);
+    bool ProposeTx(
+        TTestBasicRuntime & runtime,
+        TActorId & sender,
+        NKikimrTxColumnShard::ETransactionKind txKind,
+        const TString& txBody,
+        const ui64 txId
+    ) {
+        auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
@@ -29,7 +32,13 @@ Y_UNIT_TEST_SUITE(Backup) {
         return (res.GetStatus() == NKikimrTxColumnShard::PREPARED);
     }
 
-    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap, bool waitResult = true) {
+    void PlanTx(
+        TTestBasicRuntime & runtime,
+        TActorId & sender,
+        NKikimrTxColumnShard::ETransactionKind txKind,
+        NOlap::TSnapshot snap,
+        bool waitResult = true
+    ) {
         auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
         auto tx = plan->Record.AddTransactions();
         tx->SetTxId(snap.GetTxId());
@@ -47,7 +56,12 @@ Y_UNIT_TEST_SUITE(Backup) {
     }
 
     template <class TChecker>
-    void TestWaitCondition(TTestBasicRuntime& runtime, const TString& title, const TChecker& checker, const TDuration d = TDuration::Seconds(10)) {
+    void TestWaitCondition(
+        TTestBasicRuntime & runtime,
+        const TString& title,
+        const TChecker& checker,
+        const TDuration d = TDuration::Seconds(10)
+    ) {
         const TInstant start = TInstant::Now();
         while (TInstant::Now() - start < d && !checker()) {
             Cerr << "waiting " << title << Endl;
@@ -62,11 +76,12 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = {
-                                                                    NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
-                                                                    NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
-                                                                    NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
-                                                                };
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
+        };
+        auto csControllerGuard =
+            NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
         ui64 planStep = 1000000000; // greater then delays
@@ -77,21 +92,36 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
+            UNIT_ASSERT(
+                WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds)
+            );
             ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, ++planStep, txId);
         }
 
         const ui32 start = csControllerGuard->GetInsertStartedCounter().Val();
-        TestWaitCondition(runtime, "insert compacted",
+        TestWaitCondition(
+            runtime,
+            "insert compacted",
             [&]() {
-            ++writeId;
-            std::vector<ui64> writeIds;
-            WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
-            ProposeCommit(runtime, sender, ++txId, writeIds);
-            PlanCommit(runtime, sender, ++planStep, txId);
-            return csControllerGuard->GetInsertStartedCounter().Val() > start + 1;
-        }, TDuration::Seconds(1000));
+                ++writeId;
+                std::vector<ui64> writeIds;
+                WriteData(
+                    runtime,
+                    sender,
+                    writeId,
+                    tableId,
+                    MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema),
+                    schema,
+                    true,
+                    &writeIds
+                );
+                ProposeCommit(runtime, sender, ++txId, writeIds);
+                PlanCommit(runtime, sender, ++planStep, txId);
+                return csControllerGuard->GetInsertStartedCounter().Val() > start + 1;
+            },
+            TDuration::Seconds(1000)
+        );
 
         NKikimrTxColumnShard::TBackupTxBody txBody;
         NOlap::TSnapshot backupSnapshot(planStep, txId);
@@ -102,11 +132,13 @@ Y_UNIT_TEST_SUITE(Backup) {
         txBody.MutableBackupTask()->MutableS3Settings()->SetEndpoint("fake");
         txBody.MutableBackupTask()->MutableS3Settings()->SetSecretKey("fakeSecret");
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
-        UNIT_ASSERT(ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId));
+        UNIT_ASSERT(ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId)
+        );
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(++planStep, txId), false);
-        TestWaitCondition(runtime, "export",
-            []() {return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize(); });
+        TestWaitCondition(runtime, "export", []() {
+            return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize();
+        });
     }
 }
 

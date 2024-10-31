@@ -18,7 +18,7 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
     }
 
     auto nodeFactory = NMiniKQL::GetBuiltinFactory();
-    auto kernels =  NYql::LoadKernels(serialized, *Registry.Get(), nodeFactory);
+    auto kernels = NYql::LoadKernels(serialized, *Registry.Get(), nodeFactory);
     Kernels.swap(kernels);
     for (const auto& kernel : Kernels) {
         arrow::compute::Arity arity(kernel->signature->in_types().size(), kernel->signature->is_varargs());
@@ -30,7 +30,7 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
         Functions.push_back(func);
     }
     return true;
-}   
+}
 
 NKikimr::NSsa::TFunctionPtr TKernelsRegistry::GetFunction(const size_t index) const {
     if (index < Functions.size()) {
@@ -39,4 +39,4 @@ NKikimr::NSsa::TFunctionPtr TKernelsRegistry::GetFunction(const size_t index) co
     return nullptr;
 }
 
-}
+} // namespace NKikimr::NOlap

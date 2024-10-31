@@ -13,25 +13,25 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
 
     switch (GetStreamState()) {
-    case EStreamState::Creating:
-        if (GetStreamName().empty() && !NameAssignmentInProcess) {
-            ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(replication->GetId(), GetId()));
-            NameAssignmentInProcess = true;
-        } else if (!StreamCreator) {
-            StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx));
-        }
-        return;
-    case EStreamState::Removing:
-        if (GetWorkers()) {
-            RemoveWorkers(ctx);
-        } else if (!StreamRemover) {
-            StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));
-        }
-        return;
-    case EStreamState::Ready:
-    case EStreamState::Removed:
-    case EStreamState::Error:
-        break;
+        case EStreamState::Creating:
+            if (GetStreamName().empty() && !NameAssignmentInProcess) {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvAssignStreamName(replication->GetId(), GetId()));
+                NameAssignmentInProcess = true;
+            } else if (!StreamCreator) {
+                StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx));
+            }
+            return;
+        case EStreamState::Removing:
+            if (GetWorkers()) {
+                RemoveWorkers(ctx);
+            } else if (!StreamRemover) {
+                StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));
+            }
+            return;
+        case EStreamState::Ready:
+        case EStreamState::Removed:
+        case EStreamState::Error:
+            break;
     }
 
     TTargetBase::Progress(ctx);
@@ -47,4 +47,4 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
     TTargetBase::Shutdown(ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

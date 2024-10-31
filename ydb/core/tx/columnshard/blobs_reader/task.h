@@ -12,6 +12,7 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 class TCompositeReadBlobs {
 private:
     THashMap<TString, TActionReadBlobs> BlobsByStorage;
+
 public:
     TString DebugString() const {
         TStringBuilder sb;
@@ -96,6 +97,7 @@ private:
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     i64 BlobsWaitingCount = 0;
     bool ResultsExtracted = false;
+
 protected:
     bool IsFetchingStarted() const {
         return BlobsFetchingStarted;
@@ -104,7 +106,8 @@ protected:
     TCompositeReadBlobs ExtractBlobsData();
 
     virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) = 0;
-    virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) = 0;
+    virtual bool
+    DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) = 0;
 
     void OnDataReady();
     bool OnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status);
@@ -112,6 +115,7 @@ protected:
     virtual TString DoDebugString() const {
         return "";
     }
+
 public:
     i64 GetWaitingRangesCount() const {
         return BlobsWaitingCount;
@@ -148,17 +152,22 @@ public:
     private:
         using TBase = NResourceBroker::NSubscribe::ITask;
         std::shared_ptr<NRead::ITask> Task;
-    protected:
-        virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
-    public:
-        TReadSubscriber(const std::shared_ptr<NRead::ITask>& readTask, const ui32 cpu, const ui64 memory, const TString& name,
-            const NResourceBroker::NSubscribe::TTaskContext& context)
-            : TBase(cpu, memory, name, context)
-            , Task(readTask)
-        {
 
-        }
+    protected:
+        virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard
+        ) override;
+
+    public:
+        TReadSubscriber(
+            const std::shared_ptr<NRead::ITask>& readTask,
+            const ui32 cpu,
+            const ui64 memory,
+            const TString& name,
+            const NResourceBroker::NSubscribe::TTaskContext& context
+        )
+            : TBase(cpu, memory, name, context)
+            , Task(readTask) {}
     };
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NRead

@@ -18,9 +18,13 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
         TString error;
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::SharedBlobIds::StorageId>();
-            auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::SharedBlobIds::BlobId>(), nullptr);
+            auto unifiedBlobId =
+                NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::SharedBlobIds::BlobId>(), nullptr);
             AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
-            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId].emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>()).second)("blob_id", *unifiedBlobId)("storage_id", storageId);
+            AFL_VERIFY(sharedBlobIds[storageId][*unifiedBlobId]
+                           .emplace((TTabletId)rowset.GetValue<Schema::SharedBlobIds::TabletId>())
+                           .second)
+            ("blob_id", *unifiedBlobId)("storage_id", storageId);
             if (!rowset.Next())
                 return false;
         }
@@ -35,9 +39,13 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
 
         while (!rowset.EndOfSet()) {
             const TString& storageId = rowset.GetValue<Schema::BorrowedBlobIds::StorageId>();
-            auto unifiedBlobId = NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::BorrowedBlobIds::BlobId>(), nullptr);
+            auto unifiedBlobId =
+                NOlap::TUnifiedBlobId::BuildFromString(rowset.GetValue<Schema::BorrowedBlobIds::BlobId>(), nullptr);
             AFL_VERIFY(!!unifiedBlobId)("error", unifiedBlobId.GetErrorMessage());
-            AFL_VERIFY(borrowedBlobIds[storageId].emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>()).second)("blob_id", *unifiedBlobId)("storage_id", storageId);
+            AFL_VERIFY(borrowedBlobIds[storageId]
+                           .emplace(*unifiedBlobId, (TTabletId)rowset.GetValue<Schema::BorrowedBlobIds::TabletId>())
+                           .second)
+            ("blob_id", *unifiedBlobId)("storage_id", storageId);
             if (!rowset.Next())
                 return false;
         }
@@ -62,28 +70,48 @@ bool TSharedBlobsManager::LoadIdempotency(NTable::TDatabase& database) {
     return true;
 }
 
-void TStorageSharedBlobsManager::RemoveSharedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletsByBlob& blobIds) {
+void TStorageSharedBlobsManager::RemoveSharedBlobsDB(
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const TTabletsByBlob& blobIds
+) {
     NIceDb::TNiceDb db(txc.DB);
     for (auto i = blobIds.GetIterator(); i.IsValid(); ++i) {
-        db.Table<NColumnShard::Schema::SharedBlobIds>().Key(StorageId, i.GetBlobId().ToStringNew(), (ui64)i.GetTabletId()).Delete();
+        db.Table<NColumnShard::Schema::SharedBlobIds>()
+            .Key(StorageId, i.GetBlobId().ToStringNew(), (ui64)i.GetTabletId())
+            .Delete();
     }
 }
 
-void TStorageSharedBlobsManager::WriteSharedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletsByBlob& blobIds) {
+void TStorageSharedBlobsManager::WriteSharedBlobsDB(
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const TTabletsByBlob& blobIds
+) {
     NIceDb::TNiceDb db(txc.DB);
     for (auto i = blobIds.GetIterator(); i.IsValid(); ++i) {
-        db.Table<NColumnShard::Schema::SharedBlobIds>().Key(StorageId, i.GetBlobId().ToStringNew(), (ui64)i.GetTabletId()).Update();
+        db.Table<NColumnShard::Schema::SharedBlobIds>()
+            .Key(StorageId, i.GetBlobId().ToStringNew(), (ui64)i.GetTabletId())
+            .Update();
     }
 }
 
-void TStorageSharedBlobsManager::WriteBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletByBlob& blobIds) {
+void TStorageSharedBlobsManager::WriteBorrowedBlobsDB(
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const TTabletByBlob& blobIds
+) {
     NIceDb::TNiceDb db(txc.DB);
-    for (auto&& it: blobIds) {
-        db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, it.first.ToStringNew()).Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)it.second));
+    for (auto&& it : blobIds) {
+        db.Table<NColumnShard::Schema::BorrowedBlobIds>()
+            .Key(StorageId, it.first.ToStringNew())
+            .Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)it.second));
     }
 }
 
-void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransactionContext& txc, const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
+void TStorageSharedBlobsManager::CASBorrowedBlobsDB(
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const TTabletId tabletIdFrom,
+    const TTabletId tabletIdTo,
+    const THashSet<TUnifiedBlobId>& blobIds
+) {
     NIceDb::TNiceDb db(txc.DB);
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
@@ -92,12 +120,18 @@ void TStorageSharedBlobsManager::CASBorrowedBlobsDB(NTabletFlatExecutor::TTransa
             db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Delete();
         } else {
             AFL_VERIFY(it != BorrowedBlobIds.end())("blob_id", i.ToStringNew());
-            db.Table<NColumnShard::Schema::BorrowedBlobIds>().Key(StorageId, i.ToStringNew()).Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));
+            db.Table<NColumnShard::Schema::BorrowedBlobIds>()
+                .Key(StorageId, i.ToStringNew())
+                .Update(NIceDb::TUpdate<NColumnShard::Schema::BorrowedBlobIds::TabletId>((ui64)tabletIdTo));
         }
     }
 }
 
-void TStorageSharedBlobsManager::CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds) {
+void TStorageSharedBlobsManager::CASBorrowedBlobs(
+    const TTabletId tabletIdFrom,
+    const TTabletId tabletIdTo,
+    const THashSet<TUnifiedBlobId>& blobIds
+) {
     for (auto&& i : blobIds) {
         auto it = BorrowedBlobIds.find(i);
         if (tabletIdTo == SelfTabletId) {
@@ -113,7 +147,10 @@ void TStorageSharedBlobsManager::CASBorrowedBlobs(const TTabletId tabletIdFrom, 
     }
 }
 
-void TStorageSharedBlobsManager::OnTransactionExecuteAfterCleaning(const TBlobsCategories& removeTask, NTable::TDatabase& db) {
+void TStorageSharedBlobsManager::OnTransactionExecuteAfterCleaning(
+    const TBlobsCategories& removeTask,
+    NTable::TDatabase& db
+) {
     TBlobManagerDb dbBlobs(db);
     for (auto&& i : removeTask.GetSharing()) {
         for (auto&& b : i.second) {
@@ -129,15 +166,17 @@ void TStorageSharedBlobsManager::OnTransactionExecuteAfterCleaning(const TBlobsC
 
 void TStorageSharedBlobsManager::OnTransactionCompleteAfterCleaning(const TBlobsCategories& removeTask) {
     for (auto i = removeTask.GetSharing().GetIterator(); i.IsValid(); ++i) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_share")("tablet_id_share", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+        ("action", "remove_share")("tablet_id_share", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
         SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId());
     }
     for (auto i = removeTask.GetBorrowed().GetIterator(); i.IsValid(); ++i) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("action", "remove_own")("tablet_id_own", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+        ("action", "remove_own")("tablet_id_own", i.GetTabletId())("blob_id", i.GetBlobId().ToStringNew());
         auto it = BorrowedBlobIds.find(i.GetBlobId());
         AFL_VERIFY(it != BorrowedBlobIds.end());
         BorrowedBlobIds.erase(it);
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

@@ -8,17 +8,17 @@ class TEvModifySchemeTransactionResult;
 
 class TEvLogin;
 class TEvLoginResult;
-}
+} // namespace NKikimrScheme
 
 namespace NKikimrExport {
 class TEvCreateExportRequest;
 class TEvCreateExportResponse;
-}
+} // namespace NKikimrExport
 
 namespace NKikimrImport {
 class TEvCreateImportRequest;
 class TEvCreateImportResponse;
-}
+} // namespace NKikimrImport
 
 namespace NHttp {
 class THttpIncomingRequest;
@@ -30,16 +30,38 @@ class TSchemeShard;
 struct TExportInfo;
 struct TImportInfo;
 
-void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID);
-void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID);
+void AuditLogModifySchemeTransaction(
+    const NKikimrScheme::TEvModifySchemeTransaction& request,
+    const NKikimrScheme::TEvModifySchemeTransactionResult& response,
+    TSchemeShard* SS,
+    const TString& userSID
+);
+void AuditLogModifySchemeTransactionDeprecated(
+    const NKikimrScheme::TEvModifySchemeTransaction& request,
+    const NKikimrScheme::TEvModifySchemeTransactionResult& response,
+    TSchemeShard* SS,
+    const TString& userSID
+);
 
-void AuditLogExportStart(const NKikimrExport::TEvCreateExportRequest& request, const NKikimrExport::TEvCreateExportResponse& response, TSchemeShard* SS);
+void AuditLogExportStart(
+    const NKikimrExport::TEvCreateExportRequest& request,
+    const NKikimrExport::TEvCreateExportResponse& response,
+    TSchemeShard* SS
+);
 void AuditLogExportEnd(const TExportInfo& exportInfo, TSchemeShard* SS);
 
-void AuditLogImportStart(const NKikimrImport::TEvCreateImportRequest& request, const NKikimrImport::TEvCreateImportResponse& response, TSchemeShard* SS);
+void AuditLogImportStart(
+    const NKikimrImport::TEvCreateImportRequest& request,
+    const NKikimrImport::TEvCreateImportResponse& response,
+    TSchemeShard* SS
+);
 void AuditLogImportEnd(const TImportInfo& importInfo, TSchemeShard* SS);
 
-void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::TEvLoginResult& response, TSchemeShard* SS);
+void AuditLogLogin(
+    const NKikimrScheme::TEvLogin& request,
+    const NKikimrScheme::TEvLoginResult& response,
+    TSchemeShard* SS
+);
 void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID);
 
-}
+} // namespace NKikimr::NSchemeShard

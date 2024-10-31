@@ -5,6 +5,6 @@
 
 namespace NKikimr {
 
-IActor* CreateTxMediator(const TActorId &tablet, TTabletStorageInfo *info);
+IActor* CreateTxMediator(const TActorId& tablet, TTabletStorageInfo* info);
 
 }

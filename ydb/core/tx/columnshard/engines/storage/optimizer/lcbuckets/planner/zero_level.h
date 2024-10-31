@@ -15,15 +15,14 @@ private:
 
     public:
         TOrderedPortion(const TPortionInfo::TConstPtr& portion)
-            : Portion(portion) {
-        }
+            : Portion(portion) {}
 
         TOrderedPortion(const TPortionInfo::TPtr& portion)
-            : Portion(portion) {
-        }
+            : Portion(portion) {}
 
         bool operator==(const TOrderedPortion& item) const {
-            return item.Portion->GetPathId() == Portion->GetPathId() && item.Portion->GetPortionId() == Portion->GetPortionId();
+            return item.Portion->GetPathId() == Portion->GetPathId() &&
+                   item.Portion->GetPortionId() == Portion->GetPortionId();
         }
 
         bool operator<(const TOrderedPortion& item) const {
@@ -37,20 +36,25 @@ private:
     };
     std::set<TOrderedPortion> Portions;
 
-    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
+    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/)
+        const override {
         return NArrow::NMerger::TIntervalPositions();
     }
 
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+    virtual std::optional<TPortionsChain>
+    DoGetAffectedPortions(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
         return std::nullopt;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/)
+        const override {
         return 0;
     }
 
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add,
+        const std::vector<TPortionInfo::TPtr>& remove
+    ) override {
         const bool constructionFlag = Portions.empty();
         if (constructionFlag) {
             std::vector<TOrderedPortion> ordered;
@@ -91,12 +95,15 @@ private:
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
 public:
-    TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters, const TDuration durationToDrop)
+    TZeroLevelPortions(
+        const ui32 levelIdx,
+        const std::shared_ptr<IPortionsLevel>& nextLevel,
+        const TLevelCounters& levelCounters,
+        const TDuration durationToDrop
+    )
         : TBase(levelIdx, nextLevel)
         , LevelCounters(levelCounters)
-        , DurationToDrop(durationToDrop)
-    {
-    }
+        , DurationToDrop(durationToDrop) {}
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

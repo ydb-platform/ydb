@@ -46,10 +46,14 @@ public:
         FinalBucketTaskCounter = TBase::GetDeriviative("FinalBucketTasks/Count");
         MiddleBucketTaskCounter = TBase::GetDeriviative("MiddleBucketTasks/Count");
 
-        HistogramFinalBucketTask = TBase::GetHistogram("FinalBucketTasks/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
-        HistogramMiddleBucketTask = TBase::GetHistogram("MiddleBucketTasks/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
-        HistogramFinalBucketTaskSnapshotsDiff = TBase::GetHistogram("FinalBucketTasksDiff/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
-        HistogramMiddleBucketTaskSnapshotsDiff = TBase::GetHistogram("MiddleBucketTasksDiff/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
+        HistogramFinalBucketTask =
+            TBase::GetHistogram("FinalBucketTasks/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
+        HistogramMiddleBucketTask =
+            TBase::GetHistogram("MiddleBucketTasks/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
+        HistogramFinalBucketTaskSnapshotsDiff =
+            TBase::GetHistogram("FinalBucketTasksDiff/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
+        HistogramMiddleBucketTaskSnapshotsDiff =
+            TBase::GetHistogram("MiddleBucketTasksDiff/Count", NMonitoring::ExponentialHistogram(15, 2, 1));
 
         HistogramDiffSnapshots = TBase::GetHistogram("DiffSnapshots", NMonitoring::ExponentialHistogram(15, 2, 1000));
         OldestCriticalActuality = TBase::GetValueAutoAggregations("Granule/ActualityMs");
@@ -109,14 +113,20 @@ public:
     void OnNewTask(const bool isFinalBucket, const TInstant youngestSnapshot, const TInstant oldestSnapshot) {
         if (isFinalBucket) {
             Singleton<TGlobalCounters>()->FinalBucketTaskCounter->Add(1);
-            Singleton<TGlobalCounters>()->HistogramFinalBucketTask->Collect((Now() - youngestSnapshot).MilliSeconds() * 0.001, 1);
+            Singleton<TGlobalCounters>()->HistogramFinalBucketTask->Collect(
+                (Now() - youngestSnapshot).MilliSeconds() * 0.001, 1
+            );
             Singleton<TGlobalCounters>()->HistogramFinalBucketTaskSnapshotsDiff->Collect(
-                (youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1);
+                (youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1
+            );
         } else {
             Singleton<TGlobalCounters>()->MiddleBucketTaskCounter->Add(1);
-            Singleton<TGlobalCounters>()->HistogramMiddleBucketTask->Collect((Now() - youngestSnapshot).MilliSeconds() * 0.001, 1);
+            Singleton<TGlobalCounters>()->HistogramMiddleBucketTask->Collect(
+                (Now() - youngestSnapshot).MilliSeconds() * 0.001, 1
+            );
             Singleton<TGlobalCounters>()->HistogramMiddleBucketTaskSnapshotsDiff->Collect(
-                (youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1);
+                (youngestSnapshot - oldestSnapshot).MilliSeconds() * 0.001, 1
+            );
         }
     }
 

@@ -14,6 +14,7 @@ private:
     using TBase = IStoragesManager;
     NColumnShard::TColumnShard& Shard;
     std::shared_ptr<NDataSharing::TSharedBlobsManager> SharedBlobsManager;
+
 protected:
     virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override;
     virtual bool DoLoadIdempotency(NTable::TDatabase& database) override;
@@ -27,5 +28,4 @@ public:
     TStoragesManager(NColumnShard::TColumnShard& shard);
 };
 
-
-}
+} // namespace NKikimr::NOlap

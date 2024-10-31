@@ -8,21 +8,22 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxDescribeScheme: public TSchemeShard::TRwTxBase {
     const TActorId Sender;
     const ui64 Cookie;
     TPathDescriber PathDescriber;
 
     THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> Result;
 
-    TTxDescribeScheme(TSelf *self, TEvSchemeShard::TEvDescribeScheme::TPtr &ev)
+    TTxDescribeScheme(TSelf* self, TEvSchemeShard::TEvDescribeScheme::TPtr& ev)
         : TRwTxBase(self)
         , Sender(ev->Sender)
         , Cookie(ev->Cookie)
-        , PathDescriber(self, std::move(ev->Get()->Record))
-    {}
+        , PathDescriber(self, std::move(ev->Get()->Record)) {}
 
-    TTxType GetTxType() const override { return TXTYPE_DESCRIBE_SCHEME; }
+    TTxType GetTxType() const override {
+        return TXTYPE_DESCRIBE_SCHEME;
+    }
 
     void DoExecute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
@@ -33,7 +34,7 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
         Result = PathDescriber.Describe(ctx);
     }
 
-    void DoComplete(const TActorContext &ctx) override {
+    void DoComplete(const TActorContext& ctx) override {
         const auto& params = PathDescriber.GetParams();
 
         if (params.HasPathId()) {
@@ -57,11 +58,11 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
 
         ctx.Send(Sender, std::move(Result), 0, Cookie);
     }
-
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDescribeScheme(TEvSchemeShard::TEvDescribeScheme::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDescribeScheme(TEvSchemeShard::TEvDescribeScheme::TPtr& ev) {
     return new TTxDescribeScheme(this, ev);
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

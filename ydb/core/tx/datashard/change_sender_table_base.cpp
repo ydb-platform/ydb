@@ -11,11 +11,9 @@ namespace NKikimr::NDataShard {
 class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TableChangeSenderShard]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << "[" << ShardId << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[TableChangeSenderShard]"
+                                         << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                                         << "[" << ShardId << "]" << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -31,8 +29,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     STATEFN(StateGetProxyServices) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -54,8 +52,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         switch (ev->GetTypeRewrite()) {
             hFunc(TDataShard::TEvPrivate::TEvReadonlyLeaseConfirmation, Handle);
             hFunc(TEvChangeExchange::TEvStatus, Handshake);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -79,14 +77,14 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
-        case NKikimrChangeExchange::TEvStatus::STATUS_OK:
-            LastRecordOrder = record.GetLastRecordOrder();
-            return Ready();
-        default:
-            LOG_E("Handshake status"
+            case NKikimrChangeExchange::TEvStatus::STATUS_OK:
+                LastRecordOrder = record.GetLastRecordOrder();
+                return Ready();
+            default:
+                LOG_E("Handshake status"
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason()));
-            return Leave();
+                return Leave();
         }
     }
 
@@ -100,8 +98,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     STATEFN(StateWaitingRecords) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -110,9 +108,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
     public:
         explicit TSerializer(NKikimrChangeExchange::TChangeRecord& record)
-            : Record(record)
-        {
-        }
+            : Record(record) {}
 
         void Visit(const TChangeRecord& record) override {
             record.Serialize(Record);
@@ -151,7 +147,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         record.SetPathOwnerId(TargetTablePathId.OwnerId);
         record.SetLocalPathId(TargetTablePathId.LocalPathId);
 
-        switch(Type) {
+        switch (Type) {
             case ETableChangeSenderType::AsyncIndex:
                 Y_ABORT_UNLESS(record.HasAsyncIndex());
                 AdjustTags(*record.MutableAsyncIndex());
@@ -167,14 +163,14 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         AdjustTags(*record.MutableKey()->MutableTags());
 
         switch (record.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert:
-            AdjustTags(*record.MutableUpsert()->MutableTags());
-            break;
-        case NKikimrChangeExchange::TDataChange::kReset:
-            AdjustTags(*record.MutableReset()->MutableTags());
-            break;
-        default:
-            break;
+            case NKikimrChangeExchange::TDataChange::kUpsert:
+                AdjustTags(*record.MutableUpsert()->MutableTags());
+                break;
+            case NKikimrChangeExchange::TDataChange::kReset:
+                AdjustTags(*record.MutableReset()->MutableTags());
+                break;
+            default:
+                break;
         }
     }
 
@@ -191,8 +187,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     STATEFN(StateWaitingStatus) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvStatus, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -201,15 +197,15 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
-        case NKikimrChangeExchange::TEvStatus::STATUS_OK:
-            LastRecordOrder = record.GetLastRecordOrder();
-            return Ready();
+            case NKikimrChangeExchange::TEvStatus::STATUS_OK:
+                LastRecordOrder = record.GetLastRecordOrder();
+                return Ready();
         // TODO: REJECT?
-        default:
-            LOG_E("Apply status"
+            default:
+                LOG_E("Apply status"
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason()));
-            return Leave();
+                return Leave();
         }
     }
 
@@ -296,17 +292,16 @@ public:
         ui64 shardId,
         const TPathId& targetTablePathId,
         const TMap<TTag, TTag>& tagMap,
-        ETableChangeSenderType type)
-            : Type(type)
-            , Parent(parent)
-            , DataShard(dataShard)
-            , ShardId(shardId)
-            , TargetTablePathId(targetTablePathId)
-            , TagMap(tagMap)
-            , LeaseConfirmationCookie(0)
-            , LastRecordOrder(0)
-    {
-    }
+        ETableChangeSenderType type
+    )
+        : Type(type)
+        , Parent(parent)
+        , DataShard(dataShard)
+        , ShardId(shardId)
+        , TargetTablePathId(targetTablePathId)
+        , TagMap(tagMap)
+        , LeaseConfirmationCookie(0)
+        , LastRecordOrder(0) {}
 
     void Bootstrap() {
         GetProxyServices();
@@ -348,15 +343,9 @@ IActor* CreateTableChangeSenderShard(
     ui64 shardId,
     const TPathId& targetTablePathId,
     const TMap<TTag, TTag>& tagMap,
-    ETableChangeSenderType type)
-{
-    return new TTableChangeSenderShard(
-        parent,
-        dataShard,
-        shardId,
-        targetTablePathId,
-        tagMap,
-        type);
+    ETableChangeSenderType type
+) {
+    return new TTableChangeSenderShard(parent, dataShard, shardId, targetTablePathId, tagMap, type);
 }
 
 } // namespace NKikimr::NDataShard

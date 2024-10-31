@@ -5,9 +5,7 @@ namespace NKikimr::NOlap {
 TSnapshotSchema::TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot)
     : IndexInfo(std::move(indexInfo))
     , Schema(IndexInfo.ArrowSchemaWithSpecials())
-    , Snapshot(snapshot)
-{
-}
+    , Snapshot(snapshot) {}
 
 TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
     return IndexInfo.GetColumnSaver(columnId);
@@ -49,4 +47,4 @@ ui64 TSnapshotSchema::GetVersion() const {
     return IndexInfo.GetVersion();
 }
 
-}
+} // namespace NKikimr::NOlap

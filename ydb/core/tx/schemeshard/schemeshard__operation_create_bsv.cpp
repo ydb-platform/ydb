@@ -11,10 +11,11 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TBlockStoreVolumeDescription& op,
-                                                       TEvSchemeShard::EStatus& status,
-                                                       TString& errStr)
-{
+TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(
+    const NKikimrSchemeOp::TBlockStoreVolumeDescription& op,
+    TEvSchemeShard::EStatus& status,
+    TString& errStr
+) {
     TBlockStoreVolumeInfo::TPtr volume = new TBlockStoreVolumeInfo();
 
     const auto& volumeConfig = op.GetVolumeConfig();
@@ -39,16 +40,21 @@ TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TB
 
     volume->AlterVersion = 1;
     volume->TokenVersion = 0;
-    volume->DefaultPartitionCount =
-        TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(op.GetVolumeConfig());
+    volume->DefaultPartitionCount = TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(op.GetVolumeConfig());
     volume->VolumeConfig.CopyFrom(op.GetVolumeConfig());
 
     return volume;
 }
 
-void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volume, TTxState& txState,
-                   const TChannelsBindings& partitionChannels, const TChannelsBindings& volumeChannels,
-                   TOperationContext& context) {
+void ApplySharding(
+    TTxId txId,
+    TPathId pathId,
+    TBlockStoreVolumeInfo::TPtr volume,
+    TTxState& txState,
+    const TChannelsBindings& partitionChannels,
+    const TChannelsBindings& volumeChannels,
+    TOperationContext& context
+) {
     Y_ABORT_UNLESS(volume->VolumeConfig.GetTabletVersion() <= 2);
     ui64 count = volume->DefaultPartitionCount;
     txState.Shards.reserve(count + 1);
@@ -57,14 +63,14 @@ void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volum
         TShardIdx shardIdx;
         if (volume->VolumeConfig.GetTabletVersion() == 2) {
             shardIdx = context.SS->RegisterShardInfo(
-                TShardInfo::BlockStorePartition2Info(txId, pathId)
-                    .WithBindedChannels(partitionChannels));
+                TShardInfo::BlockStorePartition2Info(txId, pathId).WithBindedChannels(partitionChannels)
+            );
             context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION2_SHARD_COUNT].Add(1);
             txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition2, TTxState::CreateParts);
         } else {
             shardIdx = context.SS->RegisterShardInfo(
-                TShardInfo::BlockStorePartitionInfo(txId, pathId)
-                    .WithBindedChannels(partitionChannels));
+                TShardInfo::BlockStorePartitionInfo(txId, pathId).WithBindedChannels(partitionChannels)
+            );
             context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT].Add(1);
             txState.Shards.emplace_back(shardIdx, ETabletType::BlockStorePartition, TTxState::CreateParts);
         }
@@ -75,20 +81,25 @@ void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volum
         volume->Shards[shardIdx] = std::move(part);
     }
 
-    const auto shardIdx = context.SS->RegisterShardInfo(
-        TShardInfo::BlockStoreVolumeInfo(txId, pathId)
-            .WithBindedChannels(volumeChannels));
+    const auto shardIdx =
+        context.SS->RegisterShardInfo(TShardInfo::BlockStoreVolumeInfo(txId, pathId).WithBindedChannels(volumeChannels)
+        );
     context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT].Add(1);
     txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolume, TTxState::CreateParts);
     volume->VolumeShardIdx = shardIdx;
 }
 
-TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
-                    TPathElement::TPtr volumePath, TBlockStoreVolumeInfo::TPtr volume, const TString& acl,
-                    const TChannelsBindings& partitionChannels, const TChannelsBindings& volumeChannels,
-                    ui64 shardsToCreate,
-                    TOperationContext& context)
-{
+TTxState& PrepareChanges(
+    TOperationId operationId,
+    TPathElement::TPtr parentDir,
+    TPathElement::TPtr volumePath,
+    TBlockStoreVolumeInfo::TPtr volume,
+    const TString& acl,
+    const TChannelsBindings& partitionChannels,
+    const TChannelsBindings& volumeChannels,
+    ui64 shardsToCreate,
+    TOperationContext& context
+) {
     NIceDb::TNiceDb db(context.GetDB());
 
     volumePath->CreateTxId = operationId.GetTxId();
@@ -102,7 +113,7 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     ApplySharding(operationId.GetTxId(), pathId, volume, txState, partitionChannels, volumeChannels, context);
 
     if (parentDir->HasActiveChanges()) {
-        TTxId parentTxId =  parentDir->PlannedToCreate() ? parentDir->CreateTxId : parentDir->LastTxId;
+        TTxId parentTxId = parentDir->PlannedToCreate() ? parentDir->CreateTxId : parentDir->LastTxId;
         context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
     }
 
@@ -135,15 +146,14 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     for (auto shard : txState.Shards) {
         Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
         context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
-        context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, operationId.GetTxId(), shard.TabletType);
+        context.SS->PersistShardMapping(
+            db, shard.Idx, InvalidTabletId, pathId, operationId.GetTxId(), shard.TabletType
+        );
     }
     Y_ABORT_UNLESS(txState.Shards.size() == shardsToCreate);
 
     return txState;
 }
-
-
-
 
 class TCreateBlockStoreVolume: public TSubOperation {
     static TTxState::ETxState NextState() {
@@ -152,31 +162,31 @@ class TCreateBlockStoreVolume: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<NBSVState::TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<NBSVState::TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<NBSVState::TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<NBSVState::TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -192,8 +202,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateBlockStoreVolume().GetName();
         const auto defaultPartitionCount =
-            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(
-                operation.GetVolumeConfig());
+            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(operation.GetVolumeConfig());
         const ui64 shardsToCreate = defaultPartitionCount + 1;
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -208,8 +217,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -231,19 +239,15 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeBlockStoreVolume, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeBlockStoreVolume, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
+                checks.IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -275,17 +279,13 @@ public:
             return result;
         }
 
-        auto resolveChannels = [&] (const auto& ecps, TChannelsBindings& binding)
-        {
+        auto resolveChannels = [&](const auto& ecps, TChannelsBindings& binding) {
             TVector<TStringBuf> poolKinds;
             poolKinds.reserve(ecps.size());
             for (const auto& ecp : ecps) {
                 poolKinds.push_back(ecp.GetPoolKind());
             }
-            return context.SS->ResolveChannelsByPoolKinds(
-                poolKinds,
-                dstPath.GetPathIdForDomain(),
-                binding);
+            return context.SS->ResolveChannelsByPoolKinds(poolKinds, dstPath.GetPathIdForDomain(), binding);
         };
 
         TChannelsBindings partitionChannelsBinding;
@@ -293,16 +293,18 @@ public:
             const auto& ecps = operation.GetVolumeConfig().GetExplicitChannelProfiles();
 
             if (ecps.empty() || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
-                auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
-                                    ecps.size(),
-                                    NHive::MAX_TABLET_CHANNELS);
+                auto errStr = Sprintf(
+                    "Wrong number of channels %u , should be [1 .. %lu]", ecps.size(), NHive::MAX_TABLET_CHANNELS
+                );
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
 
             if (!resolveChannels(ecps, partitionChannelsBinding)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for partition with the storage pool");
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "Unable to construct channel binding for partition with the storage pool"
+                );
                 return result;
             }
 
@@ -313,24 +315,32 @@ public:
         const auto& ecps = operation.GetVolumeConfig().GetVolumeExplicitChannelProfiles();
         if (ecps.size()) {
             if ((ui32)ecps.size() != TBlockStoreVolumeInfo::NumVolumeTabletChannels) {
-                auto errStr = Sprintf("Wrong number of channels %u , should be %lu",
+                auto errStr = Sprintf(
+                    "Wrong number of channels %u , should be %lu",
                     ecps.size(),
-                    TBlockStoreVolumeInfo::NumVolumeTabletChannels);
+                    TBlockStoreVolumeInfo::NumVolumeTabletChannels
+                );
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
 
             if (!resolveChannels(ecps, volumeChannelsBinding)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for volume with the storage pool");
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "Unable to construct channel binding for volume with the storage pool"
+                );
                 return result;
             }
             context.SS->SetNbsChannelsParams(ecps, volumeChannelsBinding);
         } else {
             const ui32 volumeProfileId = 0;
-            if (!context.SS->ResolveTabletChannels(volumeProfileId, dstPath.GetPathIdForDomain(), volumeChannelsBinding)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for volume with the profile");
+            if (!context.SS->ResolveTabletChannels(
+                    volumeProfileId, dstPath.GetPathIdForDomain(), volumeChannelsBinding
+                )) {
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "Unable to construct channel binding for volume with the profile"
+                );
                 return result;
             }
         }
@@ -339,7 +349,7 @@ public:
         Y_ABORT_UNLESS(domainDir);
 
         auto volumeSpace = volume->GetVolumeSpace();
-        if (!domainDir->CheckVolumeSpaceChange(volumeSpace, { }, errStr)) {
+        if (!domainDir->CheckVolumeSpaceChange(volumeSpace, {}, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
@@ -348,9 +358,19 @@ public:
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_COUNT].Add(1);
-        domainDir->ChangeVolumeSpaceBegin(volumeSpace, { });
+        domainDir->ChangeVolumeSpaceBegin(volumeSpace, {});
 
-        const TTxState& txState = PrepareChanges(OperationId, parentPath.Base(), dstPath.Base(), volume, acl, partitionChannelsBinding, volumeChannelsBinding, shardsToCreate, context);
+        const TTxState& txState = PrepareChanges(
+            OperationId,
+            parentPath.Base(),
+            dstPath.Base(),
+            volume,
+            acl,
+            partitionChannelsBinding,
+            volumeChannelsBinding,
+            shardsToCreate,
+            context
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
         ++parentPath.Base()->DirAlterVersion;
@@ -385,7 +405,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -398,4 +418,4 @@ ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateBlockStoreVolume>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

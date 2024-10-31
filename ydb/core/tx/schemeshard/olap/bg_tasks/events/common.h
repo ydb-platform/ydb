@@ -11,6 +11,9 @@ enum EEv {
     EvEnd
 };
 
-static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SS_BG_TASKS), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_SS_BG_TASKS)");
+static_assert(
+    EvEnd < EventSpaceEnd(TKikimrEvents::ES_SS_BG_TASKS),
+    "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_SS_BG_TASKS)"
+);
 
-}
+} // namespace NKikimr::NSchemeShard::NBackground

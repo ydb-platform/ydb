@@ -8,9 +8,10 @@ class TConfig {
 private:
     YDB_READONLY(ui32, Limit, 32);
     YDB_READONLY_FLAG(Enabled, true);
+
 public:
     bool DeserializeFromProto(const NKikimrConfig::TPrioritiesQueueConfig& config);
     TString DebugString() const;
 };
 
-}
+} // namespace NKikimr::NPrioritiesQueue

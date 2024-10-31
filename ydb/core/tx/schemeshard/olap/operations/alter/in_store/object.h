@@ -13,9 +13,11 @@ private:
     YDB_READONLY_DEF(TOlapStoreInfo::TPtr, StoreInfo);
     std::optional<TOlapSchema> TableSchema;
     std::optional<TOlapTTL> TableTTL;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context) const override;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdateImpl(const TUpdateInitializationContext& context
+    ) const override;
     virtual TConclusionStatus DoInitializeImpl(const TEntityInitializationContext& context) override;
     [[nodiscard]] TConclusionStatus InitializeWithTableInfo(const TEntityInitializationContext& context);
+
 public:
     virtual TString GetClassName() const override {
         return "IN_STORE_TABLE";
@@ -23,9 +25,12 @@ public:
 
     using TBase::TBase;
 
-    TInStoreTable(const TPathId& pathId, const std::shared_ptr<TColumnTableInfo>& tableInfo, const TEntityInitializationContext& context)
-        : TBase(pathId, tableInfo)
-    {
+    TInStoreTable(
+        const TPathId& pathId,
+        const std::shared_ptr<TColumnTableInfo>& tableInfo,
+        const TEntityInitializationContext& context
+    )
+        : TBase(pathId, tableInfo) {
         InitializeWithTableInfo(context).Validate();
     }
 
@@ -45,4 +50,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

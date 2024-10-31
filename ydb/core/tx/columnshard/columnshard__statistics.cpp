@@ -7,15 +7,12 @@
 
 #include <ydb/library/minsketch/count_min_sketch.h>
 
-
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext&) {
     auto& requestRecord = ev->Get()->Record;
     // TODO Start a potentially long analysis process.
     // ...
-
-
 
     // Return the response when the analysis is completed
     auto response = std::make_unique<NStat::TEvStatistics::TEvAnalyzeTableResponse>();
@@ -33,7 +30,8 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     auto& respRecord = response->Record;
     respRecord.SetShardTabletId(TabletID());
 
-    if (record.TypesSize() > 0 && (record.TypesSize() > 1 || record.GetTypes(0) != NKikimrStat::TYPE_COUNT_MIN_SKETCH)) {
+    if (record.TypesSize() > 0 &&
+        (record.TypesSize() > 1 || record.GetTypes(0) != NKikimrStat::TYPE_COUNT_MIN_SKETCH)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Unsupported statistic type in statistics request");
 
         respRecord.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
@@ -69,7 +67,8 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
                 auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({columnId});
 
                 if (!indexMeta) {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Missing countMinSketch index for columnId " + ToString(columnId));
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+                    ("error", "Missing countMinSketch index for columnId " + ToString(columnId));
                     continue;
                 }
                 AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
@@ -77,7 +76,9 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
                 const std::vector<TString> data = portionInfo->GetIndexInplaceDataVerified(indexMeta->GetIndexId());
 
                 for (const auto& sketchAsString : data) {
-                    auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(sketchAsString.data(), sketchAsString.size()));
+                    auto sketch = std::unique_ptr<TCountMinSketch>(
+                        TCountMinSketch::FromString(sketchAsString.data(), sketchAsString.size())
+                    );
                     *sketchesByColumns[columnId] += *sketch;
                 }
             }
@@ -98,4 +99,4 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
-}
+} // namespace NKikimr::NColumnShard

@@ -24,13 +24,13 @@ public:
             << ", operationId: " << OperationId
             << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 
         const auto path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             const auto checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -128,7 +128,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -141,4 +141,4 @@ ISubOperation::TPtr CreateModifyACL(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TModifyACL>(id);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

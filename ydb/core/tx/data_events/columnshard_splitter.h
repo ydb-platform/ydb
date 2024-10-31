@@ -19,13 +19,18 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
         const TString Data;
         const ui32 RowsCount;
         const ui32 GranuleShardingVersion;
+
     public:
-        TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount, const ui32 granuleShardingVersion)
+        TShardInfo(
+            const TString& schemaData,
+            const TString& data,
+            const ui32 rowsCount,
+            const ui32 granuleShardingVersion
+        )
             : SchemaData(schemaData)
             , Data(data)
             , RowsCount(rowsCount)
-            , GranuleShardingVersion(granuleShardingVersion) {
-        }
+            , GranuleShardingVersion(granuleShardingVersion) {}
 
         virtual ui64 GetBytes() const override {
             return Data.size();
@@ -43,7 +48,8 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
             evWrite.SetArrowData(SchemaData, Data);
             evWrite.Record.SetGranuleShardingVersion(GranuleShardingVersion);
         }
-        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion) const override {
+        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion)
+            const override {
             TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(evWrite);
             TString data = Data;
             writer.AddDataToPayload(std::move(data));
@@ -59,11 +65,17 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
     };
 
 private:
-    TYdbConclusionStatus DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) override;
+    TYdbConclusionStatus DoSplitData(
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        const IEvWriteDataAccessor& data
+    ) override;
 
 private:
-    TYdbConclusionStatus SplitImpl(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding);
+    TYdbConclusionStatus SplitImpl(
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        const std::shared_ptr<NSharding::IShardingBase>& sharding
+    );
 
     std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
 };
-}
+} // namespace NKikimr::NEvWrite

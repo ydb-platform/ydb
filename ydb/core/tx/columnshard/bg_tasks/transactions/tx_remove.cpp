@@ -12,4 +12,4 @@ void TTxRemoveSession::Complete(const TActorContext& /*ctx*/) {
     AFL_VERIFY(Sessions->RemoveSession(ClassName, Identifier))("class_name", ClassName)("id", Identifier);
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

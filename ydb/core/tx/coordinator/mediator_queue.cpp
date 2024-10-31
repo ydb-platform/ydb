@@ -20,17 +20,16 @@ static constexpr size_t ConfirmedStepsToFlush = 2;
 // the number of rows as large transactions are problematic to commit.
 static constexpr size_t ConfirmedParticipantsToFlush = 10'000;
 
-void TMediatorStep::SerializeTo(TEvTxCoordinator::TEvCoordinatorStep *msg) const {
-    for (const TTx &tx : Transactions) {
-        NKikimrTx::TCoordinatorTransaction *x = msg->Record.AddTransactions();
+void TMediatorStep::SerializeTo(TEvTxCoordinator::TEvCoordinatorStep* msg) const {
+    for (const TTx& tx : Transactions) {
+        NKikimrTx::TCoordinatorTransaction* x = msg->Record.AddTransactions();
         if (tx.TxId)
             x->SetTxId(tx.TxId);
-        for (ui64 affected : tx.PushToAffected)
-            x->AddAffectedSet(affected);
+        for (ui64 affected : tx.PushToAffected) x->AddAffectedSet(affected);
     }
 }
 
-class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMediatorQueue> {
+class TTxCoordinatorMediatorQueue: public TActorBootstrapped<TTxCoordinatorMediatorQueue> {
     const TActorId Owner;
 
     const ui64 Coordinator;
@@ -50,7 +49,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     size_t ConfirmedParticipants = 0;
     size_t ConfirmedSteps = 0;
 
-    void Die(const TActorContext &ctx) override {
+    void Die(const TActorContext& ctx) override {
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
             PipeClient = TActorId();
@@ -58,8 +57,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         return IActor::Die(ctx);
     }
 
-    void Sync(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "] sync", Coordinator, Mediator);
+    void Sync(const TActorContext& ctx) {
+        LOG_DEBUG(
+            ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "] sync", Coordinator, Mediator
+        );
 
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
@@ -70,24 +71,34 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " tablet# " << Coordinator << " SEND EvCoordinatorSync to# " << Mediator << " Mediator");
-        NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorSync(++GenCookie, Mediator, Coordinator));
+        NTabletPipe::SendData(
+            ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorSync(++GenCookie, Mediator, Coordinator)
+        );
         Become(&TThis::StateSync);
         Active = false;
     }
 
-    void SendStep(const TMediatorStep &step, const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "], step [%" PRIu64 "]", Coordinator, Mediator, step.Step);
+    void SendStep(const TMediatorStep& step, const TActorContext& ctx) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::TX_COORDINATOR_PRIVATE,
+            "[%" PRIu64 "] to [%" PRIu64 "], step [%" PRIu64 "]",
+            Coordinator,
+            Mediator,
+            step.Step
+        );
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " tablet# " << Coordinator << " SEND to# " << Mediator << " Mediator TEvCoordinatorStep");
         auto msg = std::make_unique<TEvTxCoordinator::TEvCoordinatorStep>(
-            step.Step, PrevStep, Mediator, Coordinator, CoordinatorGeneration);
+            step.Step, PrevStep, Mediator, Coordinator, CoordinatorGeneration
+        );
         step.SerializeTo(msg.get());
         NTabletPipe::SendData(ctx, PipeClient, msg.release());
         PrevStep = step.Step;
     }
 
-    void SendConfirmations(const TActorContext &ctx) {
+    void SendConfirmations(const TActorContext& ctx) {
         if (Confirmations) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
                 << " tablet# " << Coordinator << " SEND EvMediatorQueueConfirmations to# " << Owner.ToString()
@@ -101,11 +112,9 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     /**
      * Filters step by removing txs/shards that have already been acknowledged
      */
-    void FilterAcked(TMediatorStep &step) {
-        auto end = std::remove_if(
-            step.Transactions.begin(),
-            step.Transactions.end(),
-            [this](TMediatorStep::TTx& tx) -> bool {
+    void FilterAcked(TMediatorStep& step) {
+        auto end =
+            std::remove_if(step.Transactions.begin(), step.Transactions.end(), [this](TMediatorStep::TTx& tx) -> bool {
                 ui64 txId = tx.TxId;
                 auto end = std::remove_if(
                     tx.PushToAffected.begin(),
@@ -113,7 +122,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
                     [this, txId](ui64 shardId) -> bool {
                         // Remove shards that have been acknowledged (not in a waiting set)
                         return WaitingAcks.find(std::make_pair(txId, shardId)) == WaitingAcks.end();
-                    });
+                    }
+                );
                 if (end != tx.PushToAffected.end()) {
                     tx.PushToAffected.erase(end, tx.PushToAffected.end());
                 }
@@ -129,8 +139,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         }
     }
 
-    void Handle(TEvTxCoordinator::TEvCoordinatorSyncResult::TPtr &ev, const TActorContext &ctx) {
-        TEvTxCoordinator::TEvCoordinatorSyncResult *msg = ev->Get();
+    void Handle(TEvTxCoordinator::TEvCoordinatorSyncResult::TPtr& ev, const TActorContext& ctx) {
+        TEvTxCoordinator::TEvCoordinatorSyncResult* msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " tablet# " << Coordinator << " HANDLE EvCoordinatorSyncResult Status# "
             << NKikimrProto::EReplyStatus_Name(msg->Record.GetStatus()));
@@ -156,8 +166,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         }
     }
 
-    void Handle(TEvMediatorQueueStep::TPtr &ev, const TActorContext &ctx) {
-        TEvMediatorQueueStep *msg = ev->Get();
+    void Handle(TEvMediatorQueueStep::TPtr& ev, const TActorContext& ctx) {
+        TEvMediatorQueueStep* msg = ev->Get();
 
         while (!msg->Steps.empty()) {
             auto it = msg->Steps.begin();
@@ -175,10 +185,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             Y_ABORT_UNLESS(it->References == 0);
             for (auto& tx : it->Transactions) {
                 for (ui64 shardId : tx.PushToAffected) {
-                    auto res = WaitingAcks.insert(
-                        std::make_pair(
-                            std::make_pair(tx.TxId, shardId),
-                            it));
+                    auto res = WaitingAcks.insert(std::make_pair(std::make_pair(tx.TxId, shardId), it));
                     Y_DEBUG_ABORT_UNLESS(res.second);
                     if (res.second) {
                         it->References++;
@@ -193,8 +200,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
-        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " HANDLE EvClientConnected Status# " << NKikimrProto::EReplyStatus_Name(msg->Status));
 
@@ -207,8 +214,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         // actual work is in sync-reply handling
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-        TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+        TEvTabletPipe::TEvClientDestroyed* msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " HANDLE EvClientDestroyed");
         if (msg->ClientId != PipeClient)
@@ -221,8 +228,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         Sync(ctx);
     }
 
-    void Handle(TEvTxProcessing::TEvPlanStepAck::TPtr &ev, const TActorContext &ctx) {
-        const NKikimrTx::TEvPlanStepAck &record = ev->Get()->Record;
+    void Handle(TEvTxProcessing::TEvPlanStepAck::TPtr& ev, const TActorContext& ctx) {
+        const NKikimrTx::TEvPlanStepAck& record = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " HANDLE EvPlanStepAck");
 
@@ -258,10 +265,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             }
         }
 
-        if (firstConfirmed ||
-            ConfirmedSteps >= ConfirmedStepsToFlush ||
-            ConfirmedParticipants >= ConfirmedParticipantsToFlush)
-        {
+        if (firstConfirmed || ConfirmedSteps >= ConfirmedStepsToFlush ||
+            ConfirmedParticipants >= ConfirmedParticipantsToFlush) {
             SendConfirmations(ctx);
         }
     }
@@ -271,14 +276,13 @@ public:
         return NKikimrServices::TActivity::TX_COORDINATOR_MEDIATORQ_ACTOR;
     }
 
-    TTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration)
+    TTxCoordinatorMediatorQueue(const TActorId& owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration)
         : Owner(owner)
         , Coordinator(coordinator)
         , Mediator(mediator)
-        , CoordinatorGeneration(coordinatorGeneration)
-    {}
+        , CoordinatorGeneration(coordinatorGeneration) {}
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext& ctx) {
         Sync(ctx);
     }
 
@@ -303,9 +307,10 @@ public:
     }
 };
 
-IActor* CreateTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration) {
+IActor*
+CreateTxCoordinatorMediatorQueue(const TActorId& owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration) {
     return new NFlatTxCoordinator::TTxCoordinatorMediatorQueue(owner, coordinator, mediator, coordinatorGeneration);
 }
 
-}
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

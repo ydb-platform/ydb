@@ -13,10 +13,7 @@ TConclusionStatus TInStoreTable::InitializeWithTableInfo(const TEntityInitializa
     TPath storePath = TPath::Init(storePathId, context.GetSSOperationContext()->SS);
     {
         TPath::TChecker checks = storePath.Check();
-        checks
-            .NotEmpty()
-            .IsResolved()
-            .IsOlapStore();
+        checks.NotEmpty().IsResolved().IsOlapStore();
 
         if (!checks) {
             return TConclusionStatus::Fail(checks.GetError());
@@ -42,7 +39,9 @@ TConclusionStatus TInStoreTable::DoInitializeImpl(const TEntityInitializationCon
     return InitializeWithTableInfo(context);
 }
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoCreateUpdateImpl(const TUpdateInitializationContext& context) const {
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TInStoreTable::DoCreateUpdateImpl(
+    const TUpdateInitializationContext& context
+) const {
     std::shared_ptr<ISSEntityUpdate> result;
     if (context.GetModification()->HasAlterTable()) {
         result = std::make_shared<TInStoreSchemaUpdate>();
@@ -85,4 +84,4 @@ NKikimr::TConclusion<NKikimrSchemeOp::TColumnTableSchema> TInStoreTable::GetTabl
     return presetProto.GetSchema();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

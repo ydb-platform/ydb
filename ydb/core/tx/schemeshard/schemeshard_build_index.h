@@ -27,7 +27,7 @@ struct TEvIndexBuilder {
     static_assert(
         EvEnd < EventSpaceEnd(TKikimrEvents::ES_INDEX_BUILD),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_INDEX_BUILD)"
-        );
+    );
 
     struct TEvCreateRequest: public TEventPB<TEvCreateRequest, NKikimrIndexBuilder::TEvCreateRequest, EvCreateRequest> {
         TEvCreateRequest() = default;
@@ -35,15 +35,16 @@ struct TEvIndexBuilder {
         explicit TEvCreateRequest(
             const ui64 txId,
             const TString& dbName,
-            NKikimrIndexBuilder::TIndexBuildSettings settings)
-        {
+            NKikimrIndexBuilder::TIndexBuildSettings settings
+        ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             *Record.MutableSettings() = std::move(settings);
         }
     };
 
-    struct TEvCreateResponse: public TEventPB<TEvCreateResponse, NKikimrIndexBuilder::TEvCreateResponse, EvCreateResponse> {
+    struct TEvCreateResponse
+        : public TEventPB<TEvCreateResponse, NKikimrIndexBuilder::TEvCreateResponse, EvCreateResponse> {
         TEvCreateResponse() = default;
 
         explicit TEvCreateResponse(const ui64 txId) {
@@ -52,7 +53,6 @@ struct TEvIndexBuilder {
     };
 
     struct TEvGetRequest: public TEventPB<TEvGetRequest, NKikimrIndexBuilder::TEvGetRequest, EvGetRequest> {
-
         TEvGetRequest() = default;
 
         explicit TEvGetRequest(const TString& dbName, ui64 buildIndexId) {
@@ -61,24 +61,20 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrIndexBuilder::TEvGetResponse, EvGetResponse> {
-    };
+    struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrIndexBuilder::TEvGetResponse, EvGetResponse> {};
 
     struct TEvCancelRequest: public TEventPB<TEvCancelRequest, NKikimrIndexBuilder::TEvCancelRequest, EvCancelRequest> {
         TEvCancelRequest() = default;
 
-        explicit TEvCancelRequest(
-            const ui64 txId,
-            const TString& dbName,
-            ui64 buildIndexId)
-        {
+        explicit TEvCancelRequest(const ui64 txId, const TString& dbName, ui64 buildIndexId) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.SetIndexBuildId(buildIndexId);
         }
     };
 
-    struct TEvCancelResponse: public TEventPB<TEvCancelResponse, NKikimrIndexBuilder::TEvCancelResponse, EvCancelResponse> {
+    struct TEvCancelResponse
+        : public TEventPB<TEvCancelResponse, NKikimrIndexBuilder::TEvCancelResponse, EvCancelResponse> {
         TEvCancelResponse() = default;
 
         explicit TEvCancelResponse(const ui64 txId) {
@@ -89,18 +85,15 @@ struct TEvIndexBuilder {
     struct TEvForgetRequest: public TEventPB<TEvForgetRequest, NKikimrIndexBuilder::TEvForgetRequest, EvForgetRequest> {
         TEvForgetRequest() = default;
 
-        explicit TEvForgetRequest(
-            const ui64 txId,
-            const TString& dbName,
-            ui64 buildIndexId
-            ) {
+        explicit TEvForgetRequest(const ui64 txId, const TString& dbName, ui64 buildIndexId) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.SetIndexBuildId(buildIndexId);
         }
     };
 
-    struct TEvForgetResponse: public TEventPB<TEvForgetResponse, NKikimrIndexBuilder::TEvForgetResponse, EvForgetResponse> {
+    struct TEvForgetResponse
+        : public TEventPB<TEvForgetResponse, NKikimrIndexBuilder::TEvForgetResponse, EvForgetResponse> {
         TEvForgetResponse() = default;
 
         explicit TEvForgetResponse(const ui64 txId) {
@@ -118,13 +111,15 @@ struct TEvIndexBuilder {
         }
     };
 
-    struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrIndexBuilder::TEvListResponse, EvListResponse> {
-    };
+    struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrIndexBuilder::TEvListResponse, EvListResponse> {};
 
-    struct TEvUploadSampleKResponse: public TEventPB<TEvUploadSampleKResponse, NKikimrIndexBuilder::TEvUploadSampleKResponse, EvUploadSampleKResponse> {
-    };
+    struct TEvUploadSampleKResponse
+        : public TEventPB<
+              TEvUploadSampleKResponse,
+              NKikimrIndexBuilder::TEvUploadSampleKResponse,
+              EvUploadSampleKResponse> {};
 
 }; // TEvIndexBuilder
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

@@ -43,8 +43,8 @@ public:
         return ResultBatch.GetRecordsCount();
     }
 
-    static std::vector<std::shared_ptr<TPartialReadResult>> SplitResults(
-        std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
+    static std::vector<std::shared_ptr<TPartialReadResult>>
+    SplitResults(std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult);
 
     const NArrow::TShardedRecordBatch& GetShardedBatch() const {
         return ResultBatch;
@@ -54,9 +54,13 @@ public:
         return LastReadKey;
     }
 
-    explicit TPartialReadResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& resourcesGuard,
-        std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, const NArrow::TShardedRecordBatch& batch,
-        std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
+    explicit TPartialReadResult(
+        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& resourcesGuard,
+        std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard,
+        const NArrow::TShardedRecordBatch& batch,
+        std::shared_ptr<arrow::RecordBatch> lastKey,
+        const std::optional<ui32> notFinishedIntervalIdx
+    )
         : ResourcesGuard(std::move(resourcesGuard))
         , GroupGuard(std::move(gGuard))
         , ResultBatch(batch)
@@ -68,9 +72,11 @@ public:
     }
 
     explicit TPartialReadResult(
-        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(nullptr, nullptr, batch, lastKey, notFinishedIntervalIdx) {
-    }
+        const NArrow::TShardedRecordBatch& batch,
+        std::shared_ptr<arrow::RecordBatch> lastKey,
+        const std::optional<ui32> notFinishedIntervalIdx
+    )
+        : TPartialReadResult(nullptr, nullptr, batch, lastKey, notFinishedIntervalIdx) {}
 };
 
 }   // namespace NKikimr::NOlap::NReader

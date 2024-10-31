@@ -13,28 +13,28 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TDataShard::TTxMonitoringCleanupBorrowedPartsActor
-    : public TActorBootstrapped<TDataShard::TTxMonitoringCleanupBorrowedPartsActor>
-{
+    : public TActorBootstrapped<TDataShard::TTxMonitoringCleanupBorrowedPartsActor> {
 public:
     TTxMonitoringCleanupBorrowedPartsActor(
-            const TActorId& owner,
-            const TActorId& replyTo,
-            THashMap<TLogoBlobID, TVector<ui64>> borrowedParts,
-            bool dryRun)
+        const TActorId& owner,
+        const TActorId& replyTo,
+        THashMap<TLogoBlobID, TVector<ui64>> borrowedParts,
+        bool dryRun
+    )
         : Owner(owner)
         , ReplyTo(replyTo)
         , BorrowedParts(std::move(borrowedParts))
-        , DryRun(dryRun)
-    { }
+        , DryRun(dryRun) {}
 
     void Bootstrap(const TActorContext& ctx) {
         NTabletPipe::TClientConfig config{
             .CheckAliveness = true,
-            .RetryPolicy = {
-                .RetryLimitCount = 5,
-                .MinRetryTime = TDuration::MilliSeconds(10),
-                .MaxRetryTime = TDuration::MilliSeconds(100),
-            },
+            .RetryPolicy =
+                {
+                    .RetryLimitCount = 5,
+                    .MinRetryTime = TDuration::MilliSeconds(10),
+                    .MaxRetryTime = TDuration::MilliSeconds(100),
+                },
         };
 
         for (const auto& kv : BorrowedParts) {
@@ -173,7 +173,9 @@ public:
         TStringStream str;
         HTML(str) {
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") { str << "Request cancelled"; }
+                DIV_CLASS("col-md-12") {
+                    str << "Request cancelled";
+                }
             }
         }
         ctx.Send(ReplyTo, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -200,16 +202,13 @@ private:
     THashSet<ui64> WaitingAcks;
 };
 
-class TDataShard::TTxMonitoringCleanupBorrowedParts
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
-{
+class TDataShard::TTxMonitoringCleanupBorrowedParts: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxMonitoringCleanupBorrowedParts(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
+    TTxMonitoringCleanupBorrowedParts(TDataShard* self, NMon::TEvRemoteHttpInfo::TPtr ev)
         : TBase(self)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext &, const TActorContext &ctx) override {
+    bool Execute(NTabletFlatExecutor::TTransactionContext&, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                     "HTTP request at " << Self->TabletID() << " url="
                     << Ev->Get()->PathInfo());
@@ -230,7 +229,9 @@ public:
             TStringStream str;
             HTML(str) {
                 DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") { str << "Datashard doesn't have any borrowed parts"; }
+                    DIV_CLASS("col-md-12") {
+                        str << "Datashard doesn't have any borrowed parts";
+                    }
                 }
             }
             ctx.Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -238,15 +239,14 @@ public:
         }
 
         auto actorId = ctx.RegisterWithSameMailbox(
-            new TTxMonitoringCleanupBorrowedPartsActor(
-                ctx.SelfID,
-                Ev->Sender,
-                std::move(BorrowedParts),
-                DryRun));
+            new TTxMonitoringCleanupBorrowedPartsActor(ctx.SelfID, Ev->Sender, std::move(BorrowedParts), DryRun)
+        );
         Self->Actors.insert(actorId);
     }
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+    TTxType GetTxType() const override {
+        return TXTYPE_MONITORING;
+    }
 
 private:
     NMon::TEvRemoteHttpInfo::TPtr Ev;
@@ -259,5 +259,5 @@ void TDataShard::HandleMonCleanupBorrowedParts(NMon::TEvRemoteHttpInfo::TPtr& ev
     Execute(new TTxMonitoringCleanupBorrowedParts(this, ev));
 }
 
-}
-}
+} // namespace NDataShard
+} // namespace NKikimr

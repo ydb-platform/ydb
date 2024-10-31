@@ -6,6 +6,7 @@ class TCurrentBatch {
 private:
     std::vector<std::shared_ptr<TPartialReadResult>> Results;
     ui64 RecordsCount = 0;
+
 public:
     ui64 GetRecordsCount() const {
         return RecordsCount;
@@ -27,7 +28,9 @@ public:
 };
 
 std::vector<std::shared_ptr<TPartialReadResult>> TPartialReadResult::SplitResults(
-    std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt, const ui32 maxRecordsInResult) {
+    std::vector<std::shared_ptr<TPartialReadResult>>&& resultsExt,
+    const ui32 maxRecordsInResult
+) {
     std::vector<TCurrentBatch> resultBatches;
     TCurrentBatch currentBatch;
     for (auto&& i : resultsExt) {
@@ -49,4 +52,4 @@ std::vector<std::shared_ptr<TPartialReadResult>> TPartialReadResult::SplitResult
     return result;
 }
 
-}
+} // namespace NKikimr::NOlap::NReader

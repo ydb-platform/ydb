@@ -15,11 +15,11 @@ using namespace Tests;
 namespace {
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
-        Tests::TServer::TPtr server,
-        NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
-        ui64 tabletId,
-        ui64 ownerId)
-{
+    Tests::TServer::TPtr server,
+    NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+    ui64 tabletId,
+    ui64 ownerId
+) {
     return CompactTable(*server->GetRuntime(), tabletId, TTableId(ownerId, userTable.GetPathId()));
 }
 
@@ -29,11 +29,10 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
     Y_UNIT_TEST(ShouldCompact) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -54,11 +53,10 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
     Y_UNIT_TEST(ShouldNotCompactWhenBorrowed) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -80,7 +78,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT(shards.size() > 1);
 
-        for (auto shard: shards) {
+        for (auto shard : shards) {
             auto [tables, ownerId] = GetTables(server, shard);
             auto compactionResult = CompactTable(server, tables["table-1"], shard, ownerId);
             UNIT_ASSERT_VALUES_EQUAL(compactionResult.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
@@ -97,11 +95,10 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
     Y_UNIT_TEST(ShouldNotCompactWhenCopyTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -135,11 +132,10 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
     Y_UNIT_TEST(ShouldNotCompactEmptyTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -158,11 +154,10 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
     Y_UNIT_TEST(ShouldNotCompactSecondTime) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);

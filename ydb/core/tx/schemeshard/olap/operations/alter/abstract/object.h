@@ -12,10 +12,13 @@ class ISSEntity {
 private:
     YDB_READONLY_DEF(TPathId, PathId);
     bool Initialized = false;
+
 protected:
     [[nodiscard]] virtual TConclusionStatus DoInitialize(const TEntityInitializationContext& context) = 0;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context) const = 0;
-    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoRestoreUpdate(const TUpdateRestoreContext& context) const = 0;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoCreateUpdate(const TUpdateInitializationContext& context
+    ) const = 0;
+    virtual TConclusion<std::shared_ptr<ISSEntityUpdate>> DoRestoreUpdate(const TUpdateRestoreContext& context
+    ) const = 0;
 
 public:
     virtual ~ISSEntity() = default;
@@ -40,12 +43,9 @@ public:
     }
 
     ISSEntity(const TPathId& pathId)
-        : PathId(pathId)
-    {
-
-    }
+        : PathId(pathId) {}
 
     static std::shared_ptr<ISSEntity> GetEntityVerified(TOperationContext& context, const TPath& path);
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

@@ -7,54 +7,55 @@
 namespace NKikimr {
 namespace NTxProxy {
 
-    struct TResolveTableRequest {
-        TString TablePath;
-        NKikimrTxUserProxy::TKeyRange KeyRange;
-    };
+struct TResolveTableRequest {
+    TString TablePath;
+    NKikimrTxUserProxy::TKeyRange KeyRange;
+};
 
-    struct TResolveTableResponse {
-        TString TablePath;
-        NKikimrTxUserProxy::TKeyRange KeyRange;
-        TTableId TableId;
-        TSerializedCellVec FromValues;
-        TSerializedCellVec ToValues;
-        THolder<TKeyDesc> KeyDescription;
-        NSchemeCache::TDomainInfo::TPtr DomainInfo;
-        bool IsColumnTable = false;
-    };
+struct TResolveTableResponse {
+    TString TablePath;
+    NKikimrTxUserProxy::TKeyRange KeyRange;
+    TTableId TableId;
+    TSerializedCellVec FromValues;
+    TSerializedCellVec ToValues;
+    THolder<TKeyDesc> KeyDescription;
+    NSchemeCache::TDomainInfo::TPtr DomainInfo;
+    bool IsColumnTable = false;
+};
 
-    using TResolveTableResponses = TVector<TResolveTableResponse>;
+using TResolveTableResponses = TVector<TResolveTableResponse>;
 
-    struct TEvResolveTablesResponse : public TEventLocal<TEvResolveTablesResponse, TEvTxUserProxy::EvResolveTablesResponse> {
-        TEvTxUserProxy::TEvProposeTransactionStatus::EStatus Status;
-        NKikimrIssues::TStatusIds::EStatusCode StatusCode;
+struct TEvResolveTablesResponse: public TEventLocal<TEvResolveTablesResponse, TEvTxUserProxy::EvResolveTablesResponse> {
+    TEvTxUserProxy::TEvProposeTransactionStatus::EStatus Status;
+    NKikimrIssues::TStatusIds::EStatusCode StatusCode;
 
-        TInstant WallClockResolveStarted;
-        TInstant WallClockResolved;
+    TInstant WallClockResolveStarted;
+    TInstant WallClockResolved;
 
-        TResolveTableResponses Tables;
+    TResolveTableResponses Tables;
 
-        TVector<TString> UnresolvedKeys;
-        NYql::TIssues Issues;
+    TVector<TString> UnresolvedKeys;
+    NYql::TIssues Issues;
 
-        TEvResolveTablesResponse(
-                TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
-                NKikimrIssues::TStatusIds::EStatusCode statusCode)
-            : Status(status)
-            , StatusCode(statusCode)
-        { }
+    TEvResolveTablesResponse(
+        TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
+        NKikimrIssues::TStatusIds::EStatusCode statusCode
+    )
+        : Status(status)
+        , StatusCode(statusCode) {}
 
-        bool CheckDomainLocality() const;
+    bool CheckDomainLocality() const;
 
-        NSchemeCache::TDomainInfo::TPtr FindDomainInfo() const;
-    };
+    NSchemeCache::TDomainInfo::TPtr FindDomainInfo() const;
+};
 
-    IActor* CreateResolveTablesActor(
-            TActorId owner,
-            ui64 txId,
-            const TTxProxyServices& services,
-            TVector<TResolveTableRequest> tables,
-            const TString& databaseName);
+IActor* CreateResolveTablesActor(
+    TActorId owner,
+    ui64 txId,
+    const TTxProxyServices& services,
+    TVector<TResolveTableRequest> tables,
+    const TString& databaseName
+);
 
 } // namespace NTxProxy
 } // namespace NKikimr

@@ -35,21 +35,21 @@ ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task) {
 
 EDataFormat NextDataFormat(EDataFormat cur) {
     switch (cur) {
-    case EDataFormat::Csv:
-        return EDataFormat::Invalid;
-    case EDataFormat::Invalid:
-        return EDataFormat::Invalid;
+        case EDataFormat::Csv:
+            return EDataFormat::Invalid;
+        case EDataFormat::Invalid:
+            return EDataFormat::Invalid;
     }
 }
 
 ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
     switch (cur) {
-    case ECompressionCodec::None:
-        return ECompressionCodec::Zstd;
-    case ECompressionCodec::Zstd:
-        return ECompressionCodec::Invalid;
-    case ECompressionCodec::Invalid:
-        return ECompressionCodec::Invalid;
+        case ECompressionCodec::None:
+            return ECompressionCodec::Zstd;
+        case ECompressionCodec::Zstd:
+            return ECompressionCodec::Invalid;
+        case ECompressionCodec::Invalid:
+            return ECompressionCodec::Invalid;
     }
 }
 
@@ -72,6 +72,6 @@ TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     return Sprintf("%s%s", fit->second.c_str(), cit->second.c_str());
 }
 
-} // NBackupRestoreTraits
-} // NDataShard
-} // NKikimr
+} // namespace NBackupRestoreTraits
+} // namespace NDataShard
+} // namespace NKikimr

@@ -26,7 +26,7 @@ namespace NDataShard {
 using namespace NKikimrTxDataShard;
 using namespace NExportScan;
 
-class TCreateIncrementalRestoreSrcUnit : public TExecutionUnit {
+class TCreateIncrementalRestoreSrcUnit: public TExecutionUnit {
 protected:
     bool IsRelevant(TActiveTransaction* tx) const {
         return tx->GetSchemeTx().HasCreateIncrementalRestoreSrc();
@@ -57,33 +57,33 @@ protected:
         Cancel(tx, ctx);
     }
 
-    THolder<NTable::IScan> CreateScan(
-        const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup,
-        ui64 txId)
-    {
+    THolder<NTable::IScan> CreateScan(const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup, ui64 txId) {
         TPathId tablePathId = PathIdFromPathId(incrBackup.GetSrcPathId());
         TPathId dstTablePathId = PathIdFromPathId(incrBackup.GetDstPathId());
         const ui64 tableId = incrBackup.GetSrcPathId().GetLocalId();
 
         return CreateIncrementalRestoreScan(
-                DataShard.SelfId(),
-                [=, tabletID = DataShard.TabletID(), generation = DataShard.Generation(), tabletActor = DataShard.SelfId()](const TActorContext& ctx, TActorId parent) {
-                    return ctx.Register(
-                        CreateIncrRestoreChangeSender(
-                            parent,
-                            NDataShard::TDataShardId{
-                                .TabletId = tabletID,
-                                .Generation = generation,
-                                .ActorId = tabletActor,
-                            },
-                            tablePathId,
-                            dstTablePathId));
-                },
-                tablePathId,
-                DataShard.GetUserTables().at(tableId),
-                dstTablePathId,
-                txId,
-                {});
+            DataShard.SelfId(),
+            [=, tabletID = DataShard.TabletID(), generation = DataShard.Generation(), tabletActor = DataShard.SelfId()](
+                const TActorContext& ctx, TActorId parent
+            ) {
+                return ctx.Register(CreateIncrRestoreChangeSender(
+                    parent,
+                    NDataShard::TDataShardId{
+                        .TabletId = tabletID,
+                        .Generation = generation,
+                        .ActorId = tabletActor,
+                    },
+                    tablePathId,
+                    dstTablePathId
+                ));
+            },
+            tablePathId,
+            DataShard.GetUserTables().at(tableId),
+            dstTablePathId,
+            txId,
+            {}
+        );
     }
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
@@ -117,7 +117,10 @@ protected:
             readAheadHi = readAheadHiOverride;
         }
 
-        tx->SetScanTask(DataShard.QueueScan(localTableId, scan.Release(), op->GetTxId(),
+        tx->SetScanTask(DataShard.QueueScan(
+            localTableId,
+            scan.Release(),
+            op->GetTxId(),
             TScanOptions()
                 .SetResourceBroker(taskName, taskPrio)
                 .SetReadAhead(readAheadLo, readAheadHi)
@@ -139,20 +142,20 @@ protected:
         bool done = true;
 
         switch (result->Outcome) {
-        case EExportOutcome::Success:
-        case EExportOutcome::Error:
-            if (auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId())) {
-                schemeOp->Success = result->Outcome == EExportOutcome::Success;
-                schemeOp->Error = std::move(result->Error);
-                schemeOp->BytesProcessed = result->BytesRead;
-                schemeOp->RowsProcessed = result->RowsRead;
-            } else {
-                Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
-            }
-            break;
-        case EExportOutcome::Aborted:
-            done = false;
-            break;
+            case EExportOutcome::Success:
+            case EExportOutcome::Error:
+                if (auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId())) {
+                    schemeOp->Success = result->Outcome == EExportOutcome::Success;
+                    schemeOp->Error = std::move(result->Error);
+                    schemeOp->BytesProcessed = result->BytesRead;
+                    schemeOp->RowsProcessed = result->RowsRead;
+                } else {
+                    Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
+                }
+                break;
+            case EExportOutcome::Aborted:
+                done = false;
+                break;
         }
 
         op->SetScanResult(nullptr);
@@ -247,9 +250,7 @@ protected:
         return false;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override final {
-    }
-
+    void Complete(TOperation::TPtr, const TActorContext&) override final {}
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, TOperation::TPtr op, const TActorContext& ctx) {
         Y_UNUSED(ev, op, ctx);
@@ -266,9 +267,7 @@ protected:
 
 public:
     TCreateIncrementalRestoreSrcUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CreateIncrementalRestoreSrc, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::CreateIncrementalRestoreSrc, false, self, pipeline) {}
 
 }; // TRestoreIncrementalBackupSrcUnit
 
@@ -283,5 +282,5 @@ void TDataShard::Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const 
     }
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

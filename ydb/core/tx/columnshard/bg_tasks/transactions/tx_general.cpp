@@ -10,4 +10,4 @@ void TTxGeneral::Complete(const TActorContext& ctx) {
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

@@ -9,26 +9,28 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-class TConfigureParts : public TSubOperationState {
+class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateSequence TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateSequence TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvHive::TEvCreateTabletReply::EventType,
+            }
+        );
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr& ev, TOperationContext& context)
+        override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -168,19 +170,20 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateSequence TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateSequence TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-            NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvHive::TEvCreateTabletReply::EventType,
+                NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::EventType,
+            }
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -247,9 +250,12 @@ public:
 };
 
 // fill sequence description with default values
-std::optional<NKikimrSchemeOp::TSequenceDescription> FillSequenceDescription(const NKikimrSchemeOp::TSequenceDescription& sequence,
-        const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled,
-        TString& errStr) {
+std::optional<NKikimrSchemeOp::TSequenceDescription> FillSequenceDescription(
+    const NKikimrSchemeOp::TSequenceDescription& sequence,
+    const NScheme::TTypeRegistry& typeRegistry,
+    bool pgTypesEnabled,
+    TString& errStr
+) {
     NKikimrSchemeOp::TSequenceDescription result = sequence;
 
     TString dataType;
@@ -321,22 +327,22 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> FillSequenceDescription(con
     return result;
 }
 
-class TCreateSequence : public TSubOperation {
+class TCreateSequence: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
         return TTxState::Invalid;
     }
@@ -345,17 +351,17 @@ class TCreateSequence : public TSubOperation {
         using TPtr = TSubOperationState::TPtr;
 
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TPtr(new TCreateParts(OperationId));
-        case TTxState::ConfigureParts:
-            return TPtr(new TConfigureParts(OperationId));
-        case TTxState::Propose:
-            return TPtr(new TPropose(OperationId));
-        case TTxState::Done:
-            return TPtr(new TDone(OperationId));
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TPtr(new TCreateParts(OperationId));
+            case TTxState::ConfigureParts:
+                return TPtr(new TConfigureParts(OperationId));
+            case TTxState::Propose:
+                return TPtr(new TPropose(OperationId));
+            case TTxState::Done:
+                return TPtr(new TDone(OperationId));
+            default:
+                return nullptr;
         }
     }
 
@@ -382,8 +388,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -396,7 +401,8 @@ public:
                     checks.NotBackupTable();
                     // allow immediately inside a normal table
                     if (parentPath.IsUnderOperation()) {
-                        checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId()
+                        ); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
@@ -429,14 +435,11 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeSequence, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeSequence, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
@@ -446,8 +449,7 @@ public:
                     checks.DepthLimit();
                 }
 
-                checks
-                    .PathsLimit()
+                checks.PathsLimit()
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
                     //.PathShardsLimit(shardsToCreate)
@@ -480,8 +482,10 @@ public:
         TChannelsBindings channelsBindings;
         if (shardsToCreate) {
             if (!context.SS->ResolveTabletChannels(profileId, dstPath.GetPathIdForDomain(), channelsBindings)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                            "Unable to construct channel binding for sequence shard with the storage pool");
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "Unable to construct channel binding for sequence shard with the storage pool"
+                );
                 return result;
             }
         }
@@ -507,8 +511,7 @@ public:
         TSequenceInfo::TPtr sequenceInfo = new TSequenceInfo(0);
         TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
-        auto description = FillSequenceDescription(
-            descr, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+        auto description = FillSequenceDescription(descr, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);
@@ -518,8 +521,8 @@ public:
 
         if (shardsToCreate) {
             sequenceShard = context.SS->RegisterShardInfo(
-                TShardInfo::SequenceShardInfo(OperationId.GetTxId(), domainPathId)
-                    .WithBindedChannels(channelsBindings));
+                TShardInfo::SequenceShardInfo(OperationId.GetTxId(), domainPathId).WithBindedChannels(channelsBindings)
+            );
             context.SS->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Add(1);
             txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::CreateParts);
             txState.State = TTxState::CreateParts;
@@ -564,7 +567,9 @@ public:
         for (auto shard : txState.Shards) {
             if (shard.Operation == TTxState::CreateParts) {
                 context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos.at(shard.Idx).BindedChannels);
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
+                context.SS->PersistShardMapping(
+                    db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType
+                );
             }
         }
 
@@ -598,14 +603,14 @@ public:
     }
 };
 
-}
+} // namespace
 
 ISubOperation::TPtr CreateNewSequence(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateSequence>(id ,tx);
+    return MakeSubOperation<TCreateSequence>(id, tx);
 }
 
 ISubOperation::TPtr CreateNewSequence(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateSequence>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

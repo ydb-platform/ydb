@@ -12,10 +12,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr Counter;
     NMonitoring::TDynamicCounters::TCounterPtr Allocation;
     NMonitoring::TDynamicCounters::TCounterPtr Free;
+
 public:
     TMonitoringObjectsCounterImpl()
-        : TBase("ObjectsCounter")
-    {
+        : TBase("ObjectsCounter") {
         TBase::DeepSubGroup("type_id", TypeName<TObject>());
         Counter = TCommonCountersOwner::GetValue("ObjectsCount");
         Allocation = TCommonCountersOwner::GetDeriviative("Allocation");
@@ -37,6 +37,7 @@ template <class TObject, bool UseSignals = true, bool UseLogs = false>
 class TMonitoringObjectsCounter {
 private:
     static inline TAtomicCounter Counter = 0;
+
 public:
     static inline TAtomicCounter GetCounter() {
         return Counter.Val();
@@ -48,7 +49,8 @@ public:
         }
         Counter.Inc();
         if (UseLogs) {
-            ACFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("event", "create")("object_type", TypeName<TObject>())("count", Counter.Val());
+            ACFL_TRACE(NKikimrServices::OBJECTS_MONITORING)
+            ("event", "create")("object_type", TypeName<TObject>())("count", Counter.Val());
         }
     }
     ~TMonitoringObjectsCounter() {
@@ -57,9 +59,10 @@ public:
         }
         Counter.Dec();
         if (UseLogs) {
-            ACFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("event", "destroy")("object_type", TypeName<TObject>())("count", Counter.Val());
+            ACFL_TRACE(NKikimrServices::OBJECTS_MONITORING)
+            ("event", "destroy")("object_type", TypeName<TObject>())("count", Counter.Val());
         }
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

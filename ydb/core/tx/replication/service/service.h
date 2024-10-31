@@ -54,10 +54,11 @@ struct TEvService {
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_ACK);
         }
 
-        explicit TEvWorkerStatus(const TWorkerId& id,
-                NKikimrReplication::TEvWorkerStatus::EStatus status,
-                NKikimrReplication::TEvWorkerStatus::EReason reason,
-                const TString& errorDescription
+        explicit TEvWorkerStatus(
+            const TWorkerId& id,
+            NKikimrReplication::TEvWorkerStatus::EStatus status,
+            NKikimrReplication::TEvWorkerStatus::EReason reason,
+            const TString& errorDescription
         ) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(status);
@@ -76,7 +77,6 @@ struct TEvService {
     struct TEvWorkerDataEnd: public TEventPB<TEvWorkerDataEnd, NKikimrReplication::TEvWorkerDataEnd, EvWorkerDataEnd> {
         TEvWorkerDataEnd() = default;
     };
-
 };
 
 namespace NService {
@@ -85,7 +85,7 @@ inline TString MakeDiscoveryPath(const TString& tenant) {
     return "rs+" + tenant;
 }
 
-} // NService
+} // namespace NService
 
 inline TActorId MakeReplicationServiceId(ui32 nodeId) {
     return TActorId(nodeId, TStringBuf("ReplictnSvc"));
@@ -93,4 +93,4 @@ inline TActorId MakeReplicationServiceId(ui32 nodeId) {
 
 IActor* CreateReplicationService();
 
-}
+} // namespace NKikimr::NReplication

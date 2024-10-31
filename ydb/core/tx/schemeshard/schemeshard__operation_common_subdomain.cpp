@@ -11,12 +11,14 @@ namespace NKikimr::NSchemeShard::NSubDomainState {
 // NSubDomainState::TConfigureParts
 //
 TConfigureParts::TConfigureParts(TOperationId id)
-    : OperationId(id)
-{
+    : OperationId(id) {
     IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
 }
 
-bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev, TOperationContext& context) {
+bool TConfigureParts::HandleReply(
+    TEvSchemeShard::TEvInitTenantSchemeShardResult::TPtr& ev,
+    TOperationContext& context
+) {
     TTabletId ssId = context.SS->SelfTabletId();
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint()
@@ -131,7 +133,6 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
     return false;
 }
 
-
 bool TConfigureParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -179,99 +180,107 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         auto type = context.SS->ShardInfos[idx].TabletType;
 
         switch (type) {
-        case ETabletType::Coordinator:
-        case ETabletType::Mediator: {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            case ETabletType::Coordinator:
+            case ETabletType::Mediator: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Send configure request to coordinator/mediator: " << tabletID <<
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
-            shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvSubDomain::TEvConfigure(processing);
-            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-            break;
-        }
-        case ETabletType::Hive: {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                shard.Operation = TTxState::ConfigureParts;
+                auto event = new TEvSubDomain::TEvConfigure(processing);
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
+            case ETabletType::Hive: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Send configure request to hive: " << tabletID <<
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
-            shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
-            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-            break;
-        }
-        case ETabletType::SysViewProcessor: {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                shard.Operation = TTxState::ConfigureParts;
+                auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
+            case ETabletType::SysViewProcessor: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Send configure request to sys view processor: " << tabletID <<
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
-            auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString());
-            shard.Operation = TTxState::ConfigureParts;
-            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-            break;
-        }
-        case ETabletType::StatisticsAggregator: {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString());
+                shard.Operation = TTxState::ConfigureParts;
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
+            case ETabletType::StatisticsAggregator: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Send configure request to statistics aggregator: " << tabletID <<
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
-            auto event = new NStat::TEvStatistics::TEvConfigureAggregator(path.PathString());
-            shard.Operation = TTxState::ConfigureParts;
-            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-            break;
-        }
-        case ETabletType::SchemeShard: {
-            auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(ui64(ssId),
-                                                                            pathId.LocalPathId, path.PathString(),
-                                                                            path.Base()->Owner, path.GetEffectiveACL(), path.GetEffectiveACLVersion(),
-                                                                            processing, storagePools,
-                                                                            path.Base()->UserAttrs->Attrs, path.Base()->UserAttrs->AlterVersion,
-                                                                            schemeLimits, ui64(alterData->GetSharedHive()), alterData->GetResourcesDomainId()
-                                                                            );
-            if (alterData->GetDeclaredSchemeQuotas()) {
-                event->Record.MutableDeclaredSchemeQuotas()->CopyFrom(*alterData->GetDeclaredSchemeQuotas());
+                auto event = new NStat::TEvStatistics::TEvConfigureAggregator(path.PathString());
+                shard.Operation = TTxState::ConfigureParts;
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
             }
-            if (alterData->GetDatabaseQuotas()) {
-                event->Record.MutableDatabaseQuotas()->CopyFrom(*alterData->GetDatabaseQuotas());
-            }
-            if (alterData->GetAuditSettings()) {
-                event->Record.MutableAuditSettings()->CopyFrom(*alterData->GetAuditSettings());
-            }
-            if (alterData->GetServerlessComputeResourcesMode()) {
-                event->Record.SetServerlessComputeResourcesMode(*alterData->GetServerlessComputeResourcesMode());
-            }
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            case ETabletType::SchemeShard: {
+                auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(
+                    ui64(ssId),
+                    pathId.LocalPathId,
+                    path.PathString(),
+                    path.Base()->Owner,
+                    path.GetEffectiveACL(),
+                    path.GetEffectiveACLVersion(),
+                    processing,
+                    storagePools,
+                    path.Base()->UserAttrs->Attrs,
+                    path.Base()->UserAttrs->AlterVersion,
+                    schemeLimits,
+                    ui64(alterData->GetSharedHive()),
+                    alterData->GetResourcesDomainId()
+                );
+                if (alterData->GetDeclaredSchemeQuotas()) {
+                    event->Record.MutableDeclaredSchemeQuotas()->CopyFrom(*alterData->GetDeclaredSchemeQuotas());
+                }
+                if (alterData->GetDatabaseQuotas()) {
+                    event->Record.MutableDatabaseQuotas()->CopyFrom(*alterData->GetDatabaseQuotas());
+                }
+                if (alterData->GetAuditSettings()) {
+                    event->Record.MutableAuditSettings()->CopyFrom(*alterData->GetAuditSettings());
+                }
+                if (alterData->GetServerlessComputeResourcesMode()) {
+                    event->Record.SetServerlessComputeResourcesMode(*alterData->GetServerlessComputeResourcesMode());
+                }
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Send configure request to schemeshard: " << tabletID <<
                             " opId: " << OperationId <<
                             " schemeshard: " << ssId <<
                             " msg: " << event->Record.ShortDebugString());
 
-            shard.Operation = TTxState::ConfigureParts;
-            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-            break;
-        }
-        case ETabletType::GraphShard: {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                shard.Operation = TTxState::ConfigureParts;
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
+            case ETabletType::GraphShard: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Send configure request to graph shard: " << tabletID <<
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
-            shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvSubDomain::TEvConfigure(processing);
-            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-            break;
-        }
-        case ETabletType::BackupController: {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                shard.Operation = TTxState::ConfigureParts;
+                auto event = new TEvSubDomain::TEvConfigure(processing);
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
+            case ETabletType::BackupController: {
+                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Send configure request to backup controller tablet: " << tabletID <<
                 " opId: " << OperationId <<
                 " schemeshard: " << ssId);
-            shard.Operation = TTxState::ConfigureParts;
-            auto event = new TEvSubDomain::TEvConfigure(processing);
-            context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
-            break;
-        }
-        default:
-            Y_FAIL_S("Unexpected type, we don't create tablets with type " << ETabletType::TypeToStr(type));
+                shard.Operation = TTxState::ConfigureParts;
+                auto event = new TEvSubDomain::TEvConfigure(processing);
+                context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
+                break;
+            }
+            default:
+                Y_FAIL_S("Unexpected type, we don't create tablets with type " << ETabletType::TypeToStr(type));
         }
     }
 
@@ -279,17 +288,18 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
     return false;
 }
 
-
 // NSubDomainState::TPropose
 //
 TPropose::TPropose(TOperationId id)
-    : OperationId(id)
-{
-    IgnoreMessages(DebugHint(), {
-        TEvHive::TEvCreateTabletReply::EventType,
-        TEvSubDomain::TEvConfigureStatus::EventType,
-        TEvPrivate::TEvCompleteBarrier::EventType,
-    });
+    : OperationId(id) {
+    IgnoreMessages(
+        DebugHint(),
+        {
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvSubDomain::TEvConfigureStatus::EventType,
+            TEvPrivate::TEvCompleteBarrier::EventType,
+        }
+    );
 }
 
 bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
@@ -329,9 +339,12 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     Y_ABORT_UNLESS(alter);
     Y_VERIFY_S(subDomain->GetVersion() < alter->GetVersion(), "" << subDomain->GetVersion() << " and " << alter->GetVersion());
 
-    subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(),
-            /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain,
-            context.SS);
+    subDomain->ActualizeAlterData(
+        context.SS->ShardInfos,
+        context.Ctx.Now(),
+        /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain,
+        context.SS
+    );
 
     context.SS->SubDomains[pathId] = alter;
     context.SS->PersistSubDomain(db, pathId, *alter);

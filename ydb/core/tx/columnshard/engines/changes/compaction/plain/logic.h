@@ -8,12 +8,17 @@
 namespace NKikimr::NOlap::NCompaction {
 class TPlainMerger: public IColumnMerger {
 private:
-    static inline auto Registrator = TFactory::TRegistrator<TPlainMerger>(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+    static inline auto Registrator =
+        TFactory::TRegistrator<TPlainMerger>(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
     using TBase = IColumnMerger;
     std::vector<NCompaction::TPortionColumnCursor> Cursors;
-    virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override;
+    virtual void DoStart(
+        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input,
+        TMergingContext& mergeContext
+    ) override;
 
-    virtual std::vector<TColumnPortionResult> DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
+    virtual std::vector<TColumnPortionResult>
+    DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
 
 public:
     using TBase::TBase;

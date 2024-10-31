@@ -5,13 +5,18 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergingContext) {
+void TSparsedMerger::DoStart(
+    const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input,
+    TMergingContext& mergingContext
+) {
     ui32 idx = 0;
     for (auto&& p : input) {
         if (p) {
             Cursors.emplace_back(p, Context);
             if (mergingContext.HasRemapInfo(idx)) {
-                CursorPositions.emplace_back(TCursorPosition(&Cursors.back(), mergingContext.GetRemapPortionIndexToResultIndex(idx)));
+                CursorPositions.emplace_back(
+                    TCursorPosition(&Cursors.back(), mergingContext.GetRemapPortionIndexToResultIndex(idx))
+                );
                 if (CursorPositions.back().IsFinished()) {
                     CursorPositions.pop_back();
                 }
@@ -21,7 +26,8 @@ void TSparsedMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor
     }
 }
 
-std::vector<TColumnPortionResult> TSparsedMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& /*mergeContext*/) {
+std::vector<TColumnPortionResult>
+TSparsedMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& /*mergeContext*/) {
     std::vector<TColumnPortionResult> result;
     std::shared_ptr<TWriter> writer = std::make_shared<TWriter>(Context);
     const auto addSkipsToWriter = [&](i64 delta) {
@@ -102,18 +108,27 @@ void TSparsedMerger::TWriter::AddRealData(const std::shared_ptr<arrow::Array>& a
 }
 
 TColumnPortionResult TSparsedMerger::TWriter::Flush() {
-    std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-        std::make_shared<arrow::Field>("value", DataType) };
+    std::vector<std::shared_ptr<arrow::Field>> fields = {
+        std::make_shared<arrow::Field>("index", arrow::uint32()), std::make_shared<arrow::Field>("value", DataType)
+    };
     auto schema = std::make_shared<arrow::Schema>(fields);
-    std::vector<std::shared_ptr<arrow::Array>> columns = { NArrow::TStatusValidator::GetValid(IndexBuilder->Finish()),
-        NArrow::TStatusValidator::GetValid(ValueBuilder->Finish()) };
+    std::vector<std::shared_ptr<arrow::Array>> columns = {
+        NArrow::TStatusValidator::GetValid(IndexBuilder->Finish()),
+        NArrow::TStatusValidator::GetValid(ValueBuilder->Finish())
+    };
 
     auto recordBatch = arrow::RecordBatch::Make(schema, UsefulRecordsCount, columns);
     NArrow::NAccessor::TSparsedArray::TBuilder builder(
-        Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue(), Context.GetResultField()->type());
+        Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue(),
+        Context.GetResultField()->type()
+    );
     builder.AddChunk(CurrentRecordIdx, recordBatch);
-    Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(Context.GetSaver().Apply(recordBatch), builder.Finish(),
-        TChunkAddress(ColumnId, 0), Context.GetIndexInfo().GetColumnFeaturesVerified(ColumnId)));
+    Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+        Context.GetSaver().Apply(recordBatch),
+        builder.Finish(),
+        TChunkAddress(ColumnId, 0),
+        Context.GetIndexInfo().GetColumnFeaturesVerified(ColumnId)
+    ));
     return *this;
 }
 
@@ -164,7 +179,8 @@ void TSparsedMerger::TCursor::InitArrays(const ui32 position) {
         SparsedCursor = nullptr;
     }
     AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position);
-    FinishGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + CurrentOwnedArray->GetArray()->GetRecordsCount();
+    FinishGlobalPosition =
+        CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + CurrentOwnedArray->GetArray()->GetRecordsCount();
     AFL_VERIFY(position < FinishGlobalPosition);
 }
 

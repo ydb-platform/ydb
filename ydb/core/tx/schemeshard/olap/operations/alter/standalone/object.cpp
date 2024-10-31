@@ -4,7 +4,9 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-NKikimr::TConclusion<std::shared_ptr<ISSEntityUpdate>> TStandaloneTable::DoCreateUpdateImpl(const TUpdateInitializationContext& context) const {
+NKikimr::TConclusion<std::shared_ptr<ISSEntityUpdate>> TStandaloneTable::DoCreateUpdateImpl(
+    const TUpdateInitializationContext& context
+) const {
     std::shared_ptr<ISSEntityUpdate> result;
     if (context.GetModification()->HasAlterTable() || context.GetModification()->HasAlterColumnTable()) {
         result = std::make_shared<TStandaloneSchemaUpdate>();
@@ -40,4 +42,4 @@ NKikimr::TConclusionStatus TStandaloneTable::InitializeFromTableInfo() {
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

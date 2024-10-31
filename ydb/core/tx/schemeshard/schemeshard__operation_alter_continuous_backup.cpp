@@ -10,9 +10,15 @@
 
 namespace NKikimr::NSchemeShard {
 
-void DoAlterPqPart(const TOperationId& opId, const TPath& tablePath, const TPath& topicPath, TTopicInfo::TPtr topic, TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(topicPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
+void DoAlterPqPart(
+    const TOperationId& opId,
+    const TPath& tablePath,
+    const TPath& topicPath,
+    TTopicInfo::TPtr topic,
+    TVector<ISubOperation::TPtr>& result
+) {
+    auto outTx =
+        TransactionTemplate(topicPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
     // outTx.SetFailOnExist(!acceptExisted);
 
     outTx.SetAllowAccessToPrivatePaths(true);
@@ -35,7 +41,12 @@ void DoAlterPqPart(const TOperationId& opId, const TPath& tablePath, const TPath
     result.push_back(CreateAlterPQ(NextPartId(opId, result), outTx));
 }
 
-void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimrSchemeOp::TTableDescription tableDesc, TVector<ISubOperation::TPtr>& result) {
+void DoCreateIncrBackupTable(
+    const TOperationId& opId,
+    const TPath& dst,
+    NKikimrSchemeOp::TTableDescription tableDesc,
+    TVector<ISubOperation::TPtr>& result
+) {
     auto outTx = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
     // outTx.SetFailOnExist(!acceptExisted);
 
@@ -66,14 +77,16 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
 }
 
-TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup);
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     const auto& cbOp = tx.GetAlterContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
 
-    const auto checksResult = NCdc::DoAlterStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
+    const auto checksResult =
+        NCdc::DoAlterStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }
@@ -106,13 +119,16 @@ TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, cons
     alterCdcStreamOp.SetStreamName(NBackup::CB_CDC_STREAM_NAME);
 
     switch (cbOp.GetActionCase()) {
-    case NKikimrSchemeOp::TAlterContinuousBackup::kStop:
-    case NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup:
-        alterCdcStreamOp.MutableDisable();
-        break;
-    default:
-        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-            << "Unknown action: " << static_cast<ui32>(cbOp.GetActionCase()))};
+        case NKikimrSchemeOp::TAlterContinuousBackup::kStop:
+        case NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup:
+            alterCdcStreamOp.MutableDisable();
+            break;
+        default:
+            return {CreateReject(
+                opId,
+                NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "Unknown action: " << static_cast<ui32>(cbOp.GetActionCase())
+            )};
     }
 
     TVector<ISubOperation::TPtr> result;

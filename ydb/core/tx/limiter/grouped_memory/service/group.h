@@ -50,7 +50,8 @@ public:
         return Groups.empty();
     }
 
-    [[nodiscard]] bool Allocate(const bool isPriorityProcess, TProcessMemoryScope& process, const ui32 allocationsLimit);
+    [[nodiscard]] bool
+    Allocate(const bool isPriorityProcess, TProcessMemoryScope& process, const ui32 allocationsLimit);
 
     [[nodiscard]] std::vector<std::shared_ptr<TAllocationInfo>> ExtractGroup(const ui64 id) {
         auto it = Groups.find(id);
@@ -70,7 +71,8 @@ public:
         }
     }
 
-    [[nodiscard]] bool RemoveAllocation(const ui64 internalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
+    [[nodiscard]] bool
+    RemoveAllocation(const ui64 internalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
         auto groupIt = Groups.find(internalGroupId);
         if (groupIt == Groups.end()) {
             return false;

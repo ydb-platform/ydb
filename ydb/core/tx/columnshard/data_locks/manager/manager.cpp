@@ -39,8 +39,9 @@ std::optional<TString> TManager::IsLocked(const TGranuleMeta& granule, const THa
     return {};
 }
 
-std::optional<TString> TManager::IsLocked(
-    const std::shared_ptr<const TPortionInfo>& portion, const THashSet<TString>& excludedLocks /*= {}*/) const {
+std::optional<TString>
+TManager::IsLocked(const std::shared_ptr<const TPortionInfo>& portion, const THashSet<TString>& excludedLocks /*= {}*/)
+    const {
     AFL_VERIFY(!!portion);
     return IsLocked(*portion, excludedLocks);
 }
@@ -66,4 +67,4 @@ void TManager::TGuard::AbortLock() {
     Released = true;
 }
 
-}
+} // namespace NKikimr::NOlap::NDataLocks

@@ -11,6 +11,7 @@ class TCompactColumnEngineChanges: public TChangesWithAppend {
 private:
     using TBase = TChangesWithAppend;
     bool NeedGranuleStatusProvide = false;
+
 protected:
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
@@ -25,14 +26,18 @@ protected:
         NeedGranuleStatusProvide = false;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        const THashSet<ui64> pathIds = { GranuleMeta->GetPathId() };
+        const THashSet<ui64> pathIds = {GranuleMeta->GetPathId()};
         return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds);
     }
 
 public:
     std::vector<TPortionDataAccessor> SwitchedPortions; // Portions that would be replaced by new ones
 
-    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::vector<TPortionDataAccessor>& portions,
+        const TSaverContext& saverContext
+    );
     ~TCompactColumnEngineChanges();
 
     static TString StaticTypeName() {
@@ -40,4 +45,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

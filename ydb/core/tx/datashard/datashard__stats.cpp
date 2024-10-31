@@ -15,7 +15,9 @@ namespace NDataShard {
 using namespace NResourceBroker;
 using namespace NTable;
 
-class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages {
+class TTableStatsCoroBuilder
+    : public TActorCoroImpl
+    , private IPages {
 private:
     using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
 
@@ -28,21 +30,31 @@ private:
     struct TExTableStatsError {
         TExTableStatsError(ECode code, const TString& msg)
             : Code(code)
-            , Message(msg)
-        {}
+            , Message(msg) {}
 
         TExTableStatsError(ECode code)
-            : TExTableStatsError(code, "")
-        {}
+            : TExTableStatsError(code, "") {}
 
         ECode Code;
         TString Message;
     };
 
 public:
-    TTableStatsCoroBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, TActorId executorId, ui64 indexSize,
-                            const TAutoPtr<TSubset> subset, ui64 memRowCount, ui64 memDataSize,
-                            ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, ui64 searchHeight, TInstant statsUpdateTime)
+    TTableStatsCoroBuilder(
+        TActorId replyTo,
+        ui64 tabletId,
+        ui64 tableId,
+        TActorId executorId,
+        ui64 indexSize,
+        const TAutoPtr<TSubset> subset,
+        ui64 memRowCount,
+        ui64 memDataSize,
+        ui64 rowCountResolution,
+        ui64 dataSizeResolution,
+        ui32 histogramBucketsCount,
+        ui64 searchHeight,
+        TInstant statsUpdateTime
+    )
         : TActorCoroImpl(/* stackSize */ 64_KB, /* allowUnhandledDtor */ true)
         , ReplyTo(replyTo)
         , TabletId(tabletId)
@@ -56,8 +68,7 @@ public:
         , RowCountResolution(rowCountResolution)
         , DataSizeResolution(dataSizeResolution)
         , HistogramBucketsCount(histogramBucketsCount)
-        , SearchHeight(searchHeight)
-    {}
+        , SearchHeight(searchHeight) {}
 
     void Run() override {
         try {
@@ -98,9 +109,11 @@ public:
             return page;
         }
 
-        auto fetchEv = new NPageCollection::TFetch{ {}, info->PageCollection, TVector<TPageId>{ pageId } };
+        auto fetchEv = new NPageCollection::TFetch{{}, info->PageCollection, TVector<TPageId>{pageId}};
         PagesSize += info->GetPageSize(pageId);
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv, SelfActorId));
+        Send(
+            MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv, SelfActorId)
+        );
 
         Spent->Alter(false); // pause measurement
         ReleaseResources();
@@ -116,7 +129,7 @@ public:
 
         ObtainResources();
         Spent->Alter(true); // resume measurement
-        
+
         for (auto& loaded : msg->Loaded) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
         }
@@ -144,23 +157,26 @@ private:
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
         Spent = new TSpent(TAppData::TimeProvider.Get());
 
-        BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this](){
+        BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this]() {
             const auto now = GetCycleCountFast();
-    
+
             if (now > CoroutineDeadline) {
                 Spent->Alter(false); // pause measurement
                 ReleaseResources();
 
                 Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
-                WaitForSpecificEvent([](IEventHandle& ev) { 
-                    return ev.Type == EvResume; 
-                }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
+                WaitForSpecificEvent(
+                    [](IEventHandle& ev) {
+                        return ev.Type == EvResume;
+                    },
+                    &TTableStatsCoroBuilder::ProcessUnexpectedEvent
+                );
 
                 ObtainResources();
                 Spent->Alter(true); // resume measurement
             }
         });
-        
+
         Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
 
         LOG_DEBUG_S(GetActorContext(), NKikimrServices::TX_DATASHARD, "BuildStats result at datashard " << TabletId << ", for tableId " << TableId
@@ -202,16 +218,21 @@ private:
     }
 
     void ObtainResources() {
-        Send(MakeResourceBrokerID(),
+        Send(
+            MakeResourceBrokerID(),
             new TEvResourceBroker::TEvSubmitTask(
                 /* task id */ 1,
                 /* task name */ TStringBuilder() << "build-stats-table-" << TableId << "-tablet-" << TabletId,
-                /* cpu & memory */ {{ 1, 0 }},
+                /* cpu & memory */ {{1, 0}},
                 /* task type */ "datashard_build_stats",
                 /* priority */ 5,
-                /* cookie */ nullptr));
+                /* cookie */ nullptr
+            )
+        );
 
-        auto ev = WaitForSpecificEvent<TEvResourceBroker::TEvResourceAllocated>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
+        auto ev = WaitForSpecificEvent<TEvResourceBroker::TEvResourceAllocated>(
+            &TTableStatsCoroBuilder::ProcessUnexpectedEvent
+        );
         auto msg = ev->Get();
         Y_ABORT_UNLESS(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
         Y_ABORT_UNLESS(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
@@ -242,7 +263,7 @@ private:
     TAutoPtr<TSpent> Spent;
 };
 
-class TDataShard::TTxGetTableStats : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxGetTableStats: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvGetTableStats::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
@@ -250,10 +271,11 @@ private:
 public:
     TTxGetTableStats(TDataShard* ds, TEvDataShard::TEvGetTableStats::TPtr ev)
         : TBase(ds)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_GET_TABLE_STATS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_GET_TABLE_STATS;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
@@ -303,7 +325,9 @@ public:
         FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
         // Fill key access sample if it was collected not too long ago:
         if (Self->StopKeyAccessSamplingAt + TDuration::Seconds(30) >= AppData(ctx)->TimeProvider->Now()) {
-            FillKeyAccessSample(tableInfo.Stats.AccessStats, *Result->Record.MutableTableStats()->MutableKeyAccessSample());
+            FillKeyAccessSample(
+                tableInfo.Stats.AccessStats, *Result->Record.MutableTableStats()->MutableKeyAccessSample()
+            );
         }
 
         Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
@@ -371,8 +395,9 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
 
         if (!tableInfo.StatsUpdateInProgress) {
             // How can this happen?
-            LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD,
-                      "Unexpected async stats update at datashard %" PRIu64, TabletID());
+            LOG_ERROR(
+                ctx, NKikimrServices::TX_DATASHARD, "Unexpected async stats update at datashard %" PRIu64, TabletID()
+            );
         }
         tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
         tableInfo.Stats.PartOwners = std::move(ev->Get()->PartOwners);
@@ -428,17 +453,18 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
     }
 }
 
-class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxInitiateStatsUpdate: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvGetTableStats::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
 
 public:
     TTxInitiateStatsUpdate(TDataShard* ds)
-        : TBase(ds)
-    {}
+        : TBase(ds) {}
 
-    TTxType GetTxType() const override { return TXTYPE_INITIATE_STATS_UPDATE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INITIATE_STATS_UPDATE;
+    }
 
     void CheckIdleMemCompaction(const TUserTable& table, TTransactionContext& txc, const TActorContext& ctx) {
         // Note: we only care about changes in the main table
@@ -456,7 +482,8 @@ public:
 
         // Compact non-empty mem table when there have been no changes for a while
         TDuration elapsed = ctx.Monotonic() - table.LastTableChangeTimestamp;
-        TDuration idleInterval = TDuration::Seconds(AppData(ctx)->DataShardConfig.GetIdleMemCompactionIntervalSeconds());
+        TDuration idleInterval =
+            TDuration::Seconds(AppData(ctx)->DataShardConfig.GetIdleMemCompactionIntervalSeconds());
         if (elapsed >= idleInterval) {
             Self->Executor()->CompactMemTable(table.LocalTid);
             table.LastTableChangeTimestamp = ctx.Monotonic();
@@ -502,16 +529,13 @@ public:
             ui64 dataSizeResolution = gDbStatsDataSizeResolution;
             ui32 histogramBucketsCount = gDbStatsHistogramBucketsCount;
 
-
             if (ti.second->Stats.DataSizeResolution &&
-                ti.second->Stats.DataStats.DataSize.Size / ti.second->Stats.DataSizeResolution <= MaxBuckets)
-            {
+                ti.second->Stats.DataStats.DataSize.Size / ti.second->Stats.DataSizeResolution <= MaxBuckets) {
                 dataSizeResolution = ti.second->Stats.DataSizeResolution;
             }
 
             if (ti.second->Stats.RowCountResolution &&
-                ti.second->Stats.DataStats.RowCount / ti.second->Stats.RowCountResolution <= MaxBuckets)
-            {
+                ti.second->Stats.DataStats.RowCount / ti.second->Stats.RowCountResolution <= MaxBuckets) {
                 rowCountResolution = ti.second->Stats.RowCountResolution;
             }
 
@@ -527,7 +551,7 @@ public:
                 indexSize += txc.DB.GetTableIndexSize(shadowTableId);
             }
 
-            TAutoPtr<TSubset> subsetForStats = txc.DB.Subset(localTableId, TEpoch::Max(), { }, { });
+            TAutoPtr<TSubset> subsetForStats = txc.DB.Subset(localTableId, TEpoch::Max(), {}, {});
             // Remove memtables from the subset as we only want to look at indexes for parts
             subsetForStats->Frozen.clear();
 
@@ -536,30 +560,33 @@ public:
                 // It's only safe to do as long as stats collector performs
                 // index lookups only, and doesn't care about the actual lsm
                 // part order.
-                auto shadowSubset = txc.DB.Subset(shadowTableId, TEpoch::Max(), { }, { });
+                auto shadowSubset = txc.DB.Subset(shadowTableId, TEpoch::Max(), {}, {});
                 subsetForStats->Flatten.insert(
-                    subsetForStats->Flatten.end(),
-                    shadowSubset->Flatten.begin(),
-                    shadowSubset->Flatten.end());
+                    subsetForStats->Flatten.end(), shadowSubset->Flatten.begin(), shadowSubset->Flatten.end()
+                );
                 subsetForStats->ColdParts.insert(
-                    subsetForStats->ColdParts.end(),
-                    shadowSubset->ColdParts.begin(),
-                    shadowSubset->ColdParts.end());
+                    subsetForStats->ColdParts.end(), shadowSubset->ColdParts.begin(), shadowSubset->ColdParts.end()
+                );
             }
 
-            auto builder = new TActorCoro(MakeHolder<TTableStatsCoroBuilder>(ctx.SelfID,
-                Self->TabletID(),
-                tableId,
-                Self->ExecutorID(),
-                indexSize,
-                subsetForStats,
-                memRowCount,
-                memDataSize,
-                rowCountResolution,
-                dataSizeResolution,
-                histogramBucketsCount,
-                searchHeight,
-                AppData(ctx)->TimeProvider->Now()), NKikimrServices::TActivity::DATASHARD_STATS_BUILDER);
+            auto builder = new TActorCoro(
+                MakeHolder<TTableStatsCoroBuilder>(
+                    ctx.SelfID,
+                    Self->TabletID(),
+                    tableId,
+                    Self->ExecutorID(),
+                    indexSize,
+                    subsetForStats,
+                    memRowCount,
+                    memDataSize,
+                    rowCountResolution,
+                    dataSizeResolution,
+                    histogramBucketsCount,
+                    searchHeight,
+                    AppData(ctx)->TimeProvider->Now()
+                ),
+                NKikimrServices::TActivity::DATASHARD_STATS_BUILDER
+            );
 
             TActorId actorId = ctx.Register(builder, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
             Self->Actors.insert(actorId);
@@ -568,7 +595,7 @@ public:
         Self->SysTablesPartOwners.clear();
         for (ui32 sysTableId : Self->SysTablesToTransferAtSplit) {
             THashSet<ui64> sysPartOwners;
-            auto subset = txc.DB.Subset(sysTableId, TEpoch::Max(), { }, { });
+            auto subset = txc.DB.Subset(sysTableId, TEpoch::Max(), {}, {});
             GetPartOwners(*subset, sysPartOwners);
             Self->SysTablesPartOwners.insert(sysPartOwners.begin(), sysPartOwners.end());
         }
@@ -580,7 +607,7 @@ public:
     }
 };
 
-void TDataShard::UpdateTableStats(const TActorContext &ctx) {
+void TDataShard::UpdateTableStats(const TActorContext& ctx) {
     if (StatisticsDisabled)
         return;
 
@@ -599,7 +626,7 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     Executor()->Execute(new TTxInitiateStatsUpdate(this), ctx);
 }
 
-void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
+void TDataShard::CollectCpuUsage(const TActorContext& ctx) {
     auto* metrics = Executor()->GetResourceMetrics();
     TInstant now = AppData(ctx)->TimeProvider->Now();
 
@@ -633,4 +660,5 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
     }
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

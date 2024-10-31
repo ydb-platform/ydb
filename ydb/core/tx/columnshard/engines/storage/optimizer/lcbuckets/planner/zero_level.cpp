@@ -7,7 +7,10 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
     TCompactionTaskData result(NextLevel->GetLevelId());
     for (auto&& i : Portions) {
         result.AddCurrentLevelPortion(
-            i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
+            i.GetPortion(),
+            NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()),
+            true
+        );
         if (!result.CanTakeMore()) {
 //            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
             break;
@@ -31,8 +34,9 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
         }
     }
 
-    const ui64 affectedRawBytes =
-        NextLevel->GetAffectedPortionBytes(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+    const ui64 affectedRawBytes = NextLevel->GetAffectedPortionBytes(
+        Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd()
+    );
     /*
     THashSet<ui64> portionIds;
     auto chain =

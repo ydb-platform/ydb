@@ -2,7 +2,11 @@
 
 namespace NKikimr::NDataShard::NIncrRestoreHelpers {
 
-std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, const TMap<ui32, TUserTable::TUserColumn>& columns) {
+std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(
+    TArrayRef<const TCell> cells,
+    TArrayRef<const TTag> tags,
+    const TMap<ui32, TUserTable::TUserColumn>& columns
+) {
     Y_ABORT_UNLESS(cells.size() >= 1);
     TVector<TUpdateOp> updates(::Reserve(cells.size() - 1));
 
@@ -26,4 +30,4 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
     return updates;
 }
 
-} // namespace NKikimr::NBackup::NImpl
+} // namespace NKikimr::NDataShard::NIncrRestoreHelpers

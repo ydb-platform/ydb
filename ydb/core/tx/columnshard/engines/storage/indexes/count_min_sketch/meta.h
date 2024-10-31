@@ -18,12 +18,18 @@ protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
         const auto* bMeta = dynamic_cast<const TIndexMeta*>(&newMeta);
         if (!bMeta) {
-            return TConclusionStatus::Fail("cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+            return TConclusionStatus::Fail(
+                "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " +
+                newMeta.GetClassName()
+            );
         }
         return TBase::CheckSameColumnsForModification(newMeta);
     }
 
-    virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
+    virtual void DoFillIndexCheckers(
+        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info,
+        const NSchemeShard::TOlapSchema& schema
+    ) const override;
 
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader) const override;
 
@@ -47,8 +53,7 @@ protected:
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const std::set<ui32>& columnIds)
-        : TBase(indexId, indexName, columnIds, storageId) {
-    }
+        : TBase(indexId, indexName, columnIds, storageId) {}
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
@@ -57,7 +62,6 @@ public:
     const std::set<ui32>& GetColumnIds() const {
         return ColumnIds;
     }
-
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

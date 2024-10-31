@@ -20,6 +20,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr SkipEraseBytes;
     std::shared_ptr<TValueAggregationClient> DataSize;
     std::shared_ptr<TValueAggregationClient> ChunksCount;
+
 public:
     TDataOwnerSignals(const TString& module, const TString dataName);
 
@@ -52,14 +53,13 @@ public:
         SkipEraseCount->Add(1);
         SkipEraseBytes->Add(size);
     }
-
 };
 
 class TLoadTimeSignals;
 
 class TLoadTimeSignals: public TCommonCountersOwner {
 public:
-    class TLoadTimer : public TNonCopyable {
+    class TLoadTimer: public TNonCopyable {
     private:
         const TLoadTimeSignals& Signals;
         TInstant Start;
@@ -69,8 +69,7 @@ public:
     public:
         TLoadTimer(const TLoadTimeSignals& signals, const TString& name)
             : Signals(signals)
-            , Name(name)
-        {
+            , Name(name) {
             Start = TInstant::Now();
         }
 
@@ -89,8 +88,7 @@ private:
 public:
     TLoadTimeSignals(const TString& type)
         : TBase("Startup")
-        , Type(type)
-    {
+        , Type(type) {
         LoadingTimeCounter = TBase::GetValue("Startup/" + type + "LoadingTime");
         FailedLoadingTimeCounter = TBase::GetValue("Startup/" + type + "FailedLoadingTime");
         LoadingFailCounter = TBase::GetValue("Startup/" + type + "LoadingFailCount");
@@ -124,13 +122,11 @@ public:
 
 public:
     TTableLoadTimeCounters()
-    : TableLoadTimeCounters("Tables")
-    , SchemaPresetLoadTimeCounters("SchemaPreset")
-    , TableVersionsLoadTimeCounters("TableVersionss")
-    , SchemaPresetVersionsLoadTimeCounters("SchemaPresetVersions")
-    , PrechargeTimeCounters("Precharge")
-    {
-    }
+        : TableLoadTimeCounters("Tables")
+        , SchemaPresetLoadTimeCounters("SchemaPreset")
+        , TableVersionsLoadTimeCounters("TableVersionss")
+        , SchemaPresetVersionsLoadTimeCounters("SchemaPresetVersions")
+        , PrechargeTimeCounters("Precharge") {}
 };
 
-}
+} // namespace NKikimr::NColumnShard

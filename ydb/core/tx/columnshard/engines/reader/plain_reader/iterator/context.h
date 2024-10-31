@@ -35,14 +35,26 @@ private:
     NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
-    std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshotsFilter, const bool exclusiveSource, 
-        const bool partialUsageByPredicate, const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
-    std::array<std::array<std::array<std::array<std::array<std::array<std::optional<std::shared_ptr<TFetchingScript>>, 2>, 2>, 2>, 2>, 2>, 2>
+    std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(
+        const bool needSnapshotsFilter,
+        const bool exclusiveSource,
+        const bool partialUsageByPredicate,
+        const bool useIndexes,
+        const bool needFilterSharding,
+        const bool needFilterDeletion
+    ) const;
+    std::array<
+        std::array<
+            std::array<std::array<std::array<std::array<std::optional<std::shared_ptr<TFetchingScript>>, 2>, 2>, 2>, 2>,
+            2>,
+        2>
         CacheFetchingScripts;
 
 public:
-    const ui64 ReduceMemoryIntervalLimit = NYDBTest::TControllers::GetColumnShardController()->GetReduceMemoryIntervalLimit();
-    const ui64 RejectMemoryIntervalLimit = NYDBTest::TControllers::GetColumnShardController()->GetRejectMemoryIntervalLimit();
+    const ui64 ReduceMemoryIntervalLimit =
+        NYDBTest::TControllers::GetColumnShardController()->GetReduceMemoryIntervalLimit();
+    const ui64 RejectMemoryIntervalLimit =
+        NYDBTest::TControllers::GetColumnShardController()->GetRejectMemoryIntervalLimit();
     const ui64 ReadSequentiallyBufferSize = TGlobalLimits::DefaultReadSequentiallyBufferSize;
 
     ui64 GetProcessMemoryControlId() const {
@@ -51,7 +63,8 @@ public:
     }
     ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources);
     ui64 GetRequestedMemoryBytes() const {
-        return MergeStageMemory->GetFullMemory() + FilterStageMemory->GetFullMemory() + FetchingStageMemory->GetFullMemory();
+        return MergeStageMemory->GetFullMemory() + FilterStageMemory->GetFullMemory() +
+               FetchingStageMemory->GetFullMemory();
     }
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
@@ -81,4 +94,4 @@ public:
     std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source);
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

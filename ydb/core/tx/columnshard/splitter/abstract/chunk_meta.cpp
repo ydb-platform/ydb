@@ -4,12 +4,11 @@
 
 namespace NKikimr::NOlap {
 
-TSimpleChunkMeta::TSimpleChunkMeta(
-    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column) {
+TSimpleChunkMeta::TSimpleChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column) {
     Y_ABORT_UNLESS(column);
     Y_ABORT_UNLESS(column->GetRecordsCount());
     RecordsCount = column->GetRecordsCount();
     RawBytes = column->GetRawSizeVerified();
 }
 
-}
+} // namespace NKikimr::NOlap

@@ -5,9 +5,7 @@
 namespace NKikimr::NReplication::NController {
 
 TSessionInfo::TSessionInfo()
-    : Ready(false)
-{
-}
+    : Ready(false) {}
 
 void TSessionInfo::SetReady() {
     Ready = true;
@@ -83,4 +81,4 @@ void TWorkerInfo::SetDataEnded(bool value) {
     DataEnded = value;
 }
 
-}
+} // namespace NKikimr::NReplication::NController

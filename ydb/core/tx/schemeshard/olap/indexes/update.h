@@ -7,29 +7,33 @@
 
 namespace NKikimr::NSchemeShard {
 
-    class TOlapIndexUpsert {
-    private:
-        YDB_READONLY_DEF(TString, Name);
-        YDB_READONLY_DEF(TString, TypeName);
-        YDB_READONLY_DEF(std::optional<TString>, StorageId);
-    protected:
-        NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
-    public:
-        TOlapIndexUpsert() = default;
+class TOlapIndexUpsert {
+private:
+    YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY_DEF(TString, TypeName);
+    YDB_READONLY_DEF(std::optional<TString>, StorageId);
 
-        const NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor>& GetIndexConstructor() const {
-            return IndexConstructor;
-        }
+protected:
+    NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
 
-        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
-        void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const;
-    };
+public:
+    TOlapIndexUpsert() = default;
 
-    class TOlapIndexesUpdate {
-    private:
-        YDB_READONLY_DEF(TVector<TOlapIndexUpsert>, UpsertIndexes);
-        YDB_READONLY_DEF(TSet<TString>, DropIndexes);
-    public:
-        bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
-    };
-}
+    const NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor>& GetIndexConstructor(
+    ) const {
+        return IndexConstructor;
+    }
+
+    bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& requestedProto);
+    void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& requestedProto) const;
+};
+
+class TOlapIndexesUpdate {
+private:
+    YDB_READONLY_DEF(TVector<TOlapIndexUpsert>, UpsertIndexes);
+    YDB_READONLY_DEF(TSet<TString>, DropIndexes);
+
+public:
+    bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
+};
+} // namespace NKikimr::NSchemeShard

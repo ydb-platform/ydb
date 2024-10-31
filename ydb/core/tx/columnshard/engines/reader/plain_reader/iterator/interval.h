@@ -81,12 +81,18 @@ public:
         return IntervalGroupGuard;
     }
 
-    TFetchingInterval(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const THashMap<ui32, std::shared_ptr<IDataSource>>& sources, const std::shared_ptr<TSpecialReadContext>& context,
-        const bool includeFinish, const bool includeStart, const bool isExclusiveInterval);
-    
-    ~TFetchingInterval() {
-    }
+    TFetchingInterval(
+        const NArrow::NMerger::TSortableBatchPosition& start,
+        const NArrow::NMerger::TSortableBatchPosition& finish,
+        const ui32 intervalIdx,
+        const THashMap<ui32, std::shared_ptr<IDataSource>>& sources,
+        const std::shared_ptr<TSpecialReadContext>& context,
+        const bool includeFinish,
+        const bool includeStart,
+        const bool isExclusiveInterval
+    );
+
+    ~TFetchingInterval() {}
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

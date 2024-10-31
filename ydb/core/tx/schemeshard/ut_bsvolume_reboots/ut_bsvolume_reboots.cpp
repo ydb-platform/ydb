@@ -12,10 +12,7 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
-auto& InitCreateVolumeConfig(
-    const TString& name,
-    NKikimrSchemeOp::TBlockStoreVolumeDescription& vdescr)
-{
+auto& InitCreateVolumeConfig(const TString& name, NKikimrSchemeOp::TBlockStoreVolumeDescription& vdescr) {
     vdescr.SetName(name);
     auto& vc = *vdescr.MutableVolumeConfig();
     vc.SetBlockSize(4096);
@@ -28,8 +25,7 @@ auto& InitCreateVolumeConfig(
     return vc;
 }
 
-void InitAlterVolumeConfig(NKikimrBlockStore::TVolumeConfig& vc)
-{
+void InitAlterVolumeConfig(NKikimrBlockStore::TVolumeConfig& vc) {
     vc.Clear();
     vc.SetVersion(1);
     vc.AddPartitions()->SetBlockCount(32);
@@ -58,20 +54,33 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             AsyncAssignBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", "Owner123");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestDropBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", 0,
-                                     {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted});
+            TestDropBlockStoreVolume(
+                runtime,
+                ++t.TxId,
+                "/MyRoot",
+                "BSVolume",
+                0,
+                {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId - 2); // wait Alter
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDropBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", 0,
-                                         {NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusAccepted});
+                TestDropBlockStoreVolume(
+                    runtime,
+                    ++t.TxId,
+                    "/MyRoot",
+                    "BSVolume",
+                    0,
+                    {NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusAccepted}
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                                   {NLs::PathNotExist});
-                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+5));
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), {NLs::PathNotExist});
+                t.TestEnv->TestWaitTabletDeletion(
+                    runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5)
+                );
             }
         });
     }
@@ -84,7 +93,7 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
             InitCreateVolumeConfig("BSVolume_1", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             activeZone = false;
             TestLs(runtime, "/MyRoot/DirA/BSVolume_1", false, NLs::Finished);
@@ -99,19 +108,19 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
             auto& vc = InitCreateVolumeConfig("BSVolume_2", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             TestLs(runtime, "/MyRoot/DirA/BSVolume_2", false, NLs::Finished);
 
             InitAlterVolumeConfig(vc);
             TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             activeZone = false;
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/BSVolume_2"),
-                               {NLs::PathExist,
-                                NLs::Finished,
-                                NLs::PathVersionEqual(3)});
+            TestDescribeResult(
+                DescribePath(runtime, "/MyRoot/DirA/BSVolume_2"),
+                {NLs::PathExist, NLs::Finished, NLs::PathVersionEqual(3)}
+            );
         });
     }
 
@@ -123,12 +132,12 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
             auto& vc = InitCreateVolumeConfig("BSVolume_2", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_2", false, NLs::Finished);
 
             InitAlterVolumeConfig(vc);
             TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             activeZone = false;
             TestLs(runtime, "/MyRoot/DirA/BSVolume_2", false, NLs::PathExist);
@@ -144,11 +153,11 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             InitCreateVolumeConfig("BSVolume_3", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_3", false, NLs::Finished);
 
             TestDropBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_3");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             activeZone = false;
             TestLs(runtime, "/MyRoot/DirA/BSVolume_3", false, NLs::PathNotExist);
@@ -164,11 +173,11 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             auto& vc = InitCreateVolumeConfig("BSVolume_4", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
 
             TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner123");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
             InitAlterVolumeConfig(vc);
@@ -188,11 +197,11 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             auto& vc = InitCreateVolumeConfig("BSVolume_4", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
 
             TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner123");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
             InitAlterVolumeConfig(vc);
@@ -212,11 +221,11 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             InitCreateVolumeConfig("BSVolume_4", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
 
             TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner123");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
             TestDropBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4");
@@ -235,19 +244,19 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             InitCreateVolumeConfig("BSVolume_4", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
 
             TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner123");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
             TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", ""));
 
             TestDropBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4");
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
 
             activeZone = false;
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::PathNotExist);
@@ -259,20 +268,24 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
-                TestCreateSubDomain(runtime, ++t.TxId, "/MyRoot/DirA",
-                                    "PlanResolution: 50 "
-                                    "Coordinators: 1 "
-                                    "Mediators: 1 "
-                                    "TimeCastBucketsPerMediator: 2 "
-                                    "Name: \"USER_0\""
-                                    "StoragePools {"
-                                    "  Name: \"name_USER_0_kind_hdd-1\""
-                                    "  Kind: \"storage-pool-number-1\""
-                                    "}"
-                                    "StoragePools {"
-                                    "  Name: \"name_USER_0_kind_hdd-2\""
-                                    "  Kind: \"storage-pool-number-2\""
-                                    "}");
+                TestCreateSubDomain(
+                    runtime,
+                    ++t.TxId,
+                    "/MyRoot/DirA",
+                    "PlanResolution: 50 "
+                    "Coordinators: 1 "
+                    "Mediators: 1 "
+                    "TimeCastBucketsPerMediator: 2 "
+                    "Name: \"USER_0\""
+                    "StoragePools {"
+                    "  Name: \"name_USER_0_kind_hdd-1\""
+                    "  Kind: \"storage-pool-number-1\""
+                    "}"
+                    "StoragePools {"
+                    "  Name: \"name_USER_0_kind_hdd-2\""
+                    "  Kind: \"storage-pool-number-2\""
+                    "}"
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -285,20 +298,21 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-2");
             TestCreateBlockStoreVolume(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", vdescr.DebugString());
 
-            TestForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
+            TestForceDropSubDomain(runtime, ++t.TxId, "/MyRoot/DirA", "USER_0");
 
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId-1});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3));
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId - 1});
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3)
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"), {NLs::PathNotExist});
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                                   {NLs::PathVersionEqual(7),
-                                    NLs::PathsInsideDomain(1),
-                                    NLs::ShardsInsideDomain(0)});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirA"),
+                    {NLs::PathVersionEqual(7), NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(0)}
+                );
             }
         });
     }
@@ -314,7 +328,9 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateBlockStoreVolume(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateBlockStoreVolume(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -325,7 +341,6 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             AsyncCreateBlockStoreVolume(runtime, txId, root, vdescr.DebugString());
         });
     }
-
 
     Y_UNIT_TEST(CreateAssignWithVersion) {
         TTestWithReboots t;
@@ -338,15 +353,15 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             InitCreateVolumeConfig("BSVolume_4", vdescr);
             TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
 
             TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner123", 0);
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
             TestAssignBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", "BSVolume_4", "Owner124", 1);
-            t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner124"));
         });
     }

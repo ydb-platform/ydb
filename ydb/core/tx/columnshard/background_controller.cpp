@@ -51,4 +51,4 @@ TString TBackgroundController::DebugStringIndexation() const {
     return sb;
 }
 
-}
+} // namespace NKikimr::NColumnShard

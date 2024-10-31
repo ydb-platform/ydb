@@ -11,8 +11,10 @@ class TStatsIteratorBase: public TScanIteratorBase {
 private:
     const NTable::TScheme::TTableSchema StatsSchema;
     std::shared_ptr<arrow::Schema> DataSchema;
+
 protected:
-    virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, TGranuleMetaView& granule) const = 0;
+    virtual bool
+    AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, TGranuleMetaView& granule) const = 0;
     virtual ui32 PredictRecordsCount(const TGranuleMetaView& granule) const = 0;
     TReadStatsMetadata::TConstPtr ReadMetadata;
     const bool Reverse = false;
@@ -20,6 +22,7 @@ protected:
     std::shared_ptr<arrow::Schema> ResultSchema;
 
     std::deque<TGranuleMetaView> IndexGranules;
+
 public:
     virtual TConclusionStatus Start() override {
         return TConclusionStatus::Success();
@@ -87,14 +90,15 @@ public:
         return std::nullopt;
     }
 
-
-    TStatsIteratorBase(const NAbstract::TReadStatsMetadata::TConstPtr& readMetadata, const NTable::TScheme::TTableSchema& statsSchema)
+    TStatsIteratorBase(
+        const NAbstract::TReadStatsMetadata::TConstPtr& readMetadata,
+        const NTable::TScheme::TTableSchema& statsSchema
+    )
         : StatsSchema(statsSchema)
         , ReadMetadata(readMetadata)
         , KeySchema(MakeArrowSchema(StatsSchema.Columns, StatsSchema.KeyColumns))
         , ResultSchema(MakeArrowSchema(StatsSchema.Columns, ReadMetadata->ResultColumnIds))
-        , IndexGranules(ReadMetadata->IndexGranules)
-    {
+        , IndexGranules(ReadMetadata->IndexGranules) {
         if (ResultSchema->num_fields() == 0) {
             ResultSchema = KeySchema;
         }
@@ -108,9 +112,10 @@ public:
 };
 
 template <class TSysViewSchema>
-class TStatsIterator : public TStatsIteratorBase {
+class TStatsIterator: public TStatsIteratorBase {
 private:
     using TBase = TStatsIteratorBase;
+
 public:
     static inline const NTable::TScheme::TTableSchema StatsSchema = []() {
         NTable::TScheme::TTableSchema schema;
@@ -144,10 +149,7 @@ public:
     };
 
     TStatsIterator(const NAbstract::TReadStatsMetadata::TConstPtr& readMetadata)
-        : TBase(readMetadata, StatsSchema)
-    {
-    }
-
+        : TBase(readMetadata, StatsSchema) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NSysView::NAbstract

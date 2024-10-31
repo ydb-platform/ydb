@@ -25,8 +25,7 @@ protected:
 
 public:
     TFetchedData(const bool useFilter)
-        : UseFilter(useFilter) {
-    }
+        : UseFilter(useFilter) {}
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
         if (!Filter) {
@@ -155,8 +154,7 @@ private:
 public:
     TFetchedResult(std::unique_ptr<TFetchedData>&& data)
         : Batch(data->GetTable())
-        , NotAppliedFilter(data->GetNotAppliedFilter()) {
-    }
+        , NotAppliedFilter(data->GetNotAppliedFilter()) {}
 
     bool IsEmpty() const {
         return !Batch || Batch->num_rows() == 0 || (NotAppliedFilter && NotAppliedFilter->IsTotalDenyFilter());

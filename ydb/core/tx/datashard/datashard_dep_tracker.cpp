@@ -12,44 +12,40 @@ static constexpr bool DelayPlannedRanges = true;
 static constexpr bool DelayImmediateRanges = true;
 
 namespace {
-    template<class T>
-    void SwapConsume(T& value) {
-        T tmp;
-        tmp.swap(value);
-    }
+template <class T>
+void SwapConsume(T& value) {
+    T tmp;
+    tmp.swap(value);
+}
 
-    TRangeTreeBase::TRange MakeSearchRange(const TTableRange& range) {
-        if (range.Point) {
-            return TRangeTreeBase::TRange(range.From, true, range.From, true);
-        } else {
-            return TRangeTreeBase::TRange(
-                range.From,
-                range.InclusiveFrom || !range.From,
-                range.To,
-                range.InclusiveTo || !range.To);
-        }
-    }
-
-    TRangeTreeBase::TOwnedRange MakeOwnedRange(const TOwnedTableRange& range) {
-        if (range.Point) {
-            return TRangeTreeBase::TOwnedRange(range.GetOwnedFrom(), true, range.GetOwnedFrom(), true);
-        } else {
-            return TRangeTreeBase::TOwnedRange(
-                range.GetOwnedFrom(),
-                range.InclusiveFrom || !range.From,
-                range.GetOwnedTo(),
-                range.InclusiveTo || !range.To);
-        }
-    }
-
-    bool IsLess(const TOperation& a, const TRowVersion& b) {
-        return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() < b.TxId);
-    }
-
-    bool IsEqual(const TOperation& a, const TRowVersion& b) {
-        return a.GetStep() == b.Step && a.GetTxId() == b.TxId;
+TRangeTreeBase::TRange MakeSearchRange(const TTableRange& range) {
+    if (range.Point) {
+        return TRangeTreeBase::TRange(range.From, true, range.From, true);
+    } else {
+        return TRangeTreeBase::TRange(
+            range.From, range.InclusiveFrom || !range.From, range.To, range.InclusiveTo || !range.To
+        );
     }
 }
+
+TRangeTreeBase::TOwnedRange MakeOwnedRange(const TOwnedTableRange& range) {
+    if (range.Point) {
+        return TRangeTreeBase::TOwnedRange(range.GetOwnedFrom(), true, range.GetOwnedFrom(), true);
+    } else {
+        return TRangeTreeBase::TOwnedRange(
+            range.GetOwnedFrom(), range.InclusiveFrom || !range.From, range.GetOwnedTo(), range.InclusiveTo || !range.To
+        );
+    }
+}
+
+bool IsLess(const TOperation& a, const TRowVersion& b) {
+    return a.GetStep() < b.Step || (a.GetStep() == b.Step && a.GetTxId() < b.TxId);
+}
+
+bool IsEqual(const TOperation& a, const TRowVersion& b) {
+    return a.GetStep() == b.Step && a.GetTxId() == b.TxId;
+}
+} // namespace
 
 void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) noexcept {
     auto& state = Tables[tableId.LocalPathId];
@@ -282,13 +278,16 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                             if (it->second.WholeShard) {
                                 isGlobalReader = true;
                             } else {
-                                Parent.TmpRead.insert(Parent.TmpRead.end(), it->second.Keys.begin(), it->second.Keys.end());
+                                Parent.TmpRead.insert(
+                                    Parent.TmpRead.end(), it->second.Keys.begin(), it->second.Keys.end()
+                                );
                             }
                         }
                     } else if (lock) {
                         Y_ASSERT(!lock->IsBroken(readVersion));
                         haveReads = true;
-                        if (!tooManyKeys && (keysCount += (lock->NumPoints() + lock->NumRanges())) > MAX_REORDER_TX_KEYS) {
+                        if (!tooManyKeys &&
+                            (keysCount += (lock->NumPoints() + lock->NumRanges())) > MAX_REORDER_TX_KEYS) {
                             tooManyKeys = true;
                         }
                         if (!tooManyKeys && !isGlobalReader) {
@@ -296,10 +295,14 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                                 isGlobalReader = true;
                             } else {
                                 for (const auto& point : lock->GetPoints()) {
-                                    Parent.TmpRead.emplace_back(point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange());
+                                    Parent.TmpRead.emplace_back(
+                                        point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange()
+                                    );
                                 }
                                 for (const auto& range : lock->GetRanges()) {
-                                    Parent.TmpRead.emplace_back(range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange());
+                                    Parent.TmpRead.emplace_back(
+                                        range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange()
+                                    );
                                 }
                             }
                         }
@@ -352,7 +355,8 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     TRowVersion snapshot = TRowVersion::Max();
     if (op->IsMvccSnapshotRead()) {
         snapshot = op->GetMvccSnapshot();
-    } else if (op->IsImmediate() && (op->IsReadTable() || (op->IsDataTx() || op->IsWriteTx()) && !haveWrites && !isGlobalWriter && !commitWriteLock)) {
+    } else if (op->IsImmediate() && (op->IsReadTable() || (op->IsDataTx() || op->IsWriteTx()) && !haveWrites &&
+                                                              !isGlobalWriter && !commitWriteLock)) {
         snapshot = readVersion;
         op->SetMvccSnapshot(snapshot, /* repeatable */ false);
     }
@@ -576,10 +580,14 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                         lockState.WholeShard = true;
                     } else {
                         for (const auto& point : lock->GetPoints()) {
-                            lockState.Keys.emplace_back(point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange());
+                            lockState.Keys.emplace_back(
+                                point.Table->GetTableId().LocalPathId, point.ToOwnedTableRange()
+                            );
                         }
                         for (const auto& range : lock->GetRanges()) {
-                            lockState.Keys.emplace_back(range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange());
+                            lockState.Keys.emplace_back(
+                                range.Table->GetTableId().LocalPathId, range.ToOwnedTableRange()
+                            );
                         }
                     }
                 }

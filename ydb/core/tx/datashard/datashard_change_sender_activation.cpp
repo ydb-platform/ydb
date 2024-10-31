@@ -11,9 +11,7 @@ public:
         : TTransactionBase(self)
         , Origin(origin)
         , AckTo(ackTo)
-        , AllSrcActivationsReceived(false)
-    {
-    }
+        , AllSrcActivationsReceived(false) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_ACTIVATE_CHANGE_SENDER;
@@ -72,9 +70,7 @@ public:
     explicit TTxActivateChangeSenderAck(TDataShard* self, ui64 origin)
         : TTransactionBase(self)
         , Origin(origin)
-        , AllDstAcksReceived(false)
-    {
-    }
+        , AllDstAcksReceived(false) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_ACTIVATE_CHANGE_SENDER_ACK;
@@ -119,5 +115,5 @@ void TDataShard::Handle(TEvChangeExchange::TEvActivateSenderAck::TPtr& ev, const
     Execute(new TTxActivateChangeSenderAck(this, ev->Get()->Record.GetOrigin()), ctx);
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

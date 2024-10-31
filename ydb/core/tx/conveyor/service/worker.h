@@ -17,6 +17,7 @@ private:
     YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
     YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
+
 public:
     void OnBeforeStart() {
         StartInstant = TMonotonic::Now();
@@ -29,8 +30,7 @@ public:
 
     TWorkerTask(ITask::TPtr task, std::shared_ptr<TTaskSignals> taskSignals)
         : Task(task)
-        , TaskSignals(taskSignals)
-    {
+        , TaskSignals(taskSignals) {
         Y_ABORT_UNLESS(task);
     }
 
@@ -51,6 +51,7 @@ struct TEvInternal {
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
         TWorkerTask Task;
+
     public:
         TEvNewTask() = default;
 
@@ -59,20 +60,17 @@ struct TEvInternal {
         }
 
         explicit TEvNewTask(const TWorkerTask& task)
-            : Task(task) {
-        }
+            : Task(task) {}
     };
 
-    class TEvTaskProcessedResult:
-        public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
+    class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
         using TBase = TConclusion<ITask::TPtr>;
         YDB_READONLY_DEF(TMonotonic, StartInstant);
+
     public:
         TEvTaskProcessedResult(const TWorkerTask& originalTask)
-            : StartInstant(originalTask.GetStartInstant()) {
-
-        }
+            : StartInstant(originalTask.GetStartInstant()) {}
     };
 };
 
@@ -86,14 +84,15 @@ private:
     void ExecuteTask(const TWorkerTask& workerTask);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
-public:
 
+public:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInternal::TEvNewTask, HandleMain);
             hFunc(NActors::TEvents::TEvWakeup, HandleMain);
-        default:
-                ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "unexpected event for task executor: " << ev->GetTypeRewrite();
+            default:
+                ALS_ERROR(NKikimrServices::TX_CONVEYOR)
+                    << "unexpected event for task executor: " << ev->GetTypeRewrite();
                 break;
         }
     }
@@ -105,10 +104,7 @@ public:
     TWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId)
         : TBase("CONVEYOR::" + conveyorName + "::WORKER")
         , CPUUsage(cpuUsage)
-        , DistributorId(distributorId)
-    {
-
-    }
+        , DistributorId(distributorId) {}
 };
 
-}
+} // namespace NKikimr::NConveyor

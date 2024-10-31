@@ -50,7 +50,8 @@ private:
             *shardAlter.MutableTtlSettings() = TargetStandalone->GetTableTTLProto();
         }
     }
+
 public:
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

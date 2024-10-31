@@ -26,9 +26,6 @@ namespace NKikimr::NSchemeShard::NCdcStreamAtTable {
 void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxDataShard::TCreateCdcStreamNotice& notice);
 
 void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex);
-void CheckSrcDirOnPropose(
-    const TPath::TChecker& checks,
-    bool isInsideTableIndexPath,
-    TTxId op = InvalidTxId);
+void CheckSrcDirOnPropose(const TPath::TChecker& checks, bool isInsideTableIndexPath, TTxId op = InvalidTxId);
 
-} // namespace NKikimr::NSchemeShard::NCdc
+} // namespace NKikimr::NSchemeShard::NCdcStreamAtTable

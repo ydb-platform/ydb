@@ -30,15 +30,14 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
         << ", running# " << BackgroundCompactionQueue->RunningSize() << " shards"
         << " at schemeshard " << TabletID());
 
-    std::unique_ptr<TEvDataShard::TEvCompactTable> request(new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
+    std::unique_ptr<TEvDataShard::TEvCompactTable> request(
+        new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId)
+    );
     if (BackgroundCompactionQueue->GetReadyQueue().GetConfig().CompactSinglePartedShards) {
         request->Record.SetCompactSinglePartedShards(true);
     }
 
-    PipeClientCache->Send(
-        ctx,
-        ui64(datashardId),
-        request.release());
+    PipeClientCache->Send(ctx, ui64(datashardId), request.release());
 
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
@@ -72,15 +71,13 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
         << " at schemeshard " << TabletID());
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     const TTabletId tabletId(record.GetTabletId());
     const TShardIdx shardIdx = GetShardIdx(tabletId);
 
-    auto pathId = TPathId(
-        record.GetPathId().GetOwnerId(),
-        record.GetPathId().GetLocalId());
+    auto pathId = TPathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalId());
 
     // it's OK to OnDone InvalidShardIdx
     // move shard to the end of all queues
@@ -115,32 +112,29 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     auto& histCounters = TabletCounters->Percentile();
 
     switch (record.GetStatus()) {
-    case NKikimrTxDataShard::TEvCompactTableResult::OK:
-        TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_OK].Increment(1);
-        if (duration)
-            histCounters[COUNTER_BACKGROUND_COMPACTION_OK_LATENCY].IncrementFor(duration.MilliSeconds());
-        break;
-    case NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED:
-        TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_NOT_NEEDED].Increment(1);
-        break;
-    case NKikimrTxDataShard::TEvCompactTableResult::FAILED:
-        TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_FAILED].Increment(1);
-        break;
-    case NKikimrTxDataShard::TEvCompactTableResult::BORROWED:
-        TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_BORROWED].Increment(1);
-        break;
-    case NKikimrTxDataShard::TEvCompactTableResult::LOANED:
-        TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_LOANED].Increment(1);
-        break;
+        case NKikimrTxDataShard::TEvCompactTableResult::OK:
+            TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_OK].Increment(1);
+            if (duration)
+                histCounters[COUNTER_BACKGROUND_COMPACTION_OK_LATENCY].IncrementFor(duration.MilliSeconds());
+            break;
+        case NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED:
+            TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_NOT_NEEDED].Increment(1);
+            break;
+        case NKikimrTxDataShard::TEvCompactTableResult::FAILED:
+            TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_FAILED].Increment(1);
+            break;
+        case NKikimrTxDataShard::TEvCompactTableResult::BORROWED:
+            TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_BORROWED].Increment(1);
+            break;
+        case NKikimrTxDataShard::TEvCompactTableResult::LOANED:
+            TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_LOANED].Increment(1);
+            break;
     }
 
     UpdateBackgroundCompactionQueueMetrics();
 }
 
-void TSchemeShard::EnqueueBackgroundCompaction(
-    const TShardIdx& shardIdx,
-    const TPartitionStats& stats)
-{
+void TSchemeShard::EnqueueBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& stats) {
     if (!BackgroundCompactionQueue)
         return;
 
@@ -168,7 +162,7 @@ void TSchemeShard::EnqueueBackgroundCompaction(
             << ", searchHeight# " << stats.SearchHeight
             << ", lastFullCompaction# " << TInstant::Seconds(stats.FullCompactionTs)
             << " at schemeshard " << TabletID());
-        
+
         UpdateBackgroundCompactionQueueMetrics();
     } else {
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -181,10 +175,7 @@ void TSchemeShard::EnqueueBackgroundCompaction(
     }
 }
 
-void TSchemeShard::UpdateBackgroundCompaction(
-    const TShardIdx& shardIdx,
-    const TPartitionStats& newStats)
-{
+void TSchemeShard::UpdateBackgroundCompaction(const TShardIdx& shardIdx, const TPartitionStats& newStats) {
     if (!BackgroundCompactionQueue)
         return;
 
@@ -264,4 +255,4 @@ void TSchemeShard::UpdateBackgroundCompactionQueueMetrics() {
     TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE_DELETES].Set(queue.SizeByRowDeletes());
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -11,15 +11,11 @@ class TController::TTxDropReplication: public TTxBase {
 public:
     explicit TTxDropReplication(TController* self, TEvController::TEvDropReplication::TPtr& ev)
         : TTxBase("TxDropReplication", self)
-        , PubEv(ev)
-    {
-    }
+        , PubEv(ev) {}
 
     explicit TTxDropReplication(TController* self, TEvPrivate::TEvDropReplication::TPtr& ev)
         : TTxBase("TxDropReplication", self)
-        , PrivEv(ev)
-    {
-    }
+        , PrivEv(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_DROP_REPLICATION;
@@ -64,9 +60,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Replication->SetState(TReplication::EState::Removing);
-        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
-        );
+        db.Table<Schema::Replications>()
+            .Key(Replication->GetId())
+            .Update(NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()));
 
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
@@ -77,15 +73,15 @@ public:
             target->Shutdown(ctx);
 
             target->SetStreamState(TReplication::EStreamState::Removing);
-            db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
-                NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
-            );
+            db.Table<Schema::SrcStreams>()
+                .Key(Replication->GetId(), tid)
+                .Update(NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
 
             if (record.GetCascade()) {
                 target->SetDstState(TReplication::EDstState::Removing);
-                db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
-                    NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
-                );
+                db.Table<Schema::Targets>()
+                    .Key(Replication->GetId(), tid)
+                    .Update(NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
             }
         }
 
@@ -156,4 +152,4 @@ void TController::RunTxDropReplication(TEvPrivate::TEvDropReplication::TPtr& ev,
     Execute(new TTxDropReplication(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

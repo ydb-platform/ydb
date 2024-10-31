@@ -9,9 +9,7 @@ class TController::TTxDropStreamResult: public TTxBase {
 public:
     explicit TTxDropStreamResult(TController* self, TEvPrivate::TEvDropStreamResult::TPtr& ev)
         : TTxBase("TxDropStreamResult", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_DROP_STREAM_RESULT;
@@ -86,4 +84,4 @@ void TController::RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& e
     Execute(new TTxDropStreamResult(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

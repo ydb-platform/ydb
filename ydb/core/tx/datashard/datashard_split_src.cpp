@@ -8,8 +8,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-
-class TDataShard::TTxSplit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSplit: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplit::TPtr Ev;
     bool SplitAlreadyFinished;
@@ -20,10 +19,11 @@ public:
     TTxSplit(TDataShard* ds, TEvDataShard::TEvSplit::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
-        , SplitAlreadyFinished(false)
-    {}
+        , SplitAlreadyFinished(false) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SPLIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SPLIT;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
@@ -35,13 +35,16 @@ public:
         if (Self->State == TShardState::Ready) {
             Self->SrcAckSplitTo.insert(Ev->Sender);
             Self->SrcSplitOpId = opId;
-            Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
+            Self->SrcSplitDescription =
+                std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
 
             // Persist split description
             TString splitDescr;
             bool serilaizeOk = Self->SrcSplitDescription->SerializeToString(&splitDescr);
             Y_ABORT_UNLESS(serilaizeOk, "Failed to serialize split/merge description");
-            db.Table<Schema::Sys>().Key(Schema::Sys_SrcSplitDescription).Update(NIceDb::TUpdate<Schema::Sys::Bytes>(splitDescr));
+            db.Table<Schema::Sys>()
+                .Key(Schema::Sys_SrcSplitDescription)
+                .Update(NIceDb::TUpdate<Schema::Sys::Bytes>(splitDescr));
 
             Self->PersistSys(db, Schema::Sys_SrcSplitOpId, Self->SrcSplitOpId);
 
@@ -86,7 +89,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         Self->SendCommittedReplies(std::move(Replies));
 
         if (SplitAlreadyFinished) {
@@ -113,14 +116,14 @@ void TDataShard::CheckSplitCanStart(const TActorContext& ctx) {
     }
 }
 
-
-class TDataShard::TTxStartSplit : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxStartSplit: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     explicit TTxStartSplit(TDataShard* ds)
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
-    {}
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) {}
 
-    TTxType GetTxType() const override { return TXTYPE_START_SPLIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_START_SPLIT;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State != TShardState::SplitSrcWaitForNoTxInFlight &&
@@ -193,8 +196,10 @@ public:
         // Just ignore if for now but we should only persist readsets for known TxId's
         VERIFY_TABLE_IS_EMPTY(InReadSets, false);
 
-        TVector<ui32> tablesToSnapshot(Self->SysTablesToTransferAtSplit,
-            Self->SysTablesToTransferAtSplit + Y_ARRAY_SIZE(Self->SysTablesToTransferAtSplit));
+        TVector<ui32> tablesToSnapshot(
+            Self->SysTablesToTransferAtSplit,
+            Self->SysTablesToTransferAtSplit + Y_ARRAY_SIZE(Self->SysTablesToTransferAtSplit)
+        );
 
         for (const auto& ti : Self->TableInfos) {
             tablesToSnapshot.push_back(ti.second->LocalTid);
@@ -204,11 +209,14 @@ public:
         }
 
         TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;
-        snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
-                                                Self->GetSnapshotManager().GetCompleteEdge(),
-                                                Self->GetSnapshotManager().GetIncompleteEdge(),
-                                                Self->GetSnapshotManager().GetImmediateWriteEdge(),
-                                                Self->GetSnapshotManager().GetLowWatermark());
+        snapContext = new TSplitSnapshotContext(
+            opId,
+            std::move(tablesToSnapshot),
+            Self->GetSnapshotManager().GetCompleteEdge(),
+            Self->GetSnapshotManager().GetIncompleteEdge(),
+            Self->GetSnapshotManager().GetImmediateWriteEdge(),
+            Self->GetSnapshotManager().GetLowWatermark()
+        );
 
         txc.Env.MakeSnapshot(snapContext);
 
@@ -226,16 +234,14 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &) override {
-    }
+    void Complete(const TActorContext&) override {}
 };
-
 
 NTabletFlatExecutor::ITransaction* TDataShard::CreateTxStartSplit() {
     return new TTxStartSplit(this);
 }
 
-class TDataShard::TTxSplitSnapshotComplete : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSplitSnapshotComplete: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TIntrusivePtr<TSplitSnapshotContext> SnapContext;
     bool ChangeExchangeSplit;
@@ -246,10 +252,11 @@ public:
     TTxSplitSnapshotComplete(TDataShard* ds, TIntrusivePtr<TSplitSnapshotContext> snapContext)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , SnapContext(snapContext)
-        , ChangeExchangeSplit(false)
-    {}
+        , ChangeExchangeSplit(false) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SPLIT_SNASHOT_COMPLETE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SPLIT_SNASHOT_COMPLETE;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Self->SrcSplitOpId;
@@ -275,7 +282,8 @@ public:
             const auto& dstRangeDescr = Self->SrcSplitDescription->GetDestinationRanges(i);
             const ui64 dstTablet = dstRangeDescr.GetTabletID();
 
-            TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot = new NKikimrTxDataShard::TEvSplitTransferSnapshot;
+            TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot =
+                new NKikimrTxDataShard::TEvSplitTransferSnapshot;
             snapshot->SetSrcTabletId(Self->TabletID());
             snapshot->SetOperationCookie(opId);
 
@@ -291,15 +299,18 @@ public:
                     TSerializedCellVec fromCells(dstRangeDescr.GetKeyRangeBegin());
                     TSerializedCellVec toCells(dstRangeDescr.GetKeyRangeEnd());
 
-                    auto cellsToRawValues = [&tableInfo] (const TSerializedCellVec& cells) {
+                    auto cellsToRawValues = [&tableInfo](const TSerializedCellVec& cells) {
                         TVector<TRawTypeValue> rawVals;
                         ui32 ki = 0;
                         for (; ki < cells.GetCells().size(); ++ki) {
                             rawVals.push_back(
-                                        cells.GetCells()[ki].IsNull() ?
-                                            TRawTypeValue() :
-                                            TRawTypeValue(cells.GetCells()[ki].Data(), cells.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId())
-                                            );
+                                cells.GetCells()[ki].IsNull() ? TRawTypeValue()
+                                                              : TRawTypeValue(
+                                                                    cells.GetCells()[ki].Data(),
+                                                                    cells.GetCells()[ki].Size(),
+                                                                    tableInfo.KeyColumnTypes[ki].GetTypeId()
+                                                                )
+                            );
                         }
                         // Extend with NULLs if needed
                         for (; ki < tableInfo.KeyColumnTypes.size(); ++ki) {
@@ -311,7 +322,7 @@ public:
                     TVector<TRawTypeValue> from = cellsToRawValues(fromCells);
                     TVector<TRawTypeValue> to;
                     if (!toCells.GetCells().empty()) { // special case: empty vec means +INF
-                       to = cellsToRawValues(toCells);
+                        to = cellsToRawValues(toCells);
                     }
 
                     // Apply dst range to user table
@@ -388,9 +399,9 @@ public:
                 // Persist snapshot data so that it can be sent if this datashard restarts
                 TString snapshotMeta;
                 Y_PROTOBUF_SUPPRESS_NODISCARD snapshot->SerializeToString(&snapshotMeta);
-                db.Table<Schema::SplitSrcSnapshots>()
-                        .Key(dstTablet)
-                        .Update(NIceDb::TUpdate<Schema::SplitSrcSnapshots::SnapshotMeta>(snapshotMeta));
+                db.Table<Schema::SplitSrcSnapshots>().Key(dstTablet).Update(
+                    NIceDb::TUpdate<Schema::SplitSrcSnapshots::SnapshotMeta>(snapshotMeta)
+                );
 
                 Self->SplitSrcSnapshotSender.SaveSnapshotForSending(dstTablet, snapshot);
             }
@@ -420,7 +431,7 @@ public:
         }
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
         Self->SplitSrcSnapshotSender.DoSend(ctx);
         if (ChangeExchangeSplit) {
@@ -430,13 +441,13 @@ public:
     }
 };
 
-
-NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext) {
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitSnapshotComplete(
+    TIntrusivePtr<TSplitSnapshotContext> snapContext
+) {
     return new TTxSplitSnapshotComplete(this, snapContext);
 }
 
-
-class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSplitTransferSnapshotAck: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
     bool AllDstAcksReceived;
@@ -447,10 +458,11 @@ public:
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , AllDstAcksReceived(false)
-        , ActivateTabletId(0)
-    {}
+        , ActivateTabletId(0) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
@@ -471,14 +483,15 @@ public:
         // Remove the row for acked snapshot
         db.Table<Schema::SplitSrcSnapshots>().Key(dstTabletId).Delete();
 
-        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done() && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
+        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done() &&
+            !Self->ChangeSenderActivator.Acked(dstTabletId)) {
             ActivateTabletId = dstTabletId;
         }
 
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         if (AllDstAcksReceived) {
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 ui64 opId = Self->SrcSplitOpId;
@@ -493,17 +506,17 @@ public:
     }
 };
 
-
-class TDataShard::TTxSplitPartitioningChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSplitPartitioningChanged: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     THashMap<TActorId, THashSet<ui64>> Waiters;
 
 public:
     TTxSplitPartitioningChanged(TDataShard* ds, THashMap<TActorId, THashSet<ui64>>&& waiters)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
-        , Waiters(std::move(waiters))
-    {}
+        , Waiters(std::move(waiters)) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SPLIT_PARTITIONING_CHANGED; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SPLIT_PARTITIONING_CHANGED;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_ABORT_UNLESS(!Self->ChangesQueue && Self->ChangeSenderActivator.AllAcked());
@@ -526,7 +539,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         for (const auto& [ackTo, opIds] : Waiters) {
             for (const ui64 opId : opIds) {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
@@ -576,8 +589,11 @@ void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, con
     }
 }
 
-NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitPartitioningChanged(THashMap<TActorId, THashSet<ui64>>&& waiters) {
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitPartitioningChanged(
+    THashMap<TActorId, THashSet<ui64>>&& waiters
+) {
     return new TTxSplitPartitioningChanged(this, std::move(waiters));
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

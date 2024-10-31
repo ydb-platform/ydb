@@ -8,12 +8,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TExecuteCommitWritesTxUnit : public TExecutionUnit {
+class TExecuteCommitWritesTxUnit: public TExecutionUnit {
 public:
     TExecuteCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::ExecuteCommitWritesTx, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::ExecuteCommitWritesTx, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
         if (DataShard.IsStopping()) {
@@ -62,8 +60,7 @@ public:
         return EExecutionStatus::ExecutedNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override {}
 };
 
 THolder<TExecutionUnit> CreateExecuteCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline) {

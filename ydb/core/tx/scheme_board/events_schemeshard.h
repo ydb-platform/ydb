@@ -14,12 +14,7 @@ namespace NSchemeshardEvents {
 struct TEvUpdateAck: public TEventPB<TEvUpdateAck, NKikimrSchemeBoard::TEvUpdateAck, TSchemeBoardEvents::EvUpdateAck> {
     TEvUpdateAck() = default;
 
-    explicit TEvUpdateAck(
-        const ui64 owner,
-        const ui64 generation,
-        const TPathId pathId,
-        const ui64 version
-    ) {
+    explicit TEvUpdateAck(const ui64 owner, const ui64 generation, const TPathId pathId, const ui64 version) {
         Record.SetOwner(owner);
         Record.SetGeneration(generation);
         Record.SetLocalPathId(pathId.LocalPathId);
@@ -28,15 +23,12 @@ struct TEvUpdateAck: public TEventPB<TEvUpdateAck, NKikimrSchemeBoard::TEvUpdate
     }
 
     TPathId GetPathId() const {
-        return TPathId(
-            Record.HasPathOwnerId() ? Record.GetPathOwnerId() : Record.GetOwner(),
-            Record.GetLocalPathId()
-        );
+        return TPathId(Record.HasPathOwnerId() ? Record.GetPathOwnerId() : Record.GetOwner(), Record.GetLocalPathId());
     }
 
     TString ToString() const override;
 };
 
-}  // NSchemeshardEvents
+}  // namespace NSchemeshardEvents
 
-}  // NKikimr::NSchemeBoard
+}  // namespace NKikimr::NSchemeBoard

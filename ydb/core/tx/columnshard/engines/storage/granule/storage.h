@@ -31,10 +31,7 @@ private:
 
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
-        : Counters(counters)
-    {
-
-    }
+        : Counters(counters) {}
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
         return Counters;
@@ -43,6 +40,7 @@ public:
     class TModificationGuard: TNonCopyable {
     private:
         TGranulesStat& Owner;
+
     public:
         TModificationGuard(TGranulesStat& storage)
             : Owner(storage) {
@@ -89,7 +87,6 @@ public:
         const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemorySize());
         Counters.OnIndexMetadataUsageBytes(value);
     }
-
 };
 
 class TGranulesStorage {
@@ -98,21 +95,27 @@ private:
     std::shared_ptr<IStoragesManager> StoragesManager;
     THashMap<ui64, std::shared_ptr<TGranuleMeta>> Tables; // pathId into Granule that equal to Table
     std::shared_ptr<TGranulesStat> Stats;
+
 public:
-    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const std::shared_ptr<IStoragesManager>& storagesManager)
+    TGranulesStorage(
+        const NColumnShard::TEngineLogsCounters counters,
+        const std::shared_ptr<IStoragesManager>& storagesManager
+    )
         : Counters(counters)
         , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters))
-    {
-
-    }
+        , Stats(std::make_shared<TGranulesStat>(Counters)) {}
 
     const std::shared_ptr<TGranulesStat>& GetStats() const {
         return Stats;
     }
 
-    std::shared_ptr<TGranuleMeta> RegisterTable(const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
-        auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
+    std::shared_ptr<TGranuleMeta> RegisterTable(
+        const ui64 pathId,
+        const NColumnShard::TGranuleDataCounters& counters,
+        const TVersionedIndex& versionedIndex
+    ) {
+        auto infoEmplace =
+            Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
         AFL_VERIFY(infoEmplace.second);
         return infoEmplace.first->second;
     }
@@ -141,7 +144,8 @@ public:
         }
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<ui64> pathIdFrom, const std::optional<ui64> pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>>
+    GetTables(const std::optional<ui64> pathIdFrom, const std::optional<ui64> pathIdTo) const {
         std::vector<std::shared_ptr<TGranuleMeta>> result;
         for (auto&& i : Tables) {
             if (pathIdFrom && i.first < *pathIdFrom) {
@@ -179,10 +183,14 @@ public:
         return Counters;
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
-    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& locksManager,
-        const std::set<ui64>& pathIds = Default<std::set<ui64>>(), const std::optional<ui64> waitingPriority = std::nullopt,
-        std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
+    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager
+    ) const;
+    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(
+        const std::shared_ptr<NDataLocks::TManager>& locksManager,
+        const std::set<ui64>& pathIds = Default<std::set<ui64>>(),
+        const std::optional<ui64> waitingPriority = std::nullopt,
+        std::shared_ptr<TGranuleMeta>* granuleResult = nullptr
+    ) const;
 };
 
 } // namespace NKikimr::NOlap

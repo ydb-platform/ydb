@@ -7,4 +7,4 @@ TString TEventTablesErased::DoDebugString() const {
     return "paths=" + JoinSeq(",", PathIds);
 }
 
-}
+} // namespace NKikimr::NColumnShard::NSubscriber

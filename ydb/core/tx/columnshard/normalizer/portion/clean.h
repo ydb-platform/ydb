@@ -35,18 +35,23 @@ public:
     }
 
     TCleanPortionsNormalizer(const TNormalizationController::TInitContext& info)
-        : TPortionsNormalizerBase(info) {
-    }
+        : TPortionsNormalizerBase(info) {}
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& /*schema*/) const override {
         return {};
     }
 
     virtual INormalizerTask::TPtr BuildTask(
-        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const override;
-    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+        std::vector<TPortionDataAccessor>&& portions,
+        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+    ) const override;
+    virtual TConclusion<bool>
+    DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
-    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const override;
+    virtual bool CheckPortion(
+        const NColumnShard::TTablesManager& tablesManager,
+        const TPortionDataAccessor& portionInfo
+    ) const override;
 };
 
 }   // namespace NKikimr::NOlap

@@ -1,5 +1,3 @@
 #include "adapter.h"
 
-namespace NKikimr::NSchemeShard::NBackground {
-
-}
+namespace NKikimr::NSchemeShard::NBackground {}

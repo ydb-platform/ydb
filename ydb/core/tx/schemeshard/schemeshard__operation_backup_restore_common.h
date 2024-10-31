@@ -18,9 +18,8 @@ class TConfigurePart: public TSubOperationState {
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TConfigurePart"
-                << ", opId: " << OperationId;
+        return TStringBuilder() << TKind::Name() << " TConfigurePart"
+                                << ", opId: " << OperationId;
     }
 
     static TVirtualTimestamp GetSnapshotTime(const TSchemeShard* ss, const TPathId& pathId) {
@@ -32,8 +31,7 @@ class TConfigurePart: public TSubOperationState {
 public:
     TConfigurePart(TTxState::ETxType type, TOperationId id)
         : TxType(type)
-        , OperationId(id)
-    {
+        , OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -81,24 +79,29 @@ protected:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TProposedWaitParts"
-                << ", opId: " << OperationId;
+        return TStringBuilder() << TKind::Name() << " TProposedWaitParts"
+                                << ", opId: " << OperationId;
     }
 
 public:
     TProposedWaitParts(TTxState::ETxType type, TOperationId id)
         : TxType(type)
-        , OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
-            , TEvDataShard::TEvProposeTransactionResult::EventType
-            , TEvPrivate::TEvOperationPlan::EventType }
+        , OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvDataShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType}
         );
     }
 
-    static void Bill(TOperationId operationId, const TPathId& pathId, const TShardIdx& shardIdx, ui64 ru, TOperationContext& context) {
+    static void Bill(
+        TOperationId operationId,
+        const TPathId& pathId,
+        const TShardIdx& shardIdx,
+        ui64 ru,
+        TOperationContext& context
+    ) {
         const auto path = TPath::Init(pathId, context.SS);
         const auto pathIdForDomainId = path.GetPathIdForDomain();
         const auto domainPath = TPath::Init(pathIdForDomainId, context.SS);
@@ -137,18 +140,18 @@ public:
         }
 
         const auto now = context.Ctx.Now();
-        const TString id = TStringBuilder() << operationId.GetTxId()
-            << "-" << pathId.OwnerId << "-" << pathId.LocalPathId
-            << "-" << shardIdx.GetOwnerId() << "-" << shardIdx.GetLocalId();
+        const TString id = TStringBuilder()
+                           << operationId.GetTxId() << "-" << pathId.OwnerId << "-" << pathId.LocalPathId << "-"
+                           << shardIdx.GetOwnerId() << "-" << shardIdx.GetLocalId();
 
         const TString billRecord = TBillRecord()
-            .Id(id)
-            .CloudId(attrs.at("cloud_id"))
-            .FolderId(attrs.at("folder_id"))
-            .ResourceId(attrs.at("database_id"))
-            .SourceWt(now)
-            .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
-            .ToString();
+                                       .Id(id)
+                                       .CloudId(attrs.at("cloud_id"))
+                                       .FolderId(attrs.at("folder_id"))
+                                       .ResourceId(attrs.at("database_id"))
+                                       .SourceWt(now)
+                                       .Usage(TBillRecord::RequestUnits(Max(ui64(1), ru), now))
+                                       .ToString();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Make a bill"
             << ": kind# " << TKind::Name()
@@ -157,11 +160,13 @@ public:
             << ", domainPathId# " << pathIdForDomainId
             << ", record# " << billRecord);
 
-        context.OnComplete.Send(NMetering::MakeMeteringServiceID(),
-            new NMetering::TEvMetering::TEvWriteMeteringJson(std::move(billRecord)));
+        context.OnComplete.Send(
+            NMetering::MakeMeteringServiceID(), new NMetering::TEvMetering::TEvWriteMeteringJson(std::move(billRecord))
+        );
     }
 
-    static void CollectStats(TOperationId operationId, const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
+    static void
+    CollectStats(TOperationId operationId, const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
         const auto& evRecord = ev->Get()->Record;
 
         if (!evRecord.HasOpResult() || !evRecord.GetOpResult().HasSuccess()) {
@@ -204,19 +209,22 @@ public:
             if (result.HasBytesProcessed()) {
                 txState.DataTotalSize += result.GetBytesProcessed();
 
-                db.Table<Schema::TxInFlightV2>().Key(operationId.GetTxId(), operationId.GetSubTxId()).Update(
-                            NIceDb::TUpdate<Schema::TxInFlightV2::DataTotalSize>(txState.DataTotalSize));
+                db.Table<Schema::TxInFlightV2>()
+                    .Key(operationId.GetTxId(), operationId.GetSubTxId())
+                    .Update(NIceDb::TUpdate<Schema::TxInFlightV2::DataTotalSize>(txState.DataTotalSize));
             }
         } else {
             if (result.HasExplain()) {
                 TString explain = result.GetExplain();
 
                 if (context.SS->IsLocalId(shardIdx)) {
-                    db.Table<Schema::ShardBackupStatus>().Key(operationId.GetTxId(), shardIdx.GetLocalId()).Update(
-                        NIceDb::TUpdate<Schema::ShardBackupStatus::Explain>(explain));
+                    db.Table<Schema::ShardBackupStatus>()
+                        .Key(operationId.GetTxId(), shardIdx.GetLocalId())
+                        .Update(NIceDb::TUpdate<Schema::ShardBackupStatus::Explain>(explain));
                 } else {
-                    db.Table<Schema::MigratedShardBackupStatus>().Key(operationId.GetTxId(), shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
-                        NIceDb::TUpdate<Schema::MigratedShardBackupStatus::Explain>(explain));
+                    db.Table<Schema::MigratedShardBackupStatus>()
+                        .Key(operationId.GetTxId(), shardIdx.GetOwnerId(), shardIdx.GetLocalId())
+                        .Update(NIceDb::TUpdate<Schema::MigratedShardBackupStatus::Explain>(explain));
                 }
             }
         }
@@ -299,19 +307,18 @@ class TAborting: public TProposedWaitParts<TKind> {
     using TProposedWaitParts<TKind>::TxType;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TAborting"
-                << ", opId: " << OperationId;
+        return TStringBuilder() << TKind::Name() << " TAborting"
+                                << ", opId: " << OperationId;
     }
 
 public:
     TAborting(TTxState::ETxType type, TOperationId id)
-        : TProposedWaitParts<TKind>(type, id)
-    {
-        this->IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
-            , TEvDataShard::TEvProposeTransactionResult::EventType
-            , TEvPrivate::TEvOperationPlan::EventType }
+        : TProposedWaitParts<TKind>(type, id) {
+        this->IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvDataShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType}
         );
     }
 
@@ -334,8 +341,7 @@ public:
         for (TTxState::TShardOperation& shard : txState->Shards) {
             if (shard.Operation < TTxState::ProposedWaitParts) {
                 shard.Operation = TTxState::ProposedWaitParts;
-                context.SS->PersistUpdateTxShard(
-                    db, OperationId, shard.Idx, shard.Operation);
+                context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
             }
         }
 
@@ -375,16 +381,14 @@ class TPropose: public TSubOperationState {
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TPropose"
-                << ", opId: " << OperationId;
+        return TStringBuilder() << TKind::Name() << " TPropose"
+                                << ", opId: " << OperationId;
     }
 
 public:
     TPropose(TTxState::ETxType type, TOperationId id)
         : TxType(type)
-        , OperationId(id)
-    {
+        , OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
@@ -466,52 +470,52 @@ class TBackupRestoreOperationBase: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state, TOperationContext& context) const {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts: {
-            TTxState* txState = context.SS->FindTx(OperationId);
-            Y_ABORT_UNLESS(txState);
-            Y_ABORT_UNLESS(txState->TxType == TxType);
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts: {
+                TTxState* txState = context.SS->FindTx(OperationId);
+                Y_ABORT_UNLESS(txState);
+                Y_ABORT_UNLESS(txState->TxType == TxType);
 
-            if (txState->Cancel) {
-                if (txState->State == TTxState::Done) {
-                    return TTxState::Done;
+                if (txState->Cancel) {
+                    if (txState->State == TTxState::Done) {
+                        return TTxState::Done;
+                    }
+
+                    Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
+                    return TTxState::Aborting;
                 }
-
-                Y_ABORT_UNLESS(txState->State == TTxState::Aborting);
-                return TTxState::Aborting;
+                return TTxState::Done;
             }
-            return TTxState::Done;
-        }
-        case TTxState::Aborting:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Aborting:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigurePart<TKind>>(TxType, OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose<TKind>>(TxType, OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<TProposedWaitParts<TKind>>(TxType, OperationId);
-        case TTxState::Aborting:
-            return MakeHolder<TAborting<TKind, TEvCancel>>(TxType, OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigurePart<TKind>>(TxType, OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose<TKind>>(TxType, OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<TProposedWaitParts<TKind>>(TxType, OperationId);
+            case TTxState::Aborting:
+                return MakeHolder<TAborting<TKind, TEvCancel>>(TxType, OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -526,21 +530,24 @@ class TBackupRestoreOperationBase: public TSubOperation {
 
 public:
     TBackupRestoreOperationBase(
-            TTxState::ETxType type, TPathElement::EPathState lock,
-            TOperationId id, const TTxTransaction& tx)
+        TTxState::ETxType type,
+        TPathElement::EPathState lock,
+        TOperationId id,
+        const TTxTransaction& tx
+    )
         : TSubOperation(id, tx)
         , TxType(type)
-        , Lock(lock)
-    {
-    }
+        , Lock(lock) {}
 
     TBackupRestoreOperationBase(
-            TTxState::ETxType type, TPathElement::EPathState lock,
-            TOperationId id, TTxState::ETxState state)
+        TTxState::ETxType type,
+        TPathElement::EPathState lock,
+        TOperationId id,
+        TTxState::ETxState state
+    )
         : TSubOperation(id, state)
         , TxType(type)
-        , Lock(lock)
-    {
+        , Lock(lock) {
         SetState(state);
     }
 
@@ -564,7 +571,7 @@ public:
 
         TKind::PersistTask(path->PathId, Transaction, context);
 
-        for (auto splitTx: table->GetSplitOpsInFlight()) {
+        for (auto splitTx : table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
@@ -584,33 +591,28 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasWorkingDir()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Malformed request: no working dir");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Malformed request: no working dir");
             return result;
         }
 
         if (!TKind::HasTask(Transaction)) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "Malformed request");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Malformed request");
             return result;
         }
 
         if (name.empty()) {
-            result->SetError(
-                NKikimrScheme::StatusInvalidParameter,
-                "No table name in task");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "No table name in task");
             return result;
         }
 
         TPath path = TPath::Resolve(parentPath, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -659,4 +661,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard

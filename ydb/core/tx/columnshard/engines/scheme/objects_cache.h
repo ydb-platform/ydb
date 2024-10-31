@@ -29,28 +29,32 @@ public:
         AFL_VERIFY(Fields.emplace(fingerprint, f).second);
     }
     void RegisterColumnFeatures(const TString& fingerprint, const std::shared_ptr<TColumnFeatures>& f) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "register_column_features")("fp", fingerprint)("info", f->DebugString());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "register_column_features")("fp", fingerprint)("info", f->DebugString());
         AFL_VERIFY(ColumnFeatures.emplace(fingerprint, f).second);
     }
     std::shared_ptr<arrow::Field> GetField(const TString& fingerprint) const {
         auto it = Fields.find(fingerprint);
         if (it == Fields.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_miss")("fp", fingerprint)("count", Fields.size())(
-                "acc", AcceptionFieldsCount);
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "get_field_miss")("fp", fingerprint)("count", Fields.size())("acc", AcceptionFieldsCount);
             return nullptr;
         }
         if (++AcceptionFieldsCount % 1000 == 0) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_field_accept")("fp", fingerprint)("count", Fields.size())(
-                "acc", AcceptionFieldsCount);
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "get_field_accept")("fp", fingerprint)("count", Fields.size())("acc", AcceptionFieldsCount);
         }
         return it->second;
     }
     template <class TConstructor>
-    TConclusion<std::shared_ptr<TColumnFeatures>> GetOrCreateColumnFeatures(const TString& fingerprint, const TConstructor& constructor) {
+    TConclusion<std::shared_ptr<TColumnFeatures>>
+    GetOrCreateColumnFeatures(const TString& fingerprint, const TConstructor& constructor) {
         auto it = ColumnFeatures.find(fingerprint);
         if (it == ColumnFeatures.end()) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_miss")("fp", UrlEscapeRet(fingerprint))(
-                "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "get_column_features_miss")("fp", UrlEscapeRet(fingerprint))("count", ColumnFeatures.size())(
+                "acc", AcceptionFeaturesCount
+            );
             TConclusion<std::shared_ptr<TColumnFeatures>> resultConclusion = constructor();
             if (resultConclusion.IsFail()) {
                 return resultConclusion;
@@ -59,8 +63,11 @@ public:
             AFL_VERIFY(it->second);
         } else {
             if (++AcceptionFeaturesCount % 1000 == 0) {
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))(
-                    "count", ColumnFeatures.size())("acc", AcceptionFeaturesCount);
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)
+                ("event",
+                 "get_column_features_accept")("fp", UrlEscapeRet(fingerprint))("count", ColumnFeatures.size())(
+                    "acc", AcceptionFeaturesCount
+                );
             }
         }
         return it->second;

@@ -17,7 +17,8 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     SharingTask = std::make_shared<NOlap::NDataSharing::TDestinationSession>();
     auto conclusion = SharingTask->DeserializeDataFromProto(txBody, owner.GetIndexAs<NOlap::TColumnEngineForLogs>());
     if (!conclusion) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_start_data_sharing_from_initiator")("error", conclusion.GetErrorMessage());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "cannot_parse_start_data_sharing_from_initiator")("error", conclusion.GetErrorMessage());
         return false;
     }
 
@@ -25,17 +26,20 @@ bool TSharingTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     if (currentSession) {
         SessionExistsFlag = true;
         SharingTask = currentSession;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "session_exists")("session_id", SharingTask->GetSessionId())("info", SharingTask->DebugString());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "session_exists")("session_id", SharingTask->GetSessionId())("info", SharingTask->DebugString());
     } else {
         SharingTask->Confirm();
         TxPropose = SharingSessionsManager->ProposeDestSession(&owner, SharingTask);
     }
 
-
     return true;
 }
 
-TSharingTransactionOperator::TProposeResult TSharingTransactionOperator::DoStartProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& txc) {
+TSharingTransactionOperator::TProposeResult TSharingTransactionOperator::DoStartProposeOnExecute(
+    TColumnShard& /*owner*/,
+    NTabletFlatExecutor::TTransactionContext& txc
+) {
     if (!SessionExistsFlag) {
         AFL_VERIFY(!!TxPropose);
         AFL_VERIFY(TxPropose->Execute(txc, NActors::TActivationContext::AsActorContext()));
@@ -52,7 +56,10 @@ void TSharingTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner
 }
 
 bool TSharingTransactionOperator::ProgressOnExecute(
-    TColumnShard& /*owner*/, const NOlap::TSnapshot& /*version*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+    TColumnShard& /*owner*/,
+    const NOlap::TSnapshot& /*version*/,
+    NTabletFlatExecutor::TTransactionContext& /*txc*/
+) {
     return true;
 }
 
@@ -84,4 +91,4 @@ bool TSharingTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const
     return true;
 }
 
-}
+} // namespace NKikimr::NColumnShard

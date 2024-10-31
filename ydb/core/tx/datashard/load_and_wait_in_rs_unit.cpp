@@ -7,34 +7,24 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TLoadAndWaitInRSUnit : public TExecutionUnit {
+class TLoadAndWaitInRSUnit: public TExecutionUnit {
 public:
-    TLoadAndWaitInRSUnit(TDataShard &dataShard,
-                         TPipeline &pipeline);
+    TLoadAndWaitInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TLoadAndWaitInRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TLoadAndWaitInRSUnit::TLoadAndWaitInRSUnit(TDataShard &dataShard,
-                                           TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::LoadAndWaitInRS, true, dataShard, pipeline)
-{
-}
+TLoadAndWaitInRSUnit::TLoadAndWaitInRSUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::LoadAndWaitInRS, true, dataShard, pipeline) {}
 
-TLoadAndWaitInRSUnit::~TLoadAndWaitInRSUnit()
-{
-}
+TLoadAndWaitInRSUnit::~TLoadAndWaitInRSUnit() {}
 
-bool TLoadAndWaitInRSUnit::IsReadyToExecute(TOperation::TPtr op) const
-{
+bool TLoadAndWaitInRSUnit::IsReadyToExecute(TOperation::TPtr op) const {
     // Check if operation expects input read sets.
     if (op->InReadSets().empty())
         return true;
@@ -51,10 +41,8 @@ bool TLoadAndWaitInRSUnit::IsReadyToExecute(TOperation::TPtr op) const
     return false;
 }
 
-EExecutionStatus TLoadAndWaitInRSUnit::Execute(TOperation::TPtr op,
-                                               TTransactionContext &txc,
-                                               const TActorContext &ctx)
-{
+EExecutionStatus
+TLoadAndWaitInRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     if (op->InReadSets().empty())
         return EExecutionStatus::Executed;
 
@@ -74,14 +62,9 @@ EExecutionStatus TLoadAndWaitInRSUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TLoadAndWaitInRSUnit::Complete(TOperation::TPtr,
-                                    const TActorContext &)
-{
-}
+void TLoadAndWaitInRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard,
-                                                  TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TLoadAndWaitInRSUnit(dataShard, pipeline));
 }
 

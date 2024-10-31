@@ -16,8 +16,8 @@ private:
         if (!DeadlockControlInstant) {
             DeadlockControlInstant = now;
         } else if (now - *DeadlockControlInstant > TDuration::Seconds(2)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tx_timeout")("lock", LockId)("tx_id", GetTxId())(
-                "d", now - *DeadlockControlInstant);
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "tx_timeout")("lock", LockId)("tx_id", GetTxId())("d", now - *DeadlockControlInstant);
             DeadlockControlInstant = now;
             OnTimeout(owner);
             return true;
@@ -28,9 +28,10 @@ private:
 public:
     using TBase::TBase;
 
-    virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(TColumnShard& owner, const ui64 recvTabletId) const = 0;
-    virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
-        TColumnShard& owner, const ui64 sendTabletId, const bool broken) const = 0;
+    virtual std::unique_ptr<NTabletFlatExecutor::ITransaction>
+    CreateReceiveResultAckTx(TColumnShard& owner, const ui64 recvTabletId) const = 0;
+    virtual std::unique_ptr<NTabletFlatExecutor::ITransaction>
+    CreateReceiveBrokenFlagTx(TColumnShard& owner, const ui64 sendTabletId, const bool broken) const = 0;
     virtual NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() const = 0;
 };
 

@@ -39,7 +39,11 @@ private:
 public:
     template <class TAggregator, class TChunkInfo>
     static void AggregateIndexChunksData(
-        const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::set<ui32>* columnIds, const bool validation) {
+        const TAggregator& aggr,
+        const std::vector<TChunkInfo>& chunks,
+        const std::set<ui32>* columnIds,
+        const bool validation
+    ) {
         if (columnIds) {
             auto itColumn = columnIds->begin();
             auto itRecord = chunks.begin();
@@ -48,8 +52,8 @@ public:
                 if (itRecord->GetEntityId() < *itColumn) {
                     ++itRecord;
                 } else if (*itColumn < itRecord->GetEntityId()) {
-                    AFL_VERIFY(!validation || recordsInEntityCount)("problem", "validation")("reason", "no_chunks_for_column")(
-                        "column_id", *itColumn);
+                    AFL_VERIFY(!validation || recordsInEntityCount)
+                    ("problem", "validation")("reason", "no_chunks_for_column")("column_id", *itColumn);
                     ++itColumn;
                     recordsInEntityCount = 0;
                 } else {
@@ -66,11 +70,10 @@ public:
     }
 
     explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
-        : PortionInfo(portionInfo) {
-    }
+        : PortionInfo(portionInfo) {}
 
-    static TConclusion<TPortionDataAccessor> BuildFromProto(
-        const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
+    static TConclusion<TPortionDataAccessor>
+    BuildFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
 
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
@@ -123,12 +126,13 @@ public:
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TIndexInfo& indexInfo) const;
     void FillBlobIdsByStorage(THashMap<TString, THashSet<TUnifiedBlobId>>& result, const TVersionedIndex& index) const;
 
-    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> RestoreEntityChunks(
-        NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
+    THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>>
+    RestoreEntityChunks(NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
 
-    THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
+    THashMap<TChunkAddress, TString>
+    DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
     THashMap<TString, THashSet<TUnifiedBlobId>> GetBlobIdsByStorage(const TIndexInfo& indexInfo) const {
         THashMap<TString, THashSet<TUnifiedBlobId>> result;
@@ -175,7 +179,11 @@ public:
             }
         }
 
-        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue, const bool needCache = true)
+        TAssembleBlobInfo(
+            const ui32 rowsCount,
+            const std::shared_ptr<arrow::Scalar>& defValue,
+            const bool needCache = true
+        )
             : DefaultRowsCount(rowsCount)
             , DefaultValue(defValue)
             , NeedCache(needCache) {
@@ -203,8 +211,11 @@ public:
             return DefaultRowsCount && !Data;
         }
 
-        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
-        NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader) const;
+        TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader
+        ) const;
+        NArrow::NAccessor::TDeserializeChunkedArray::TChunk BuildDeserializeChunk(
+            const std::shared_ptr<TColumnLoader>& loader
+        ) const;
     };
 
     class TPreparedColumn {
@@ -289,10 +300,11 @@ public:
 
         TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount)
             : Columns(std::move(columns))
-            , RowsCount(rowsCount) {
-        }
+            , RowsCount(rowsCount) {}
 
-        TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;
+        TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(
+            const std::set<ui32>& sequentialColumnIds
+        ) const;
     };
 
     class TColumnAssemblingInfo {
@@ -306,7 +318,10 @@ public:
 
     public:
         TColumnAssemblingInfo(
-            const ui32 recordsCount, const std::shared_ptr<TColumnLoader>& dataLoader, const std::shared_ptr<TColumnLoader>& resultLoader)
+            const ui32 recordsCount,
+            const std::shared_ptr<TColumnLoader>& dataLoader,
+            const std::shared_ptr<TColumnLoader>& resultLoader
+        )
             : ColumnId(resultLoader->GetColumnId())
             , RecordsCount(recordsCount)
             , DataLoader(dataLoader)
@@ -314,8 +329,8 @@ public:
             AFL_VERIFY(ResultLoader);
             if (DataLoader) {
                 AFL_VERIFY(ResultLoader->GetColumnId() == DataLoader->GetColumnId());
-                AFL_VERIFY(DataLoader->GetField()->IsCompatibleWith(ResultLoader->GetField()))("data", DataLoader->GetField()->ToString())(
-                    "result", ResultLoader->GetField()->ToString());
+                AFL_VERIFY(DataLoader->GetField()->IsCompatibleWith(ResultLoader->GetField()))
+                ("data", DataLoader->GetField()->ToString())("result", ResultLoader->GetField()->ToString());
             }
         }
 
@@ -332,21 +347,31 @@ public:
 
         TPreparedColumn Compile() {
             if (BlobsInfo.empty()) {
-                BlobsInfo.emplace_back(
-                    TAssembleBlobInfo(RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()));
+                BlobsInfo.emplace_back(TAssembleBlobInfo(
+                    RecordsCount, DataLoader ? DataLoader->GetDefaultValue() : ResultLoader->GetDefaultValue()
+                ));
                 return TPreparedColumn(std::move(BlobsInfo), ResultLoader);
             } else {
-                AFL_VERIFY(RecordsCountByChunks == RecordsCount)("by_chunks", RecordsCountByChunks)("expected", RecordsCount);
+                AFL_VERIFY(RecordsCountByChunks == RecordsCount)
+                ("by_chunks", RecordsCountByChunks)("expected", RecordsCount);
                 AFL_VERIFY(DataLoader);
                 return TPreparedColumn(std::move(BlobsInfo), DataLoader);
             }
         }
     };
 
-    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
-    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
-        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
+    TPreparedBatchData PrepareForAssemble(
+        const ISnapshotSchema& dataSchema,
+        const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TString>& blobsData,
+        const std::optional<TSnapshot>& defaultSnapshot = std::nullopt
+    ) const;
+    TPreparedBatchData PrepareForAssemble(
+        const ISnapshotSchema& dataSchema,
+        const ISnapshotSchema& resultSchema,
+        THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData,
+        const std::optional<TSnapshot>& defaultSnapshot = std::nullopt
+    ) const;
 
     class TPage {
     private:
@@ -355,11 +380,14 @@ public:
         YDB_READONLY(ui32, RecordsCount, 0);
 
     public:
-        TPage(std::vector<const TColumnRecord*>&& records, std::vector<const TIndexChunk*>&& indexes, const ui32 recordsCount)
+        TPage(
+            std::vector<const TColumnRecord*>&& records,
+            std::vector<const TIndexChunk*>&& indexes,
+            const ui32 recordsCount
+        )
             : Records(std::move(records))
             , Indexes(std::move(indexes))
-            , RecordsCount(recordsCount) {
-        }
+            , RecordsCount(recordsCount) {}
     };
 
     const std::vector<TColumnRecord>& GetRecords() const {

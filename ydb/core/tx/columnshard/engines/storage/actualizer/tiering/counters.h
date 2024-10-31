@@ -17,10 +17,10 @@ private:
     std::shared_ptr<NColumnShard::TValueAggregationAgent> DifferenceWaitToDelete;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForCompaction;
     NMonitoring::TDynamicCounters::TCounterPtr SkipEvictionForLimit;
+
 public:
     TTieringGlobalCounters()
-        : TBase("TieringActualizer")
-    {
+        : TBase("TieringActualizer") {
         QueueSizeToEvict = TBase::GetValueAutoAggregations("Granule/Eviction/QueueSize");
         QueueSizeToDelete = TBase::GetValueAutoAggregations("Granule/Deletion/QueueSize");
         DifferenceWaitToEvict = TBase::GetValueAutoAggregations("Granule/Eviction/WaitingInSeconds");
@@ -52,7 +52,6 @@ public:
     static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildDifferenceWaitToDelete() {
         return Singleton<TTieringGlobalCounters>()->DifferenceWaitToDelete->GetClient();
     }
-
 };
 
 class TTieringCounters {
@@ -70,9 +69,7 @@ public:
         , DifferenceWaitToEvict(TTieringGlobalCounters::BuildDifferenceWaitToEvict())
         , DifferenceWaitToDelete(TTieringGlobalCounters::BuildDifferenceWaitToDelete())
         , SkipEvictionForCompaction(TTieringGlobalCounters::GetSkipEvictionForCompaction())
-        , SkipEvictionForLimit(TTieringGlobalCounters::GetSkipEvictionForLimit()) {
-    }
-
+        , SkipEvictionForLimit(TTieringGlobalCounters::GetSkipEvictionForLimit()) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

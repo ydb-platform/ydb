@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap {
 class IStoragesManager;
 class IBlobsStorageOperator;
-}
+} // namespace NKikimr::NOlap
 
 namespace NKikimrTxColumnShard {
 class TBackupTxBody;
@@ -17,9 +17,14 @@ namespace NKikimr::NOlap::NExport {
 
 class IStorageInitializer {
 protected:
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto) = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(
+        const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto
+    ) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardExportProto::TStorageInitializerContainer& proto) const = 0;
-    virtual TConclusion<std::shared_ptr<IBlobsStorageOperator>> DoInitializeOperator(const std::shared_ptr<IStoragesManager>& storages) const = 0;
+    virtual TConclusion<std::shared_ptr<IBlobsStorageOperator>> DoInitializeOperator(
+        const std::shared_ptr<IStoragesManager>& storages
+    ) const = 0;
+
 public:
     using TProto = NKikimrColumnShardExportProto::TStorageInitializerContainer;
     using TFactory = NObjectFactory::TObjectFactory<IStorageInitializer, TString>;
@@ -29,7 +34,9 @@ public:
         return DoDeserializeFromProto(proto);
     }
 
-    TConclusion<std::shared_ptr<IBlobsStorageOperator>> InitializeOperator(const std::shared_ptr<IStoragesManager>& storages) const {
+    TConclusion<std::shared_ptr<IBlobsStorageOperator>> InitializeOperator(
+        const std::shared_ptr<IStoragesManager>& storages
+    ) const {
         return DoInitializeOperator(storages);
     }
 
@@ -43,10 +50,13 @@ public:
 class TStorageInitializerContainer: public NBackgroundTasks::TInterfaceProtoContainer<IStorageInitializer> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IStorageInitializer>;
+
 public:
     using TBase::TBase;
 
-    static TConclusion<TStorageInitializerContainer> BuildFromProto(const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto) {
+    static TConclusion<TStorageInitializerContainer> BuildFromProto(
+        const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto
+    ) {
         TStorageInitializerContainer result;
         if (!result.DeserializeFromProto(proto)) {
             return TConclusionStatus::Fail("cannot parse proto as TSelectorContainer");
@@ -60,4 +70,4 @@ public:
         return TBase::SerializeToProto().DebugString();
     }
 };
-}
+} // namespace NKikimr::NOlap::NExport

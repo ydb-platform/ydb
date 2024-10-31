@@ -10,11 +10,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TExportInfo::TPtr exportInfo
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+MkDirPropose(TSchemeShard* ss, TTxId txId, const TExportInfo::TPtr exportInfo) {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 
@@ -35,11 +32,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TExportInfo::TPtr exportInfo
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+CopyTablesPropose(TSchemeShard* ss, TTxId txId, const TExportInfo::TPtr exportInfo) {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 
@@ -84,8 +78,11 @@ static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, c
     return record.GetPathDescription();
 }
 
-void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& description,
-        const TPathId& exportItemPathId) {
+void FillSetValForSequences(
+    TSchemeShard* ss,
+    NKikimrSchemeOp::TTableDescription& description,
+    const TPathId& exportItemPathId
+) {
     NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnSetVal(true);
 
@@ -108,12 +105,8 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
     }
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TExportInfo::TPtr exportInfo,
-    ui32 itemIdx
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+BackupPropose(TSchemeShard* ss, TTxId txId, const TExportInfo::TPtr exportInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
@@ -135,8 +128,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
         auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
         if (sourceDescription.HasTable()) {
-            FillSetValForSequences(
-                ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+            FillSetValForSequences(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         }
         task.MutableTable()->CopyFrom(sourceDescription);
     }
@@ -145,8 +137,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     task.SetSnapshotTxId(exportInfo->SnapshotTxId);
 
     switch (exportInfo->Kind) {
-    case TExportInfo::EKind::YT:
-        {
+        case TExportInfo::EKind::YT: {
             Ydb::Export::ExportToYtSettings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
 
@@ -157,11 +148,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetToken(exportSettings.token());
             backupSettings.SetTablePattern(exportSettings.items(itemIdx).destination_path());
             backupSettings.SetUseTypeV3(exportSettings.use_type_v3());
-        }
-        break;
+        } break;
 
-    case TExportInfo::EKind::S3:
-        {
+        case TExportInfo::EKind::S3: {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
 
@@ -176,14 +165,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
 
             switch (exportSettings.scheme()) {
-            case Ydb::Export::ExportToS3Settings::HTTP:
-                backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-                break;
-            case Ydb::Export::ExportToS3Settings::HTTPS:
-                backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTPS);
-                break;
-            default:
-                Y_ABORT("Unknown scheme");
+                case Ydb::Export::ExportToS3Settings::HTTP:
+                    backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+                    break;
+                case Ydb::Export::ExportToS3Settings::HTTPS:
+                    backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTPS);
+                    break;
+                default:
+                    Y_ABORT("Unknown scheme");
             }
 
             if (const auto region = exportSettings.region()) {
@@ -193,19 +182,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             if (const auto compression = exportSettings.compression()) {
                 Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));
             }
-        }
-        break;
+        } break;
     }
 
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TExportInfo::TPtr exportInfo,
-    ui32 itemIdx
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+DropPropose(TSchemeShard* ss, TTxId txId, const TExportInfo::TPtr exportInfo, ui32 itemIdx) {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
     auto& modifyScheme = *propose->Record.AddTransaction();
@@ -221,11 +205,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TExportInfo::TPtr exportInfo
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+DropPropose(TSchemeShard* ss, TTxId txId, const TExportInfo::TPtr exportInfo) {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
     auto& modifyScheme = *propose->Record.AddTransaction();
@@ -241,10 +222,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
-    const TExportInfo::TPtr exportInfo,
-    TTxId backupTxId
-) {
+THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(const TExportInfo::TPtr exportInfo, TTxId backupTxId) {
     auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>();
 
     auto& record = propose->Record;
@@ -263,5 +241,5 @@ TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx) {
     return TStringBuilder() << exportPathName << "/" << itemIdx;
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

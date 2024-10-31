@@ -11,11 +11,17 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
     }
     auto& table = context.GetOriginalEntityAsVerified<TInStoreTable>();
     auto sharding = table.GetTableInfo()->GetShardingVerified(table.GetTableSchemaVerified());
-    for (auto&& alter : context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers()) {
+    for (auto&& alter :
+         context.GetModification()->GetAlterColumnTable().GetAlterShards().GetTransfer().GetTransfers()) {
         NKikimrColumnShardDataSharingProto::TDestinationSession destinationSession;
         destinationSession.SetSessionId(alter.GetSessionId());
-        *destinationSession.MutableInitiatorController() = NKikimr::NOlap::NDataSharing::TInitiatorControllerContainer(
-            std::make_shared<NKikimr::NOlap::NDataSharing::TSSInitiatorController>(context.GetSSOperationContext()->SS->TabletID(), 0)).SerializeToProto();
+        *destinationSession.MutableInitiatorController() =
+            NKikimr::NOlap::NDataSharing::TInitiatorControllerContainer(
+                std::make_shared<NKikimr::NOlap::NDataSharing::TSSInitiatorController>(
+                    context.GetSSOperationContext()->SS->TabletID(), 0
+                )
+            )
+                .SerializeToProto();
         {
             auto& pathIdRemap = *destinationSession.AddPathIds();
             pathIdRemap.SetSourcePathId(context.GetOriginalEntity().GetPathId().LocalPathId);
@@ -30,16 +36,22 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
         for (auto&& i : alter.GetSourceTabletIds()) {
             destinationSession.MutableTransferContext()->AddSourceTabletIds(i);
         }
-        AFL_VERIFY(DestinationSessions.emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession).second);
+        AFL_VERIFY(DestinationSessions
+                       .emplace(destinationSession.GetTransferContext().GetDestinationTabletId(), destinationSession)
+                       .second);
         AFL_VERIFY(ShardIdsUsage.emplace(alter.GetDestinationTabletId()).second);
     }
     const auto& inStoreOriginal = context.GetOriginalEntityAsVerified<TInStoreTable>();
-    auto targetInfo = std::make_shared<TColumnTableInfo>(inStoreOriginal.GetTableInfoVerified().AlterVersion,
-        inStoreOriginal.GetTableInfoVerified().Description, TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(), context.GetModification()->GetAlterColumnTable());
+    auto targetInfo = std::make_shared<TColumnTableInfo>(
+        inStoreOriginal.GetTableInfoVerified().AlterVersion,
+        inStoreOriginal.GetTableInfoVerified().Description,
+        TMaybe<NKikimrSchemeOp::TColumnStoreSharding>(),
+        context.GetModification()->GetAlterColumnTable()
+    );
     TEntityInitializationContext eContext(context.GetSSOperationContext());
     TargetInStoreTable = std::make_shared<TInStoreTable>(context.GetOriginalEntity().GetPathId(), targetInfo, eContext);
 
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

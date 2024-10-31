@@ -23,4 +23,4 @@ ui64 ICSController::GetGuaranteeIndexationStartBytesLimit() const {
     const ui64 defaultValue = NColumnShard::TSettings::GuaranteeIndexationStartBytesLimit;
     return DoGetGuaranteeIndexationStartBytesLimit(defaultValue);
 }
-}
+} // namespace NKikimr::NYDBTest

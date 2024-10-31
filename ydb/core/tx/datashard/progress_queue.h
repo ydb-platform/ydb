@@ -8,17 +8,16 @@ template <typename T, typename TDestruct, typename TEvent>
 class TTxProgressQueue {
     bool HasInFly;
     TOneOneQueueInplace<T, 32> Queue;
+
 public:
     TTxProgressQueue()
-        : HasInFly(false)
-    {}
+        : HasInFly(false) {}
 
     ~TTxProgressQueue() {
-        while (T head = Queue.Pop())
-            TDestruct::Destroy(head);
+        while (T head = Queue.Pop()) TDestruct::Destroy(head);
     }
 
-    void Progress(T x, const TActorContext &ctx) {
+    void Progress(T x, const TActorContext& ctx) {
         if (!HasInFly) {
             Y_DEBUG_ABORT_UNLESS(!Queue.Head());
             ctx.Send(ctx.SelfID, new TEvent(x));
@@ -28,7 +27,7 @@ public:
         }
     }
 
-    void Reset(const TActorContext &ctx) {
+    void Reset(const TActorContext& ctx) {
         Y_DEBUG_ABORT_UNLESS(HasInFly);
         if (T x = Queue.Pop())
             ctx.Send(ctx.SelfID, new TEvent(x));
@@ -40,18 +39,18 @@ public:
 template <typename TEvent>
 class TTxProgressCountedScalarQueue {
     ui32 InFly;
+
 public:
     TTxProgressCountedScalarQueue()
-        : InFly(0)
-    {}
+        : InFly(0) {}
 
-    void Progress(const TActorContext &ctx) {
+    void Progress(const TActorContext& ctx) {
         if (++InFly == 1) {
             ctx.Send(ctx.SelfID, new TEvent());
         }
     }
 
-    void Reset(const TActorContext &ctx) {
+    void Reset(const TActorContext& ctx) {
         Y_DEBUG_ABORT_UNLESS(InFly);
         if (--InFly) {
             ctx.Send(ctx.SelfID, new TEvent());
@@ -62,19 +61,19 @@ public:
 template <typename TEvent>
 class TTxProgressIdempotentScalarQueue {
     bool HasInFly;
+
 public:
     TTxProgressIdempotentScalarQueue()
-        : HasInFly(false)
-    {}
+        : HasInFly(false) {}
 
-    void Progress(const TActorContext &ctx) {
+    void Progress(const TActorContext& ctx) {
         if (!HasInFly) {
             ctx.Send(ctx.SelfID, new TEvent());
             HasInFly = true;
         }
     }
 
-    void Reset(const TActorContext &ctx) {
+    void Reset(const TActorContext& ctx) {
         Y_UNUSED(ctx);
         Y_DEBUG_ABORT_UNLESS(HasInFly);
         HasInFly = false;
@@ -84,10 +83,10 @@ public:
 template <typename TDelayedEvent>
 class TTxProgressIdempotentScalarScheduleQueue {
     bool HasSchedule;
+
 public:
     TTxProgressIdempotentScalarScheduleQueue()
-        : HasSchedule(false)
-    {}
+        : HasSchedule(false) {}
 
     void Schedule(const TActorContext& ctx, TDuration delta) {
         if (!HasSchedule) {
@@ -96,11 +95,11 @@ public:
         }
     }
 
-    void Reset(const TActorContext &ctx) {
+    void Reset(const TActorContext& ctx) {
         Y_UNUSED(ctx);
         Y_DEBUG_ABORT_UNLESS(HasSchedule);
         HasSchedule = false;
     }
 };
 
-}
+} // namespace NKikimr

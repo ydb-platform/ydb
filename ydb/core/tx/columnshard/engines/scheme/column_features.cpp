@@ -3,6 +3,4 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <util/string/builder.h>
 
-namespace NKikimr::NOlap {
-
-} // namespace NKikimr::NOlap
+namespace NKikimr::NOlap {} // namespace NKikimr::NOlap

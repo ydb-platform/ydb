@@ -17,7 +17,7 @@ namespace {
 static TAtomicCounter ClientsCounter = 0;
 NTls::TValue<std::vector<TTraceClient*>> GuardedClients;
 NTls::TValue<std::vector<TTraceClient::TDurationGuard*>> Guards;
-}
+} // namespace
 
 TTraceClient::TDurationGuard TTraceClient::MakeContextGuard(const TString& id) {
     if (GuardedClients.Get().size()) {
@@ -37,8 +37,7 @@ TTraceClient::TDurationGuard* TTraceClient::GetContextGuard() {
 
 TTraceClient::TDurationGuard::TDurationGuard(TTraceClient& owner, const TString& id)
     : Owner(&owner)
-    , Id(id)
-{
+    , Id(id) {
     GuardedClients.Get().emplace_back(Owner);
     Guards.Get().emplace_back(this);
     auto it = Owner->Stats.find(Id);
@@ -50,8 +49,7 @@ TTraceClient::TDurationGuard::TDurationGuard(TTraceClient& owner, const TString&
 }
 
 TTraceClient::TDurationGuard::TDurationGuard(const TString& id)
-    : Id(id) {
-}
+    : Id(id) {}
 
 TTraceClient::TDurationGuard::~TDurationGuard() {
     if (!Owner) {
@@ -160,4 +158,4 @@ TInstant TStatInfo::GetLastVerified() const {
     return *Last;
 }
 
-}
+} // namespace NKikimr::NTracing

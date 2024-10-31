@@ -18,7 +18,7 @@ using namespace NMiniKQL;
 #define LOG_C(stream) LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, stream)
 
-class TBuildKqpDataTxOutRSUnit : public TExecutionUnit {
+class TBuildKqpDataTxOutRSUnit: public TExecutionUnit {
 public:
     TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TBuildKqpDataTxOutRSUnit() override;
@@ -28,8 +28,12 @@ public:
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
-    EExecutionStatus OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx, TTransactionContext& txc,
-                                      const TActorContext& ctx);
+    EExecutionStatus OnTabletNotReady(
+        TActiveTransaction& tx,
+        TValidatedDataTx& dataTx,
+        TTransactionContext& txc,
+        const TActorContext& ctx
+    );
 };
 
 TBuildKqpDataTxOutRSUnit::TBuildKqpDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
@@ -41,9 +45,8 @@ bool TBuildKqpDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc,
-    const TActorContext& ctx)
-{
+EExecutionStatus
+TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
@@ -105,7 +108,9 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             }
         }
 
-        KqpFillOutReadSets(op->OutReadSets(), kqpLocks, useGenericReadSets, &tasksRunner, DataShard.SysLocksTable(), tabletId);
+        KqpFillOutReadSets(
+            op->OutReadSets(), kqpLocks, useGenericReadSets, &tasksRunner, DataShard.SysLocksTable(), tabletId
+        );
     } catch (const TMemoryLimitExceededException&) {
         LOG_T("Operation " << *op << " at " << tabletId
             << " exceeded memory limit " << txc.GetMemoryLimit()
@@ -128,7 +133,9 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         if (op->IsReadOnly() || op->IsImmediate()) {
             tx->ReleaseTxData(txc, ctx);
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
-                ->AddError(NKikimrTxDataShard::TError::PROGRAM_ERROR, TStringBuilder() << "Tx was terminated: " << e.what());
+                ->AddError(
+                    NKikimrTxDataShard::TError::PROGRAM_ERROR, TStringBuilder() << "Tx was terminated: " << e.what()
+                );
             return EExecutionStatus::Executed;
         } else {
             Y_FAIL_S("Unexpected exception in KQP out-readsets prepare: " << e.what());
@@ -140,9 +147,12 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
 
 void TBuildKqpDataTxOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx,
-    TTransactionContext& txc, const TActorContext& ctx)
-{
+EExecutionStatus TBuildKqpDataTxOutRSUnit::OnTabletNotReady(
+    TActiveTransaction& tx,
+    TValidatedDataTx& dataTx,
+    TTransactionContext& txc,
+    const TActorContext& ctx
+) {
     LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << tx << " execution");
 
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);

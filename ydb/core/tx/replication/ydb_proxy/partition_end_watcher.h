@@ -19,9 +19,7 @@ class TPartitionEndWatcher {
 
 public:
     inline explicit TPartitionEndWatcher(IActorOps* actorOps)
-        : ActorOps(actorOps)
-    {
-    }
+        : ActorOps(actorOps) {}
 
     inline void SetEvent(TReadSessionEvent::TEndPartitionSessionEvent&& event, const TActorId& client) {
         EndPartitionSessionEvent = std::move(event);
@@ -56,4 +54,4 @@ private:
     TMaybe<TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
 }; // TPartitionEndWatcher
 
-}
+} // namespace NKikimr::NReplication

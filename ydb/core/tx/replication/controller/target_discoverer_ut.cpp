@@ -16,10 +16,11 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         return TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Uint32"},
-            },
+            .Columns =
+                {
+                    {.Name = "key", .Type = "Uint32"},
+                    {.Name = "value", .Type = "Uint32"},
+                },
             .ReplicationConfig = Nothing(),
         };
     }
@@ -30,7 +31,10 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
 
         env.CreateTable("/Root", *MakeTableDescription(DummyTable()));
 
-        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
+        env.GetRuntime().Register(CreateTargetDiscoverer(
+            env.GetSender(),
+            1,
+            env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
             }
@@ -50,10 +54,18 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
-        env.CreateTableWithIndex("/Root", *MakeTableDescription(DummyTable()),
-             "Index", TVector<TString>{"value"}, NKikimrSchemeOp::EIndexTypeGlobal);
+        env.CreateTableWithIndex(
+            "/Root",
+            *MakeTableDescription(DummyTable()),
+            "Index",
+            TVector<TString>{"value"},
+            NKikimrSchemeOp::EIndexTypeGlobal
+        );
 
-        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
+        env.GetRuntime().Register(CreateTargetDiscoverer(
+            env.GetSender(),
+            1,
+            env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
             }
@@ -73,7 +85,10 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
-        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
+        env.GetRuntime().Register(CreateTargetDiscoverer(
+            env.GetSender(),
+            1,
+            env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root/Table", "/Root/ReplicatedTable"},
             }
@@ -95,7 +110,10 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.MkDir("/Root", "Dir");
         env.CreateTable("/Root/Dir", *MakeTableDescription(DummyTable()));
 
-        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
+        env.GetRuntime().Register(CreateTargetDiscoverer(
+            env.GetSender(),
+            1,
+            env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
             }
@@ -118,7 +136,10 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.MkDir("/Root", "export-100500");
         env.CreateTable("/Root/export-100500", *MakeTableDescription(DummyTable()));
 
-        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
+        env.GetRuntime().Register(CreateTargetDiscoverer(
+            env.GetSender(),
+            1,
+            env.GetYdbProxy(),
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
             }
@@ -142,10 +163,14 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         NKikimrReplication::TStaticCredentials staticCreds;
         staticCreds.SetUser("user");
         staticCreds.SetPassword("password");
-        const auto ydbProxy = env.GetRuntime().Register(CreateYdbProxy(
-            env.GetEndpoint(), env.GetDatabase(), false /* ssl */, staticCreds));
+        const auto ydbProxy =
+            env.GetRuntime().Register(CreateYdbProxy(env.GetEndpoint(), env.GetDatabase(), false /* ssl */, staticCreds)
+            );
 
-        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, ydbProxy,
+        env.GetRuntime().Register(CreateTargetDiscoverer(
+            env.GetSender(),
+            1,
+            ydbProxy,
             TVector<std::pair<TString, TString>>{
                 {"/Root", "/Root/Replicated"},
             }
@@ -160,4 +185,4 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
     }
 }
 
-}
+} // namespace NKikimr::NReplication::NController

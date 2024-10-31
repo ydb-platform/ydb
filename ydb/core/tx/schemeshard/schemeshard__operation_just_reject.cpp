@@ -14,15 +14,11 @@ class TReject: public ISubOperation {
 public:
     TReject(TOperationId id, THolder<TProposeResponse> response)
         : OperationId(id)
-        , Response(std::move(response))
-    {}
+        , Response(std::move(response)) {}
 
     TReject(TOperationId id, NKikimrScheme::EStatus status, const TString& explain)
         : OperationId(id)
-        , Response(
-            new TEvSchemeShard::TEvModifySchemeTransactionResult(
-                NKikimrScheme::StatusAccepted, 0, 0))
-    {
+        , Response(new TEvSchemeShard::TEvModifySchemeTransactionResult(NKikimrScheme::StatusAccepted, 0, 0)) {
         Response->SetError(status, explain);
     }
 
@@ -64,7 +60,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -76,4 +72,4 @@ ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status,
     return new TReject(id, status, message);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

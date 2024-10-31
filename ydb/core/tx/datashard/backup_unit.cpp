@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TBackupUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelBackup> {
+class TBackupUnit: public TBackupRestoreUnitBase<TEvDataShard::TEvCancelBackup> {
     using IBuffer = NExportScan::IBuffer;
 
 protected:
@@ -63,8 +63,12 @@ protected:
         } else if (backup.HasS3Settings()) {
             NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
-                Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
-                    << ": " << backup.GetCompression().GetCodec());
+                Abort(
+                    op,
+                    ctx,
+                    TStringBuilder() << "Unsupported compression codec"
+                                     << ": " << backup.GetCompression().GetCodec()
+                );
                 return false;
             }
 
@@ -99,7 +103,10 @@ protected:
             readAheadHi = readAheadHiOverride;
         }
 
-        tx->SetScanTask(DataShard.QueueScan(localTableId, scan.Release(), op->GetTxId(),
+        tx->SetScanTask(DataShard.QueueScan(
+            localTableId,
+            scan.Release(),
+            op->GetTxId(),
             TScanOptions()
                 .SetResourceBroker(taskName, taskPrio)
                 .SetReadAhead(readAheadLo, readAheadHi)
@@ -121,20 +128,20 @@ protected:
         bool done = true;
 
         switch (result->Outcome) {
-        case EExportOutcome::Success:
-        case EExportOutcome::Error:
-            if (auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId())) {
-                schemeOp->Success = result->Outcome == EExportOutcome::Success;
-                schemeOp->Error = std::move(result->Error);
-                schemeOp->BytesProcessed = result->BytesRead;
-                schemeOp->RowsProcessed = result->RowsRead;
-            } else {
-                Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
-            }
-            break;
-        case EExportOutcome::Aborted:
-            done = false;
-            break;
+            case EExportOutcome::Success:
+            case EExportOutcome::Error:
+                if (auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId())) {
+                    schemeOp->Success = result->Outcome == EExportOutcome::Success;
+                    schemeOp->Error = std::move(result->Error);
+                    schemeOp->BytesProcessed = result->BytesRead;
+                    schemeOp->RowsProcessed = result->RowsRead;
+                } else {
+                    Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
+                }
+                break;
+            case EExportOutcome::Aborted:
+                done = false;
+                break;
         }
 
         op->SetScanResult(nullptr);
@@ -159,9 +166,7 @@ protected:
 
 public:
     TBackupUnit(TDataShard& self, TPipeline& pipeline)
-        : TBase(EExecutionUnitKind::Backup, self, pipeline)
-    {
-    }
+        : TBase(EExecutionUnitKind::Backup, self, pipeline) {}
 
 }; // TBackupUnit
 
@@ -169,5 +174,5 @@ THolder<TExecutionUnit> CreateBackupUnit(TDataShard& self, TPipeline& pipeline) 
     return THolder(new TBackupUnit(self, pipeline));
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

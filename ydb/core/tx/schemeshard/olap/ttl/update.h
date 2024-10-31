@@ -6,16 +6,14 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 class TOlapTTLUpdate {
 private:
     NKikimrSchemeOp::TColumnDataLifeCycle Proto;
+
 public:
     TOlapTTLUpdate(const NKikimrSchemeOp::TColumnDataLifeCycle& proto)
-        : Proto(proto)
-    {
-
-    }
+        : Proto(proto) {}
 
     const NKikimrSchemeOp::TColumnDataLifeCycle& GetPatch() const {
         return Proto;
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

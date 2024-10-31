@@ -16,7 +16,10 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
-    const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const {
+    const ISnapshotSchema& data,
+    const ISnapshotSchema& resultSchema,
+    const std::set<ui32>& seqColumns
+) const {
     THashMap<TChunkAddress, TString> blobs;
     for (auto&& i : PortionInfo.GetRecords()) {
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
@@ -26,7 +29,10 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlob
 }
 
 TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
-    const TPortionDataAccessor& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) {
+    const TPortionDataAccessor& portion,
+    NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    const TIndexInfo& indexInfo
+) {
     TReadPortionInfoWithBlobs result(portion);
     THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> records =
         result.PortionInfo.RestoreEntityChunks(blobs, indexInfo);
@@ -39,8 +45,10 @@ TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(
 }
 
 std::vector<TReadPortionInfoWithBlobs> TReadPortionInfoWithBlobs::RestorePortions(
-    const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
-    const TVersionedIndex& tables) {
+    const std::vector<TPortionDataAccessor>& portions,
+    NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+    const TVersionedIndex& tables
+) {
     std::vector<TReadPortionInfoWithBlobs> result;
     for (auto&& i : portions) {
         const auto schema = i.GetPortionInfo().GetSchema(tables);
@@ -58,14 +66,18 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TReadPortionInfoWithBlobs::GetEn
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& i : sortedChunks) {
-        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())("idx", i.second->GetChunkIdxVerified())("size", result.size());
+        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())
+        ("idx", i.second->GetChunkIdxVerified())("size", result.size());
         result.emplace_back(i.second);
     }
     return result;
 }
 
 bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
-    const ui32 entityId, std::vector<const TColumnRecord*>& records, std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
+    const ui32 entityId,
+    std::vector<const TColumnRecord*>& records,
+    std::vector<std::shared_ptr<IPortionDataChunk>>& chunks
+) {
     records = PortionInfo.GetColumnChunksPointers(entityId);
     if (records.empty()) {
         return false;
@@ -73,7 +85,10 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
     std::vector<std::shared_ptr<IPortionDataChunk>> chunksLocal;
     for (auto it = Chunks.begin(); it != Chunks.end();) {
         if (it->first.GetEntityId() == entityId) {
-            AFL_VERIFY(chunksLocal.empty() || chunksLocal.back()->GetChunkAddressVerified() < it->second->GetChunkAddressVerified());
+            AFL_VERIFY(
+                chunksLocal.empty() ||
+                chunksLocal.back()->GetChunkAddressVerified() < it->second->GetChunkAddressVerified()
+            );
             chunksLocal.emplace_back(std::move(it->second));
             it = Chunks.erase(it);
         } else {
@@ -84,10 +99,16 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
     return true;
 }
 
-std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
-    const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier,
-    const std::shared_ptr<IStoragesManager>& storages, std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
-    if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
+std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(
+    TReadPortionInfoWithBlobs&& source,
+    const ISnapshotSchema::TPtr& from,
+    const ISnapshotSchema::TPtr& to,
+    const TString& targetTier,
+    const std::shared_ptr<IStoragesManager>& storages,
+    std::shared_ptr<NColumnShard::TSplitterCounters> counters
+) {
+    if (from->GetVersion() == to->GetVersion() &&
+        targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "we don't need sync portion");
         return {};
     }
@@ -125,12 +146,15 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
     }
 
-    const NSplitter::TEntityGroups groups = source.PortionInfo.GetPortionInfo().GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());
-    auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<NArrow::NSplitter::TSerializationStats>());
+    const NSplitter::TEntityGroups groups =
+        source.PortionInfo.GetPortionInfo().GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());
+    auto schemaTo =
+        std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<NArrow::NSplitter::TSerializationStats>());
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 
     return TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages);
+        slice.GroupChunksByBlobs(groups), secondaryData.GetSecondaryInplaceData(), std::move(constructor), storages
+    );
 }
 
 const TString& TReadPortionInfoWithBlobs::GetBlobByAddressVerified(const ui32 columnId, const ui32 chunkId) const {

@@ -14,13 +14,15 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
     const TOperationId& opId,
     const TPath& workingDirPath,
     const TString& tableName,
-    const TString& streamName);
+    const TString& streamName
+);
 
 void DoAlterStream(
     TVector<ISubOperation::TPtr>& result,
     const NKikimrSchemeOp::TAlterCdcStream& op,
     const TOperationId& opId,
     const TPath& workingDirPath,
-    const TPath& tablePath);
+    const TPath& tablePath
+);
 
-} // namespace NKikimr::NSchemesShard::NCdc
+} // namespace NKikimr::NSchemeShard::NCdc

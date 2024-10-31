@@ -20,4 +20,4 @@ void TTxWriteDraft::Complete(const TActorContext& ctx) {
     ctx.Register(NColumnShard::CreateWriteActor(Self->TabletID(), WriteController, TInstant::Max()));
 }
 
-}
+} // namespace NKikimr::NColumnShard

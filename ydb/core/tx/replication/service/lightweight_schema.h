@@ -24,4 +24,4 @@ struct TLightweightSchema: public TThrRefBase {
     ui64 Version = 0;
 };
 
-}
+} // namespace NKikimr::NReplication::NService

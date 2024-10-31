@@ -43,4 +43,4 @@ const TMaybe<TDuration> TLagProvider::GetLag() const {
     return ChildrenByLag.rbegin()->first;
 }
 
-}
+} // namespace NKikimr::NReplication::NController

@@ -9,30 +9,29 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxLogin: TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvLogin::TPtr Request;
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
 
-    TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
+    TTxLogin(TSelf* self, TEvSchemeShard::TEvLogin::TPtr& ev)
         : TRwTxBase(self)
-        , Request(std::move(ev))
-    {}
+        , Request(std::move(ev)) {}
 
-    TTxType GetTxType() const override { return TXTYPE_LOGIN; }
+    TTxType GetTxType() const override {
+        return TXTYPE_LOGIN;
+    }
 
     NLogin::TLoginProvider::TLoginUserRequest GetLoginRequest() const {
         const auto& record(Request->Get()->Record);
         return {
             .User = record.GetUser(),
             .Password = record.GetPassword(),
-            .Options = {
-                .ExpiresAfter = record.HasExpiresAfterMs()
-                    ? std::chrono::milliseconds(record.GetExpiresAfterMs())
-                    : std::chrono::system_clock::duration::zero()
-                },
+            .Options =
+                {.ExpiresAfter = record.HasExpiresAfterMs() ? std::chrono::milliseconds(record.GetExpiresAfterMs())
+                                                            : std::chrono::system_clock::duration::zero()},
             .ExternalAuth = record.GetExternalAuth(),
-            };
+        };
     }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -61,8 +60,11 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             for (ui64 keyId : keysAdded) {
                 const auto* key = Self->LoginProvider.FindKey(keyId);
                 if (key) {
-                    db.Table<Schema::LoginKeys>().Key(keyId).Update<Schema::LoginKeys::KeyDataPEM, Schema::LoginKeys::ExpiresAt>(
-                        key->PublicKey, ToInstant(key->ExpiresAt).MilliSeconds());
+                    db.Table<Schema::LoginKeys>()
+                        .Key(keyId)
+                        .Update<Schema::LoginKeys::KeyDataPEM, Schema::LoginKeys::ExpiresAt>(
+                            key->PublicKey, ToInstant(key->ExpiresAt).MilliSeconds()
+                        );
                 }
             }
 
@@ -70,7 +72,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         }
     }
 
-    void DoComplete(const TActorContext &ctx) override {
+    void DoComplete(const TActorContext& ctx) override {
         if (NeedPublishOnComplete) {
             Self->PublishToSchemeBoard(TTxId(), {SubDomainPathId}, ctx);
         }
@@ -99,11 +101,11 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
         ctx.Send(Request->Sender, std::move(result), 0, Request->Cookie);
     }
-
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr& ev) {
     return new TTxLogin(this, ev);
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

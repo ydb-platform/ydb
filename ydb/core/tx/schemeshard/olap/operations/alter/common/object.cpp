@@ -3,7 +3,8 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdate(const TUpdateRestoreContext& context) const {
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdate(const TUpdateRestoreContext& context
+) const {
     auto& ssContext = *context.GetSSOperationContext();
     auto tableInfo = ssContext.SS->ColumnTables.GetVerifiedPtr(GetPathId());
     if (!tableInfo) {
@@ -18,7 +19,9 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdat
     NKikimrSchemeOp::TModifyScheme mScheme;
     *mScheme.MutableAlterColumnTable() = *tableInfo->AlterData->AlterBody;
     mScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-    TUpdateInitializationContext uContext(&context.GetOriginalEntity(), context.GetSSOperationContext(), &mScheme, context.GetTxId());
+    TUpdateInitializationContext uContext(
+        &context.GetOriginalEntity(), context.GetSSOperationContext(), &mScheme, context.GetTxId()
+    );
     return DoCreateUpdateImpl(uContext);
 }
 
@@ -27,7 +30,9 @@ TConclusionStatus TColumnTableEntity::DoInitialize(const TEntityInitializationCo
     return DoInitializeImpl(context);
 }
 
-TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoCreateUpdate(const TUpdateInitializationContext& context) const {
+TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoCreateUpdate(
+    const TUpdateInitializationContext& context
+) const {
     if (GetTableInfo()->AlterVersion == 0) {
         return NKikimr::TConclusionStatus::Fail("Table is not created yet");
     }
@@ -37,4 +42,4 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoCreateUpdate
     return DoCreateUpdateImpl(context);
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

@@ -19,18 +19,20 @@ using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 
-
 Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
-
-    static void DoBuildIndex(Tests::TServer::TPtr server, TActorId sender,
-                             const TString& tableFrom, const TString& tableTo,
-                             const TRowVersion& snapshot,
-                             const NKikimrIndexBuilder::EBuildStatus& expected) {
-        auto &runtime = *server->GetRuntime();
+    static void DoBuildIndex(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& tableFrom,
+        const TString& tableTo,
+        const TRowVersion& snapshot,
+        const NKikimrIndexBuilder::EBuildStatus& expected
+    ) {
+        auto& runtime = *server->GetRuntime();
         TVector<ui64> datashards = GetTableShards(server, sender, tableFrom);
         TTableId tableId = ResolveTableId(server, sender, tableFrom);
 
-        for (auto tid: datashards) {
+        for (auto tid : datashards) {
             auto ev = new TEvDataShard::TEvBuildIndexCreateRequest;
             NKikimrTxDataShard::TEvBuildIndexCreateRequest& rec = ev->Record;
             rec.SetBuildIndexId(1);
@@ -52,14 +54,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
                 TAutoPtr<IEventHandle> handle;
                 auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildIndexProgressResponse>(handle);
 
-                if (expected == NKikimrIndexBuilder::EBuildStatus::DONE
-                    && reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::ACCEPTED) {
+                if (expected == NKikimrIndexBuilder::EBuildStatus::DONE &&
+                    reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::ACCEPTED) {
                     Cerr << "skip ACCEPTED" << Endl;
                     continue;
                 }
 
-                if (expected != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS
-                    && reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
+                if (expected != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS &&
+                    reply->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
                     Cerr << "skip INPROGRESS" << Endl;
                     continue;
                 }
@@ -73,10 +75,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
     }
 
     static void CreateShardedTableForIndex(
-        Tests::TServer::TPtr server, TActorId sender,
-        const TString &root, const TString &name,
-        ui64 shards, bool enableOutOfOrder)
-    {
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& root,
+        const TString& name,
+        ui64 shards,
+        bool enableOutOfOrder
+    ) {
         NLocalDb::TCompactionPolicyPtr policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->KeepEraseMarkers = true;
 
@@ -93,11 +98,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
     Y_UNIT_TEST(RunScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
@@ -114,9 +118,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1" });
+        auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"});
 
-        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
+        DoBuildIndex(
+            server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE
+        );
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, "/Root/table-2");
@@ -129,21 +135,21 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         // Shadow data must be visible now
         auto data2 = ReadShardedTable(server, "/Root/table-2");
-        UNIT_ASSERT_VALUES_EQUAL(data2,
-                                 "value = 100, key = 1\n"
-                                 "value = 300, key = 3\n"
-                                 "value = 500, key = 5\n");
+        UNIT_ASSERT_VALUES_EQUAL(
+            data2,
+            "value = 100, key = 1\n"
+            "value = 300, key = 3\n"
+            "value = 500, key = 5\n"
+        );
     }
 
     Y_UNIT_TEST(ShadowBorrowCompaction) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
@@ -158,17 +164,26 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
         // Upsert some initial values
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400), (5, 500);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400), (5, 500);"
+        );
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 
-        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(runtime, [&](const TEvDataShard::TEvCompactBorrowed::TPtr& event) {
-            return runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR";
-        });
+        TBlockEvents<TEvDataShard::TEvCompactBorrowed> block(
+            runtime,
+            [&](const TEvDataShard::TEvCompactBorrowed::TPtr& event) {
+                return runtime.FindActorName(event->Sender) == "FLAT_SCHEMESHARD_ACTOR";
+            }
+        );
 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1" });
+        auto snapshot = CreateVolatileSnapshot(server, {"/Root/table-1"});
 
-        DoBuildIndex(server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE);
+        DoBuildIndex(
+            server, sender, "/Root/table-1", "/Root/table-2", snapshot, NKikimrIndexBuilder::EBuildStatus::DONE
+        );
 
         // Writes to shadow data should not be visible yet
         auto data = ReadShardedTable(server, "/Root/table-2");
@@ -197,7 +212,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             THashSet<ui64> owners(stats.GetUserTablePartOwners().begin(), stats.GetUserTablePartOwners().end());
             // Note: datashard always adds current shard to part owners, even if there are no parts
             UNIT_ASSERT_VALUES_EQUAL(owners, (THashSet<ui64>{shards1.at(0), shards2.at(shardIndex)}));
-            
+
             auto tableId = ResolveTableId(server, sender, "/Root/table-2");
             auto result = CompactBorrowed(runtime, shards2.at(shardIndex), tableId);
             // Cerr << "Compact result " << result.DebugString() << Endl;
@@ -220,12 +235,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         // Shadow data must be visible now
         auto data2 = ReadShardedTable(server, "/Root/table-2");
-        UNIT_ASSERT_VALUES_EQUAL(data2,
-                                 "value = 100, key = 1\n"
-                                 "value = 200, key = 2\n"
-                                 "value = 300, key = 3\n"
-                                 "value = 400, key = 4\n"
-                                 "value = 500, key = 5\n");
+        UNIT_ASSERT_VALUES_EQUAL(
+            data2,
+            "value = 100, key = 1\n"
+            "value = 200, key = 2\n"
+            "value = 300, key = 3\n"
+            "value = 400, key = 4\n"
+            "value = 500, key = 5\n"
+        );
     }
 }
 

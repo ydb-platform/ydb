@@ -14,7 +14,12 @@ private:
     YDB_READONLY(ui64, PathId, 0);
 
 public:
-    TGranuleShardingInfo(const NSharding::TGranuleShardingLogicContainer& shardingInfo, const TSnapshot& sinceSnapshot, const ui64 version, const ui64 pathId)
+    TGranuleShardingInfo(
+        const NSharding::TGranuleShardingLogicContainer& shardingInfo,
+        const TSnapshot& sinceSnapshot,
+        const ui64 version,
+        const ui64 pathId
+    )
         : ShardingInfo(shardingInfo)
         , SinceSnapshot(sinceSnapshot)
         , SnapshotVersion(version)
@@ -62,7 +67,8 @@ public:
     std::optional<TGranuleShardingInfo> GetShardingInfoActual(const ui64 pathId) const;
 
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
-        AFL_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
+        AFL_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second
+        );
     }
 
     TString DebugString() const {

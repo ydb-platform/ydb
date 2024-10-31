@@ -10,4 +10,4 @@ public:
     virtual void Start() = 0;
 };
 
-}
+} // namespace NKikimr::NArrow::NHash

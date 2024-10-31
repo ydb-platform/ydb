@@ -40,7 +40,7 @@ inline void WriteTablePoint(const TConstArrayRef<NKikimr::TCell>& point, TString
     output << Base64Encode(result);
 }
 
-inline void WriteTableRange(const NKikimr::TTableRange &range, TStringStream& output) {
+inline void WriteTableRange(const NKikimr::TTableRange& range, TStringStream& output) {
     if (range.Point) {
         WriteTablePoint(range.From, output);
     } else {
@@ -52,7 +52,12 @@ inline void WriteTableRange(const NKikimr::TTableRange &range, TStringStream& ou
     }
 }
 
-inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const NMiniKQL::IEngineFlat::TValidationInfo& keys) {
+inline void LogIntegrityTrailsKeys(
+    const NActors::TActorContext& ctx,
+    const ui64 tabletId,
+    const ui64 txId,
+    const NMiniKQL::IEngineFlat::TValidationInfo& keys
+) {
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY)) {
         if (keys.HasWrites()) {
             const int batchSize = 10;
@@ -86,7 +91,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                         case NKikimr::TKeyDesc::ERowOperation::Erase:
                             rowOp = "Erase";
                             break;
-                        default:                   
+                        default:
                             rowOp = "Invalid operation";
                             break;
                     }
@@ -108,7 +113,12 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 }
 
 template <typename TxResult>
-inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui64 tabletId, const ui64 txId, const typename TxResult::EStatus status) {
+inline void LogIntegrityTrailsFinish(
+    const NActors::TActorContext& ctx,
+    const ui64 tabletId,
+    const ui64 txId,
+    const typename TxResult::EStatus status
+) {
     auto logFn = [&]() {
         TString statusString = TxResult::EStatus_descriptor()->FindValueByNumber(status)->name();
 
@@ -126,5 +136,5 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
     LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
 }
 
-}
-}
+} // namespace NDataIntegrity
+} // namespace NKikimr

@@ -45,31 +45,35 @@ namespace {
 
 static ui64 currentTime = 1704067200000000ull; //TInstant::ParseIso8601("2024-01-01").GetValue();
 
-void CreateTable(TServer::TPtr server, const TActorId& sender, const TString& root,
-        const TString& name, const TString& ttlColType = "Timestamp") {
-    auto opts = TShardedTableOptions()
-        .EnableOutOfOrder(false)
-        .Columns({
-            {"key", "Uint32", true, false},
-            {"value", ttlColType, false, false}
-        });
+void CreateTable(
+    TServer::TPtr server,
+    const TActorId& sender,
+    const TString& root,
+    const TString& name,
+    const TString& ttlColType = "Timestamp"
+) {
+    auto opts = TShardedTableOptions().EnableOutOfOrder(false).Columns(
+        {{"key", "Uint32", true, false}, {"value", ttlColType, false, false}}
+    );
     CreateShardedTable(server, sender, root, name, opts);
 }
 
-void CreateIndexedTable(TServer::TPtr server, const TActorId& sender, const TString& root,
-        const TString& name, const TString& ttlColType = "Timestamp") {
+void CreateIndexedTable(
+    TServer::TPtr server,
+    const TActorId& sender,
+    const TString& root,
+    const TString& name,
+    const TString& ttlColType = "Timestamp"
+) {
     auto opts = TShardedTableOptions()
-        .EnableOutOfOrder(false)
-        .Columns({
-            {"key", "Uint32", true, false},
-            {"skey", "Uint32", false, false},
-            {"tkey", "Uint32", false, false},
-            {"value", ttlColType, false, false}
-        })
-        .Indexes({
-            {"by_skey", {"skey"}},
-            {"by_tkey", {"tkey"}}
-        });
+                    .EnableOutOfOrder(false)
+                    .Columns(
+                        {{"key", "Uint32", true, false},
+                         {"skey", "Uint32", false, false},
+                         {"tkey", "Uint32", false, false},
+                         {"value", ttlColType, false, false}}
+                    )
+                    .Indexes({{"by_skey", {"skey"}}, {"by_tkey", {"tkey"}}});
     CreateShardedTable(server, sender, root, name, opts);
 }
 
@@ -93,11 +97,8 @@ TVector<TString> SerializeKeys(const TVector<ui32>& keys, TKeyCellsMaker makeKey
     return serializedKeys;
 }
 
-TProto::TEvEraseRequest MakeEraseRowsRequest(
-        const TTableId& tableId,
-        const TVector<ui32>& keyTags,
-        const TVector<TString>& keys)
-{
+TProto::TEvEraseRequest
+MakeEraseRowsRequest(const TTableId& tableId, const TVector<ui32>& keyTags, const TVector<TString>& keys) {
     TProto::TEvEraseRequest request;
 
     request.SetTableId(tableId.PathId.LocalPathId);
@@ -147,9 +148,7 @@ protected:
 public:
     explicit TRequestRunner(const TActorId& replyTo, ui64 tabletID)
         : ReplyTo(replyTo)
-        , TabletID(tabletID)
-    {
-    }
+        , TabletID(tabletID) {}
 
     void Bootstrap() {
         if (Pipe) {
@@ -180,24 +179,31 @@ private:
 };
 
 void EraseRows(
-        TServer::TPtr server, const TActorId& sender, const TString& path,
-        const TTableId& tableId, TVector<ui32> keyTags, TVector<TString> keys,
-        ui32 status = TProto::TEvEraseResponse::OK, const TString& error = "")
-{
+    TServer::TPtr server,
+    const TActorId& sender,
+    const TString& path,
+    const TTableId& tableId,
+    TVector<ui32> keyTags,
+    TVector<TString> keys,
+    ui32 status = TProto::TEvEraseResponse::OK,
+    const TString& error = ""
+) {
     using TEvRequest = TEvDataShard::TEvEraseRowsRequest;
     using TEvResponse = TEvDataShard::TEvEraseRowsResponse;
 
     class TEraser: public TRequestRunner<TEvResponse, TEraser> {
     public:
         explicit TEraser(
-                const TActorId& replyTo, ui64 tabletID,
-                const TTableId& tableId, TVector<ui32> keyTags, TVector<TString> keys)
+            const TActorId& replyTo,
+            ui64 tabletID,
+            const TTableId& tableId,
+            TVector<ui32> keyTags,
+            TVector<TString> keys
+        )
             : TBase(replyTo, tabletID)
             , TableId(tableId)
             , KeyTags(std::move(keyTags))
-            , Keys(std::move(keys))
-        {
-        }
+            , Keys(std::move(keys)) {}
 
         IEventBase* MakeRequest() const override {
             auto request = MakeHolder<TEvRequest>();
@@ -223,10 +229,18 @@ void EraseRows(
 }
 
 void ConditionalEraseRows(
-        TServer::TPtr server, const TActorId& sender, const TString& path,
-        const TTableId& tableId, ui32 columnId, ui64 threshold, EUnit unit = TUnit::AUTO,
-        const NDataShard::TIndexes& indexes = {}, const TProto::TLimits& limits = {},
-        ui32 status = TProto::TEvCondEraseResponse::ACCEPTED, const TString& error = "") {
+    TServer::TPtr server,
+    const TActorId& sender,
+    const TString& path,
+    const TTableId& tableId,
+    ui32 columnId,
+    ui64 threshold,
+    EUnit unit = TUnit::AUTO,
+    const NDataShard::TIndexes& indexes = {},
+    const TProto::TLimits& limits = {},
+    ui32 status = TProto::TEvCondEraseResponse::ACCEPTED,
+    const TString& error = ""
+) {
     using TEvRequest = TEvDataShard::TEvConditionalEraseRowsRequest;
     using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
@@ -236,13 +250,13 @@ void ConditionalEraseRows(
             bool continue_ = false;
 
             switch (ev->Get()->Record.GetStatus()) {
-            case TEvResponse::ProtoRecordType::ACCEPTED:
-            case TEvResponse::ProtoRecordType::PARTIAL:
-                continue_ = true;
-                break;
+                case TEvResponse::ProtoRecordType::ACCEPTED:
+                case TEvResponse::ProtoRecordType::PARTIAL:
+                    continue_ = true;
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
             }
 
             Reply(ev);
@@ -254,19 +268,22 @@ void ConditionalEraseRows(
 
     public:
         explicit TEraser(
-                const TActorId& replyTo, ui64 tabletID,
-                const TTableId& tableId, ui32 columnId, ui64 threshold, EUnit unit,
-                const TProto::TLimits& limits,
-                const NDataShard::TIndexes& indexes)
+            const TActorId& replyTo,
+            ui64 tabletID,
+            const TTableId& tableId,
+            ui32 columnId,
+            ui64 threshold,
+            EUnit unit,
+            const TProto::TLimits& limits,
+            const NDataShard::TIndexes& indexes
+        )
             : TBase(replyTo, tabletID)
             , TableId(tableId)
             , ColumnId(columnId)
             , Threshold(threshold)
             , ColumnUnit(unit)
             , Limits(limits)
-            , Indexes(indexes)
-        {
-        }
+            , Indexes(indexes) {}
 
         IEventBase* MakeRequest() const override {
             auto request = MakeHolder<TEvRequest>();
@@ -305,7 +322,9 @@ void ConditionalEraseRows(
 
     auto tabletIDs = GetTableShards(server, sender, path);
     UNIT_ASSERT_VALUES_EQUAL(tabletIDs.size(), 1);
-    server->GetRuntime()->Register(new TEraser(sender, tabletIDs[0], tableId, columnId, threshold, unit, limits, indexes));
+    server->GetRuntime()->Register(
+        new TEraser(sender, tabletIDs[0], tableId, columnId, threshold, unit, limits, indexes)
+    );
 
     auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetStatus()), status);
@@ -315,22 +334,23 @@ void ConditionalEraseRows(
 }
 
 void DistributedEraseTx(
-        TServer::TPtr server, const TActorId& sender, const TString& path,
-        ui64 txId, const TProto::TDistributedEraseTx& tx,
-        ui32 status = TProto::TEvProposeTxResult::PREPARED, const TString& error = "") {
+    TServer::TPtr server,
+    const TActorId& sender,
+    const TString& path,
+    ui64 txId,
+    const TProto::TDistributedEraseTx& tx,
+    ui32 status = TProto::TEvProposeTxResult::PREPARED,
+    const TString& error = ""
+) {
     using TEvRequest = TEvDataShard::TEvProposeTransaction;
     using TEvResponse = TEvDataShard::TEvProposeTransactionResult;
 
     class TEraser: public TRequestRunner<TEvResponse, TEraser> {
     public:
-        explicit TEraser(
-                const TActorId& replyTo, ui64 tabletId,
-                ui64 txId, const TProto::TDistributedEraseTx& tx)
+        explicit TEraser(const TActorId& replyTo, ui64 tabletId, ui64 txId, const TProto::TDistributedEraseTx& tx)
             : TBase(replyTo, tabletId)
             , TxId(txId)
-            , Tx(tx)
-        {
-        }
+            , Tx(tx) {}
 
         IEventBase* MakeRequest() const override {
             return new TEvRequest(
@@ -355,15 +375,13 @@ void DistributedEraseTx(
     }
 }
 
-} // anonymous
+} // namespace
 
 Y_UNIT_TEST_SUITE(EraseRowsTests) {
     void EraseRowsShouldSuccess(TMaybe<ui64> injectSchemaVersion) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -395,9 +413,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
     Y_UNIT_TEST(EraseRowsShouldFailOnVariousErrors) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -409,26 +425,80 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         CreateTable(server, sender, "/Root", "table-1");
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
 
-        EraseRows(server, sender, "/Root/table-1", TTableId(), {1}, SerializeKeys({1, 2}),
-            TProto::TEvEraseResponse::SCHEME_ERROR, "Unknown table id");
+        EraseRows(
+            server,
+            sender,
+            "/Root/table-1",
+            TTableId(),
+            {1},
+            SerializeKeys({1, 2}),
+            TProto::TEvEraseResponse::SCHEME_ERROR,
+            "Unknown table id"
+        );
 
-        EraseRows(server, sender, "/Root/table-1", TTableId(tableId.PathId, 100), {1}, SerializeKeys({1, 2}),
-            TProto::TEvEraseResponse::SCHEME_ERROR, "Schema version mismatch");
+        EraseRows(
+            server,
+            sender,
+            "/Root/table-1",
+            TTableId(tableId.PathId, 100),
+            {1},
+            SerializeKeys({1, 2}),
+            TProto::TEvEraseResponse::SCHEME_ERROR,
+            "Schema version mismatch"
+        );
 
-        EraseRows(server, sender, "/Root/table-1", tableId, {0, 1}, SerializeKeys({1, 2}),
-            TProto::TEvEraseResponse::SCHEME_ERROR, "Key column count mismatch");
+        EraseRows(
+            server,
+            sender,
+            "/Root/table-1",
+            tableId,
+            {0, 1},
+            SerializeKeys({1, 2}),
+            TProto::TEvEraseResponse::SCHEME_ERROR,
+            "Key column count mismatch"
+        );
 
-        EraseRows(server, sender, "/Root/table-1", tableId, {0}, SerializeKeys({1, 2}),
-            TProto::TEvEraseResponse::SCHEME_ERROR, "Key column schema mismatch");
+        EraseRows(
+            server,
+            sender,
+            "/Root/table-1",
+            tableId,
+            {0},
+            SerializeKeys({1, 2}),
+            TProto::TEvEraseResponse::SCHEME_ERROR,
+            "Key column schema mismatch"
+        );
 
-        EraseRows(server, sender, "/Root/table-1", tableId, {1}, {"trash"},
-            TProto::TEvEraseResponse::BAD_REQUEST, "Cannot parse key");
+        EraseRows(
+            server,
+            sender,
+            "/Root/table-1",
+            tableId,
+            {1},
+            {"trash"},
+            TProto::TEvEraseResponse::BAD_REQUEST,
+            "Cannot parse key"
+        );
 
-        EraseRows(server, sender, "/Root/table-1", tableId, {1}, SerializeKeys({1, 2}, &KeyCellsRepeater),
-            TProto::TEvEraseResponse::SCHEME_ERROR, "Cell count doesn't match row scheme");
+        EraseRows(
+            server,
+            sender,
+            "/Root/table-1",
+            tableId,
+            {1},
+            SerializeKeys({1, 2}, &KeyCellsRepeater),
+            TProto::TEvEraseResponse::SCHEME_ERROR,
+            "Cell count doesn't match row scheme"
+        );
     }
 
-    void ConditionalEraseShouldSuccess(const TString& ttlColType, EUnit unit, const TString& toUpload, const TString& afterErase, const bool enableDatetime64 = false) {
+    void ConditionalEraseShouldSuccess(
+        const TString& ttlColType,
+        EUnit unit,
+        const TString& toUpload,
+        const TString& afterErase,
+        const bool enableDatetime64 = false
+    ) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         NKikimrConfig::TFeatureFlags featureFlags;
@@ -438,10 +508,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetFeatureFlags(featureFlags);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetFeatureFlags(featureFlags);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -464,98 +531,136 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldErase) {
-        ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Timestamp",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
 (2, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
 (3, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = 2030-04-15T00:00:00.000000Z
 key = 4, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldNotErase) {
-        ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Timestamp",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (2, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (3, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
-        )", R"(
+        )",
+            R"(
 key = 1, value = 2030-04-15T00:00:00.000000Z
 key = 2, value = 2030-04-15T00:00:00.000000Z
 key = 3, value = 2030-04-15T00:00:00.000000Z
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint32) {
-        ConditionalEraseShouldSuccess("Uint32", TUnit::SECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "Uint32",
+            TUnit::SECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600),
 (3, 1902441600),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = 1902441600
 key = 4, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64Seconds) {
-        ConditionalEraseShouldSuccess("Uint64", TUnit::SECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "Uint64",
+            TUnit::SECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600),
 (3, 1902441600),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = 1902441600
 key = 4, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64MilliSeconds) {
-        ConditionalEraseShouldSuccess("Uint64", TUnit::MILLISECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "Uint64",
+            TUnit::MILLISECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600000),
 (3, 1902441600000),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = 1902441600000
 key = 4, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64MicroSeconds) {
-        ConditionalEraseShouldSuccess("Uint64", TUnit::MICROSECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "Uint64",
+            TUnit::MICROSECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600000000),
 (3, 1902441600000000),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = 1902441600000000
 key = 4, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint64NanoSeconds) {
-        ConditionalEraseShouldSuccess("Uint64", TUnit::NANOSECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "Uint64",
+            TUnit::NANOSECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600000000000),
 (3, 1902441600000000000),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = 1902441600000000000
 key = 4, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberSeconds) {
-        ConditionalEraseShouldSuccess("DyNumber", TUnit::SECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "DyNumber",
+            TUnit::SECONDS,
+            R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("0" As DyNumber)),
@@ -565,15 +670,20 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 (5, CAST("1902441600" As DyNumber)),
 (6, CAST("636249600000" As DyNumber)),
 (7, NULL);
-        )", R"(
+        )",
+            R"(
 key = 5, value = .19024416e10
 key = 6, value = .6362496e12
 key = 7, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberMilliSeconds) {
-        ConditionalEraseShouldSuccess("DyNumber", TUnit::MILLISECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "DyNumber",
+            TUnit::MILLISECONDS,
+            R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("0" As DyNumber)),
@@ -581,15 +691,20 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 (3, CAST("1902441600000" As DyNumber)),
 (4, CAST("636249600000000" As DyNumber)),
 (5, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = .19024416e13
 key = 4, value = .6362496e15
 key = 5, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberMicroSeconds) {
-        ConditionalEraseShouldSuccess("DyNumber", TUnit::MICROSECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "DyNumber",
+            TUnit::MICROSECONDS,
+            R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("-9.9999999999999999999999999999999999999E+125" As DyNumber)),
@@ -600,147 +715,202 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 (6, CAST("1902441600000000" As DyNumber)),
 (7, CAST("9.9999999999999999999999999999999999999E+125" As DyNumber)),
 (8, NULL);
-        )", R"(
+        )",
+            R"(
 key = 6, value = .19024416e16
 key = 7, value = .99999999999999999999999999999999999999e126
 key = 8, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDyNumberNanoSeconds) {
-        ConditionalEraseShouldSuccess("DyNumber", TUnit::NANOSECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "DyNumber",
+            TUnit::NANOSECONDS,
+            R"(
 --!syntax_v1
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("0" As DyNumber)),
 (2, CAST("636249600000000000" As DyNumber)),
 (3, CAST("1902441600000000000" As DyNumber)),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = .19024416e19
 key = 4, value = (empty maybe)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDate32) {
-        ConditionalEraseShouldSuccess("Date32", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Date32",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("1960-01-01" AS Date32)),
 (2, CAST("1970-01-01" AS Date32)),
 (3, CAST("1990-03-01" AS Date32)),
 (4, CAST("2030-04-15" AS Date32)),
 (5, NULL);
-        )", R"(
+        )",
+            R"(
 key = 4, value = 22019
 key = 5, value = (empty maybe)
-        )", true);
+        )",
+            true
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnDatetime64) {
-        ConditionalEraseShouldSuccess("Datetime64", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Datetime64",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("1960-01-01T00:00:00Z" AS Datetime64)),
 (2, CAST("1970-01-01T00:00:00Z" AS Datetime64)),
 (3, CAST("1990-03-01T00:00:00Z" AS Datetime64)),
 (4, CAST("2030-04-15T00:00:00Z" AS Datetime64)),
 (5, NULL);
-        )", R"(
+        )",
+            R"(
 key = 4, value = 1902441600
 key = 5, value = (empty maybe)
-        )", true);
+        )",
+            true
+        );
     }
-    
+
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnTimestamp64) {
-        ConditionalEraseShouldSuccess("Timestamp64", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Timestamp64",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("1960-01-01T00:00:00.000000Z" AS Timestamp64)),
 (2, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp64)),
 (3, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp64)),
 (4, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp64)),
 (5, NULL);
-        )", R"(
+        )",
+            R"(
 key = 4, value = 1902441600000000
 key = 5, value = (empty maybe)
-        )", true);
+        )",
+            true
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt4Seconds) {
-        ConditionalEraseShouldSuccess("pgint4", TUnit::SECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "pgint4",
+            TUnit::SECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0p),
 (2, 636249600p),
 (3, 1902441600p),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = "1902441600"
 key = 4, value = (pg null)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Seconds) {
-        ConditionalEraseShouldSuccess("pgint8", TUnit::SECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "pgint8",
+            TUnit::SECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0pb),
 (2, 636249600pb),
 (3, 1902441600pb),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = "1902441600"
 key = 4, value = (pg null)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Milliseconds) {
-        ConditionalEraseShouldSuccess("pgint8", TUnit::MILLISECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "pgint8",
+            TUnit::MILLISECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0pb),
 (2, 636249600000pb),
 (3, 1902441600000pb),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = "1902441600000"
 key = 4, value = (pg null)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgInt8Microseconds) {
-        ConditionalEraseShouldSuccess("pgint8", TUnit::MICROSECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "pgint8",
+            TUnit::MICROSECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0pb),
 (2, 636249600000000pb),
 (3, 1902441600000000pb),
 (4, NULL);
-        )", R"(
+        )",
+            R"(
 key = 3, value = "1902441600000000"
 key = 4, value = (pg null)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgDate) {
-        ConditionalEraseShouldSuccess("pgdate", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "pgdate",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, pgdate("1960-01-01")),
 (2, pgdate("1970-01-01")),
 (3, pgdate("1990-03-01")),
 (4, pgdate("2030-04-15")),
 (5, NULL);
-        )", R"(
+        )",
+            R"(
 key = 4, value = "2030-04-15"
 key = 5, value = (pg null)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnPgTimestamp) {
-        ConditionalEraseShouldSuccess("pgtimestamp", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "pgtimestamp",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, pgtimestamp("1960-01-01 00:00:00")),
 (2, pgtimestamp("1970-01-01 00:00:00")),
 (3, pgtimestamp("1990-03-01 00:00:00")),
 (4, pgtimestamp("2030-04-15 00:00:00")),
 (5, NULL);
-        )", R"(
+        )",
+            R"(
 key = 4, value = "2030-04-15 00:00:00"
 key = 5, value = (pg null)
-        )");
+        )"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldFailOnVariousErrors) {
@@ -748,9 +918,7 @@ key = 5, value = (pg null)
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -767,23 +935,78 @@ key = 5, value = (pg null)
             CreateTable(server, sender, "/Root", tableName, TString(ct));
             auto tableId = ResolveTableId(server, sender, tablePath);
 
-            ConditionalEraseRows(server, sender, tablePath, TTableId(), 2, 0, TUnit::AUTO, {}, {},
-                TEvResponse::ProtoRecordType::BAD_REQUEST, "Unknown table id");
+            ConditionalEraseRows(
+                server,
+                sender,
+                tablePath,
+                TTableId(),
+                2,
+                0,
+                TUnit::AUTO,
+                {},
+                {},
+                TEvResponse::ProtoRecordType::BAD_REQUEST,
+                "Unknown table id"
+            );
 
-            ConditionalEraseRows(server, sender, tablePath, tableId, 3, 0, TUnit::AUTO, {}, {},
-                TEvResponse::ProtoRecordType::BAD_REQUEST, "Unknown column id");
+            ConditionalEraseRows(
+                server,
+                sender,
+                tablePath,
+                tableId,
+                3,
+                0,
+                TUnit::AUTO,
+                {},
+                {},
+                TEvResponse::ProtoRecordType::BAD_REQUEST,
+                "Unknown column id"
+            );
 
             if (ct == "Date" || ct == "Datetime" || ct == "Timestamp") {
                 for (auto unit : {TUnit::SECONDS, TUnit::MILLISECONDS, TUnit::MICROSECONDS}) {
-                    ConditionalEraseRows(server, sender, tablePath, tableId, 2, 0, unit, {}, {},
-                        TEvResponse::ProtoRecordType::BAD_REQUEST, "Unit cannot be specified for date type column");
+                    ConditionalEraseRows(
+                        server,
+                        sender,
+                        tablePath,
+                        tableId,
+                        2,
+                        0,
+                        unit,
+                        {},
+                        {},
+                        TEvResponse::ProtoRecordType::BAD_REQUEST,
+                        "Unit cannot be specified for date type column"
+                    );
                 }
             } else if (ct == "Uint32" || ct == "Uint64" || ct == "DyNumber") {
-                ConditionalEraseRows(server, sender, tablePath, tableId, 2, 0, TUnit::AUTO, {}, {},
-                    TEvResponse::ProtoRecordType::BAD_REQUEST, "Unit should be specified for integral type column");
+                ConditionalEraseRows(
+                    server,
+                    sender,
+                    tablePath,
+                    tableId,
+                    2,
+                    0,
+                    TUnit::AUTO,
+                    {},
+                    {},
+                    TEvResponse::ProtoRecordType::BAD_REQUEST,
+                    "Unit should be specified for integral type column"
+                );
             } else {
-                ConditionalEraseRows(server, sender, tablePath, tableId, 2, 0, TUnit::AUTO, {}, {},
-                    TEvResponse::ProtoRecordType::BAD_REQUEST, "Unsupported type");
+                ConditionalEraseRows(
+                    server,
+                    sender,
+                    tablePath,
+                    tableId,
+                    2,
+                    0,
+                    TUnit::AUTO,
+                    {},
+                    {},
+                    TEvResponse::ProtoRecordType::BAD_REQUEST,
+                    "Unsupported type"
+                );
             }
         }
     }
@@ -795,10 +1018,7 @@ key = 5, value = (pg null)
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetAppConfig(appConfig)
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetAppConfig(appConfig).SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -848,9 +1068,7 @@ key = 5, value = (pg null)
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -870,11 +1088,11 @@ key = 5, value = (pg null)
         THolder<IEventHandle> delayed;
         auto prevObserver = server->GetRuntime()->SetObserverFunc([&delayed](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::TEvEraseRowsRequest::EventType:
-                delayed.Reset(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            default:
-                return TTestActorRuntime::EEventAction::PROCESS;
+                case TEvDataShard::TEvEraseRowsRequest::EventType:
+                    delayed.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                default:
+                    return TTestActorRuntime::EEventAction::PROCESS;
             }
         });
 
@@ -907,9 +1125,7 @@ key = 5, value = (pg null)
     Y_UNIT_TEST(EraseRowsFromReplicatedTable) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -921,8 +1137,16 @@ key = 5, value = (pg null)
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
-        EraseRows(server, sender, "/Root/table-1", tableId, {1}, SerializeKeys({1, 2}),
-            TProto::TEvEraseResponse::EXEC_ERROR, "Can't execute erase at replicated table");
+        EraseRows(
+            server,
+            sender,
+            "/Root/table-1",
+            tableId,
+            {1},
+            SerializeKeys({1, 2}),
+            TProto::TEvEraseResponse::EXEC_ERROR,
+            "Can't execute erase at replicated table"
+        );
     }
 }
 
@@ -930,12 +1154,12 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     using TResolve = NSchemeCache::TSchemeCacheRequest;
 
-    void FillPath(TNavigate::TEntry& entry, const TString& path) {
+    void FillPath(TNavigate::TEntry & entry, const TString& path) {
         entry.Path = SplitPath(path);
         entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
     }
 
-    void FillPath(TNavigate::TEntry& entry, const TTableId& tableId) {
+    void FillPath(TNavigate::TEntry & entry, const TTableId& tableId) {
         entry.TableId = tableId;
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
     }
@@ -1025,19 +1249,24 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
     }
 
     TVector<THolder<IEventHandle>> ConditionalEraseRowsDelayedPlan(
-            TServer::TPtr server, const TActorId& sender, const TString& path,
-            const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) {
-
+        TServer::TPtr server,
+        const TActorId& sender,
+        const TString& path,
+        const TTableId& tableId,
+        ui32 columnId,
+        ui64 threshold,
+        const NDataShard::TIndexes& indexes
+    ) {
         TVector<THolder<IEventHandle>> delayed;
 
         auto& runtime = *server->GetRuntime();
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvTxProxy::TEvProposeTransaction::EventType:
-                delayed.emplace_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            default:
-                return TTestActorRuntime::EEventAction::PROCESS;
+                case TEvTxProxy::TEvProposeTransaction::EventType:
+                    delayed.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                default:
+                    return TTestActorRuntime::EEventAction::PROCESS;
             }
         });
 
@@ -1056,27 +1285,32 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
     }
 
     TVector<THolder<IEventHandle>> ConditionalEraseRowsDelayedResolve(
-            TServer::TPtr server, const TActorId& sender, const TString& path,
-            const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) {
-
+        TServer::TPtr server,
+        const TActorId& sender,
+        const TString& path,
+        const TTableId& tableId,
+        ui32 columnId,
+        ui64 threshold,
+        const NDataShard::TIndexes& indexes
+    ) {
         TVector<THolder<IEventHandle>> delayed;
         TActorId eraser;
 
         auto& runtime = *server->GetRuntime();
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TEvDataShard::TEvEraseRowsRequest::EventType:
-                delayed.emplace_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
-                if (ev->Recipient == eraser) {
+                case TEvDataShard::TEvEraseRowsRequest::EventType:
                     delayed.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
-                }
-            case TEvTxUserProxy::TEvAllocateTxId::EventType:
-                eraser = ev->Sender;
-            default:
-                return TTestActorRuntime::EEventAction::PROCESS;
+                case TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType:
+                    if (ev->Recipient == eraser) {
+                        delayed.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                case TEvTxUserProxy::TEvAllocateTxId::EventType:
+                    eraser = ev->Sender;
+                default:
+                    return TTestActorRuntime::EEventAction::PROCESS;
             }
         });
 
@@ -1103,16 +1337,17 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
     }
 
     void ConditionalEraseShouldSuccess(
-            const TString& ttlColType, EUnit unit,
-            const TString& toUpload, const THashMap<TString, TString>& afterErase,
-            const THashMap<TString, ui32>& shardsConfig = {}) {
+        const TString& ttlColType,
+        EUnit unit,
+        const TString& toUpload,
+        const THashMap<TString, TString>& afterErase,
+        const THashMap<TString, ui32>& shardsConfig = {}
+    ) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1150,94 +1385,107 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldErase) {
-        ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Timestamp",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 400, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
 (2, 20, 300, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
 (3, 30, 200, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (4, 40, 100, NULL);
-        )", {{
-"/Root/table-1", R"(
+        )",
+            {{"/Root/table-1", R"(
 key = 3, skey = 30, tkey = 200, value = 2030-04-15T00:00:00.000000Z
 key = 4, skey = 40, tkey = 100, value = (empty maybe)
-        )"}, {
-"/Root/table-1/by_skey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_skey/indexImplTable", R"(
 skey = 30, key = 3
 skey = 40, key = 4
-        )"}, {
-"/Root/table-1/by_tkey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_tkey/indexImplTable", R"(
 tkey = 100, key = 4
 tkey = 200, key = 3
-        )"}});
+        )"}}
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint32) {
-        ConditionalEraseShouldSuccess("Uint32", TUnit::SECONDS, R"(
+        ConditionalEraseShouldSuccess(
+            "Uint32",
+            TUnit::SECONDS,
+            R"(
 UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 400, 0),
 (2, 20, 300, 636249600),
 (3, 30, 200, 1902441600),
 (4, 40, 100, NULL);
-        )", {{
-"/Root/table-1", R"(
+        )",
+            {{"/Root/table-1", R"(
 key = 3, skey = 30, tkey = 200, value = 1902441600
 key = 4, skey = 40, tkey = 100, value = (empty maybe)
-        )"}, {
-"/Root/table-1/by_skey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_skey/indexImplTable", R"(
 skey = 30, key = 3
 skey = 40, key = 4
-        )"}, {
-"/Root/table-1/by_tkey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_tkey/indexImplTable", R"(
 tkey = 100, key = 4
 tkey = 200, key = 3
-        )"}});
+        )"}}
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldNotErase) {
-        ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Timestamp",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 300, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (2, 20, 200, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (3, 30, 100, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
-        )", {{
-"/Root/table-1", R"(
+        )",
+            {{"/Root/table-1", R"(
 key = 1, skey = 10, tkey = 300, value = 2030-04-15T00:00:00.000000Z
 key = 2, skey = 20, tkey = 200, value = 2030-04-15T00:00:00.000000Z
 key = 3, skey = 30, tkey = 100, value = 2030-04-15T00:00:00.000000Z
-        )"}, {
-"/Root/table-1/by_skey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_skey/indexImplTable", R"(
 skey = 10, key = 1
 skey = 20, key = 2
 skey = 30, key = 3
-        )"}, {
-"/Root/table-1/by_tkey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_tkey/indexImplTable", R"(
 tkey = 100, key = 3
 tkey = 200, key = 2
 tkey = 300, key = 1
-        )"}});
+        )"}}
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldSuccessOnShardedIndex) {
-        ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
+        ConditionalEraseShouldSuccess(
+            "Timestamp",
+            TUnit::AUTO,
+            R"(
 UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 400, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
 (2, 20, 300, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
 (3, 30, 200, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp)),
 (4, 40, 100, NULL);
-        )", {{
-"/Root/table-1", R"(
+        )",
+            {{"/Root/table-1", R"(
 key = 4, skey = 40, tkey = 100, value = (empty maybe)
-        )"}, {
-"/Root/table-1/by_skey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_skey/indexImplTable", R"(
 skey = 40, key = 4
-        )"}, {
-"/Root/table-1/by_tkey/indexImplTable", R"(
+        )"},
+             {"/Root/table-1/by_tkey/indexImplTable", R"(
 tkey = 100, key = 4
-        )"}}, {{
-"/Root/table-1/by_skey/indexImplTable", 20
-        }, {
-"/Root/table-1/by_tkey/indexImplTable", 300
-        }});
+        )"}},
+            {{"/Root/table-1/by_skey/indexImplTable", 20}, {"/Root/table-1/by_tkey/indexImplTable", 300}}
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldNotEraseModifiedRows) {
@@ -1245,9 +1493,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1266,8 +1512,8 @@ tkey = 100, key = 4
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
-        auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, currentTime, indexes);
+        auto delayed =
+            ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1", tableId, 4, currentTime, indexes);
 
         // case 1: modify ttl column
         ExecSQL(server, sender, R"(
@@ -1285,7 +1531,9 @@ tkey = 100, key = 4
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, skey = 90, tkey = 900, value = 2030-04-15T00:00:00.000000Z");
+            UNIT_ASSERT_STRINGS_EQUAL(
+                StripInPlace(content), "key = 3, skey = 90, tkey = 900, value = 2030-04-15T00:00:00.000000Z"
+            );
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1/by_skey/indexImplTable");
@@ -1302,8 +1550,7 @@ tkey = 100, key = 4
             (3, 90, 900, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
         )");
 
-        delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, currentTime, indexes);
+        delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1", tableId, 4, currentTime, indexes);
 
         // case 2: modify index column
         ExecSQL(server, sender, R"(
@@ -1321,7 +1568,9 @@ tkey = 100, key = 4
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, skey = 30, tkey = 100, value = 2020-04-15T00:00:00.000000Z");
+            UNIT_ASSERT_STRINGS_EQUAL(
+                StripInPlace(content), "key = 3, skey = 30, tkey = 100, value = 2020-04-15T00:00:00.000000Z"
+            );
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1/by_skey/indexImplTable");
@@ -1357,9 +1606,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1379,8 +1626,8 @@ tkey = 100, key = 4
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
-        auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, currentTime, indexes);
+        auto delayed =
+            ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1", tableId, 4, currentTime, indexes);
 
         ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key < 3;");
 
@@ -1393,7 +1640,9 @@ tkey = 100, key = 4
 
         {
             auto content = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 4, skey = 40, tkey = 100, value = 2030-04-15T00:00:00.000000Z");
+            UNIT_ASSERT_STRINGS_EQUAL(
+                StripInPlace(content), "key = 4, skey = 40, tkey = 100, value = 2030-04-15T00:00:00.000000Z"
+            );
         }
         {
             auto content = ReadShardedTable(server, "/Root/table-1/by_skey/indexImplTable");
@@ -1413,9 +1662,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1429,20 +1676,21 @@ tkey = 100, key = 4
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
 
         using TSimpleEventObserver = std::function<void(TAutoPtr<IEventHandle>&)>;
-        auto check = [&](TEvResponse::ProtoRecordType::EStatus status, const TString& error, TSimpleEventObserver observer) {
-            auto prevObserver = runtime.SetObserverFunc([observer](TAutoPtr<IEventHandle>& ev) {
-                observer(ev);
-                return TTestActorRuntime::EEventAction::PROCESS;
-            });
+        auto check =
+            [&](TEvResponse::ProtoRecordType::EStatus status, const TString& error, TSimpleEventObserver observer) {
+                auto prevObserver = runtime.SetObserverFunc([observer](TAutoPtr<IEventHandle>& ev) {
+                    observer(ev);
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                });
 
-            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes));
-            auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
-            UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
-            runtime.Send(new IEventHandle(eraser, sender, new TEvents::TEvPoisonPill()));
+                const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes));
+                auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
+                UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
+                runtime.Send(new IEventHandle(eraser, sender, new TEvents::TEvPoisonPill()));
 
-            runtime.SetObserverFunc(prevObserver);
-        };
+                runtime.SetObserverFunc(prevObserver);
+            };
 
         /// resolve tables
 
@@ -1464,17 +1712,25 @@ tkey = 100, key = 4
             }
         });
 
-        check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Main table's path id mismatch", [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
-                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).TableId = TTableId();
+        check(
+            TEvResponse::ProtoRecordType::SCHEME_ERROR,
+            "Main table's path id mismatch",
+            [](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
+                    ev->Get<TEvNavigate>()->Request->ResultSet.at(0).TableId = TTableId();
+                }
             }
-        });
+        );
 
-        check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Main table's schema version mismatch", [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
-                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).TableId.SchemaVersion = 0;
+        check(
+            TEvResponse::ProtoRecordType::SCHEME_ERROR,
+            "Main table's schema version mismatch",
+            [](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
+                    ev->Get<TEvNavigate>()->Request->ResultSet.at(0).TableId.SchemaVersion = 0;
+                }
             }
-        });
+        );
 
         check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Indexes count mismatch", [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
@@ -1484,7 +1740,9 @@ tkey = 100, key = 4
 
         check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Invalid index state", [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
-                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).Indexes.at(0).SetState(NKikimrSchemeOp::EIndexStateInvalid);
+                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).Indexes.at(0).SetState(
+                    NKikimrSchemeOp::EIndexStateInvalid
+                );
             }
         });
 
@@ -1515,7 +1773,8 @@ tkey = 100, key = 4
 
         check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Failed locality check", [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
-                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).DomainInfo = new NSchemeCache::TDomainInfo(TPathId(), TPathId());
+                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).DomainInfo =
+                    new NSchemeCache::TDomainInfo(TPathId(), TPathId());
             }
         });
 
@@ -1586,9 +1845,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1607,8 +1864,8 @@ tkey = 100, key = 4
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
-        auto delayed = ConditionalEraseRowsDelayedResolve(server, sender, "/Root/table-1",
-            tableId, 4, currentTime, indexes);
+        auto delayed =
+            ConditionalEraseRowsDelayedResolve(server, sender, "/Root/table-1", tableId, 4, currentTime, indexes);
 
         SimulateSleep(server, TDuration::Seconds(1));
         SetSplitMergePartCountLimit(&runtime, -1);
@@ -1630,9 +1887,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1651,8 +1906,8 @@ tkey = 100, key = 4
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
-        auto delayed = ConditionalEraseRowsDelayedResolve(server, sender, "/Root/table-1",
-            tableId, 4, currentTime, indexes);
+        auto delayed =
+            ConditionalEraseRowsDelayedResolve(server, sender, "/Root/table-1", tableId, 4, currentTime, indexes);
 
         const ui64 txId = AsyncAlterAddExtraColumn(server, "/Root", "table-1");
         WaitTxNotification(server, sender, txId);
@@ -1670,9 +1925,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1691,8 +1944,8 @@ tkey = 100, key = 4
 
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
         auto indexes = GetIndexes(server, sender, "/Root/table-1");
-        auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
-            tableId, 4, currentTime, indexes);
+        auto delayed =
+            ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1", tableId, 4, currentTime, indexes);
 
         auto tabletIds = GetTableShards(server, sender, "/Root/table-1/by_skey/indexImplTable");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
@@ -1709,9 +1962,7 @@ tkey = 100, key = 4
     Y_UNIT_TEST(DistributedEraseTxShouldFailOnVariousErrors) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1727,41 +1978,85 @@ tkey = 100, key = 4
         TProto::TDistributedEraseTx tx;
 
         *tx.MutableEraseRowsRequest() = MakeEraseRowsRequest(TTableId(), {1}, SerializeKeys({1, 2}));
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "Unknown table id");
+        DistributedEraseTx(
+            server, sender, "/Root/table-1", txId++, tx, TProto::TEvProposeTxResult::BAD_REQUEST, "Unknown table id"
+        );
 
         *tx.MutableEraseRowsRequest() = MakeEraseRowsRequest(TTableId(tableId.PathId, 100), {1}, SerializeKeys({1, 2}));
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "Schema version mismatch");
+        DistributedEraseTx(
+            server,
+            sender,
+            "/Root/table-1",
+            txId++,
+            tx,
+            TProto::TEvProposeTxResult::BAD_REQUEST,
+            "Schema version mismatch"
+        );
 
         *tx.MutableEraseRowsRequest() = MakeEraseRowsRequest(tableId, {0, 1}, SerializeKeys({1, 2}));
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "Key column count mismatch");
+        DistributedEraseTx(
+            server,
+            sender,
+            "/Root/table-1",
+            txId++,
+            tx,
+            TProto::TEvProposeTxResult::BAD_REQUEST,
+            "Key column count mismatch"
+        );
 
         *tx.MutableEraseRowsRequest() = MakeEraseRowsRequest(tableId, {0}, SerializeKeys({1, 2}));
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "Key column schema mismatch");
+        DistributedEraseTx(
+            server,
+            sender,
+            "/Root/table-1",
+            txId++,
+            tx,
+            TProto::TEvProposeTxResult::BAD_REQUEST,
+            "Key column schema mismatch"
+        );
 
         *tx.MutableEraseRowsRequest() = MakeEraseRowsRequest(tableId, {1}, {"trash"});
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "Cannot parse key");
+        DistributedEraseTx(
+            server, sender, "/Root/table-1", txId++, tx, TProto::TEvProposeTxResult::BAD_REQUEST, "Cannot parse key"
+        );
 
         *tx.MutableEraseRowsRequest() = MakeEraseRowsRequest(tableId, {1}, SerializeKeys({1, 2}, &KeyCellsRepeater));
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "Cell count doesn't match row scheme");
+        DistributedEraseTx(
+            server,
+            sender,
+            "/Root/table-1",
+            txId++,
+            tx,
+            TProto::TEvProposeTxResult::BAD_REQUEST,
+            "Cell count doesn't match row scheme"
+        );
 
         *tx.MutableEraseRowsRequest() = MakeEraseRowsRequest(tableId, {1}, SerializeKeys({1, 2}));
         // underlying request is valid now
 
         tx.MutableDependents()->Add();
         auto& dependency = *tx.MutableDependencies()->Add();
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "can only have dependents or dependencies");
+        DistributedEraseTx(
+            server,
+            sender,
+            "/Root/table-1",
+            txId++,
+            tx,
+            TProto::TEvProposeTxResult::BAD_REQUEST,
+            "can only have dependents or dependencies"
+        );
 
         tx.MutableDependents()->Clear();
         dependency.SetPresentRows(NDataShard::SerializeBitMap(TDynBitMap().Push(1)));
-        DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
-            TProto::TEvProposeTxResult::BAD_REQUEST, "Present rows count mismatch");
+        DistributedEraseTx(
+            server,
+            sender,
+            "/Root/table-1",
+            txId++,
+            tx,
+            TProto::TEvProposeTxResult::BAD_REQUEST,
+            "Present rows count mismatch"
+        );
     }
 
     Y_UNIT_TEST(ConditionalEraseRowsCheckLimits) {
@@ -1769,9 +2064,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1782,16 +2075,25 @@ tkey = 100, key = 4
 
         auto check = [&](const char* table, const TProto::TLimits& limits, ui32 expectedRuns) {
             CreateIndexedTable(server, sender, "/Root", table);
-            ExecSQL(server, sender, Sprintf(R"(
+            ExecSQL(
+                server,
+                sender,
+                Sprintf(
+                    R"(
                 UPSERT INTO `/Root/%s` (key, skey, tkey, value) VALUES
                 (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
                 (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
                 (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
-            )", table));
+            )",
+                    table
+                )
+            );
 
             auto tableId = ResolveTableId(server, sender, Sprintf("/Root/%s", table));
             auto indexes = GetIndexes(server, sender, Sprintf("/Root/%s", table));
-            ConditionalEraseRows(server, sender, Sprintf("/Root/%s", table), tableId, 4, currentTime, TUnit::AUTO, indexes, limits);
+            ConditionalEraseRows(
+                server, sender, Sprintf("/Root/%s", table), tableId, 4, currentTime, TUnit::AUTO, indexes, limits
+            );
 
             ui32 runs = 0;
             TEvResponse::ProtoRecordType::EStatus status;
@@ -1826,9 +2128,7 @@ tkey = 100, key = 4
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1839,23 +2139,33 @@ tkey = 100, key = 4
 
         auto check = [&](const char* table, const TShardedTableOptions& opts) {
             CreateShardedTable(server, sender, "/Root", table, opts);
-            ExecSQL(server, sender, Sprintf(R"(
+            ExecSQL(
+                server,
+                sender,
+                Sprintf(
+                    R"(
                 UPSERT INTO `/Root/%s` (key, skey, tkey, value) VALUES
                 (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
                 (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
                 (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
-            )", table));
+            )",
+                    table
+                )
+            );
 
             auto tableId = ResolveTableId(server, sender, Sprintf("/Root/%s", table));
             auto indexes = GetIndexes(server, sender, Sprintf("/Root/%s", table));
-            ConditionalEraseRows(server, sender, Sprintf("/Root/%s", table), tableId, 4, currentTime, TUnit::AUTO, indexes);
+            ConditionalEraseRows(
+                server, sender, Sprintf("/Root/%s", table), tableId, 4, currentTime, TUnit::AUTO, indexes
+            );
 
             auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
 
             for (const auto& index : opts.Indexes_) {
                 do {
-                    auto content = ReadShardedTable(server, Sprintf("/Root/%s/%s/indexImplTable", table, index.Name.c_str()));
+                    auto content =
+                        ReadShardedTable(server, Sprintf("/Root/%s/%s/indexImplTable", table, index.Name.c_str()));
 
                     if (index.Type == NKikimrSchemeOp::EIndexTypeGlobal) {
                         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "");
@@ -1873,32 +2183,36 @@ tkey = 100, key = 4
             }
         };
 
-        check("table-1", TShardedTableOptions()
-            .EnableOutOfOrder(false)
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"skey", "Uint32", false, false},
-                {"tkey", "Uint32", false, false},
-                {"value", "Timestamp", false, false}
-            })
-            .Indexes({
-                {"by_skey", {"skey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
-                {"by_tkey", {"tkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}
-            })
+        check(
+            "table-1",
+            TShardedTableOptions()
+                .EnableOutOfOrder(false)
+                .Columns(
+                    {{"key", "Uint32", true, false},
+                     {"skey", "Uint32", false, false},
+                     {"tkey", "Uint32", false, false},
+                     {"value", "Timestamp", false, false}}
+                )
+                .Indexes(
+                    {{"by_skey", {"skey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                     {"by_tkey", {"tkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}}
+                )
         );
 
-        check("table-2", TShardedTableOptions()
-            .EnableOutOfOrder(false)
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"skey", "Uint32", false, false},
-                {"tkey", "Uint32", false, false},
-                {"value", "Timestamp", false, false}
-            })
-            .Indexes({
-                {"by_skey", {"skey"}, {}, NKikimrSchemeOp::EIndexTypeGlobal},
-                {"by_tkey", {"tkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}
-            })
+        check(
+            "table-2",
+            TShardedTableOptions()
+                .EnableOutOfOrder(false)
+                .Columns(
+                    {{"key", "Uint32", true, false},
+                     {"skey", "Uint32", false, false},
+                     {"tkey", "Uint32", false, false},
+                     {"value", "Timestamp", false, false}}
+                )
+                .Indexes(
+                    {{"by_skey", {"skey"}, {}, NKikimrSchemeOp::EIndexTypeGlobal},
+                     {"by_tkey", {"tkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}}
+                )
         );
     }
 }

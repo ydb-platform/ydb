@@ -6,7 +6,6 @@ namespace NKikimr {
 namespace NLongTxService {
 
 Y_UNIT_TEST_SUITE(LongTxServicePublicTypes) {
-
     Y_UNIT_TEST(LongTxId) {
         TLongTxId txId;
         TString errStr;
@@ -26,7 +25,9 @@ Y_UNIT_TEST_SUITE(LongTxServicePublicTypes) {
         UNIT_ASSERT_VALUES_EQUAL(txId.NodeId, 1234u);
         UNIT_ASSERT_VALUES_EQUAL(txId.Snapshot.Step, 123u);
         UNIT_ASSERT_VALUES_EQUAL(txId.Snapshot.TxId, 456u);
-        UNIT_ASSERT_VALUES_EQUAL(txId.ToString(), "ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1234&snapshot=123%3A456");
+        UNIT_ASSERT_VALUES_EQUAL(
+            txId.ToString(), "ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1234&snapshot=123%3A456"
+        );
     }
 
     Y_UNIT_TEST(SnapshotMaxTxId) {
@@ -38,7 +39,9 @@ Y_UNIT_TEST_SUITE(LongTxServicePublicTypes) {
         UNIT_ASSERT_VALUES_EQUAL(txId.NodeId, 1234u);
         UNIT_ASSERT_VALUES_EQUAL(txId.Snapshot.Step, 123u);
         UNIT_ASSERT_VALUES_EQUAL(txId.Snapshot.TxId, Max<ui64>());
-        UNIT_ASSERT_VALUES_EQUAL(txId.ToString(), "ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1234&snapshot=123%3Amax");
+        UNIT_ASSERT_VALUES_EQUAL(
+            txId.ToString(), "ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1234&snapshot=123%3Amax"
+        );
     }
 
     Y_UNIT_TEST(SnapshotReadOnly) {

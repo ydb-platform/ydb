@@ -8,7 +8,9 @@
 namespace NKikimr::NOlap {
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
-    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+    const TNormalizationController& controller,
+    NTabletFlatExecutor::TTransactionContext& txc
+) {
     auto initRes = DoInitImpl(controller, txc);
 
     if (initRes.IsFail()) {
@@ -86,16 +88,22 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
             tasks.emplace_back(task);
         }
     }
-    ACFL_INFO("normalizer", "TPortionsNormalizer")("message", TStringBuilder() << brokenPortioncCount << " portions found");
+    ACFL_INFO("normalizer", "TPortionsNormalizer")
+    ("message", TStringBuilder() << brokenPortioncCount << " portions found");
     return tasks;
 }
 
 TConclusionStatus TPortionsNormalizerBase::InitPortions(
-    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& constructors) {
+    const NColumnShard::TTablesManager& tablesManager,
+    NIceDb::TNiceDb& db,
+    THashMap<ui64, TPortionInfoConstructor>& constructors
+) {
     TDbWrapper wrapper(db.GetDatabase(), nullptr);
-    if (!wrapper.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+    if (!wrapper.LoadPortions([&](TPortionInfoConstructor&& portion,
+                                  const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
             const TIndexInfo& indexInfo =
-                portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
+                portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())
+                    ->GetIndexInfo();
             AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
             const ui64 portionId = portion.GetPortionIdVerified();
             AFL_VERIFY(constructors.emplace(portionId, std::move(portion)).second);
@@ -106,7 +114,10 @@ TConclusionStatus TPortionsNormalizerBase::InitPortions(
 }
 
 TConclusionStatus TPortionsNormalizerBase::InitColumns(
-    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions) {
+    const NColumnShard::TTablesManager& tablesManager,
+    NIceDb::TNiceDb& db,
+    THashMap<ui64, TPortionInfoConstructor>& portions
+) {
     using namespace NColumnShard;
     auto columnsFilter = GetColumnsFilter(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema());
     auto rowset = db.Table<Schema::IndexColumns>().Select();
@@ -133,12 +144,17 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     };
 
     while (!rowset.EndOfSet()) {
-        TPortionInfoConstructor portion(rowset.GetValue<Schema::IndexColumns::PathId>(), rowset.GetValue<Schema::IndexColumns::Portion>());
+        TPortionInfoConstructor portion(
+            rowset.GetValue<Schema::IndexColumns::PathId>(), rowset.GetValue<Schema::IndexColumns::Portion>()
+        );
         Y_ABORT_UNLESS(rowset.GetValue<Schema::IndexColumns::Index>() == 0);
 
-        portion.SetMinSnapshotDeprecated(
-            NOlap::TSnapshot(rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>()));
-        portion.SetRemoveSnapshot(rowset.GetValue<Schema::IndexColumns::XPlanStep>(), rowset.GetValue<Schema::IndexColumns::XTxId>());
+        portion.SetMinSnapshotDeprecated(NOlap::TSnapshot(
+            rowset.GetValue<Schema::IndexColumns::PlanStep>(), rowset.GetValue<Schema::IndexColumns::TxId>()
+        ));
+        portion.SetRemoveSnapshot(
+            rowset.GetValue<Schema::IndexColumns::XPlanStep>(), rowset.GetValue<Schema::IndexColumns::XTxId>()
+        );
 
         NOlap::TColumnChunkLoadContext chunkLoadContext(rowset, &DsGroupSelector);
         initPortion(std::move(portion), chunkLoadContext);
@@ -150,7 +166,8 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions) {
+TConclusionStatus
+TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions) {
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     auto rowset = db.Table<IndexIndexes>().Select();
     if (!rowset.IsReady()) {

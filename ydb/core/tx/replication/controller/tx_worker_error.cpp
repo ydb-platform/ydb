@@ -10,9 +10,7 @@ public:
     explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error)
         : TTxBase("TxWorkerError", self)
         , WorkerId(id)
-        , Error(error)
-    {
-    }
+        , Error(error) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_WORKER_ERROR;
@@ -46,18 +44,24 @@ public:
         target->SetDstState(TReplication::EDstState::Error);
         target->SetIssue(Error);
 
-        replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-            << ": " << target->GetIssue());
+        replication->SetState(
+            TReplication::EState::Error,
+            TStringBuilder() << "Error in target #" << target->GetId() << ": " << target->GetIssue()
+        );
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Replications>().Key(WorkerId.ReplicationId()).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
-            NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue())
-        );
-        db.Table<Schema::Targets>().Key(WorkerId.ReplicationId(), WorkerId.TargetId()).Update(
-            NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
-            NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
-        );
+        db.Table<Schema::Replications>()
+            .Key(WorkerId.ReplicationId())
+            .Update(
+                NIceDb::TUpdate<Schema::Replications::State>(replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::Issue>(replication->GetIssue())
+            );
+        db.Table<Schema::Targets>()
+            .Key(WorkerId.ReplicationId(), WorkerId.TargetId())
+            .Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
+                NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
+            );
 
         return true;
     }
@@ -72,4 +76,4 @@ void TController::RunTxWorkerError(const TWorkerId& id, const TString& error, co
     Execute(new TTxWorkerError(this, id, error), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

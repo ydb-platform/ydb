@@ -15,13 +15,14 @@
 namespace NKikimrColumnShardBlobOperationsProto {
 class TTabletByBlob;
 class TTabletsByBlob;
-}
+} // namespace NKikimrColumnShardBlobOperationsProto
 
 namespace NKikimr::NOlap {
 
 class TTabletByBlob {
 private:
     THashMap<TUnifiedBlobId, TTabletId> Data;
+
 public:
     NKikimrColumnShardBlobOperationsProto::TTabletByBlob SerializeToProto() const;
 
@@ -42,7 +43,6 @@ public:
     THashMap<TUnifiedBlobId, TTabletId>* operator->() {
         return &Data;
     }
-
 };
 
 class TBlobsByGenStep {
@@ -59,6 +59,7 @@ private:
         }
     };
     std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator> Blobs;
+
 public:
     [[nodiscard]] bool Add(const TLogoBlobID& blobId) {
         return Blobs.emplace(blobId).second;
@@ -103,6 +104,7 @@ class TTabletsByBlob {
 private:
     THashMap<TUnifiedBlobId, THashSet<TTabletId>> Data;
     i32 Size = 0;
+
 public:
     ui32 GetSize() const {
         return Size;
@@ -173,6 +175,7 @@ public:
         const TTabletsByBlob& Owner;
         THashMap<TUnifiedBlobId, THashSet<TTabletId>>::const_iterator BlobsIterator;
         THashSet<TTabletId>::const_iterator TabletsIterator;
+
     public:
         TIterator(const TTabletsByBlob& owner)
             : Owner(owner) {
@@ -323,16 +326,17 @@ public:
 class TBlobsByTablet {
 private:
     THashMap<TTabletId, THashSet<TUnifiedBlobId>> Data;
+
 public:
     class TIterator {
     private:
         const TBlobsByTablet* Owner;
         THashMap<TTabletId, THashSet<TUnifiedBlobId>>::const_iterator TabletsIterator;
         THashSet<TUnifiedBlobId>::const_iterator BlobsIterator;
+
     public:
         TIterator(const TBlobsByTablet& owner)
-            : Owner(&owner)
-        {
+            : Owner(&owner) {
             TabletsIterator = Owner->Data.begin();
             if (TabletsIterator != Owner->Data.end()) {
                 BlobsIterator = TabletsIterator->second.begin();
@@ -491,6 +495,7 @@ private:
     YDB_READONLY_DEF(TBlobsByTablet, Sharing);
     YDB_ACCESSOR_DEF(TBlobsByTablet, Direct);
     YDB_READONLY_DEF(TBlobsByTablet, Borrowed);
+
 public:
     bool IsEmpty() const {
         return Sharing.IsEmpty() && Direct.IsEmpty() && Borrowed.IsEmpty();
@@ -529,8 +534,7 @@ public:
 
     public:
         TIterator(const TBlobsCategories& owner)
-            : Owner(&owner)
-        {
+            : Owner(&owner) {
             Sharing = Owner->Sharing.GetIterator();
             Direct = Owner->Direct.GetIterator();
             Borrowed = Owner->Borrowed.GetIterator();
@@ -580,10 +584,9 @@ public:
         return Borrowed.Remove(tabletId, id);
     }
     TBlobsCategories(const TTabletId selfTabletId)
-        : SelfTabletId(selfTabletId)
-    {
+        : SelfTabletId(selfTabletId) {
         Y_UNUSED(SelfTabletId);
     }
 };
 
-}
+} // namespace NKikimr::NOlap

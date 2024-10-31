@@ -9,16 +9,22 @@ namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 void TPortionsBucket::RebuildOptimizedFeature(const TInstant currentInstant) const {
     for (auto&& [_, p] : Portions) {
-        p.MutablePortionInfo().InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized,
+        p.MutablePortionInfo().InitRuntimeFeature(
+            TPortionInfo::ERuntimeFeature::Optimized,
             Portions.size() == 1 &&
-                currentInstant > p->RecordSnapshotMax().GetPlanInstant() +
-                                     NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings());
+                currentInstant >
+                    p->RecordSnapshotMax().GetPlanInstant() +
+                        NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings()
+        );
     }
 }
 
-std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule,
-    const std::shared_ptr<NDataLocks::TManager>& locksManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
-    const std::shared_ptr<IStoragesManager>& storagesManager) const {
+std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(
+    std::shared_ptr<TGranuleMeta> granule,
+    const std::shared_ptr<NDataLocks::TManager>& locksManager,
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+    const std::shared_ptr<IStoragesManager>& storagesManager
+) const {
     auto context = Logic->BuildTask(TInstant::Now(), GetMemLimit(), *this);
     AFL_VERIFY(context.GetPortions().size() > 1)("size", context.GetPortions().size());
     ui64 size = 0;
@@ -26,8 +32,8 @@ std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std
         size += i->GetTotalBlobBytes();
         AFL_VERIFY(!locksManager->IsLocked(*i));
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("size", size)("next", Finish.DebugString())("count", context.GetPortions().size())(
-        "event", "start_optimization");
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+    ("size", size)("next", Finish.DebugString())("count", context.GetPortions().size())("event", "start_optimization");
     TSaverContext saverContext(storagesManager);
     std::vector<TPortionDataAccessor> accessors;
     for (auto&& i : context.GetPortions()) {
@@ -35,7 +41,9 @@ std::shared_ptr<TColumnEngineChanges> TPortionsBucket::BuildOptimizationTask(std
     }
     auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, accessors, saverContext);
     for (auto&& i : context.GetSplitRightOpenIntervalPoints()) {
-        NArrow::NMerger::TSortableBatchPosition pos(i.ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+        NArrow::NMerger::TSortableBatchPosition pos(
+            i.ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false
+        );
         result->AddCheckPoint(pos, false);
     }
     return result;

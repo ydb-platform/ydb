@@ -20,34 +20,41 @@ private:
     TString TxSuffix() const {
         return TStringBuilder() << " at tablet " << Self->TabletID();
     }
+
 public:
-    TTxRemoveSharedBlobs(TColumnShard* self,
-        const NOlap::TTabletsByBlob& sharingBlobIds, const NActors::TActorId initiatorActorId,
-        const TString& storageId)
+    TTxRemoveSharedBlobs(
+        TColumnShard* self,
+        const NOlap::TTabletsByBlob& sharingBlobIds,
+        const NActors::TActorId initiatorActorId,
+        const TString& storageId
+    )
         : TBase(self)
         , TabletTxNo(++Self->TabletTxCounter)
         , InitiatorActorId(initiatorActorId)
         , SharingBlobIds(sharingBlobIds)
-        , Manager(Self->GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(storageId))
-    {
+        , Manager(Self->GetStoragesManager()->GetSharedBlobsManager()->GetStorageManagerVerified(storageId)) {
         Self->GetStoragesManager()->GetSharedBlobsManager()->StartExternalModification();
-        RemoveAction = Self->GetStoragesManager()->GetOperatorVerified(storageId)->StartDeclareRemovingAction(NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS);
+        RemoveAction = Self->GetStoragesManager()->GetOperatorVerified(storageId)->StartDeclareRemovingAction(
+            NOlap::NBlobOperations::EConsumer::CLEANUP_SHARED_BLOBS
+        );
         auto categories = Manager->BuildRemoveCategories(SharingBlobIds);
         for (auto it = categories.GetDirect().GetIterator(); it.IsValid(); ++it) {
             RemoveAction->DeclareRemove(it.GetTabletId(), it.GetBlobId());
         }
         for (auto it = categories.GetBorrowed().GetIterator(); it.IsValid(); ++it) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_BLOBS)("problem", "borrowed_to_remove")("blob_id", it.GetBlobId())("tablet_id", it.GetTabletId());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_BLOBS)
+            ("problem", "borrowed_to_remove")("blob_id", it.GetBlobId())("tablet_id", it.GetTabletId());
         }
         AFL_VERIFY(categories.GetBorrowed().IsEmpty());
-        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize())("sharing_category", categories.GetSharing().GetSize())(
-                                                            "sharing", SharingBlobIds.GetSize());
+        AFL_VERIFY(categories.GetSharing().GetSize() == SharingBlobIds.GetSize())
+        ("sharing_category", categories.GetSharing().GetSize())("sharing", SharingBlobIds.GetSize());
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_DELETE_SHARED_BLOBS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_DELETE_SHARED_BLOBS;
+    }
 };
 
-
-}
+} // namespace NKikimr::NColumnShard

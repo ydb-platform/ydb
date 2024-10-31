@@ -27,12 +27,10 @@ using ESenderType = TEvChangeExchange::ESenderType;
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[CdcChangeSenderPartition]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << "[" << PartitionId << "]"
-                << "[" << ShardId << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[CdcChangeSenderPartition]"
+                                         << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                                         << "[" << PartitionId << "]"
+                                         << "[" << ShardId << "]" << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -41,10 +39,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     /// Init
 
     void Init() {
-        auto opts = TPartitionWriterOpts()
-            .WithCheckState(true)
-            .WithAutoRegister(true)
-            .WithSourceId(SourceId);
+        auto opts = TPartitionWriterOpts().WithCheckState(true).WithAutoRegister(true).WithSourceId(SourceId);
         Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, opts));
         Become(&TThis::StateInit);
     }
@@ -52,8 +47,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     STATEFN(StateInit) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPartitionWriter::TEvInitResult, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -86,8 +81,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
             sFunc(TEvPartitionWriter::TEvWriteResponse, Lost);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -96,11 +91,12 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& Cmd;
 
     public:
-        explicit TSerializer(IChangeRecordSerializer& serializer, NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd)
+        explicit TSerializer(
+            IChangeRecordSerializer& serializer,
+            NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd
+        )
             : Serializer(serializer)
-            , Cmd(cmd)
-        {
-        }
+            , Cmd(cmd) {}
 
         void Visit(const TChangeRecord& record) override {
             Serializer.Serialize(Cmd, record);
@@ -151,8 +147,8 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         switch (ev->GetTypeRewrite()) {
             IgnoreFunc(TEvPartitionWriter::TEvWriteAccepted);
             hFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -262,25 +258,24 @@ public:
     }
 
     explicit TCdcChangeSenderPartition(
-            const TActorId& parent,
-            const TDataShardId& dataShard,
-            ui32 partitionId,
-            ui64 shardId,
-            const TUserTable::TCdcStream& stream)
+        const TActorId& parent,
+        const TDataShardId& dataShard,
+        ui32 partitionId,
+        ui64 shardId,
+        const TUserTable::TCdcStream& stream
+    )
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
         , Serializer(CreateChangeRecordSerializer({
-            .StreamFormat = stream.Format,
-            .StreamMode = stream.Mode,
-            .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
-            .VirtualTimestamps = stream.VirtualTimestamps,
-            .ShardId = DataShard.TabletId,
-        }))
-    {
-    }
+              .StreamFormat = stream.Format,
+              .StreamMode = stream.Mode,
+              .AwsRegion = stream.AwsRegion.GetOrElse(AppData()->AwsCompatibilityConfig.GetAwsRegion()),
+              .VirtualTimestamps = stream.VirtualTimestamps,
+              .ShardId = DataShard.TabletId,
+          })) {}
 
     void Bootstrap() {
         Init();
@@ -314,9 +309,7 @@ private:
 class TMd5PartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
     TMd5PartitionResolver(size_t partitionCount)
-        : PartitionCount(partitionCount)
-    {
-    }
+        : PartitionCount(partitionCount) {}
 
     void Visit(const TChangeRecord& record) override {
         using namespace NKikimr::NDataStreams::V1;
@@ -349,14 +342,12 @@ class TCdcChangeSenderMain
     , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderPathResolver
     , public NChangeExchange::IChangeSenderFactory
-    , private NSchemeCache::TSchemeCacheHelpers
-{
+    , private NSchemeCache::TSchemeCacheHelpers {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[CdcChangeSenderMain]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[CdcChangeSenderMain]"
+                                         << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
+                                         << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -371,8 +362,7 @@ class TCdcChangeSenderMain
     }
 
     bool IsResolving() const override {
-        return IsResolvingCdcStream()
-            || IsResolvingTopic();
+        return IsResolvingCdcStream() || IsResolvingTopic();
     }
 
     TStringBuf CurrentStateName() const {
@@ -401,7 +391,9 @@ class TCdcChangeSenderMain
 
     template <typename CheckFunc, typename FailFunc, typename T, typename... Args>
     bool Check(CheckFunc checkFunc, FailFunc failFunc, const T& subject, Args&&... args) {
-        return checkFunc(CurrentStateName(), subject, std::forward<Args>(args)..., std::bind(failFunc, this, std::placeholders::_1));
+        return checkFunc(
+            CurrentStateName(), subject, std::forward<Args>(args)..., std::bind(failFunc, this, std::placeholders::_1)
+        );
     }
 
     bool CheckNotEmpty(const TAutoPtr<TNavigate>& result) {
@@ -456,8 +448,8 @@ class TCdcChangeSenderMain
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCdcStream);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -526,8 +518,8 @@ class TCdcChangeSenderMain
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -581,11 +573,13 @@ class TCdcChangeSenderMain
             }
         }
 
-        const bool topicAutoPartitioning = IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());
+        const bool topicAutoPartitioning =
+            IsTopicAutoPartitioningEnabled(pqConfig.GetPartitionStrategy().GetPartitionStrategyType());
         Y_ABORT_UNLESS(topicAutoPartitioning || entry.PQGroupInfo->Schema);
         KeyDesc = NKikimr::TKeyDesc::CreateMiniKeyDesc(entry.PQGroupInfo->Schema);
         Y_ABORT_UNLESS(entry.PQGroupInfo->Partitioning);
-        KeyDesc->Partitioning = std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
+        KeyDesc->Partitioning =
+            std::make_shared<TVector<NKikimr::TKeyDesc::TPartitionInfo>>(entry.PQGroupInfo->Partitioning);
 
         if (topicAutoPartitioning) {
             Y_ABORT_UNLESS(entry.PQGroupInfo->PartitionChooser);
@@ -601,7 +595,8 @@ class TCdcChangeSenderMain
     }
 
     static bool IsTopicAutoPartitioningEnabled(NKikimrPQ::TPQTabletConfig::TPartitionStrategyType strategy) {
-        return strategy != NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
+        return strategy !=
+               NKikimrPQ::TPQTabletConfig::TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
     }
 
     /// Main
@@ -681,9 +676,7 @@ public:
         , TChangeSender(this, this, this, this, dataShard.ActorId)
         , StreamPathId(streamPathId)
         , DataShard(dataShard)
-        , TopicVersion(0)
-    {
-    }
+        , TopicVersion(0) {}
 
     TPathId GetChangeSenderIdentity() const override final {
         return StreamPathId;
@@ -732,4 +725,4 @@ IActor* CreateCdcStreamChangeSender(const TDataShardId& dataShard, const TPathId
     return new TCdcChangeSenderMain(dataShard, streamPathId);
 }
 
-}
+} // namespace NKikimr::NDataShard

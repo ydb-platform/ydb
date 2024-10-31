@@ -16,12 +16,14 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TTTLColumnEngineChanges>, Task);
     YDB_ACCESSOR(ui64, MemoryUsage, 0);
     YDB_ACCESSOR(ui64, TxWriteVolume, 0);
-public:
-    TTaskConstructor(const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& predictor, const std::shared_ptr<TTTLColumnEngineChanges>& task)
-        : MemoryPredictor(predictor)
-        , Task(task) {
 
-    }
+public:
+    TTaskConstructor(
+        const std::shared_ptr<TColumnEngineChanges::IMemoryPredictor>& predictor,
+        const std::shared_ptr<TTTLColumnEngineChanges>& task
+    )
+        : MemoryPredictor(predictor)
+        , Task(task) {}
 };
 
 class TTieringProcessContext {
@@ -33,6 +35,7 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     std::shared_ptr<NActualizer::TController> Controller;
     TInstant ActualInstant = AppData()->TimeProvider->Now();
+
 public:
     const std::shared_ptr<NDataLocks::TManager> DataLocksManager;
 
@@ -52,7 +55,11 @@ public:
         return Tasks;
     }
 
-    bool AddPortion(const std::shared_ptr<const TPortionInfo>& info, TPortionEvictionFeatures&& features, const std::optional<TDuration> dWait);
+    bool AddPortion(
+        const std::shared_ptr<const TPortionInfo>& info,
+        TPortionEvictionFeatures&& features,
+        const std::optional<TDuration> dWait
+    );
 
     bool IsRWAddressAvailable(const TRWAddress& address) const {
         auto it = Tasks.find(address);
@@ -63,8 +70,13 @@ public:
         }
     }
 
-    TTieringProcessContext(const ui64 memoryUsageLimit, const TSaverContext& saverContext, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
-        const NColumnShard::TEngineLogsCounters& counters, const std::shared_ptr<TController>& controller);
+    TTieringProcessContext(
+        const ui64 memoryUsageLimit,
+        const TSaverContext& saverContext,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager,
+        const NColumnShard::TEngineLogsCounters& counters,
+        const std::shared_ptr<TController>& controller
+    );
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

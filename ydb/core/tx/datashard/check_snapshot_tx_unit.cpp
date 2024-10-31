@@ -5,11 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCheckSnapshotTxUnit : public TExecutionUnit {
+class TCheckSnapshotTxUnit: public TExecutionUnit {
 public:
     TCheckSnapshotTxUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CheckSnapshotTx, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::CheckSnapshotTx, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -17,14 +16,11 @@ public:
 
     bool CheckTable(TOperation::TPtr op, ui64 ownerId, ui64 pathId) {
         // FIXME: tables must use proper owner id when addressed
-        if (ownerId != DataShard.GetPathOwnerId() ||
-            !DataShard.GetUserTables().contains(pathId))
-        {
+        if (ownerId != DataShard.GetPathOwnerId() || !DataShard.GetUserTables().contains(pathId)) {
             BuildResult(op)->AddError(
-                    NKikimrTxDataShard::TError::SCHEME_ERROR,
-                    TStringBuilder()
-                        << "Shard " << DataShard.TabletID()
-                        << " has no table " << ownerId << ":" << pathId);
+                NKikimrTxDataShard::TError::SCHEME_ERROR,
+                TStringBuilder() << "Shard " << DataShard.TabletID() << " has no table " << ownerId << ":" << pathId
+            );
 
             op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -37,11 +33,11 @@ public:
     bool CheckSnapshotRemove(TOperation::TPtr op, const TSnapshotKey& key) {
         const auto* snapshot = DataShard.GetSnapshotManager().FindAvailable(key);
         if (!snapshot) {
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
+                ->AddError(
                     NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
-                    TStringBuilder()
-                        << "Shard " << DataShard.TabletID()
-                        << " has no snapshot " << key);
+                    TStringBuilder() << "Shard " << DataShard.TabletID() << " has no snapshot " << key
+                );
 
             op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -50,11 +46,10 @@ public:
 
         if (snapshot->HasFlags(TSnapshot::FlagScheme)) {
             BuildResult(op)->AddError(
-                    NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                    TStringBuilder()
-                        << "Shard " << DataShard.TabletID()
-                        << " has snapshot " << key
-                        << " marked as a scheme snapshot");
+                NKikimrTxDataShard::TError::BAD_ARGUMENT,
+                TStringBuilder() << "Shard " << DataShard.TabletID() << " has snapshot " << key
+                                 << " marked as a scheme snapshot"
+            );
 
             op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -79,14 +74,13 @@ public:
 
         const auto& txBody = tx->GetSnapshotTx();
 
-        size_t count = (
-            (size_t)txBody.HasCreateVolatileSnapshot() +
-            (size_t)txBody.HasDropVolatileSnapshot());
+        size_t count = ((size_t)txBody.HasCreateVolatileSnapshot() + (size_t)txBody.HasDropVolatileSnapshot());
 
         if (count != 1) {
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
-                    NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                    "Snapshot tx cannot have multiple conflicting operations");
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
+                ->AddError(
+                    NKikimrTxDataShard::TError::BAD_ARGUMENT, "Snapshot tx cannot have multiple conflicting operations"
+                );
 
             op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -105,9 +99,11 @@ public:
             }
 
             if (op->IsImmediate()) {
-                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
+                    ->AddError(
                         NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                        "CreateVolatileSnapshot cannot be an immediate transaction");
+                        "CreateVolatileSnapshot cannot be an immediate transaction"
+                    );
 
                 op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -136,8 +132,7 @@ public:
         if (!op->IsImmediate()) {
             if (!Pipeline.AssignPlanInterval(op)) {
                 TString err = TStringBuilder()
-                    << "Can't propose tx " << op->GetTxId() << " at blocked shard "
-                    << DataShard.TabletID();
+                              << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
                 BuildResult(op)->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
                 op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -161,10 +156,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(
-        TDataShard& dataShard,
-        TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TCheckSnapshotTxUnit(dataShard, pipeline));
 }
 

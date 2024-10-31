@@ -44,8 +44,7 @@ public:
         , BackgroundControllerCounters(std::make_shared<TBackgroundControllerCounters>())
         , ColumnTablesCounters(std::make_shared<TColumnTablesCounters>())
         , RequestsTracingCounters(std::make_shared<TRequestsTracerCounters>())
-        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
-    }
+        , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {}
 
     void OnWriteOverloadDisk() const {
         TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);

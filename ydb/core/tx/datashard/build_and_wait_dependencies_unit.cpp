@@ -7,50 +7,37 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TBuildAndWaitDependenciesUnit : public TExecutionUnit {
+class TBuildAndWaitDependenciesUnit: public TExecutionUnit {
 public:
-    TBuildAndWaitDependenciesUnit(TDataShard &dataShard,
-                                  TPipeline &pipeline);
+    TBuildAndWaitDependenciesUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TBuildAndWaitDependenciesUnit() override;
 
     bool HasDirectBlockers(const TOperation::TPtr& op) const;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
-    void BuildDependencies(const TOperation::TPtr &op);
-    bool BuildVolatileDependencies(const TOperation::TPtr &op);
+    void BuildDependencies(const TOperation::TPtr& op);
+    bool BuildVolatileDependencies(const TOperation::TPtr& op);
 };
 
-TBuildAndWaitDependenciesUnit::TBuildAndWaitDependenciesUnit(TDataShard &dataShard,
-                                                             TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies, false, dataShard, pipeline)
-{
-}
+TBuildAndWaitDependenciesUnit::TBuildAndWaitDependenciesUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies, false, dataShard, pipeline) {}
 
-TBuildAndWaitDependenciesUnit::~TBuildAndWaitDependenciesUnit()
-{
-}
+TBuildAndWaitDependenciesUnit::~TBuildAndWaitDependenciesUnit() {}
 
 /**
  * Returns true if operation has blockers that prevent it from starting
  */
-bool TBuildAndWaitDependenciesUnit::HasDirectBlockers(const TOperation::TPtr& op) const
-{
+bool TBuildAndWaitDependenciesUnit::HasDirectBlockers(const TOperation::TPtr& op) const {
     Y_DEBUG_ABORT_UNLESS(op->IsWaitingDependencies());
 
-    return !op->GetDependencies().empty()
-        || !op->GetSpecialDependencies().empty()
-        || op->HasVolatileDependencies();
+    return !op->GetDependencies().empty() || !op->GetSpecialDependencies().empty() || op->HasVolatileDependencies();
 }
 
-bool TBuildAndWaitDependenciesUnit::IsReadyToExecute(TOperation::TPtr op) const
-{
+bool TBuildAndWaitDependenciesUnit::IsReadyToExecute(TOperation::TPtr op) const {
     // Dependencies were not built yet. Allow to execute to build dependencies.
     if (!op->IsWaitingDependencies())
         return true;
@@ -63,10 +50,8 @@ bool TBuildAndWaitDependenciesUnit::IsReadyToExecute(TOperation::TPtr op) const
     return true;
 }
 
-EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
-                                                        TTransactionContext &txc,
-                                                        const TActorContext &ctx)
-{
+EExecutionStatus
+TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     // Build dependencies if not yet.
     if (!op->IsWaitingDependencies()) {
         BuildDependencies(op);
@@ -94,7 +79,7 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
             // Cache write keys while operation waits in the queue
             Pipeline.RegisterDistributedWrites(op, txc.DB);
 
-            TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+            TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
             if (tx) {
                 // We should put conflicting tx into cache
                 // or release its data.
@@ -129,7 +114,7 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op) {
+void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr& op) {
     TMicrosecTimerCounter measureBuildDependencies(DataShard, COUNTER_BUILD_DEPENDENCIES_USEC);
 
     Pipeline.GetDepTracker().AddOperation(op);
@@ -139,10 +124,10 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
     // don't preserve schema, so dropping columns or tables is unsafe until
     // they are completed.
     if (op->IsSchemeTx() && !op->IsReadOnly()) {
-        auto *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+        auto* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-        for (const auto &pr : Pipeline.GetActivePlannedOps()) {
+        for (const auto& pr : Pipeline.GetActivePlannedOps()) {
             Y_VERIFY_S(pr.first < op->GetStepOrder(),
                 "unexpected tx " << pr.first.ToString()
                 << " when adding " << op->GetStepOrder().ToString());
@@ -152,9 +137,9 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
         }
 
         // For DropTable we must also wait for all immediate operations to complete
-        auto &schemeTx = tx->GetSchemeTx();
+        auto& schemeTx = tx->GetSchemeTx();
         if (schemeTx.HasDropTable()) {
-            for (const auto &pr : Pipeline.GetImmediateOps()) {
+            for (const auto& pr : Pipeline.GetImmediateOps()) {
                 op->AddSpecialDependency(pr.second);
             }
         }
@@ -163,7 +148,7 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
     op->ResetCurrentTimer();
 }
 
-bool TBuildAndWaitDependenciesUnit::BuildVolatileDependencies(const TOperation::TPtr &op) {
+bool TBuildAndWaitDependenciesUnit::BuildVolatileDependencies(const TOperation::TPtr& op) {
     // Scheme operations need to wait for all volatile transactions below them
     if (op->IsSchemeTx()) {
         TRowVersion current(op->GetStep(), op->GetTxId());
@@ -172,8 +157,7 @@ bool TBuildAndWaitDependenciesUnit::BuildVolatileDependencies(const TOperation::
                 break;
             }
             op->AddVolatileDependency(info->TxId);
-            bool added = DataShard.GetVolatileTxManager()
-                .AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
+            bool added = DataShard.GetVolatileTxManager().AttachWaitingRemovalOperation(info->TxId, op->GetTxId());
             Y_ABORT_UNLESS(added);
         }
     }
@@ -181,14 +165,9 @@ bool TBuildAndWaitDependenciesUnit::BuildVolatileDependencies(const TOperation::
     return op->HasVolatileDependencies();
 }
 
-void TBuildAndWaitDependenciesUnit::Complete(TOperation::TPtr,
-                                             const TActorContext &)
-{
-}
+void TBuildAndWaitDependenciesUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard,
-                                                           TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TBuildAndWaitDependenciesUnit(dataShard, pipeline));
 }
 

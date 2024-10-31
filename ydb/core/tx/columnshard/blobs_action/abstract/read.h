@@ -11,14 +11,14 @@ namespace NKikimr::NOlap {
 class TActionReadBlobs {
 private:
     THashMap<TBlobRange, TString> Blobs;
+
 public:
     TString DebugString() const;
 
     TActionReadBlobs() = default;
 
     TActionReadBlobs(THashMap<TBlobRange, TString>&& blobs)
-        : Blobs(std::move(blobs))
-    {
+        : Blobs(std::move(blobs)) {
         for (auto&& i : Blobs) {
             AFL_VERIFY(i.second.size());
         }
@@ -95,11 +95,10 @@ public:
     class TBlobGluePolicy {
     private:
         const ui64 BlobLimitSize = 8LLU << 20;
+
     public:
         TBlobGluePolicy(const ui64 blobLimitSize)
-            : BlobLimitSize(blobLimitSize)
-        {
-        }
+            : BlobLimitSize(blobLimitSize) {}
 
         bool Glue(TBlobRange& currentRange, const TBlobRange& addRange) const {
             return currentRange.TryGlueSameBlob(addRange, BlobLimitSize);
@@ -107,7 +106,8 @@ public:
     };
 
     template <class TGluePolicy>
-    static THashMap<TBlobRange, std::vector<TBlobRange>> GroupRanges(std::vector<TBlobRange>&& ranges, const TGluePolicy& policy) {
+    static THashMap<TBlobRange, std::vector<TBlobRange>>
+    GroupRanges(std::vector<TBlobRange>&& ranges, const TGluePolicy& policy) {
         std::sort(ranges.begin(), ranges.end());
         THashMap<TBlobRange, std::vector<TBlobRange>> result;
         std::optional<TBlobRange> currentRange;
@@ -115,8 +115,7 @@ public:
         for (auto&& br : ranges) {
             if (!currentRange) {
                 currentRange = br;
-            }
-            else if (!policy.Glue(*currentRange, br)) {
+            } else if (!policy.Glue(*currentRange, br)) {
                 result.emplace(*currentRange, std::move(currentList));
                 currentRange = br;
                 currentList.clear();
@@ -128,12 +127,15 @@ public:
         }
         return result;
     }
-
 };
 
 class IBlobsReadingAction: public ICommonBlobsAction {
 public:
-    using TErrorStatus = TConclusionSpecialStatus<NKikimrProto::EReplyStatus, NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::ERROR>;
+    using TErrorStatus = TConclusionSpecialStatus<
+        NKikimrProto::EReplyStatus,
+        NKikimrProto::EReplyStatus::OK,
+        NKikimrProto::EReplyStatus::ERROR>;
+
 private:
     using TBase = ICommonBlobsAction;
 
@@ -148,12 +150,14 @@ private:
     bool Started = false;
     bool DataExtracted = false;
     YDB_ACCESSOR(bool, IsBackgroundProcess, true);
+
 protected:
     virtual void DoStartReading(THashSet<TBlobRange>&& range) = 0;
     void StartReading(std::vector<TBlobRange>&& ranges);
-    virtual THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges) const = 0;
-public:
+    virtual THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges
+    ) const = 0;
 
+public:
     const THashMap<TBlobRange, std::vector<TBlobRange>>& GetGroups() const {
         return Groups;
     }
@@ -194,10 +198,7 @@ public:
     }
 
     IBlobsReadingAction(const TString& storageId)
-        : TBase(storageId)
-    {
-
-    }
+        : TBase(storageId) {}
 
     ui64 GetExpectedBlobsSize() const {
         ui64 result = 0;
@@ -232,6 +233,7 @@ public:
 class TReadActionsCollection {
 private:
     THashMap<TString, std::shared_ptr<IBlobsReadingAction>> Actions;
+
 public:
     THashMap<TString, std::shared_ptr<IBlobsReadingAction>>::const_iterator begin() const {
         return Actions.begin();
@@ -265,10 +267,10 @@ public:
     TReadActionsCollection() = default;
 
     TReadActionsCollection(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions) {
-        for (auto&& a: actions) {
+        for (auto&& a : actions) {
             Add(a);
         }
     }
 };
 
-}
+} // namespace NKikimr::NOlap

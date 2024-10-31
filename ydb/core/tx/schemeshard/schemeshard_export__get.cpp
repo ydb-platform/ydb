@@ -6,11 +6,9 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TExport::TTxGet: public TSchemeShard::TXxport::TTxGet<
-        TExportInfo,
-        TEvExport::TEvGetExportRequest,
-        TEvExport::TEvGetExportResponse
-> {
+struct TSchemeShard::TExport::TTxGet
+    : public TSchemeShard::TXxport::
+          TTxGet<TExportInfo, TEvExport::TEvGetExportRequest, TEvExport::TEvGetExportResponse> {
     using TTxGetBase::TTxGetBase;
 
     TTxType GetTxType() const override {
@@ -27,5 +25,5 @@ ITransaction* TSchemeShard::CreateTxGetExport(TEvExport::TEvGetExportRequest::TP
     return new TExport::TTxGet(this, ev);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

@@ -16,7 +16,9 @@ class TTestStoragesManager: public NOlap::IStoragesManager {
 private:
     using TBase = NOlap::IStoragesManager;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
-    std::shared_ptr<NOlap::NDataSharing::TSharedBlobsManager> SharedBlobsManager = std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId(0));
+    std::shared_ptr<NOlap::NDataSharing::TSharedBlobsManager> SharedBlobsManager =
+        std::make_shared<NOlap::NDataSharing::TSharedBlobsManager>(NOlap::TTabletId(0));
+
 protected:
     virtual bool DoLoadIdempotency(NTable::TDatabase& /*database*/) override {
         return true;
@@ -26,8 +28,8 @@ protected:
     virtual const std::shared_ptr<NDataSharing::TSharedBlobsManager>& DoGetSharedBlobsManager() const override {
         return SharedBlobsManager;
     }
-public:
 
+public:
     static std::shared_ptr<TTestStoragesManager> GetInstance() {
         static auto result = std::make_shared<NKikimr::NOlap::TTestStoragesManager>();
         static TMutex mutex;
@@ -39,10 +41,9 @@ public:
         initialized = true;
         return result;
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap
 
 namespace NKikimr::NArrow::NTest {
 
@@ -57,9 +58,7 @@ private:
 public:
     explicit TTestColumn(const TString& name, const NScheme::TTypeInfo& type)
         : Name(name)
-        , Type(type) {
-
-    }
+        , Type(type) {}
 
     NKikimrSchemeOp::TOlapColumnDescription CreateColumn(const ui32 id) const;
     static std::vector<std::pair<TString, NScheme::TTypeInfo>> ConvertToPairs(const std::vector<TTestColumn>& columns);
@@ -69,11 +68,11 @@ public:
     static std::set<std::string> GetNullableSet(const std::vector<TTestColumn>& columns);
 };
 
-}
+} // namespace NKikimr::NArrow::NTest
 
 namespace NKikimr::NArrow {
 
 std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns);
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns);
 
-}
+} // namespace NKikimr::NArrow

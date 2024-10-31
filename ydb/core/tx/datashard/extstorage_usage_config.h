@@ -25,8 +25,7 @@ public:
         : Bucket(settings.GetBucket())
         , ObjectKeyPattern(settings.GetObjectKeyPattern())
         , Shard(shard)
-        , StorageClass(settings.GetStorageClass()) {
-    }
+        , StorageClass(settings.GetStorageClass()) {}
 
 public:
     static TS3Settings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task) {
@@ -37,8 +36,12 @@ public:
         return TS3Settings(task.GetS3Settings(), task.GetShardNum());
     }
 
-    inline const TString& GetBucket() const { return Bucket; }
-    inline const TString& GetObjectKeyPattern() const { return ObjectKeyPattern; }
+    inline const TString& GetBucket() const {
+        return Bucket;
+    }
+    inline const TString& GetObjectKeyPattern() const {
+        return ObjectKeyPattern;
+    }
 
     Aws::S3::Model::StorageClass GetStorageClass() const;
 
@@ -54,13 +57,12 @@ public:
         return NBackupRestoreTraits::SchemeKey(ObjectKeyPattern);
     }
 
-    inline TString GetDataKey(
-        NBackupRestoreTraits::EDataFormat format,
-        NBackupRestoreTraits::ECompressionCodec codec) const {
+    inline TString GetDataKey(NBackupRestoreTraits::EDataFormat format, NBackupRestoreTraits::ECompressionCodec codec)
+        const {
         return NBackupRestoreTraits::DataKey(ObjectKeyPattern, Shard, format, codec);
     }
 
 }; // TS3Settings
-}
+} // namespace NKikimr::NDataShard
 
 #endif // KIKIMR_DISABLE_S3_OPS

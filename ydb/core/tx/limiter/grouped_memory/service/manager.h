@@ -46,15 +46,18 @@ private:
     }
 
 public:
-    TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,
-        const std::shared_ptr<TStageFeatures>& defaultStage)
+    TManager(
+        const NActors::TActorId& ownerActorId,
+        const TConfig& config,
+        const TString& name,
+        const std::shared_ptr<TCounters>& signals,
+        const std::shared_ptr<TStageFeatures>& defaultStage
+    )
         : Config(config)
         , Name(name)
         , Signals(signals)
         , OwnerActorId(ownerActorId)
-        , DefaultStage(defaultStage)
-    {
-    }
+        , DefaultStage(defaultStage) {}
 
     void RegisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId);
     void UnregisterGroup(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId);
@@ -65,11 +68,20 @@ public:
     void RegisterProcess(const ui64 externalProcessId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
     void UnregisterProcess(const ui64 externalProcessId);
 
-    void RegisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 externalGroupId,
+    void RegisterAllocation(
+        const ui64 externalProcessId,
+        const ui64 externalScopeId,
+        const ui64 externalGroupId,
         const std::shared_ptr<IAllocation>& task,
-        const std::optional<ui32>& stageIdx);
+        const std::optional<ui32>& stageIdx
+    );
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
-    void UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
+    void UpdateAllocation(
+        const ui64 externalProcessId,
+        const ui64 externalScopeId,
+        const ui64 allocationId,
+        const ui64 volume
+    );
 
     bool IsEmpty() const {
         return Processes.empty();

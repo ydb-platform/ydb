@@ -9,7 +9,8 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 TString TCommonSession::DebugString() const {
-    return TStringBuilder() << "{id=" << SessionId << ";context=" << TransferContext.DebugString() << ";state=" << State << ";}";
+    return TStringBuilder() << "{id=" << SessionId << ";context=" << TransferContext.DebugString() << ";state=" << State
+                            << ";}";
 }
 
 bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
@@ -24,7 +25,7 @@ bool TCommonSession::TryStart(const NColumnShard::TColumnShard& shard) {
     for (auto&& i : GetPathIdsForStart()) {
         const auto& g = index.GetGranuleVerified(i);
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
-            if (shard.GetDataLocksManager()->IsLocked(*p.second, { "sharing_session:" + GetSessionId() })) {
+            if (shard.GetDataLocksManager()->IsLocked(*p.second, {"sharing_session:" + GetSessionId()})) {
                 return false;
             }
             portionsByPath[i].emplace_back(p.second);
@@ -45,12 +46,16 @@ void TCommonSession::PrepareToStart(const NColumnShard::TColumnShard& shard) {
     AFL_VERIFY(State == EState::Created);
     State = EState::Prepared;
     AFL_VERIFY(!LockGuard);
-    LockGuard = shard.GetDataLocksManager()->RegisterLock<NDataLocks::TSnapshotLock>("sharing_session:" + GetSessionId(),
-        TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), true);
+    LockGuard = shard.GetDataLocksManager()->RegisterLock<NDataLocks::TSnapshotLock>(
+        "sharing_session:" + GetSessionId(), TransferContext.GetSnapshotBarrierVerified(), GetPathIdsForStart(), true
+    );
     shard.GetSharingSessionsManager()->StartSharingSession();
 }
 
-void TCommonSession::Finish(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
+void TCommonSession::Finish(
+    const NColumnShard::TColumnShard& shard,
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager
+) {
     AFL_VERIFY(State == EState::InProgress || State == EState::Prepared);
     State = EState::Finished;
     shard.GetSharingSessionsManager()->FinishSharingSession();
@@ -58,4 +63,4 @@ void TCommonSession::Finish(const NColumnShard::TColumnShard& shard, const std::
     LockGuard->Release(*dataLocksManager);
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

@@ -9,26 +9,41 @@ void TMemoryLimiterActor::Bootstrap() {
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartTask::TPtr& ev) {
     for (auto&& i : ev->Get()->GetAllocations()) {
-        Manager->RegisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId(), i,
-            ev->Get()->GetStageFeaturesIdx());
+        Manager->RegisterAllocation(
+            ev->Get()->GetExternalProcessId(),
+            ev->Get()->GetExternalScopeId(),
+            ev->Get()->GetExternalGroupId(),
+            i,
+            ev->Get()->GetStageFeaturesIdx()
+        );
     }
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishTask::TPtr& ev) {
-    Manager->UnregisterAllocation(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId());
+    Manager->UnregisterAllocation(
+        ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId()
+    );
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvUpdateTask::TPtr& ev) {
     Manager->UpdateAllocation(
-        ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetAllocationId(), ev->Get()->GetVolume());
+        ev->Get()->GetExternalProcessId(),
+        ev->Get()->GetExternalScopeId(),
+        ev->Get()->GetAllocationId(),
+        ev->Get()->GetVolume()
+    );
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishGroup::TPtr& ev) {
-    Manager->UnregisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
+    Manager->UnregisterGroup(
+        ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId()
+    );
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvStartGroup::TPtr& ev) {
-    Manager->RegisterGroup(ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId());
+    Manager->RegisterGroup(
+        ev->Get()->GetExternalProcessId(), ev->Get()->GetExternalScopeId(), ev->Get()->GetExternalGroupId()
+    );
 }
 
 void TMemoryLimiterActor::Handle(NEvents::TEvExternal::TEvFinishProcess::TPtr& ev) {

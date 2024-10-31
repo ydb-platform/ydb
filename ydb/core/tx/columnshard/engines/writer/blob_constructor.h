@@ -15,7 +15,7 @@ namespace NColumnShard {
 class TBlobBatch;
 struct TUsage;
 
-}
+} // namespace NColumnShard
 
 namespace NOlap {
 
@@ -25,10 +25,19 @@ private:
     YDB_READONLY_DEF(TString, Data);
     YDB_ACCESSOR_DEF(std::shared_ptr<IBlobsWritingAction>, WriteOperator);
 
-    TBlobWriteInfo(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator, const std::optional<TUnifiedBlobId>& customBlobId);
+    TBlobWriteInfo(
+        const TString& data,
+        const std::shared_ptr<IBlobsWritingAction>& writeOperator,
+        const std::optional<TUnifiedBlobId>& customBlobId
+    );
+
 public:
-    static TBlobWriteInfo BuildWriteTask(const TString& data, const std::shared_ptr<IBlobsWritingAction>& writeOperator, const std::optional<TUnifiedBlobId>& customBlobId = {});
+    static TBlobWriteInfo BuildWriteTask(
+        const TString& data,
+        const std::shared_ptr<IBlobsWritingAction>& writeOperator,
+        const std::optional<TUnifiedBlobId>& customBlobId = {}
+    );
 };
 
-}
-}
+} // namespace NOlap
+} // namespace NKikimr

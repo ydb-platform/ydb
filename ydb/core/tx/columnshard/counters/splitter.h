@@ -14,18 +14,20 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerializationBytes;
     NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerialization;
     NMonitoring::THistogramPtr CorrectDataSerializationHistogramBytes;
+
 public:
     TSplitterCaseCounters(const TCommonCountersOwner& owner, const TString& splitterType)
-        : TBase(owner)
-    {
+        : TBase(owner) {
         DeepSubGroup("splitter_type", splitterType);
 
         TrashDataSerializationBytes = TBase::GetDeriviative("TrashDataSerialization/Bytes");
         TrashDataSerialization = TBase::GetDeriviative("TrashDataSerialization/Count");
-        TrashDataSerializationHistogramBytes = TBase::GetHistogram("TrashDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
+        TrashDataSerializationHistogramBytes =
+            TBase::GetHistogram("TrashDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
         CorrectDataSerializationBytes = TBase::GetDeriviative("CorrectDataSerialization/Bytes");
         CorrectDataSerialization = TBase::GetDeriviative("CorrectDataSerialization/Count");
-        CorrectDataSerializationHistogramBytes = TBase::GetHistogram("CorrectDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
+        CorrectDataSerializationHistogramBytes =
+            TBase::GetHistogram("CorrectDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
     }
 
     void OnTrashSerialized(const ui64 bytes) const {
@@ -47,6 +49,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr BlobsCount;
     NMonitoring::TDynamicCounters::TCounterPtr BlobsBytes;
     NMonitoring::THistogramPtr BlobsBytesHistogram;
+
 public:
     TBlobResultCounters(const TCommonCountersOwner& owner, const TString& blobsType)
         : TBase(owner) {
@@ -54,7 +57,8 @@ public:
 
         BlobsCount = TBase::GetDeriviative("DataSerialization/Bytes");
         BlobsBytes = TBase::GetDeriviative("DataSerialization/Count");
-        BlobsBytesHistogram = TBase::GetHistogram("DataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
+        BlobsBytesHistogram =
+            TBase::GetHistogram("DataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
     }
 
     void OnBlobData(const ui64 size) const {
@@ -62,12 +66,12 @@ public:
         BlobsBytes->Add(size);
         BlobsBytesHistogram->Collect(size);
     }
-
 };
 
 class TSplitterCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
+
 public:
     TSplitterCounters(const TCommonCountersOwner& owner);
     const TSplitterCaseCounters SimpleSplitter;
@@ -76,4 +80,4 @@ public:
     const TBlobResultCounters MonoBlobs;
 };
 
-}
+} // namespace NKikimr::NColumnShard

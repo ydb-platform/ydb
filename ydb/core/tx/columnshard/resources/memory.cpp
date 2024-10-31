@@ -4,8 +4,7 @@
 namespace NKikimr::NOlap {
 
 TScanMemoryCounter::TScanMemoryCounter(const TString& limitName, const ui64 memoryLimit)
-    : TBase(limitName)
-{
+    : TBase(limitName) {
     AvailableMemory = TBase::GetValue("Available");
     MinimalMemory = TBase::GetValue("Minimal");
     DeriviativeTake = TBase::GetDeriviative("Take");
@@ -99,4 +98,4 @@ void TScanMemoryLimiter::TGuard::Take(const ui64 size) {
     }
 }
 
-}
+} // namespace NKikimr::NOlap

@@ -20,35 +20,37 @@ Y_UNIT_TEST_SUITE(Worker) {
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
         {
-            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic",
-                    NYdb::NTopic::TCreateTopicSettings()
-                        .BeginAddConsumer()
-                            .ConsumerName("consumer")
-                        .EndAddConsumer()
-            ));
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                env.GetYdbProxy(),
+                new TEvYdbProxy::TEvCreateTopicRequest(
+                    "/Root/topic",
+                    NYdb::NTopic::TCreateTopicSettings().BeginAddConsumer().ConsumerName("consumer").EndAddConsumer()
+                )
+            );
 
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
 
-        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        }));
+        env.CreateTable(
+            "/Root",
+            *MakeTableDescription(TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            })
+        );
 
         auto createReaderFn = [ydbProxy = env.GetYdbProxy()]() {
-            return CreateRemoteTopicReader(ydbProxy,
+            return CreateRemoteTopicReader(
+                ydbProxy,
                 TEvYdbProxy::TTopicReaderSettings()
                     .ConsumerName("consumer")
-                    .AppendTopics(NYdb::NTopic::TTopicReadSettings()
-                        .Path("/Root/topic")
-                        .AppendPartitionIds(0)
-                    )
+                    .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path("/Root/topic").AppendPartitionIds(0))
             );
         };
 
@@ -56,7 +58,9 @@ Y_UNIT_TEST_SUITE(Worker) {
             return CreateLocalTableWriter(tablePathId);
         };
 
-        auto worker = env.GetRuntime().Register(CreateWorker(env.GetSender(), std::move(createReaderFn), std::move(createWriterFn)));
+        auto worker = env.GetRuntime().Register(
+            CreateWorker(env.GetSender(), std::move(createReaderFn), std::move(createWriterFn))
+        );
         Y_UNUSED(worker);
 
         UNIT_ASSERT(WriteTopic(env, "/Root/topic", R"({"key":[1], "update":{"value":"10"}})"));
@@ -65,4 +69,4 @@ Y_UNIT_TEST_SUITE(Worker) {
     }
 }
 
-}
+} // namespace NKikimr::NReplication::NService

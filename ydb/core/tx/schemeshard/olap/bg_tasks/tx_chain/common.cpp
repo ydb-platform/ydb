@@ -19,4 +19,4 @@ TTxChainData::TProtoStorage TTxChainData::SerializeToProto() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NBackground

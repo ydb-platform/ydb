@@ -28,7 +28,8 @@ public:
             ColumnNames.emplace_back(i);
         }
         if (ShardsCount >= 1 && ColumnNames.empty()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("shards_count", ShardsCount)("column_names", JoinSeq(",", ColumnNames));
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+            ("shards_count", ShardsCount)("column_names", JoinSeq(",", ColumnNames));
             return false;
         }
         return true;
@@ -99,9 +100,16 @@ public:
         return ResourcesTaskContext;
     }
 
-    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters,
-        const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
-        const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId)
+    TReadContext(
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const NColumnShard::TConcreteScanCounters& counters,
+        const TReadMetadataBase::TConstPtr& readMetadata,
+        const TActorId& scanActorId,
+        const TActorId& resourceSubscribeActorId,
+        const TActorId& readCoordinatorActorId,
+        const TComputeShardingPolicy& computeShardingPolicy,
+        const ui64 scanId
+    )
         : StoragesManager(storagesManager)
         , Counters(counters)
         , ReadMetadata(readMetadata)

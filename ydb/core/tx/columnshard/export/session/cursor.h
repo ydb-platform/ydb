@@ -16,14 +16,12 @@ private:
     bool Finished = false;
 
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TCursor& proto);
+
 public:
     TCursor() = default;
     TCursor(const TOwnedCellVec& lastKey, const bool finished)
         : LastKey(lastKey)
-        , Finished(finished)
-    {
-
-    }
+        , Finished(finished) {}
 
     const std::optional<TOwnedCellVec>& GetLastKey() const {
         return LastKey;
@@ -52,4 +50,4 @@ public:
     NKikimrColumnShardExportProto::TCursor SerializeToProto() const;
 };
 
-}
+} // namespace NKikimr::NOlap::NExport

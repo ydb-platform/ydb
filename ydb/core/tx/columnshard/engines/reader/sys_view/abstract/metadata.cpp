@@ -1,5 +1,3 @@
 #include "metadata.h"
 
-namespace NKikimr::NOlap::NReader::NSysView::NAbstract {
-
-}
+namespace NKikimr::NOlap::NReader::NSysView::NAbstract {}

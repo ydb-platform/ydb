@@ -14,16 +14,13 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateBackupCollection TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TCreateBackupCollection TPropose"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(std::move(id))
-    {
-    }
+        : OperationId(std::move(id)) {}
 
     bool ProgressState(TOperationContext& context) override {
         LOG_I(DebugHint() << "ProgressState");
@@ -67,30 +64,30 @@ public:
     }
 };
 
-class TCreateBackupCollection : public TSubOperation {
+class TCreateBackupCollection: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -105,7 +102,7 @@ class TCreateBackupCollection : public TSubOperation {
         backupCollection->CreateTxId = OperationId.GetTxId();
         backupCollection->PathType = TPathElement::EPathType::EPathTypeBackupCollection;
         backupCollection->PathState = TPathElement::EPathState::EPathStateCreate;
-        backupCollection->LastTxId  = OperationId.GetTxId();
+        backupCollection->LastTxId = OperationId.GetTxId();
 
         return backupCollection;
     }
@@ -126,9 +123,11 @@ public:
 
         LOG_N("TCreateBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                    static_cast<ui64>(OperationId.GetTxId()),
-                                                    static_cast<ui64>(context.SS->SelfTabletId()));
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted,
+            static_cast<ui64>(OperationId.GetTxId()),
+            static_cast<ui64>(context.SS->SelfTabletId())
+        );
 
         auto bcPaths = ResolveBackupCollectionPaths(rootPathStr, name, true, context, result);
         if (!bcPaths) {
@@ -141,23 +140,15 @@ public:
             const auto checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeBackupCollection, false);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeBackupCollection, false
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .IsValidACL(acl);
+                checks.IsValidLeafName().DepthLimit().PathsLimit().DirChildrenLimit().IsValidACL(acl);
             }
 
             if (!checks) {
@@ -165,7 +156,6 @@ public:
                 return result;
             }
         }
-
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
@@ -182,17 +172,13 @@ public:
         auto backupCollection = TBackupCollectionInfo::Create(desc);
         context.SS->BackupCollections[dstPath->PathId] = backupCollection;
         context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Add(1);
-        context.SS->CreateTx(
-            OperationId,
-            TTxState::TxCreateBackupCollection,
-            pathEl->PathId);
+        context.SS->CreateTx(OperationId, TTxState::TxCreateBackupCollection, pathEl->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
         if (rootPath.Base()->HasActiveChanges()) {
-            const TTxId parentTxId = rootPath.Base()->PlannedToCreate()
-                                         ? rootPath.Base()->CreateTxId
-                                         : rootPath.Base()->LastTxId;
+            const TTxId parentTxId =
+                rootPath.Base()->PlannedToCreate() ? rootPath.Base()->CreateTxId : rootPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -209,15 +195,10 @@ public:
         }
         context.SS->PersistPath(db, backupCollectionPathId);
 
-        context.SS->PersistBackupCollection(db,
-                                            backupCollectionPathId,
-                                            backupCollection);
+        context.SS->PersistBackupCollection(db, backupCollectionPathId, backupCollection);
         context.SS->PersistTxState(db, OperationId);
 
-        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
-                                                          dstPath,
-                                                          context.SS,
-                                                          context.OnComplete);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         UpdatePathSizeCounts(rootPath, dstPath);
 

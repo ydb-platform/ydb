@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TRestoreUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelRestore> {
+class TRestoreUnit: public TBackupRestoreUnitBase<TEvDataShard::TEvCancelRestore> {
 protected:
     bool IsRelevant(TActiveTransaction* tx) const override {
         return tx->GetSchemeTx().HasRestore();
@@ -38,19 +38,22 @@ protected:
 
         const auto settingsKind = restore.GetSettingsCase();
         switch (settingsKind) {
-        case NKikimrSchemeOp::TRestoreTask::kS3Settings:
-        #ifndef KIKIMR_DISABLE_S3_OPS
-            tx->SetAsyncJobActor(ctx.Register(CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
-                TMailboxType::HTSwap, AppData(ctx)->BatchPoolId));
-            break;
-        #else
-            Abort(op, ctx, "Imports from S3 are disabled");
-            return false;
-        #endif
+            case NKikimrSchemeOp::TRestoreTask::kS3Settings:
+#ifndef KIKIMR_DISABLE_S3_OPS
+                tx->SetAsyncJobActor(ctx.Register(
+                    CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
+                    TMailboxType::HTSwap,
+                    AppData(ctx)->BatchPoolId
+                ));
+                break;
+#else
+                Abort(op, ctx, "Imports from S3 are disabled");
+                return false;
+#endif
 
-        default:
-            Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
-            return false;
+            default:
+                Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
+                return false;
         }
 
         return true;
@@ -84,9 +87,7 @@ protected:
 
 public:
     TRestoreUnit(TDataShard& self, TPipeline& pipeline)
-        : TBase(EExecutionUnitKind::Restore, self, pipeline)
-    {
-    }
+        : TBase(EExecutionUnitKind::Restore, self, pipeline) {}
 
 }; // TRestoreUnit
 

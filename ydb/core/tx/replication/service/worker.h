@@ -83,9 +83,10 @@ struct TEvWorker {
 IActor* CreateWorker(
     const TActorId& parent,
     std::function<IActor*(void)>&& createReaderFn,
-    std::function<IActor*(void)>&& createWriterFn);
+    std::function<IActor*(void)>&& createWriterFn
+);
 
-}
+} // namespace NKikimr::NReplication::NService
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TEvWorker::TEvData::TRecord, o, x) {
     return x.Out(o);

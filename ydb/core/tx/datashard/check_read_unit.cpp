@@ -4,12 +4,10 @@
 
 namespace NKikimr::NDataShard {
 
-class TCheckReadUnit : public TExecutionUnit {
+class TCheckReadUnit: public TExecutionUnit {
 public:
     TCheckReadUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CheckRead, true, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::CheckRead, true, self, pipeline) {}
 
     ~TCheckReadUnit() = default;
 
@@ -35,4 +33,4 @@ THolder<TExecutionUnit> CreateCheckReadUnit(TDataShard& self, TPipeline& pipelin
     return THolder(new TCheckReadUnit(self, pipeline));
 }
 
-} // NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

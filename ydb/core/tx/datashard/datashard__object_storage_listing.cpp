@@ -6,7 +6,7 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxObjectStorageListing : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxObjectStorageListing: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvObjectStorageListingRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvObjectStorageListingResponse> Result;
@@ -22,10 +22,11 @@ public:
     TTxObjectStorageListing(TDataShard* ds, TEvDataShard::TEvObjectStorageListingRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
-        , RestartCount(0)
-    {}
+        , RestartCount(0) {}
 
-    TTxType GetTxType() const override { return TXTYPE_S3_LISTING; }
+    TTxType GetTxType() const override {
+        return TXTYPE_S3_LISTING;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ++RestartCount;
@@ -34,12 +35,12 @@ public:
             Result = new TEvDataShard::TEvObjectStorageListingResponse(Self->TabletID());
         }
 
-        if (Self->State != TShardState::Ready &&
-            Self->State != TShardState::Readonly &&
-            Self->State != TShardState::SplitSrcWaitForNoTxInFlight &&
-            Self->State != TShardState::Frozen) {
-            SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
-                        Sprintf("Wrong shard state: %" PRIu32 " tablet id: %" PRIu64, Self->State, Self->TabletID()));
+        if (Self->State != TShardState::Ready && Self->State != TShardState::Readonly &&
+            Self->State != TShardState::SplitSrcWaitForNoTxInFlight && Self->State != TShardState::Frozen) {
+            SetError(
+                NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
+                Sprintf("Wrong shard state: %" PRIu32 " tablet id: %" PRIu64, Self->State, Self->TabletID())
+            );
             return true;
         }
 
@@ -67,7 +68,7 @@ public:
         const TSerializedCellVec prefixColumns(Ev->Get()->Record.GetSerializedKeyPrefix());
         for (ui32 ki = 0; ki < prefixColumns.GetCells().size(); ++ki) {
             // TODO: check prefix column type
-            auto &cell = prefixColumns.GetCells()[ki];
+            auto& cell = prefixColumns.GetCells()[ki];
             NScheme::TTypeId type = tableInfo.KeyColumnTypes[ki].GetTypeId();
             key.emplace_back(cell.Data(), cell.Size(), type);
             endKey.emplace_back(cell.Data(), cell.Size(), type);
@@ -101,19 +102,27 @@ public:
 
             if (Ev->Get()->Record.HasLastPath()) {
                 TString reqLastPath = Ev->Get()->Record.GetLastPath();
-                
+
                 key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
 
                 for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
-                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
+                    key.emplace_back(
+                        suffixColumns.GetCells()[i].Data(),
+                        suffixColumns.GetCells()[i].Size(),
+                        tableInfo.KeyColumnTypes[ki].GetTypeId()
+                    );
                 }
-                
+
                 startAfterPath = reqLastPath;
             } else {
                 for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
-                    key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
+                    key.emplace_back(
+                        suffixColumns.GetCells()[i].Data(),
+                        suffixColumns.GetCells()[i].Size(),
+                        tableInfo.KeyColumnTypes[ki].GetTypeId()
+                    );
                 }
                 startAfterPath = TString(suffixColumns.GetCells()[0].Data(), suffixColumns.GetCells()[0].Size());
             }
@@ -126,7 +135,7 @@ public:
 
         // If this trasaction has restarted we want to continue from the last seen key
         if (LastPath) {
-            const size_t pathColIdx =  prefixColumns.GetCells().size();
+            const size_t pathColIdx = prefixColumns.GetCells().size();
             key.resize(pathColIdx);
             key.emplace_back(LastPath.data(), LastPath.size(), NScheme::NTypeIds::Utf8);
             key.resize(columnCount);
@@ -159,7 +168,9 @@ public:
         }
 
         // Select path column and all user-requested columns
-        const TVector<ui32> columnsToReturn(Ev->Get()->Record.GetColumnsToReturn().begin(), Ev->Get()->Record.GetColumnsToReturn().end());
+        const TVector<ui32> columnsToReturn(
+            Ev->Get()->Record.GetColumnsToReturn().begin(), Ev->Get()->Record.GetColumnsToReturn().end()
+        );
 
         NTable::TKeyRange keyRange;
         keyRange.MinKey = key;
@@ -184,13 +195,16 @@ public:
             for (const auto& colId : filter.columns()) {
                 filterColumnIds.push_back(colId);
             }
-            
+
             for (const auto& matchType : filter.matchtypes()) {
                 if (!NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_IsValid(matchType)) {
-                    SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, Sprintf("Unknown match type %" PRIu32, matchType));
+                    SetError(
+                        NKikimrTxDataShard::TError::BAD_ARGUMENT, Sprintf("Unknown match type %" PRIu32, matchType)
+                    );
                     return true;
                 }
-                matchTypes.push_back(static_cast<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType>(matchType));
+                matchTypes.push_back(static_cast<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType>(matchType)
+                );
             }
         }
 
@@ -248,12 +262,11 @@ public:
 
                 if (Result->Record.GetContentsRows().empty() ||
                     *Result->Record.GetContentsRows().rbegin() != newContentsRow) {
-
                     if (hasFilter) {
                         bool matches = true;
 
                         for (size_t i = 0; i < filterColumnIds.size(); i++) {
-                            auto &columnId = filterColumnIds[i];
+                            auto& columnId = filterColumnIds[i];
 
                             Y_VERIFY(columnId < value.Cells().size());
 
@@ -261,12 +274,18 @@ public:
 
                             switch (matchType) {
                                 case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL:
-                                    if (CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]) != 0) {
+                                    if (CompareTypedCells(
+                                            value.Cells()[columnId],
+                                            filterColumnValues.GetCells()[i],
+                                            value.Types[columnId]
+                                        ) != 0) {
                                         matches = false;
                                     }
                                     break;
                                 case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_NOT_EQUAL: {
-                                    int cmp = CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]);
+                                    int cmp = CompareTypedCells(
+                                        value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]
+                                    );
 
                                     if (cmp == 0) {
                                         matches = false;
@@ -285,7 +304,7 @@ public:
                             continue;
                         }
                     }
-                    
+
                     // Add a row with path column and all columns requested by user
                     Result->Record.AddContentsRows(newContentsRow);
                     if (++foundKeys >= maxKeys) {
@@ -297,12 +316,12 @@ public:
                     bool matches = true;
 
                     for (size_t i = 0; i < filterColumnIds.size(); i++) {
-                        auto &columnId = filterColumnIds[i];
+                        auto& columnId = filterColumnIds[i];
 
                         Y_VERIFY(columnId < value.Cells().size());
 
                         NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
-                        
+
                         if (matchTypes.size() == filterColumnIds.size()) {
                             matchType = matchTypes[i];
                         } else {
@@ -311,12 +330,16 @@ public:
 
                         switch (matchType) {
                             case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL:
-                                if (CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]) != 0) {
+                                if (CompareTypedCells(
+                                        value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]
+                                    ) != 0) {
                                     matches = false;
                                 }
                                 break;
                             case NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_NOT_EQUAL: {
-                                int cmp = CompareTypedCells(value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]);
+                                int cmp = CompareTypedCells(
+                                    value.Cells()[columnId], filterColumnValues.GetCells()[i], value.Types[columnId]
+                                );
 
                                 if (cmp == 0) {
                                     matches = false;
@@ -335,7 +358,7 @@ public:
                         continue;
                     }
                 }
-                
+
                 // For prefix save only path
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;

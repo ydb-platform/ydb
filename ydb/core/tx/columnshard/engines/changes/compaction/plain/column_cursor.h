@@ -33,7 +33,10 @@ public:
         AFL_VERIFY(BlobChunks);
     }
 
-    TPortionColumnCursor(const std::shared_ptr<arrow::DataType>& dataType, const std::shared_ptr<arrow::Scalar>& defaultValue)
+    TPortionColumnCursor(
+        const std::shared_ptr<arrow::DataType>& dataType,
+        const std::shared_ptr<arrow::Scalar>& defaultValue
+    )
         : DataType(dataType)
         , DefaultValue(defaultValue) {
         AFL_VERIFY(DataType);

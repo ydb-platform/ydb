@@ -8,17 +8,18 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
-
 namespace NKikimr::NEvWrite {
 
 class IShardsSplitter {
 public:
     using TPtr = std::shared_ptr<IShardsSplitter>;
-    using TYdbConclusionStatus = TConclusionSpecialStatus<Ydb::StatusIds::StatusCode, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::SCHEME_ERROR>;
+    using TYdbConclusionStatus =
+        TConclusionSpecialStatus<Ydb::StatusIds::StatusCode, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::SCHEME_ERROR>;
 
     class IEvWriteDataAccessor {
     private:
         YDB_READONLY(ui64, Size, 0);
+
     public:
         using TPtr = std::shared_ptr<IEvWriteDataAccessor>;
 
@@ -28,10 +29,7 @@ public:
         virtual std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const = 0;
         virtual TString GetSerializedData() const = 0;
         IEvWriteDataAccessor(const ui64 size)
-            : Size(size)
-        {
-
-        }
+            : Size(size) {}
         virtual ~IEvWriteDataAccessor() {}
     };
 
@@ -41,7 +39,8 @@ public:
         virtual ~IShardInfo() {}
 
         virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const = 0;
-        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion) const = 0;
+        virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion)
+            const = 0;
         virtual ui64 GetBytes() const = 0;
         virtual ui32 GetRowsCount() const = 0;
         virtual const TString& GetData() const = 0;
@@ -51,6 +50,7 @@ public:
     private:
         THashMap<ui64, std::vector<IShardInfo::TPtr>> ShardsInfo;
         ui32 AllShardsCount = 0;
+
     public:
         TFullSplitData(ui64 allShardsCount)
             : AllShardsCount(allShardsCount) {}
@@ -64,7 +64,8 @@ public:
 
     virtual ~IShardsSplitter() {}
 
-    TYdbConclusionStatus SplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
+    TYdbConclusionStatus
+    SplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
         TableId = schemeEntry.TableId.PathId.LocalPathId;
         AFL_VERIFY(schemeEntry.ColumnTableInfo);
         AFL_VERIFY(schemeEntry.ColumnTableInfo->Description.HasSchema());
@@ -89,11 +90,13 @@ public:
     static TPtr BuildSplitter(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry);
 
 private:
-    virtual TYdbConclusionStatus DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) = 0;
+    virtual TYdbConclusionStatus
+    DoSplitData(const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) = 0;
 
     ui64 TableId = 0;
     ui64 SchemaVersion = 0;
+
 protected:
     std::optional<TFullSplitData> FullSplitData;
 };
-}
+} // namespace NKikimr::NEvWrite

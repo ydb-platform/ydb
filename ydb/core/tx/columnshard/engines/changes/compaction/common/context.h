@@ -46,8 +46,12 @@ public:
         return IndexInfo;
     }
 
-    TColumnMergeContext(const ui32 columnId, const ISnapshotSchema::TPtr& schema, const ui32 chunkRawBytesLimit,
-        const std::optional<NArrow::NSplitter::TColumnSerializationStat>& columnStat)
+    TColumnMergeContext(
+        const ui32 columnId,
+        const ISnapshotSchema::TPtr& schema,
+        const ui32 chunkRawBytesLimit,
+        const std::optional<NArrow::NSplitter::TColumnSerializationStat>& columnStat
+    )
         : ColumnId(columnId)
         , SchemaInfo(schema)
         , Saver(schema->GetColumnSaver(columnId))
@@ -71,8 +75,7 @@ public:
     TChunkMergeContext(const ui32 portionRowsCountLimit, const ui32 batchIdx, const ui32 recordsCount)
         : PortionRowsCountLimit(portionRowsCountLimit)
         , BatchIdx(batchIdx)
-        , RecordsCount(recordsCount)
-    {
+        , RecordsCount(recordsCount) {
         AFL_VERIFY(RecordsCount);
         AFL_VERIFY(PortionRowsCountLimit);
     }

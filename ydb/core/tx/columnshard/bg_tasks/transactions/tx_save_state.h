@@ -12,18 +12,25 @@ private:
     const std::shared_ptr<TSession> Session;
     const std::shared_ptr<ITabletAdapter> Adapter;
     virtual void DoComplete(const TActorContext& ctx) override;
+
 public:
-    TTxSaveSessionState(const std::shared_ptr<TSession>& session, const std::optional<NActors::TActorId> progressActorId, const std::shared_ptr<ITabletAdapter>& adapter, const ui64 txInternalId)
+    TTxSaveSessionState(
+        const std::shared_ptr<TSession>& session,
+        const std::optional<NActors::TActorId> progressActorId,
+        const std::shared_ptr<ITabletAdapter>& adapter,
+        const ui64 txInternalId
+    )
         : TBase(progressActorId, txInternalId)
         , Session(session)
-        , Adapter(adapter)
-    {
+        , Adapter(adapter) {
         AFL_VERIFY(!!Session);
         AFL_VERIFY(!!Adapter);
     }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-    TTxType GetTxType() const override { return NColumnShard::TXTYPE_SAVE_BACKGROUND_SESSION_STATE; }
+    TTxType GetTxType() const override {
+        return NColumnShard::TXTYPE_SAVE_BACKGROUND_SESSION_STATE;
+    }
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

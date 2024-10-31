@@ -5,10 +5,11 @@ namespace NKikimr::NDataShard {
 class TDataShard::TTxRemoveSchemaSnapshots: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxRemoveSchemaSnapshots(TDataShard* self)
-        : TBase(self)
-    { }
+        : TBase(self) {}
 
-    TTxType GetTxType() const override { return TXTYPE_REMOVE_SCHEMA_SNAPSHOTS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_REMOVE_SCHEMA_SNAPSHOTS;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         while (!Self->PendingSchemaSnapshotsToGc.empty()) {
@@ -43,8 +44,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
-    }
+    void Complete(const TActorContext&) override {}
 };
 
 void TDataShard::Handle(TEvPrivate::TEvRemoveSchemaSnapshots::TPtr&, const TActorContext& ctx) {

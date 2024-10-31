@@ -10,8 +10,7 @@
 
 namespace NKikimr::NReplication::NTestHelpers {
 
-class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
-};
+class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {};
 
 template <bool UseDatabase = true>
 class TEnv {
@@ -34,8 +33,9 @@ class TEnv {
         Endpoint = "localhost:" + ToString(grpcPort);
         Database = "/" + ToString(DomainName);
 
-        YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
-            Endpoint, UseDatabase ? Database : "", false /* ssl */, std::forward<Args>(args)...));
+        YdbProxy = Server.GetRuntime()->Register(
+            CreateYdbProxy(Endpoint, UseDatabase ? Database : "", false /* ssl */, std::forward<Args>(args)...)
+        );
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
@@ -52,12 +52,9 @@ class TEnv {
 
 public:
     TEnv(bool init = true)
-        : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
-            .SetDomainName(DomainName)
-        )
+        : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig()).SetDomainName(DomainName))
         , Server(Settings)
-        , Client(Settings)
-    {
+        , Client(Settings) {
         if (init) {
             Init();
         }
@@ -65,28 +62,24 @@ public:
 
     TEnv(const TFeatureFlags& featureFlags, bool init = true)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
-            .SetDomainName(DomainName)
-            .SetFeatureFlags(featureFlags.FeatureFlags)
-        )
+                       .SetDomainName(DomainName)
+                       .SetFeatureFlags(featureFlags.FeatureFlags))
         , Server(Settings)
-        , Client(Settings)
-    {
+        , Client(Settings) {
         if (init) {
             Init();
         }
     }
 
     explicit TEnv(const TString& builtin)
-        : TEnv(false)
-    {
+        : TEnv(false) {
         UNIT_ASSERT_STRING_CONTAINS(builtin, "@builtin");
         Init(builtin);
         Client.ModifyOwner("/", DomainName, builtin);
     }
 
     explicit TEnv(const TString& user, const TString& password)
-        : TEnv(false)
-    {
+        : TEnv(false) {
         NKikimrReplication::TStaticCredentials staticCreds;
         staticCreds.SetUser(user);
         staticCreds.SetPassword(password);
@@ -121,8 +114,9 @@ public:
             UNIT_ASSERT(desc.GetPathDescription().GetDomainDescription().HasSecurityState());
 
             const auto& secState = desc.GetPathDescription().GetDomainDescription().GetSecurityState();
-            Server.GetRuntime()->Send(new IEventHandle(MakeTicketParserID(), Sender,
-                new TEvTicketParser::TEvUpdateLoginSecurityState(secState)));
+            Server.GetRuntime()->Send(new IEventHandle(
+                MakeTicketParserID(), Sender, new TEvTicketParser::TEvUpdateLoginSecurityState(secState)
+            ));
         }
     }
 
@@ -214,4 +208,4 @@ private:
     TActorId Sender;
 };
 
-}
+} // namespace NKikimr::NReplication::NTestHelpers

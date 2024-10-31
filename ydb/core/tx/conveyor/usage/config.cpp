@@ -59,4 +59,4 @@ double TConfig::GetWorkerCPUUsage(const ui32 workerIdx) const {
     }
 }
 
-}
+} // namespace NKikimr::NConveyor

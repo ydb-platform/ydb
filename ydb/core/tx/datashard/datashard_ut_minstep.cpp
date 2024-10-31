@@ -8,28 +8,25 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr {
 
 using namespace NSchemeShard;
 using namespace Tests;
 
-TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
-{
-    auto &runtime = *server->GetRuntime();
+TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard) {
+    auto& runtime = *server->GetRuntime();
     ui64 schemeShard = ChangeStateStorage(SchemeRoot, server->GetSettings().Domain);
 
     bool hasFound = false;
     TAutoPtr<IEventHandle> proposeEvent = nullptr;
 
-    auto captureProposes = [dataShard, schemeShard, &hasFound, &proposeEvent] (TAutoPtr<IEventHandle> &event) -> auto
-    {
+    auto captureProposes = [dataShard, schemeShard, &hasFound, &proposeEvent](TAutoPtr<IEventHandle>& event) -> auto {
         if (event->GetTypeRewrite() == TEvTxProxy::EvProposeTransaction) {
-            auto &rec = event->Get<TEvTxProxy::TEvProposeTransaction>()->Record;
+            auto& rec = event->Get<TEvTxProxy::TEvProposeTransaction>()->Record;
             bool noSchemeShard = true;
             bool hasDataShard = false;
 
-            for (auto& affected: rec.GetTransaction().GetAffectedSet()) {
+            for (auto& affected : rec.GetTransaction().GetAffectedSet()) {
                 if (schemeShard == affected.GetTabletId()) {
                     noSchemeShard = false;
                 }
@@ -51,8 +48,7 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
     };
     auto prevObserver = runtime.SetObserverFunc(captureProposes);
 
-    auto stopCondition = [&hasFound] () -> auto
-    {
+    auto stopCondition = [&hasFound]() -> auto {
         return hasFound;
     };
 
@@ -66,7 +62,9 @@ TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
 }
 
 Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
-    void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool volatileTxs) {
+    void TestDropTablePlanComesNotTooEarly(
+        const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool volatileTxs
+    ) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -76,7 +74,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
@@ -109,8 +107,10 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         WaitTabletBecomesOffline(server, shard1);
         const TInstant dropEnd = runtime.GetCurrentTime();
 
-        UNIT_ASSERT_C((dropEnd - dropStart) < TDuration::Seconds(35),
-            "Drop has taken " << (dropEnd - dropStart) << " of simulated time");
+        UNIT_ASSERT_C(
+            (dropEnd - dropStart) < TDuration::Seconds(35),
+            "Drop has taken " << (dropEnd - dropStart) << " of simulated time"
+        );
 
         { // make sure that the ejeceted propose has become outdated
             auto request = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
@@ -118,12 +118,14 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             runtime.SendToPipe(request->Record.GetCoordinatorID(), sender, request.Release());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxProxy::TEvProposeTransactionStatus>(sender);
-            auto expectedPlanStatus = volatileTxs
-                // Volatile transactions abort eagerly, so plan will be accepted (but eventually fail)
-                ? TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted
-                : TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated;
-            UNIT_ASSERT_VALUES_EQUAL((TEvTxProxy::TEvProposeTransactionStatus::EStatus)ev->Get()->Record.GetStatus(),
-                expectedPlanStatus);
+            auto expectedPlanStatus =
+                volatileTxs
+                    // Volatile transactions abort eagerly, so plan will be accepted (but eventually fail)
+                    ? TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted
+                    : TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated;
+            UNIT_ASSERT_VALUES_EQUAL(
+                (TEvTxProxy::TEvProposeTransactionStatus::EStatus)ev->Get()->Record.GetStatus(), expectedPlanStatus
+            );
         }
 
         { // handle respond from unplanned data transaction because plan ejection
@@ -131,8 +133,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             auto* reply = ev->Get();
             NYql::TIssues issues;
             NYql::IssuesFromMessage(reply->Record.GetResponse().GetQueryIssues(), issues);
-            UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetYdbStatus(), expectedStatus,
-                issues.ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetYdbStatus(), expectedStatus, issues.ToString());
         }
 
         // make sure that second table is still operationable
@@ -154,7 +155,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         SchemeShard,
     };
 
-/*
+    /*
     void TestAlterProposeRebootMinStep(ERebootOnPropose rebootOnPropose) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -377,7 +378,9 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         TestAlterProposeRebootMinStep(ERebootOnPropose::SchemeShard);
     }
 */
-    void TestDropTableCompletesQuickly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool volatileTxs) {
+    void TestDropTableCompletesQuickly(
+        const TString& query, Ydb::StatusIds::StatusCode expectedStatus, bool volatileTxs
+    ) {
         TPortManager pm;
         NKikimrConfig::TAppConfig app;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -387,7 +390,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             .SetAppConfig(app);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
@@ -451,8 +454,10 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         WaitTabletBecomesOffline(server, shard1);
         auto dropEnd = runtime.GetCurrentTime();
 
-        UNIT_ASSERT_C((dropEnd - dropStart) < TDuration::Seconds(5),
-            "Drop has taken " << (dropEnd - dropStart) << " of simulated time");
+        UNIT_ASSERT_C(
+            (dropEnd - dropStart) < TDuration::Seconds(5),
+            "Drop has taken " << (dropEnd - dropStart) << " of simulated time"
+        );
 
         { // handle response from data transaction
             auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
@@ -481,7 +486,6 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
             VolatileTxs
         );
     }
-
 }
 
 } // namespace NKikimr

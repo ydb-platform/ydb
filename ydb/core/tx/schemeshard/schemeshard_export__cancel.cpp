@@ -18,11 +18,9 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
     TEvExport::TEvCancelExportRequest::TPtr Request;
 
-    explicit TTxCancel(TSelf *self, TEvExport::TEvCancelExportRequest::TPtr& ev)
+    explicit TTxCancel(TSelf* self, TEvExport::TEvCancelExportRequest::TPtr& ev)
         : TXxport::TTxBase(self)
-        , Request(ev)
-    {
-    }
+        , Request(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CANCEL_EXPORT;
@@ -97,19 +95,16 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
-    }
+    void DoComplete(const TActorContext&) override {}
 
 }; // TTxCancel
 
 struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
     TEvSchemeShard::TEvCancelTxResult::TPtr CancelResult;
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf* self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
         : TXxport::TTxBase(self)
-        , CancelResult(ev)
-    {
-    }
+        , CancelResult(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CANCEL_EXPORT_ACK;
@@ -181,8 +176,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
-    }
+    void DoComplete(const TActorContext&) override {}
 
 }; // TTxCancelAck
 
@@ -194,5 +188,5 @@ ITransaction* TSchemeShard::CreateTxCancelExportAck(TEvSchemeShard::TEvCancelTxR
     return new TExport::TTxCancelAck(this, ev);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

@@ -3,7 +3,8 @@
 
 namespace NKikimr::NOlap {
 
-TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data, const std::optional<TUnifiedBlobId>& externalBlobId) {
+TUnifiedBlobId
+IBlobsWritingAction::AddDataForWrite(const TString& data, const std::optional<TUnifiedBlobId>& externalBlobId) {
     Y_ABORT_UNLESS(!WritingStarted);
     auto blobId = AllocateNextBlobId(data);
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_BLOBS)("generated_blob_id", blobId.ToStringNew());
@@ -21,7 +22,8 @@ void IBlobsWritingAction::AddDataForWrite(const TUnifiedBlobId& blobId, const TS
 }
 
 void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)("event", "WriteBlobResult")("blob_id", blobId.ToStringNew())("status", status);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS)
+    ("event", "WriteBlobResult")("blob_id", blobId.ToStringNew())("status", status);
     AFL_VERIFY(Counters);
     auto it = WritingStart.find(blobId);
     AFL_VERIFY(it != WritingStart.end());
@@ -53,4 +55,4 @@ void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifi
     return DoSendWriteBlobRequest(data, blobId);
 }
 
-}
+} // namespace NKikimr::NOlap

@@ -10,7 +10,7 @@ namespace NKikimr::NOlap {
 struct TPredicate {
 private:
     using EOperation = NArrow::EOperation;
-    EOperation Operation{ EOperation::Unspecified };
+    EOperation Operation{EOperation::Unspecified};
 
 public:
     static std::shared_ptr<arrow::RecordBatch> CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch);
@@ -33,7 +33,10 @@ public:
 
     template <class TArrayColumn>
     std::optional<typename TArrayColumn::value_type> Get(
-        const ui32 colIndex, const ui32 rowIndex, const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {
+        const ui32 colIndex,
+        const ui32 rowIndex,
+        const std::optional<typename TArrayColumn::value_type> defaultValue = {}
+    ) const {
         auto column = Batch->column(colIndex);
         if (!column) {
             return defaultValue;
@@ -68,7 +71,9 @@ public:
     }
 
     static std::pair<TPredicate, TPredicate> DeserializePredicatesRange(
-        const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+        const TSerializedTableRange& range,
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns
+    );
 
     constexpr TPredicate() noexcept = default;
 

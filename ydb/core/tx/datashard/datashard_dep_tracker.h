@@ -65,7 +65,7 @@ private:
         virtual void RemoveOperation(const TOperation::TPtr& op) const noexcept = 0;
     };
 
-    struct TMvccDependencyTrackingLogic : public TDependencyTrackingLogic {
+    struct TMvccDependencyTrackingLogic: public TDependencyTrackingLogic {
         explicit TMvccDependencyTrackingLogic(TDependencyTracker& parent)
             : TDependencyTrackingLogic(parent) {}
 
@@ -73,7 +73,7 @@ private:
         void RemoveOperation(const TOperation::TPtr& op) const noexcept override;
     };
 
-    struct TFollowerDependencyTrackingLogic : public TDependencyTrackingLogic {
+    struct TFollowerDependencyTrackingLogic: public TDependencyTrackingLogic {
         explicit TFollowerDependencyTrackingLogic(TDependencyTracker& parent)
             : TDependencyTrackingLogic(parent) {}
 
@@ -83,8 +83,7 @@ private:
 
 public:
     TDependencyTracker(TDataShard* self)
-        : Self(self)
-    { }
+        : Self(self) {}
 
 public:
     // Called to update this table schema
@@ -156,8 +155,8 @@ private:
     TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedPlannedWrites;
     TIntrusiveList<TOperation, TOperationDelayedWriteListTag> DelayedImmediateWrites;
 
-    const TMvccDependencyTrackingLogic MvccLogic{ *this };
-    const TFollowerDependencyTrackingLogic FollowerLogic{ *this };
+    const TMvccDependencyTrackingLogic MvccLogic{*this};
+    const TFollowerDependencyTrackingLogic FollowerLogic{*this};
 };
 
 } // namespace NDataShard

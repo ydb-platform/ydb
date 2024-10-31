@@ -16,6 +16,7 @@ private:
         return it->second;
     }
     TMutex Mutex;
+
 public:
     TTracing();
 
@@ -25,4 +26,4 @@ public:
     std::shared_ptr<TTraceClient> GetLocalClient(const TString& type, const TString& clientId);
 };
 
-}
+} // namespace NKikimr::NTracing

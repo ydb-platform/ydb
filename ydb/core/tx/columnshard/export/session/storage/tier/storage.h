@@ -8,20 +8,25 @@ public:
     static TString GetClassNameStatic() {
         return "TIER";
     }
+
 private:
     TString TierName;
-    static inline const TFactory::TRegistrator<TTierStorageInitializer> Registrator = TFactory::TRegistrator<TTierStorageInitializer>(GetClassNameStatic());
+    static inline const TFactory::TRegistrator<TTierStorageInitializer> Registrator =
+        TFactory::TRegistrator<TTierStorageInitializer>(GetClassNameStatic());
+
 protected:
-    virtual TConclusion<std::shared_ptr<IBlobsStorageOperator>> DoInitializeOperator(const std::shared_ptr<IStoragesManager>& storages) const override;
+    virtual TConclusion<std::shared_ptr<IBlobsStorageOperator>> DoInitializeOperator(
+        const std::shared_ptr<IStoragesManager>& storages
+    ) const override;
+
 public:
     TTierStorageInitializer() = default;
     TTierStorageInitializer(const TString& tierName)
-        : TierName(tierName)
-    {
+        : TierName(tierName) {}
 
-    }
-
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto) override {
+    virtual TConclusionStatus DoDeserializeFromProto(
+        const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto
+    ) override {
         if (!proto.HasTier()) {
             return TConclusionStatus::Fail("has not tier configuration");
         }
@@ -37,4 +42,4 @@ public:
         return GetClassNameStatic();
     }
 };
-}
+} // namespace NKikimr::NOlap::NExport

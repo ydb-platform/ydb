@@ -11,15 +11,15 @@ private:
     TIndexInfo IndexInfo;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
     TSnapshot Snapshot;
+
 protected:
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "("
-            "schema=" << Schema->ToString() << ";" <<
-            "snapshot=" << Snapshot.DebugString() << ";" <<
-            "index_info=" << IndexInfo.DebugString() << ";" <<
-            ")"
-            ;
+                                   "schema="
+                                << Schema->ToString() << ";" << "snapshot=" << Snapshot.DebugString() << ";"
+                                << "index_info=" << IndexInfo.DebugString() << ";" << ")";
     }
+
 public:
     TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot);
 
@@ -40,4 +40,4 @@ public:
     ui64 GetVersion() const override;
 };
 
-}
+} // namespace NKikimr::NOlap

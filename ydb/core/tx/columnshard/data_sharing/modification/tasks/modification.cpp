@@ -4,11 +4,23 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusion<std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction>> TTaskForTablet::BuildModificationTransaction(NColumnShard::TColumnShard* self, const TTabletId initiator, const TString& sessionId, const ui64 packIdx, const std::shared_ptr<TTaskForTablet>& selfPtr) {
-    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxApplyLinksModification(self, selfPtr, sessionId, initiator, packIdx));
+NKikimr::TConclusion<std::unique_ptr<NKikimr::NTabletFlatExecutor::ITransaction>>
+TTaskForTablet::BuildModificationTransaction(
+    NColumnShard::TColumnShard* self,
+    const TTabletId initiator,
+    const TString& sessionId,
+    const ui64 packIdx,
+    const std::shared_ptr<TTaskForTablet>& selfPtr
+) {
+    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(
+        new TTxApplyLinksModification(self, selfPtr, sessionId, initiator, packIdx)
+    );
 }
 
-void TTaskForTablet::ApplyForDB(NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TSharedBlobsManager>& manager) const {
+void TTaskForTablet::ApplyForDB(
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const std::shared_ptr<TSharedBlobsManager>& manager
+) const {
     for (auto&& i : TasksByStorage) {
         auto storageManager = manager->GetStorageManagerVerified(i.first);
         i.second.ApplyForDB(txc, storageManager);
@@ -22,7 +34,10 @@ void TTaskForTablet::ApplyForRuntime(const std::shared_ptr<TSharedBlobsManager>&
     }
 }
 
-void TStorageTabletTask::ApplyForDB(NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TStorageSharedBlobsManager>& manager) const {
+void TStorageTabletTask::ApplyForDB(
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const std::shared_ptr<TStorageSharedBlobsManager>& manager
+) const {
     for (auto&& i : RemapOwner) {
         manager->CASBorrowedBlobsDB(txc, i.second.GetFrom(), i.second.GetTo(), {i.first});
     }
@@ -40,4 +55,4 @@ void TStorageTabletTask::ApplyForRuntime(const std::shared_ptr<TStorageSharedBlo
     manager->RemoveSharedBlobs(RemoveSharingLinks);
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

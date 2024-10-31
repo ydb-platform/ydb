@@ -18,9 +18,7 @@ struct TStatsId {
     TStatsId(const TPathId& pathId, const TTabletId datashard = TTabletId(0), ui32 followerId = 0)
         : PathId(pathId)
         , Datashard(datashard)
-        , FollowerId(followerId)
-    {
-    }
+        , FollowerId(followerId) {}
 
     bool operator==(const TStatsId& rhs) const {
         return PathId == rhs.PathId && Datashard == rhs.Datashard & FollowerId == rhs.FollowerId;
@@ -33,17 +31,16 @@ struct TStatsId {
     };
 };
 
-template<typename TEvPeriodicStats>
+template <typename TEvPeriodicStats>
 struct TStatsQueueItem {
     typename TEvPeriodicStats::TPtr Ev;
     TStatsId Id;
     TMonotonic Ts;
 
     TStatsQueueItem(typename TEvPeriodicStats::TPtr ev, const TStatsId& id)
-            : Ev(ev)
-            , Id(id)
-            , Ts(AppData()->MonotonicTimeProvider->Now())
-    {}
+        : Ev(ev)
+        , Id(id)
+        , Ts(AppData()->MonotonicTimeProvider->Now()) {}
 
     TPathId PathId() {
         return Id.PathId;
@@ -55,7 +52,7 @@ enum EStatsQueueStatus {
     NOT_READY
 };
 
-template<typename TEvent>
+template <typename TEvent>
 class TStatsQueue {
 public:
     using TEventPtr = typename TEvent::TPtr;
@@ -63,12 +60,16 @@ public:
     using TStatsMap = THashMap<TStatsId, TItem*, TStatsId::THash>;
     using TStatsQ = TStatsQueue<TEvent>;
 
-    TStatsQueue(TSchemeShard* ss, ESimpleCounters queueSizeCounter, ECumulativeCounters writtenCounter, EPercentileCounters latencyCounter)
+    TStatsQueue(
+        TSchemeShard* ss,
+        ESimpleCounters queueSizeCounter,
+        ECumulativeCounters writtenCounter,
+        EPercentileCounters latencyCounter
+    )
         : QueueSizeCounter(queueSizeCounter)
         , WrittenCounter(writtenCounter)
         , LatencyCounter(latencyCounter)
-        , SS(ss)
-    {}
+        , SS(ss) {}
 
     EStatsQueueStatus Add(TStatsId statsId, TEventPtr ev);
     TItem Next();
@@ -93,15 +94,13 @@ public:
     const EPercentileCounters LatencyCounter;
 
 private:
-
     TSchemeShard* SS;
 
     TStatsMap Map;
     TDeque<TItem> Queue;
 };
 
-
-template<typename TEvent>
+template <typename TEvent>
 class TTxStoreStats: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     using TStatsQ = TStatsQueue<TEvent>;
     using TItem = TStatsQueueItem<TEvent>;
@@ -114,9 +113,7 @@ public:
     TTxStoreStats(TSchemeShard* ss, TStatsQ& queue, bool& persistStatsPending)
         : TBase(ss)
         , Queue(queue)
-        , PersistStatsPending(persistStatsPending)
-    {
-    }
+        , PersistStatsPending(persistStatsPending) {}
 
     virtual ~TTxStoreStats() = default;
 
@@ -127,10 +124,15 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
 
     // returns true to continue batching
-    virtual bool PersistSingleStats(const TPathId& pathId, const TItem& item, TTransactionContext& txc, const TActorContext& ctx) = 0;
+    virtual bool PersistSingleStats(
+        const TPathId& pathId,
+        const TItem& item,
+        TTransactionContext& txc,
+        const TActorContext& ctx
+    ) = 0;
 
     virtual void ScheduleNextBatch(const TActorContext& ctx) = 0;
 };
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

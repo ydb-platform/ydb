@@ -10,7 +10,9 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
     }
     const auto pathId = context.GetObjectPath()->Base()->PathId;
     auto tableInfo = context.GetSSOperationContext()->SS->ColumnTables.TakeVerified(pathId);
-    context.GetSSOperationContext()->SS->PersistColumnTableAlter(*context.GetDB(), pathId, *GetTargetTableInfoVerified());
+    context.GetSSOperationContext()->SS->PersistColumnTableAlter(
+        *context.GetDB(), pathId, *GetTargetTableInfoVerified()
+    );
     tableInfo->AlterData = GetTargetTableInfoVerified();
     return TConclusionStatus::Success();
 }
@@ -28,4 +30,4 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

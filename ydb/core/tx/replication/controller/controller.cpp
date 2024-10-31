@@ -16,14 +16,11 @@ TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , LogPrefix(this)
     , TabletCountersPtr(new TProtobufTabletCounters<
-             ESimpleCounters_descriptor,
-             ECumulativeCounters_descriptor,
-             EPercentileCounters_descriptor,
-             ETxTypes_descriptor
-        >())
-    , TabletCounters(TabletCountersPtr.Get())
-{
-}
+                        ESimpleCounters_descriptor,
+                        ECumulativeCounters_descriptor,
+                        EPercentileCounters_descriptor,
+                        ETxTypes_descriptor>())
+    , TabletCounters(TabletCountersPtr.Get()) {}
 
 void TController::OnDetach(const TActorContext& ctx) {
     CLOG_T(ctx, "OnDetach");
@@ -80,8 +77,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvRunWorker, Handle);
         HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-    default:
-        HandleDefaultEvents(ev, SelfId());
+        default:
+            HandleDefaultEvents(ev, SelfId());
     }
 }
 
@@ -163,7 +160,12 @@ void TController::Handle(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActor
 }
 
 template <typename TEvent>
-void ProcessLimiterQueue(TDeque<TActorId>& requested, THashSet<TActorId>& inflight, ui32 limit, const TActorContext& ctx) {
+void ProcessLimiterQueue(
+    TDeque<TActorId>& requested,
+    THashSet<TActorId>& inflight,
+    ui32 limit,
+    const TActorContext& ctx
+) {
     while (!requested.empty() && inflight.size() < limit) {
         const auto& actorId = requested.front();
         ctx.Send(actorId, new TEvent());
@@ -174,12 +176,16 @@ void ProcessLimiterQueue(TDeque<TActorId>& requested, THashSet<TActorId>& inflig
 
 void TController::ProcessCreateStreamQueue(const TActorContext& ctx) {
     const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
-    ProcessLimiterQueue<TEvPrivate::TEvAllowCreateStream>(RequestedCreateStream, InflightCreateStream, limits.GetInflightCreateStreamLimit(), ctx);
+    ProcessLimiterQueue<TEvPrivate::TEvAllowCreateStream>(
+        RequestedCreateStream, InflightCreateStream, limits.GetInflightCreateStreamLimit(), ctx
+    );
 }
 
 void TController::ProcessDropStreamQueue(const TActorContext& ctx) {
     const auto& limits = AppData()->ReplicationConfig.GetSchemeOperationLimits();
-    ProcessLimiterQueue<TEvPrivate::TEvAllowDropStream>(RequestedDropStream, InflightDropStream, limits.GetInflightDropStreamLimit(), ctx);
+    ProcessLimiterQueue<TEvPrivate::TEvAllowDropStream>(
+        RequestedDropStream, InflightDropStream, limits.GetInflightDropStreamLimit(), ctx
+    );
 }
 
 void TController::Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx) {
@@ -403,33 +409,33 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     const auto id = TWorkerId::Parse(record.GetWorker());
 
     switch (record.GetStatus()) {
-    case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
-        if (!session.HasWorker(id)) {
-            StopQueue.emplace(id, nodeId);
-        } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
-            UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
-        }
-        break;
-    case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
-        if (!MaybeRemoveWorker(id, ctx)) {
-            if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
-                RunTxWorkerError(id, record.GetErrorDescription(), ctx);
-            } else {
-                session.DetachWorker(id);
-                if (IsValidWorker(id)) {
-                    auto* worker = GetOrCreateWorker(id);
-                    worker->ClearSession();
-                    if (worker->HasCommand()) {
-                        BootQueue.insert(id);
+        case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
+            if (!session.HasWorker(id)) {
+                StopQueue.emplace(id, nodeId);
+            } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
+                UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
+            }
+            break;
+        case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+            if (!MaybeRemoveWorker(id, ctx)) {
+                if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
+                    RunTxWorkerError(id, record.GetErrorDescription(), ctx);
+                } else {
+                    session.DetachWorker(id);
+                    if (IsValidWorker(id)) {
+                        auto* worker = GetOrCreateWorker(id);
+                        worker->ClearSession();
+                        if (worker->HasCommand()) {
+                            BootQueue.insert(id);
+                        }
                     }
                 }
             }
-        }
-        break;
-    default:
-        CLOG_W(ctx, "Unknown worker status"
+            break;
+        default:
+            CLOG_W(ctx, "Unknown worker status"
             << ": value# " << static_cast<int>(record.GetStatus()));
-        break;
+            break;
     }
 
     ScheduleProcessQueues();
@@ -776,10 +782,10 @@ void TController::Remove(ui64 id) {
     Replications.erase(it);
 }
 
-} // NController
+} // namespace NController
 
 IActor* CreateController(const TActorId& tablet, TTabletStorageInfo* info) {
     return new NController::TController(tablet, info);
 }
 
-}
+} // namespace NKikimr::NReplication

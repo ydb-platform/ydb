@@ -21,13 +21,12 @@ private:
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -62,8 +61,10 @@ public:
                 context.SS->TabletID(),
                 context.Ctx.SelfID,
                 ui64(OperationId.GetTxId()),
-                txShardString, seqNo,
-                context.SS->SelectProcessingParams(txState->TargetPathId));
+                txShardString,
+                seqNo,
+                context.SS->SelectProcessingParams(txState->TargetPathId)
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
 
@@ -83,18 +84,17 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterColumnTable TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterColumnTable TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType}
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -106,7 +106,7 @@ public:
                      << " at tablet: " << ssId
                      << ", stepId: " << step);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -118,7 +118,9 @@ public:
         TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
         std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
 
-        TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
+        TUpdateFinishContext fContext(
+            &objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId)
+        );
         update->Finish(fContext).Validate();
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -145,7 +147,7 @@ public:
                      DebugHint() << " HandleReply ProgressState"
                      << " at tablet: " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -164,19 +166,19 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterColumnTable TProposedWaitParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterColumnTable TProposedWaitParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TProposedWaitParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
             {TEvHive::TEvCreateTabletReply::EventType,
              TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
@@ -231,29 +233,29 @@ class TAlterColumnTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -263,23 +265,29 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        const bool isAlterSharding = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasReshardColumnTable();
+        const bool isAlterSharding =
+            Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasReshardColumnTable();
         if (isAlterSharding && !AppData()->FeatureFlags.GetEnableAlterShardingInColumnShard()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Alter sharding is disabled for OLAP tables");
             return result;
         }
 
-        const bool hasTiering = Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterTtlSettings() &&
+        const bool hasTiering = Transaction.HasAlterColumnTable() &&
+                                Transaction.GetAlterColumnTable().HasAlterTtlSettings() &&
                                 Transaction.GetAlterColumnTable().GetAlterTtlSettings().HasUseTiering();
         if (hasTiering && HasAppData() && !AppDataVerified().FeatureFlags.GetEnableTieringInColumnShard()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables");
+            result->SetError(
+                NKikimrScheme::StatusPreconditionFailed, "Tiering functionality is disabled for OLAP tables"
+            );
             return result;
         }
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& name = Transaction.HasAlterColumnTable() ? Transaction.GetAlterColumnTable().GetName() : Transaction.GetAlterTable().GetName();
+        const TString& name = Transaction.HasAlterColumnTable() ? Transaction.GetAlterColumnTable().GetName()
+                                                                : Transaction.GetAlterTable().GetName();
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterColumnTable Propose"
                          << ", path: " << parentPathStr << "/" << name
@@ -289,8 +297,7 @@ public:
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -310,7 +317,9 @@ public:
 
         std::shared_ptr<ISSEntityUpdate> update;
         {
-            TUpdateInitializationContext uContext(&*originalEntity, &context, &Transaction, (ui64)OperationId.GetTxId());
+            TUpdateInitializationContext uContext(
+                &*originalEntity, &context, &Transaction, (ui64)OperationId.GetTxId()
+            );
             TConclusion<std::shared_ptr<ISSEntityUpdate>> conclusion = originalEntity->CreateUpdate(uContext);
             if (conclusion.IsFail()) {
                 errors.AddError(conclusion.GetErrorMessage());
@@ -336,7 +345,9 @@ public:
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
-                txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
+                txState.Shards.emplace_back(
+                    shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts
+                );
 
                 context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
                 context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
@@ -400,7 +411,7 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter
 
 namespace NKikimr::NSchemeShard {
 
@@ -413,4 +424,4 @@ ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState s
     return MakeSubOperation<NOlap::NAlter::TAlterColumnTable>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

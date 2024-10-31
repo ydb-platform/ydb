@@ -69,10 +69,14 @@ void TRulePreparationActor::Handle(NMetadata::NProvider::TEvRefreshSubscriberDat
 
 void TRulePreparationActor::Bootstrap() {
     Become(&TThis::StateMain);
-    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>()));
-    Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()));
+    Send(
+        NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TSnapshotConstructor>())
+    );
+    Send(
+        NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+        new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
+    );
     {
         SSFetcher = std::make_shared<TFetcherCheckUserTieringPermissions>();
         SSFetcher->SetUserToken(Context.GetExternalData().GetUserToken());
@@ -80,18 +84,19 @@ void TRulePreparationActor::Bootstrap() {
         for (auto&& i : Objects) {
             SSFetcher->MutableTieringRuleIds().emplace(i.GetTieringRuleId());
         }
-        Register(new TSSFetchingActor(SSFetcher, std::make_shared<TSSFetchingController>(SelfId()), TDuration::Seconds(10)));
+        Register(
+            new TSSFetchingActor(SSFetcher, std::make_shared<TSSFetchingController>(SelfId()), TDuration::Seconds(10))
+        );
     }
 }
 
-TRulePreparationActor::TRulePreparationActor(std::vector<TTieringRule>&& objects,
+TRulePreparationActor::TRulePreparationActor(
+    std::vector<TTieringRule>&& objects,
     NMetadata::NModifications::IAlterPreparationController<TTieringRule>::TPtr controller,
-    const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context)
+    const NMetadata::NModifications::IOperationsManager::TInternalModificationContext& context
+)
     : Objects(std::move(objects))
     , Controller(controller)
-    , Context(context)
-{
+    , Context(context) {}
 
-}
-
-}
+} // namespace NKikimr::NColumnShard::NTiers

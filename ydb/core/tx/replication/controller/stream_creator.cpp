@@ -18,9 +18,8 @@
 namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
-    static NYdb::NTable::TChangefeedDescription MakeChangefeed(
-            const TString& name, const TDuration& retentionPeriod, const NJson::TJsonMap& attrs)
-    {
+    static NYdb::NTable::TChangefeedDescription
+    MakeChangefeed(const TString& name, const TDuration& retentionPeriod, const NJson::TJsonMap& attrs) {
         using namespace NYdb::NTable;
         return TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
@@ -36,8 +35,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     STATEFN(StateRequestPermission) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvAllowCreateStream, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -48,11 +47,15 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void CreateStream() {
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-        case TReplication::ETargetKind::IndexTable:
-            Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
-                .AppendAddChangefeeds(Changefeed)));
-            break;
+            case TReplication::ETargetKind::Table:
+            case TReplication::ETargetKind::IndexTable:
+                Send(
+                    YdbProxy,
+                    new TEvYdbProxy::TEvAlterTableRequest(
+                        SrcPath, NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(Changefeed)
+                    )
+                );
+                break;
         }
 
         Become(&TThis::StateCreateStream);
@@ -62,8 +65,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, CreateStream);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -90,19 +93,19 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     TString BuildStreamPath() const {
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
-        case TReplication::ETargetKind::IndexTable:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", Changefeed.GetName()}));
+            case TReplication::ETargetKind::Table:
+                return CanonizePath(ChildPath(SplitPath(SrcPath), Changefeed.GetName()));
+            case TReplication::ETargetKind::IndexTable:
+                return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", Changefeed.GetName()}));
         }
     }
 
     void CreateConsumer() {
         const auto streamPath = BuildStreamPath();
         const auto settings = NYdb::NTopic::TAlterTopicSettings()
-            .BeginAddConsumer()
-                .ConsumerName(ReplicationConsumerName)
-            .EndAddConsumer();
+                                  .BeginAddConsumer()
+                                  .ConsumerName(ReplicationConsumerName)
+                                  .EndAddConsumer();
 
         Send(YdbProxy, new TEvYdbProxy::TEvAlterTopicRequest(streamPath, settings));
         Become(&TThis::StateCreateConsumer);
@@ -112,8 +115,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, CreateConsumer);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -153,38 +156,40 @@ public:
     }
 
     explicit TStreamCreator(
-            const TActorId& parent,
-            const TActorId& proxy,
-            ui64 rid,
-            ui64 tid,
-            TReplication::ETargetKind kind,
-            const TString& srcPath,
-            const TString& dstPath,
-            const TString& streamName,
-            const TDuration& streamRetentionPeriod)
+        const TActorId& parent,
+        const TActorId& proxy,
+        ui64 rid,
+        ui64 tid,
+        TReplication::ETargetKind kind,
+        const TString& srcPath,
+        const TString& dstPath,
+        const TString& streamName,
+        const TDuration& streamRetentionPeriod
+    )
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , SrcPath(srcPath)
-        , Changefeed(MakeChangefeed(streamName, streamRetentionPeriod, NJson::TJsonMap{
-            {"path", dstPath},
-            {"id", ToString(rid)},
-            {"supports_topic_autopartitioning", AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication()},
-        }))
-        , LogPrefix("StreamCreator", ReplicationId, TargetId)
-    {
-    }
+        , Changefeed(MakeChangefeed(
+              streamName,
+              streamRetentionPeriod,
+              NJson::TJsonMap{
+                  {"path", dstPath},
+                  {"id", ToString(rid)},
+                  {"supports_topic_autopartitioning",
+                   AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication()},
+              }
+          ))
+        , LogPrefix("StreamCreator", ReplicationId, TargetId) {}
 
     void Bootstrap() {
         RequestPermission();
     }
 
     STATEFN(StateBase) {
-        switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
+        switch (ev->GetTypeRewrite()) { sFunc(TEvents::TEvPoison, PassAway); }
     }
 
 private:
@@ -202,17 +207,31 @@ private:
 IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(),
-        target->GetSrcPath(), target->GetDstPath(), target->GetStreamName(),
-        TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()));
+    return CreateStreamCreator(
+        ctx.SelfID,
+        replication->GetYdbProxy(),
+        replication->GetId(),
+        target->GetId(),
+        target->GetKind(),
+        target->GetSrcPath(),
+        target->GetDstPath(),
+        target->GetStreamName(),
+        TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds())
+    );
 }
 
-IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        const TString& streamName, const TDuration& streamRetentionPeriod)
-{
+IActor* CreateStreamCreator(
+    const TActorId& parent,
+    const TActorId& proxy,
+    ui64 rid,
+    ui64 tid,
+    TReplication::ETargetKind kind,
+    const TString& srcPath,
+    const TString& dstPath,
+    const TString& streamName,
+    const TDuration& streamRetentionPeriod
+) {
     return new TStreamCreator(parent, proxy, rid, tid, kind, srcPath, dstPath, streamName, streamRetentionPeriod);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

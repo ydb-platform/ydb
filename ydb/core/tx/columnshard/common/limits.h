@@ -15,4 +15,4 @@ public:
     static constexpr inline ui64 DefaultReduceMemoryIntervalLimit = 0.8 * ScanMemoryLimit;
     static constexpr inline ui64 DefaultReadSequentiallyBufferSize = ((ui64)8) << 20;
 };
-}
+} // namespace NKikimr::NOlap

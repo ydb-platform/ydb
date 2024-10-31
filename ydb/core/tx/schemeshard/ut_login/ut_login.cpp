@@ -15,8 +15,17 @@ using namespace NSchemeShardUT_Private;
 namespace NSchemeShardUT_Private {
 
 // convert into generic test helper?
-void TestCreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> modifyTx(CreateAlterLoginCreateUser(txId, user, password));
+void TestCreateAlterLoginCreateUser(
+    TTestActorRuntime& runtime,
+    ui64 txId,
+    const TString& database,
+    const TString& user,
+    const TString& password,
+    const TVector<TExpectedResult>& expectedResults
+) {
+    std::unique_ptr<TEvSchemeShard::TEvModifySchemeTransaction> modifyTx(
+        CreateAlterLoginCreateUser(txId, user, password)
+    );
     //TODO: move setting of TModifyScheme.WorkingDir into CreateAlterLoginCreateUser()
     //NOTE: TModifyScheme.Name isn't set, intentionally
     modifyTx->Record.MutableTransaction(0)->SetWorkingDir(database);
@@ -32,7 +41,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        TestCreateAlterLoginCreateUser(
+            runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}}
+        );
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
@@ -53,7 +64,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestEnv env(runtime);
         runtime.GetAppData().AuthConfig.SetEnableLoginAuthentication(false);
         ui64 txId = 100;
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}});
+        TestCreateAlterLoginCreateUser(
+            runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusPreconditionFailed}}
+        );
         auto resultLogin = Login(runtime, "user1", "password1");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Login authentication is disabled");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
@@ -74,7 +87,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        TestCreateAlterLoginCreateUser(
+            runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}}
+        );
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
 
         // test body
@@ -105,7 +120,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        TestCreateAlterLoginCreateUser(
+            runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}}
+        );
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
 
         // test body
@@ -145,11 +162,11 @@ NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TStri
     }(user, password);
     TStringBuilder text;
     text << "POST /login HTTP/1.1\r\n"
-        << "Host: test.ydb\r\n"
-        << "Content-Type: application/json\r\n"
-        << "Content-Length: " << payload.size() << "\r\n"
-        << "\r\n"
-        << payload;
+         << "Host: test.ydb\r\n"
+         << "Content-Type: application/json\r\n"
+         << "Content-Length: " << payload.size() << "\r\n"
+         << "\r\n"
+         << payload;
     NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
     EatWholeString(request, text);
     // WebLoginService will crash without address
@@ -161,10 +178,10 @@ NHttp::THttpIncomingRequestPtr MakeLoginRequest(const TString& user, const TStri
 NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, const TString& cookieValue) {
     TStringBuilder text;
     text << "POST /logout HTTP/1.1\r\n"
-        << "Host: test.ydb\r\n"
-        << "Content-Type: text/plain\r\n"
-        << "Cookie: " << cookieName << "=" << cookieValue << "\r\n"
-        << "\r\n";
+         << "Host: test.ydb\r\n"
+         << "Content-Type: text/plain\r\n"
+         << "Cookie: " << cookieName << "=" << cookieValue << "\r\n"
+         << "\r\n";
     NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
     EatWholeString(request, text);
     // WebLoginService will crash without address
@@ -173,10 +190,9 @@ NHttp::THttpIncomingRequestPtr MakeLogoutRequest(const TString& cookieName, cons
     return request;
 }
 
-}
+} // namespace NSchemeShardUT_Private
 
 Y_UNIT_TEST_SUITE(TWebLoginService) {
-
     Y_UNIT_TEST(Logout) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
@@ -198,7 +214,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         ui64 txId = 100;
 
-        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        TestCreateAlterLoginCreateUser(
+            runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}}
+        );
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user creation
 
         // test body
@@ -207,9 +225,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         TString ydbSessionId;
         {
-            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
-                MakeLoginRequest("user1", "password1")
-            )));
+            runtime.Send(new IEventHandle(
+                target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(MakeLoginRequest("user1", "password1"))
+            ));
 
             TAutoPtr<IEventHandle> handle;
             auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
@@ -228,14 +246,22 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             const auto describe = DescribePath(runtime, "/MyRoot");
             const auto& securityState = describe.GetPathDescription().GetDomainDescription().GetSecurityState();
             TActorId edge = runtime.AllocateEdgeActor();
-            runtime.Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvUpdateLoginSecurityState(securityState)), 0);
+            runtime.Send(
+                new IEventHandle(
+                    MakeTicketParserID(), edge, new TEvTicketParser::TEvUpdateLoginSecurityState(securityState)
+                ),
+                0
+            );
         }
 
         // Then we are ready to test some authentication on /logout
         {  // no cookie
-            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
-                MakeLogoutRequest("not-an-ydb_session_id", ydbSessionId)
-            )));
+            runtime.Send(new IEventHandle(
+                target,
+                edge,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(MakeLogoutRequest("not-an-ydb_session_id", ydbSessionId)
+                )
+            ));
 
             TAutoPtr<IEventHandle> handle;
             auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
@@ -245,9 +271,11 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
         }
         {  // bad cookie
-            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
-                MakeLogoutRequest("ydb_session_id", "jklhagsfjhg")
-            )));
+            runtime.Send(new IEventHandle(
+                target,
+                edge,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(MakeLogoutRequest("ydb_session_id", "jklhagsfjhg"))
+            ));
 
             TAutoPtr<IEventHandle> handle;
             auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
@@ -257,9 +285,11 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
         }
         {  // good cookie
-            runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
-                MakeLogoutRequest("ydb_session_id", ydbSessionId)
-            )));
+            runtime.Send(new IEventHandle(
+                target,
+                edge,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(MakeLogoutRequest("ydb_session_id", ydbSessionId))
+            ));
 
             TAutoPtr<IEventHandle> handle;
             auto responseEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);

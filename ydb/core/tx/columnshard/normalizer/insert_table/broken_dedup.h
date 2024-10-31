@@ -3,7 +3,6 @@
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
-
 namespace NKikimr::NOlap::NInsertionDedup {
 
 class TInsertionsDedupNormalizer: public TNormalizationController::INormalizerComponent {
@@ -11,6 +10,7 @@ public:
     static TString GetClassNameStatic() {
         return "CleanInsertionDedup";
     }
+
 private:
     class TNormalizerResult;
 
@@ -18,8 +18,7 @@ private:
         INormalizerComponent::TFactory::TRegistrator<TInsertionsDedupNormalizer>(GetClassNameStatic());
 
 public:
-    TInsertionsDedupNormalizer(const TNormalizationController::TInitContext&) {
-    }
+    TInsertionsDedupNormalizer(const TNormalizationController::TInitContext&) {}
 
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
         return ENormalizerSequentialId::CleanInsertionDedup;
@@ -29,7 +28,8 @@ public:
         return GetClassNameStatic();
     }
 
-    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>>
+    DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 };
 
-}
+} // namespace NKikimr::NOlap::NInsertionDedup

@@ -18,6 +18,7 @@ namespace NKikimr::NOlap {
 class TSaverContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
+
 public:
     TSaverContext(const std::shared_ptr<IStoragesManager>& storagesManager)
         : StoragesManager(storagesManager) {
@@ -31,23 +32,35 @@ class TColumnFeatures: public TSimpleColumnInfo {
 private:
     using TBase = TSimpleColumnInfo;
     YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
-public:
-    TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
-        const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted, const bool isNullable,
-        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex)
-        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex)
-        , Operator(bOperator)
-    {
-        AFL_VERIFY(Operator);
 
+public:
+    TColumnFeatures(
+        const ui32 columnId,
+        const std::shared_ptr<arrow::Field>& arrowField,
+        const NArrow::NSerialization::TSerializerContainer& serializer,
+        const std::shared_ptr<IBlobsStorageOperator>& bOperator,
+        const bool needMinMax,
+        const bool isSorted,
+        const bool isNullable,
+        const std::shared_ptr<arrow::Scalar>& defaultValue,
+        const std::optional<ui32>& pkColumnIndex
+    )
+        : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex)
+        , Operator(bOperator) {
+        AFL_VERIFY(Operator);
     }
 
-    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo, const std::shared_ptr<IStoragesManager>& storagesManager) {
+    TConclusionStatus DeserializeFromProto(
+        const NKikimrSchemeOp::TOlapColumnDescription& columnInfo,
+        const std::shared_ptr<IStoragesManager>& storagesManager
+    ) {
         auto parsed = TBase::DeserializeFromProto(columnInfo);
         if (!parsed) {
             return parsed;
         }
-        Operator = storagesManager->GetOperatorVerified(columnInfo.GetStorageId() ? columnInfo.GetStorageId() : IStoragesManager::DefaultStorageId);
+        Operator = storagesManager->GetOperatorVerified(
+            columnInfo.GetStorageId() ? columnInfo.GetStorageId() : IStoragesManager::DefaultStorageId
+        );
         return TConclusionStatus::Success();
     }
 };

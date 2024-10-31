@@ -7,7 +7,7 @@
 #include <util/generic/ptr.h>
 
 namespace NKikimrReplication {
-    class TRunWorkerCommand;
+class TRunWorkerCommand;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -51,4 +51,4 @@ private:
     bool DataEnded = false;
 };
 
-}
+} // namespace NKikimr::NReplication::NController

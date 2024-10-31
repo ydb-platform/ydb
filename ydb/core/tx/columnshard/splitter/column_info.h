@@ -79,4 +79,4 @@ public:
         }
     }
 };
-}
+} // namespace NKikimr::NOlap

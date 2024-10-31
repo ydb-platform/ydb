@@ -50,8 +50,7 @@ private:
 
 public:
     TPortionsGroupInfo(const std::shared_ptr<TPortionCategoryCounters>& signals)
-        : Signals(signals) {
-    }
+        : Signals(signals) {}
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         TBase::AddPortion(p);
@@ -67,6 +66,7 @@ class TBucketPortionInfo {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, PortionInfo);
     YDB_READONLY(ui64, TotalBlobBytes, 0);
+
 public:
     const TPortionInfo* operator->() const {
         return PortionInfo.get();
@@ -78,18 +78,17 @@ public:
 
     TBucketPortionInfo(const std::shared_ptr<TPortionInfo>& portion)
         : PortionInfo(portion)
-        , TotalBlobBytes(portion->GetTotalBlobBytes())
-    {
-
-    }
+        , TotalBlobBytes(portion->GetTotalBlobBytes()) {}
 };
 
 class TPKPortions {
 public:
     using TBucketPortions = THashMap<ui64, TBucketPortionInfo>;
+
 private:
     YDB_READONLY_DEF(TBucketPortions, Start);
     YDB_READONLY_DEF(TBucketPortions, Finish);
+
 public:
     bool IsEmpty() const {
         return Start.empty() && Finish.empty();
@@ -112,6 +111,7 @@ class TBucketInfo {
 protected:
     std::map<NArrow::TReplaceKey, TPKPortions> PKPortions;
     std::map<TInstant, THashMap<ui64, TBucketPortionInfo>> SnapshotPortions;
+
 public:
     const std::map<NArrow::TReplaceKey, TPKPortions>& GetPKPortions() const {
         return PKPortions;

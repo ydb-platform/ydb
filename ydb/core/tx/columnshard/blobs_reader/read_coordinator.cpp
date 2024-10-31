@@ -4,7 +4,8 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 void TReadCoordinatorActor::Handle(TEvStartReadTask::TPtr& ev) {
     const auto& externalTaskId = ev->Get()->GetTask()->GetExternalTaskId();
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("external_task_id", externalTaskId);
+    NActors::TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("external_task_id", externalTaskId);
     THashSet<TBlobRange> rangesInProgress;
     BlobTasks.AddTask(ev->Get()->GetTask());
     ev->Get()->GetTask()->StartBlobsFetching(rangesInProgress);
@@ -18,7 +19,11 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
     auto tasks = BlobTasks.Extract(event.DataSourceId, event.BlobRange);
     for (auto&& i : tasks) {
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
-            i->AddError(event.DataSourceId, event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob"));
+            i->AddError(
+                event.DataSourceId,
+                event.BlobRange,
+                IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob")
+            );
         } else {
             i->AddData(event.DataSourceId, event.BlobRange, event.Data);
         }
@@ -27,9 +32,7 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
 
 TReadCoordinatorActor::TReadCoordinatorActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
-    , Parent(parent) {
-
-}
+    , Parent(parent) {}
 
 TReadCoordinatorActor::~TReadCoordinatorActor() {
     auto tasks = BlobTasks.ExtractTasksAll();
@@ -38,4 +41,4 @@ TReadCoordinatorActor::~TReadCoordinatorActor() {
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NRead

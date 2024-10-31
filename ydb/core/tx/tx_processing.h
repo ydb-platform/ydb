@@ -27,14 +27,15 @@ struct TEvTxProcessing {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROCESSING)"
+    );
 
-    struct TEvPlanStep : public TEventPB<TEvPlanStep, NKikimrTx::TEvMediatorPlanStep, EvPlanStep> {
-        TEvPlanStep()
-        {}
+    struct TEvPlanStep: public TEventPB<TEvPlanStep, NKikimrTx::TEvMediatorPlanStep, EvPlanStep> {
+        TEvPlanStep() {}
 
-        TEvPlanStep(ui64 step, ui64 mediator, ui64 tablet)
-        {
+        TEvPlanStep(ui64 step, ui64 mediator, ui64 tablet) {
             Record.SetStep(step);
             Record.SetMediatorID(mediator);
             Record.SetTabletID(tablet);
@@ -50,20 +51,17 @@ struct TEvTxProcessing {
         }
     };
 
-    struct TEvPlanStepAck : public TEventPB<TEvPlanStepAck, NKikimrTx::TEvPlanStepAck, EvPlanStepAck> {
-        TEvPlanStepAck()
-        {}
+    struct TEvPlanStepAck: public TEventPB<TEvPlanStepAck, NKikimrTx::TEvPlanStepAck, EvPlanStepAck> {
+        TEvPlanStepAck() {}
 
-        TEvPlanStepAck(ui64 tabletId, ui64 step, ui64 txid)
-        {
+        TEvPlanStepAck(ui64 tabletId, ui64 step, ui64 txid) {
             Record.SetTabletId(tabletId);
             Record.SetStep(step);
             Record.AddTxId(txid);
         }
 
-        template<typename TIterator>
-        TEvPlanStepAck(ui64 tabletId, ui64 step, TIterator begin, const TIterator &end)
-        {
+        template <typename TIterator>
+        TEvPlanStepAck(ui64 tabletId, ui64 step, TIterator begin, const TIterator& end) {
             Record.SetTabletId(tabletId);
             Record.SetStep(step);
 
@@ -86,12 +84,11 @@ struct TEvTxProcessing {
         }
     };
 
-    struct TEvPlanStepAccepted : public TEventPB<TEvPlanStepAccepted, NKikimrTx::TEvPlanStepAccepted, EvPlanStepAccepted> {
-        TEvPlanStepAccepted()
-        {}
+    struct TEvPlanStepAccepted
+        : public TEventPB<TEvPlanStepAccepted, NKikimrTx::TEvPlanStepAccepted, EvPlanStepAccepted> {
+        TEvPlanStepAccepted() {}
 
-        TEvPlanStepAccepted(ui64 tabletId, ui64 step)
-        {
+        TEvPlanStepAccepted(ui64 tabletId, ui64 step) {
             Record.SetTabletId(tabletId);
             Record.SetStep(step);
         }
@@ -106,11 +103,9 @@ struct TEvTxProcessing {
     };
 
     struct TEvReadSet: public TEventPB<TEvReadSet, NKikimrTx::TEvReadSet, EvReadSet> {
-        TEvReadSet()
-        {}
+        TEvReadSet() {}
 
-        TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer)
-        {
+        TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer) {
             Record.SetStep(step);
             Record.SetTxId(orderId);
             Record.SetTabletSource(tabletSource);
@@ -118,8 +113,15 @@ struct TEvTxProcessing {
             Record.SetTabletProducer(tabletProducer);
         }
 
-        TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer, const TString &readSet, ui64 seqno = 0)
-        {
+        TEvReadSet(
+            ui64 step,
+            ui64 orderId,
+            ui64 tabletSource,
+            ui64 tabletDest,
+            ui64 tabletProducer,
+            const TString& readSet,
+            ui64 seqno = 0
+        ) {
             Record.SetStep(step);
             Record.SetTxId(orderId);
             Record.SetTabletSource(tabletSource);
@@ -145,12 +147,20 @@ struct TEvTxProcessing {
         }
     };
 
-    struct TEvReadSetAck : public TThrRefBase, public TEventPB<TEvReadSetAck, NKikimrTx::TEvReadSetAck, EvReadSetAck> {
-        TEvReadSetAck()
-        {}
+    struct TEvReadSetAck
+        : public TThrRefBase
+        , public TEventPB<TEvReadSetAck, NKikimrTx::TEvReadSetAck, EvReadSetAck> {
+        TEvReadSetAck() {}
 
-        TEvReadSetAck(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletConsumer, ui32 flags, ui64 seqno = 0)
-        {
+        TEvReadSetAck(
+            ui64 step,
+            ui64 orderId,
+            ui64 tabletSource,
+            ui64 tabletDest,
+            ui64 tabletConsumer,
+            ui32 flags,
+            ui64 seqno = 0
+        ) {
             Record.SetStep(step);
             Record.SetTxId(orderId);
             Record.SetTabletSource(tabletSource);
@@ -160,8 +170,7 @@ struct TEvTxProcessing {
             Record.SetSeqno(seqno);
         }
 
-        TEvReadSetAck(const TEvReadSet& evReadSet, ui64 tabletConsumer)
-        {
+        TEvReadSetAck(const TEvReadSet& evReadSet, ui64 tabletConsumer) {
             Record.SetStep(evReadSet.Record.GetStep());
             Record.SetTxId(evReadSet.Record.GetTxId());
             Record.SetTabletSource(evReadSet.Record.GetTabletSource());
@@ -185,75 +194,49 @@ struct TEvTxProcessing {
         }
     };
 
-    struct TEvStreamClearanceRequest: public TEventPB<TEvStreamClearanceRequest,
-                                                      NKikimrTx::TEvStreamClearanceRequest,
-                                                      EvStreamClearanceRequest>
-    {
-    };
+    struct TEvStreamClearanceRequest
+        : public TEventPB<TEvStreamClearanceRequest, NKikimrTx::TEvStreamClearanceRequest, EvStreamClearanceRequest> {};
 
-    struct TEvStreamClearanceResponse: public TEventPB<TEvStreamClearanceResponse,
-                                                       NKikimrTx::TEvStreamClearanceResponse,
-                                                       EvStreamClearanceResponse>
-    {
-    };
+    struct TEvStreamClearanceResponse
+        : public TEventPB<
+              TEvStreamClearanceResponse,
+              NKikimrTx::TEvStreamClearanceResponse,
+              EvStreamClearanceResponse> {};
 
-    struct TEvStreamClearancePending: public TEventPB<TEvStreamClearancePending,
-                                                      NKikimrTx::TEvStreamClearancePending,
-                                                      EvStreamClearancePending>
-    {
+    struct TEvStreamClearancePending
+        : public TEventPB<TEvStreamClearancePending, NKikimrTx::TEvStreamClearancePending, EvStreamClearancePending> {
         TEvStreamClearancePending() = default;
 
-        TEvStreamClearancePending(ui64 txId)
-        {
+        TEvStreamClearancePending(ui64 txId) {
             Record.SetTxId(txId);
         }
     };
 
-    struct TEvStreamQuotaRequest: public TEventPB<TEvStreamQuotaRequest,
-                                                  NKikimrTx::TEvStreamQuotaRequest,
-                                                  EvStreamQuotaRequest>
-    {
-    };
+    struct TEvStreamQuotaRequest
+        : public TEventPB<TEvStreamQuotaRequest, NKikimrTx::TEvStreamQuotaRequest, EvStreamQuotaRequest> {};
 
-    struct TEvStreamQuotaResponse: public TEventPB<TEvStreamQuotaResponse,
-                                                   NKikimrTx::TEvStreamQuotaResponse,
-                                                   EvStreamQuotaResponse>
-    {
-    };
+    struct TEvStreamQuotaResponse
+        : public TEventPB<TEvStreamQuotaResponse, NKikimrTx::TEvStreamQuotaResponse, EvStreamQuotaResponse> {};
 
-    struct TEvStreamQuotaRelease: public TEventPB<TEvStreamQuotaRelease,
-                                                  NKikimrTx::TEvStreamQuotaRelease,
-                                                  EvStreamQuotaRelease>
-    {
-    };
+    struct TEvStreamQuotaRelease
+        : public TEventPB<TEvStreamQuotaRelease, NKikimrTx::TEvStreamQuotaRelease, EvStreamQuotaRelease> {};
 
-    struct TEvStreamIsDead: public TEventPB<TEvStreamIsDead,
-                                            NKikimrTx::TEvStreamIsDead,
-                                            EvStreamIsDead>
-    {
-        TEvStreamIsDead(ui64 txId = 0)
-        {
+    struct TEvStreamIsDead: public TEventPB<TEvStreamIsDead, NKikimrTx::TEvStreamIsDead, EvStreamIsDead> {
+        TEvStreamIsDead(ui64 txId = 0) {
             Record.SetTxId(txId);
         }
     };
 
-    struct TEvInterruptTransaction: public TEventPB<TEvInterruptTransaction,
-                                                    NKikimrTx::TEvInterruptTransaction,
-                                                    EvInterruptTransaction>
-    {
+    struct TEvInterruptTransaction
+        : public TEventPB<TEvInterruptTransaction, NKikimrTx::TEvInterruptTransaction, EvInterruptTransaction> {
         TEvInterruptTransaction() = default;
 
-        TEvInterruptTransaction(ui64 txId)
-        {
+        TEvInterruptTransaction(ui64 txId) {
             Record.SetTxId(txId);
         }
     };
 
-    struct TEvStreamDataAck: public TEventPB<TEvStreamDataAck,
-                                             NKikimrTx::TEvStreamDataAck,
-                                             EvStreamDataAck>
-    {
-    };
+    struct TEvStreamDataAck: public TEventPB<TEvStreamDataAck, NKikimrTx::TEvStreamDataAck, EvStreamDataAck> {};
 };
 
-}
+} // namespace NKikimr

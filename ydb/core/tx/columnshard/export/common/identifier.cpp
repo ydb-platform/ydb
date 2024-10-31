@@ -14,7 +14,9 @@ NKikimr::TConclusionStatus TIdentifier::DeserializeFromProto(const NKikimrColumn
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFromProto(const NKikimrColumnShardExportProto::TIdentifier& proto) {
+NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFromProto(
+    const NKikimrColumnShardExportProto::TIdentifier& proto
+) {
     TIdentifier result;
     auto parseResult = result.DeserializeFromProto(proto);
     if (!parseResult) {
@@ -23,7 +25,9 @@ NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFro
     return result;
 }
 
-NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFromProto(const NKikimrTxColumnShard::TBackupTxBody& proto) {
+NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFromProto(
+    const NKikimrTxColumnShard::TBackupTxBody& proto
+) {
     TIdentifier result;
     result.PathId = proto.GetBackupTask().GetTableId();
     if (!result.PathId) {
@@ -46,4 +50,4 @@ TString TIdentifier::ToString() const {
     return TStringBuilder() << "path_id=" << PathId << ";";
 }
 
-}
+} // namespace NKikimr::NOlap::NExport

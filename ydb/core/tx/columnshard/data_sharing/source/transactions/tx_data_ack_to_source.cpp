@@ -18,7 +18,9 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
         }
         for (auto&& i : sharedBlobIds) {
             AFL_VERIFY(sharedTabletBlobIds[i.first].Add(Session->GetDestinationTabletId(), i.second));
-            sharedTabletBlobIds[i.first].Add(Self->GetStoragesManager()->GetSharedBlobsManager()->GetSelfTabletId(), std::move(i.second));
+            sharedTabletBlobIds[i.first].Add(
+                Self->GetStoragesManager()->GetSharedBlobsManager()->GetSelfTabletId(), std::move(i.second)
+            );
         }
         Self->GetStoragesManager()->GetSharedBlobsManager()->WriteSharedBlobsDB(txc, sharedTabletBlobIds);
     }

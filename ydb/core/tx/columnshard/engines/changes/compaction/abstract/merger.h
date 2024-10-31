@@ -97,10 +97,11 @@ public:
         return result[idx];
     }
 
-    TMergingContext(const std::vector<std::shared_ptr<arrow::RecordBatch>>& pkAndAddresses,
-        const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& inputContainers)
-        : InputContainers(inputContainers)
-    {
+    TMergingContext(
+        const std::vector<std::shared_ptr<arrow::RecordBatch>>& pkAndAddresses,
+        const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& inputContainers
+    )
+        : InputContainers(inputContainers) {
         for (auto&& i : pkAndAddresses) {
             Chunks.emplace_back(i);
         }
@@ -114,8 +115,12 @@ public:
 private:
     bool Started = false;
 
-    virtual std::vector<TColumnPortionResult> DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) = 0;
-    virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) = 0;
+    virtual std::vector<TColumnPortionResult>
+    DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) = 0;
+    virtual void DoStart(
+        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input,
+        TMergingContext& mergeContext
+    ) = 0;
 
 protected:
     const TColumnMergeContext& Context;
@@ -129,11 +134,11 @@ public:
         std::make_shared<arrow::Field>(PortionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
 
     IColumnMerger(const TColumnMergeContext& context)
-        : Context(context) {
-    }
+        : Context(context) {}
     virtual ~IColumnMerger() = default;
 
-    void Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext);
+    void
+    Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext);
 
     std::vector<TColumnPortionResult> Execute(const TChunkMergeContext& context, TMergingContext& mergeContext) {
         return DoExecute(context, mergeContext);

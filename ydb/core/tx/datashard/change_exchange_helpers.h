@@ -19,5 +19,5 @@ struct TDataShardId {
     TActorId ActorId;
 };
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

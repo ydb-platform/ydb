@@ -36,15 +36,17 @@ struct TSchemeCacheHelpers {
     }
 
     template <typename T>
-    static bool CheckEntriesCount(const TStringBuf marker, const TAutoPtr<T>& result, ui32 expected, TCheckFailFunc onFailure) {
+    static bool
+    CheckEntriesCount(const TStringBuf marker, const TAutoPtr<T>& result, ui32 expected, TCheckFailFunc onFailure) {
         if (result->ResultSet.size() == expected) {
             return true;
         }
 
-        onFailure(TStringBuilder() << "Unexpected entries count at '" << marker << "'"
-            << ": expected# " << expected
-            << ", got# " << result->ResultSet.size()
-            << ", result# " << result->ToString(*AppData()->TypeRegistry));
+        onFailure(
+            TStringBuilder() << "Unexpected entries count at '" << marker << "'"
+                             << ": expected# " << expected << ", got# " << result->ResultSet.size() << ", result# "
+                             << result->ToString(*AppData()->TypeRegistry)
+        );
         return false;
     }
 
@@ -57,15 +59,17 @@ struct TSchemeCacheHelpers {
     }
 
     template <typename T>
-    static bool CheckTableId(const TStringBuf marker, const T& entry, const TTableId& expected, TCheckFailFunc onFailure) {
+    static bool
+    CheckTableId(const TStringBuf marker, const T& entry, const TTableId& expected, TCheckFailFunc onFailure) {
         if (GetTableId(entry).HasSamePath(expected)) {
             return true;
         }
 
-        onFailure(TStringBuilder() << "Unexpected table id at '" << marker << "'"
-            << ": expected# " << expected
-            << ", got# " << GetTableId(entry)
-            << ", entry# " << entry.ToString());
+        onFailure(
+            TStringBuilder() << "Unexpected table id at '" << marker << "'"
+                             << ": expected# " << expected << ", got# " << GetTableId(entry) << ", entry# "
+                             << entry.ToString()
+        );
         return false;
     }
 
@@ -83,24 +87,28 @@ struct TSchemeCacheHelpers {
             return true;
         }
 
-        onFailure(TStringBuilder() << "Failed entry at '" << marker << "'"
-            << ": entry# " << entry.ToString());
+        onFailure(
+            TStringBuilder() << "Failed entry at '" << marker << "'"
+                             << ": entry# " << entry.ToString()
+        );
         return false;
     }
 
     template <typename T>
-    static bool CheckEntryKind(const TStringBuf marker, const T& entry, TNavigate::EKind expected, TCheckFailFunc onFailure) {
+    static bool
+    CheckEntryKind(const TStringBuf marker, const T& entry, TNavigate::EKind expected, TCheckFailFunc onFailure) {
         if (entry.Kind == expected) {
             return true;
         }
 
-        onFailure(TStringBuilder() << "Unexpected entry kind at '" << marker << "'"
-            << ", expected# " << static_cast<ui32>(expected)
-            << ", got# " << static_cast<ui32>(entry.Kind)
-            << ", entry# " << entry.ToString());
+        onFailure(
+            TStringBuilder() << "Unexpected entry kind at '" << marker << "'"
+                             << ", expected# " << static_cast<ui32>(expected) << ", got# "
+                             << static_cast<ui32>(entry.Kind) << ", entry# " << entry.ToString()
+        );
         return false;
     }
 
 }; // TSchemeCacheHelpers
 
-}
+} // namespace NKikimr::NSchemeCache

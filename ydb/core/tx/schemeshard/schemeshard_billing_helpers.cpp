@@ -16,5 +16,5 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
     return (Max(rows, (bytes + 1_KB - 1) / 1_KB) + 1) / 2;
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

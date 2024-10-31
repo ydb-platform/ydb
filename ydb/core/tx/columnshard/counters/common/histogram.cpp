@@ -2,9 +2,13 @@
 
 namespace NKikimr::NColumnShard {
 
-TIncrementalHistogram::TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::set<i64>& values)
-    : TBase(moduleId)
-{
+TIncrementalHistogram::TIncrementalHistogram(
+    const TString& moduleId,
+    const TString& metricId,
+    const TString& category,
+    const std::set<i64>& values
+)
+    : TBase(moduleId) {
     DeepSubGroup("metric", metricId);
     if (category) {
         DeepSubGroup("category", category);
@@ -22,9 +26,13 @@ TIncrementalHistogram::TIncrementalHistogram(const TString& moduleId, const TStr
     PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
 }
 
-TIncrementalHistogram::TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::map<i64, TString>& values)
-    : TBase(moduleId)
-{
+TIncrementalHistogram::TIncrementalHistogram(
+    const TString& moduleId,
+    const TString& metricId,
+    const TString& category,
+    const std::map<i64, TString>& values
+)
+    : TBase(moduleId) {
     DeepSubGroup("metric", metricId);
     if (category) {
         DeepSubGroup("category", category);
@@ -42,9 +50,13 @@ TIncrementalHistogram::TIncrementalHistogram(const TString& moduleId, const TStr
     PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
 }
 
-TDeriviativeHistogram::TDeriviativeHistogram(const TString& moduleId, const TString& signalName, const TString& category, const std::set<i64>& values)
-    : TBase(moduleId)
-{
+TDeriviativeHistogram::TDeriviativeHistogram(
+    const TString& moduleId,
+    const TString& signalName,
+    const TString& category,
+    const std::set<i64>& values
+)
+    : TBase(moduleId) {
     if (category) {
         DeepSubGroup("category", category);
     }
@@ -53,7 +65,9 @@ TDeriviativeHistogram::TDeriviativeHistogram(const TString& moduleId, const TStr
         if (!predName) {
             Counters.emplace(i, CreateSubGroup("bin", "(-Inf," + ::ToString(i) + "]").GetDeriviative(signalName));
         } else {
-            Counters.emplace(i, CreateSubGroup("bin", "(" + *predName + "," + ::ToString(i) + "]").GetDeriviative(signalName));
+            Counters.emplace(
+                i, CreateSubGroup("bin", "(" + *predName + "," + ::ToString(i) + "]").GetDeriviative(signalName)
+            );
         }
         predName = ::ToString(i);
     }
@@ -61,9 +75,13 @@ TDeriviativeHistogram::TDeriviativeHistogram(const TString& moduleId, const TStr
     PlusInf = CreateSubGroup("bin", "(" + *predName + ",+Inf)").GetDeriviative(signalName);
 }
 
-TDeriviativeHistogram::TDeriviativeHistogram(const TString& moduleId, const TString& signalName, const TString& category, const std::map<i64, TString>& values)
-    : TBase(moduleId) 
-{
+TDeriviativeHistogram::TDeriviativeHistogram(
+    const TString& moduleId,
+    const TString& signalName,
+    const TString& category,
+    const std::map<i64, TString>& values
+)
+    : TBase(moduleId) {
     if (category) {
         DeepSubGroup("category", category);
     }
@@ -72,7 +90,9 @@ TDeriviativeHistogram::TDeriviativeHistogram(const TString& moduleId, const TStr
         if (!predName) {
             Counters.emplace(i.first, CreateSubGroup("bin", "(-Inf," + i.second + "]").GetDeriviative(signalName));
         } else {
-            Counters.emplace(i.first, CreateSubGroup("bin", "(" + *predName + "," + i.second + "]").GetDeriviative(signalName));
+            Counters.emplace(
+                i.first, CreateSubGroup("bin", "(" + *predName + "," + i.second + "]").GetDeriviative(signalName)
+            );
         }
         predName = i.second;
     }
@@ -80,4 +100,4 @@ TDeriviativeHistogram::TDeriviativeHistogram(const TString& moduleId, const TStr
     PlusInf = CreateSubGroup("bin", "(" + *predName + ",+Inf)").GetDeriviative(signalName);
 }
 
-}
+} // namespace NKikimr::NColumnShard

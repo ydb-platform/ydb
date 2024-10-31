@@ -7,34 +7,34 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TTxReleaseSnaphotReference : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TTxReleaseSnaphotReference: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     TSnapshotKey SnapshotKey;
 
 public:
     TTxReleaseSnaphotReference(TDataShard* self, const TSnapshotKey& snapshotKey)
         : TTransactionBase<TDataShard>(self)
-        , SnapshotKey(snapshotKey)
-    {}
+        , SnapshotKey(snapshotKey) {}
 
-    TTxType GetTxType() const override { return TXTYPE_READ_COLUMNS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_READ_COLUMNS;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Self->GetSnapshotManager().ReleaseReference(SnapshotKey, txc.DB, ctx.Now());
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         Y_UNUSED(ctx);
     }
 };
-
 
 struct TKeyBoundary {
     TSerializedCellVec Key;
     bool Inclusive;
 };
 
-class TReadColumnsScan : public INoTxScan {
+class TReadColumnsScan: public INoTxScan {
     const TActorId ReplyTo;
     const TActorId DatashardActorId;
     const TString TableName;
@@ -44,7 +44,7 @@ class TReadColumnsScan : public INoTxScan {
     const TVector<NTable::TTag> ValueColumns;
     const TVector<NScheme::TTypeInfo> ValueColumnTypes;
     const ui64 RowsLimit = 100000;
-    const ui64 BytesLimit = 1024*1024;
+    const ui64 BytesLimit = 1024 * 1024;
     const TKeyBoundary ShardEnd;
     TMaybe<TSnapshotKey> SnapshotKey;
 
@@ -55,22 +55,25 @@ class TReadColumnsScan : public INoTxScan {
     TString LastKeySerialized;
     TAutoPtr<TEvDataShard::TEvReadColumnsResponse> Result;
 
-    IDriver *Driver = nullptr;
+    IDriver* Driver = nullptr;
     TIntrusiveConstPtr<TScheme> Scheme;
 
 public:
-    TReadColumnsScan(const TKeyBoundary& keyFrom,
-                     const TKeyBoundary& keyTo,
-                     const TVector<NTable::TTag>& valueColumns,
-                     const TVector<NScheme::TTypeInfo> valueColumnTypes,
-                     std::unique_ptr<IBlockBuilder>&& blockBuilder,
-                     ui64 rowsLimit, ui64 bytesLimit,
-                     const TKeyBoundary& shardEnd,
-                     const TActorId& replyTo,
-                     const TActorId& datashardActorId,
-                     TMaybe<TSnapshotKey> snapshotKey,
-                     const TString& tableName,
-                     ui64 tabletId)
+    TReadColumnsScan(
+        const TKeyBoundary& keyFrom,
+        const TKeyBoundary& keyTo,
+        const TVector<NTable::TTag>& valueColumns,
+        const TVector<NScheme::TTypeInfo> valueColumnTypes,
+        std::unique_ptr<IBlockBuilder>&& blockBuilder,
+        ui64 rowsLimit,
+        ui64 bytesLimit,
+        const TKeyBoundary& shardEnd,
+        const TActorId& replyTo,
+        const TActorId& datashardActorId,
+        TMaybe<TSnapshotKey> snapshotKey,
+        const TString& tableName,
+        ui64 tabletId
+    )
         : ReplyTo(replyTo)
         , DatashardActorId(datashardActorId)
         , TableName(tableName)
@@ -83,8 +86,7 @@ public:
         , BytesLimit(bytesLimit)
         , ShardEnd(shardEnd)
         , SnapshotKey(snapshotKey)
-        , BlockBuilder(std::move(blockBuilder))
-    {}
+        , BlockBuilder(std::move(blockBuilder)) {}
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
         Driver = driver;
@@ -153,7 +155,9 @@ public:
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));
-        TlsActivationContext->Send(new IEventHandle(DatashardActorId, TActorId(), new TDataShard::TEvPrivate::TEvScanStats(Rows, Bytes)));
+        TlsActivationContext->Send(
+            new IEventHandle(DatashardActorId, TActorId(), new TDataShard::TEvPrivate::TEvScanStats(Rows, Bytes))
+        );
 
         return this;
     }
@@ -163,7 +167,7 @@ public:
     }
 
     void Describe(IOutputStream& str) const noexcept override {
-        str << "ReadColumnsScan table: ["<< TableName << "]shard: " << TabletId;
+        str << "ReadColumnsScan table: [" << TableName << "]shard: " << TabletId;
     }
 
     void OnFinished(TDataShard* self) override {
@@ -173,8 +177,7 @@ public:
     }
 };
 
-
-class TDataShard::TTxReadColumns : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxReadColumns: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvReadColumnsRequest::TPtr Ev;
     TAutoPtr<TEvDataShard::TEvReadColumnsResponse> Result;
@@ -183,28 +186,29 @@ private:
     bool InclusiveFrom;
     bool InclusiveTo;
     ui64 RowsLimit = 100000;
-    ui64 BytesLimit = 1024*1024;
+    ui64 BytesLimit = 1024 * 1024;
     TRowVersion ReadVersion = TRowVersion::Max();
 
 public:
     TTxReadColumns(TDataShard* ds, TEvDataShard::TEvReadColumnsRequest::TPtr ev)
         : TBase(ds)
-        , Ev(ev)
-    {
+        , Ev(ev) {
         if (Ev->Get()->Record.HasSnapshotStep() && Ev->Get()->Record.HasSnapshotTxId()) {
             ReadVersion.Step = Ev->Get()->Record.GetSnapshotStep();
             ReadVersion.TxId = Ev->Get()->Record.GetSnapshotTxId();
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_READ_COLUMNS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_READ_COLUMNS;
+    }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         // FIXME: we need to transform HEAD into some non-repeatable snapshot here
         if (!ReadVersion.IsMax() && Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(ReadVersion)) {
             Self->GetVolatileTxManager().AttachWaitingSnapshotEvent(
-                ReadVersion,
-                std::unique_ptr<IEventHandle>(Ev.Release()));
+                ReadVersion, std::unique_ptr<IEventHandle>(Ev.Release())
+            );
             Result.Destroy();
             return true;
         }
@@ -222,12 +226,15 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Read columns: " << Ev->Get()->Record);
 
-        if (Self->State != TShardState::Ready &&
-            Self->State != TShardState::Readonly)
-        {
-            SetError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
-                        Sprintf("Wrong shard state: %s tablet id: %" PRIu64,
-                                DatashardStateName(Self->State).c_str(), Self->TabletID()));
+        if (Self->State != TShardState::Ready && Self->State != TShardState::Readonly) {
+            SetError(
+                NKikimrTxDataShard::TError::WRONG_SHARD_STATE,
+                Sprintf(
+                    "Wrong shard state: %s tablet id: %" PRIu64,
+                    DatashardStateName(Self->State).c_str(),
+                    Self->TabletID()
+                )
+            );
             return true;
         }
 
@@ -249,9 +256,11 @@ public:
 
             // Check if readVersion is a valid snapshot
             if (!Self->GetSnapshotManager().FindAvailable(*snapshotKey)) {
-                SetError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
-                    TStringBuilder() << "Table id " << tableId << " has no snapshot at " << ReadVersion
-                         << " shard " << Self->TabletID() << (Self->IsFollower() ? " RO replica" : ""));
+                SetError(
+                    NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
+                    TStringBuilder() << "Table id " << tableId << " has no snapshot at " << ReadVersion << " shard "
+                                     << Self->TabletID() << (Self->IsFollower() ? " RO replica" : "")
+                );
                 return true;
             }
         }
@@ -274,8 +283,9 @@ public:
         }
         std::unique_ptr<IBlockBuilder> blockBuilder = AppData()->FormatFactory->CreateBlockBuilder(format);
         if (!blockBuilder) {
-            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                     Sprintf("Unsupported block format \"%s\"", format.data()));
+            SetError(
+                NKikimrTxDataShard::TError::BAD_ARGUMENT, Sprintf("Unsupported block format \"%s\"", format.data())
+            );
             return true;
         }
 
@@ -284,7 +294,8 @@ public:
         TSerializedCellVec fromKeyCells(Ev->Get()->Record.GetFromKey());
         KeyFrom.clear();
         for (ui32 i = 0; i < fromKeyCells.GetCells().size(); ++i) {
-            KeyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId()));
+            KeyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId())
+            );
         }
         KeyFrom.resize(tableInfo.KeyColumnTypes.size());
         InclusiveFrom = Ev->Get()->Record.GetFromKeyInclusive();
@@ -304,8 +315,7 @@ public:
 
         for (const auto& col : Ev->Get()->Record.GetColumns()) {
             if (!columnsByName.contains(col)) {
-                SetError(NKikimrTxDataShard::TError::SCHEME_ERROR,
-                         Sprintf("Unknown column: %s", col.data()));
+                SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Unknown column: %s", col.data()));
                 return true;
             }
 
@@ -320,8 +330,9 @@ public:
 
         TString err;
         if (!blockBuilder->Start(columns, rowsPerBlock, bytesPerBlock, err)) {
-            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                     Sprintf("Failed to create block builder \"%s\"", err.data()));
+            SetError(
+                NKikimrTxDataShard::TError::BAD_ARGUMENT, Sprintf("Failed to create block builder \"%s\"", err.data())
+            );
             return true;
         }
 
@@ -329,28 +340,36 @@ public:
 
         if (snapshotKey) {
             if (!Self->GetSnapshotManager().AcquireReference(*snapshotKey)) {
-                SetError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
-                    TStringBuilder() << "Table id " << tableId << " has no snapshot at " << ReadVersion
-                            << " shard " << Self->TabletID() << (Self->IsFollower() ? " RO replica" : ""));
+                SetError(
+                    NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
+                    TStringBuilder() << "Table id " << tableId << " has no snapshot at " << ReadVersion << " shard "
+                                     << Self->TabletID() << (Self->IsFollower() ? " RO replica" : "")
+                );
                 return true;
             }
         }
 
-        auto* scan = new TReadColumnsScan(TKeyBoundary{fromKeyCells, InclusiveFrom},
-                                            TKeyBoundary{toKeyCells, InclusiveTo},
-                                            valueColumns, valueColumnTypes,
-                                            std::move(blockBuilder), RowsLimit, BytesLimit,
-                                            TKeyBoundary{tableInfo.Range.To, tableInfo.Range.ToInclusive},
-                                            Ev->Sender, ctx.SelfID,
-                                            snapshotKey,
-                                            tableInfo.Path,
-                                            Self->TabletID());
+        auto* scan = new TReadColumnsScan(
+            TKeyBoundary{fromKeyCells, InclusiveFrom},
+            TKeyBoundary{toKeyCells, InclusiveTo},
+            valueColumns,
+            valueColumnTypes,
+            std::move(blockBuilder),
+            RowsLimit,
+            BytesLimit,
+            TKeyBoundary{tableInfo.Range.To, tableInfo.Range.ToInclusive},
+            Ev->Sender,
+            ctx.SelfID,
+            snapshotKey,
+            tableInfo.Path,
+            Self->TabletID()
+        );
         auto opts = TScanOptions()
-                .SetResourceBroker("scan", 10)
-                .SetSnapshotRowVersion(ReadVersion)
-                .SetActorPoolId(AppData(ctx)->BatchPoolId)
-                .SetReadAhead(512*1024, 1024*1024)
-                .SetReadPrio(TScanOptions::EReadPrio::Low);
+                        .SetResourceBroker("scan", 10)
+                        .SetSnapshotRowVersion(ReadVersion)
+                        .SetActorPoolId(AppData(ctx)->BatchPoolId)
+                        .SetReadAhead(512 * 1024, 1024 * 1024)
+                        .SetReadPrio(TScanOptions::EReadPrio::Low);
 
         ui64 cookie = -1; // Should be ignored
         Self->QueueScan(localTableId, scan, cookie, opts);
@@ -377,4 +396,5 @@ void TDataShard::Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TAc
     Executor()->Execute(new TTxReadColumns(this, ev), ctx);
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

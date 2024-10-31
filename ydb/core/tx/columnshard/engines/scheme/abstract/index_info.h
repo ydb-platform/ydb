@@ -42,18 +42,23 @@ public:
     }
 
     static const std::set<ui32>& GetNecessarySystemColumnIdsSet() {
-        static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
+        static const std::set<ui32> result = {
+            (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID
+        };
         return result;
     }
 
     static const std::vector<std::string>& GetSnapshotColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
-            std::string(SPEC_COL_WRITE_ID) };
+        static const std::vector<std::string> result = {
+            std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID), std::string(SPEC_COL_WRITE_ID)
+        };
         return result;
     }
 
     static const std::vector<ui32>& GetSnapshotColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
+        static const std::vector<ui32> result = {
+            (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID
+        };
         return result;
     }
 
@@ -86,7 +91,7 @@ public:
     }
 
     static const std::vector<std::string>& SnapshotColumnNames() {
-        static std::vector<std::string> result = { SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID };
+        static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
         return result;
     }
 
@@ -104,19 +109,29 @@ public:
     }
 
     static const std::set<ui32>& GetSnapshotColumnIdsSet() {
-        static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
+        static const std::set<ui32> result = {
+            (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID
+        };
         return result;
     }
 
     static const std::vector<std::string>& GetSystemColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
-            std::string(SPEC_COL_WRITE_ID), std::string(SPEC_COL_DELETE_FLAG) };
+        static const std::vector<std::string> result = {
+            std::string(SPEC_COL_PLAN_STEP),
+            std::string(SPEC_COL_TX_ID),
+            std::string(SPEC_COL_WRITE_ID),
+            std::string(SPEC_COL_DELETE_FLAG)
+        };
         return result;
     }
 
     static const std::vector<ui32>& GetSystemColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID,
-            (ui32)ESpecialColumn::DELETE_FLAG };
+        static const std::vector<ui32> result = {
+            (ui32)ESpecialColumn::PLAN_STEP,
+            (ui32)ESpecialColumn::TX_ID,
+            (ui32)ESpecialColumn::WRITE_ID,
+            (ui32)ESpecialColumn::DELETE_FLAG
+        };
         return result;
     }
 
@@ -153,7 +168,8 @@ public:
 
     static void NormalizeDeletionColumn(NArrow::TGeneralContainer& batch);
 
-    static void AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId);
+    static void
+    AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId);
     static void AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete);
 
     static ui64 GetSpecialColumnsRecordSize() {
@@ -161,14 +177,17 @@ public:
     }
 
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot() {
-        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
-                arrow::field(SPEC_COL_TX_ID, arrow::uint64()), arrow::field(SPEC_COL_WRITE_ID, arrow::uint64()) });
+        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{
+            arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
+            arrow::field(SPEC_COL_TX_ID, arrow::uint64()),
+            arrow::field(SPEC_COL_WRITE_ID, arrow::uint64())
+        });
         return result;
     }
 
     static std::shared_ptr<arrow::Schema> ArrowSchemaDeletion() {
         static std::shared_ptr<arrow::Schema> result =
-            std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()) });
+            std::make_shared<arrow::Schema>(arrow::FieldVector{arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean())});
         return result;
     }
 

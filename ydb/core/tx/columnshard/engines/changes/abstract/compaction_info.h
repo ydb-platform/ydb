@@ -27,13 +27,11 @@ public:
     }
 
     TPlanCompactionInfo(const ui64 pathId)
-        : PathId(pathId) {
-
-    }
+        : PathId(pathId) {}
 
     ui64 GetPathId() const {
         return PathId;
     }
 };
 
-}
+} // namespace NKikimr::NOlap

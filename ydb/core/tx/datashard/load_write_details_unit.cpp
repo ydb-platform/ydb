@@ -5,41 +5,29 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TLoadWriteDetailsUnit : public TExecutionUnit {
+class TLoadWriteDetailsUnit: public TExecutionUnit {
 public:
-    TLoadWriteDetailsUnit(TDataShard &dataShard,
-                       TPipeline &pipeline);
+    TLoadWriteDetailsUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TLoadWriteDetailsUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TLoadWriteDetailsUnit::TLoadWriteDetailsUnit(TDataShard &dataShard,
-                                       TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::LoadTxDetails, true, dataShard, pipeline)
-{
-}
+TLoadWriteDetailsUnit::TLoadWriteDetailsUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::LoadTxDetails, true, dataShard, pipeline) {}
 
-TLoadWriteDetailsUnit::~TLoadWriteDetailsUnit()
-{
-}
+TLoadWriteDetailsUnit::~TLoadWriteDetailsUnit() {}
 
-bool TLoadWriteDetailsUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TLoadWriteDetailsUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TLoadWriteDetailsUnit::Execute(TOperation::TPtr op,
-                                             TTransactionContext &txc,
-                                             const TActorContext &ctx)
-{
+EExecutionStatus
+TLoadWriteDetailsUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     if (!Pipeline.LoadWriteDetails(txc, ctx, writeOp))
@@ -48,14 +36,9 @@ EExecutionStatus TLoadWriteDetailsUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TLoadWriteDetailsUnit::Complete(TOperation::TPtr,
-                                  const TActorContext &)
-{
-}
+void TLoadWriteDetailsUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateLoadWriteDetailsUnit(TDataShard &dataShard,
-                                                TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateLoadWriteDetailsUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TLoadWriteDetailsUnit>(dataShard, pipeline);
 }
 

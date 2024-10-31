@@ -10,10 +10,13 @@
 
 namespace NKikimr::NSchemeShard {
 
-void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
+void DoCreateLock(
+    const TOperationId opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath,
+    TVector<ISubOperation::TPtr>& result
+) {
+    auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
     outTx.SetFailOnExist(false);
     outTx.SetInternal(true);
     auto cfg = outTx.MutableLockConfig();
@@ -22,10 +25,13 @@ void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TP
     result.push_back(CreateLock(NextPartId(opId, result), outTx));
 }
 
-void DoDropLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
+void DoDropLock(
+    const TOperationId opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath,
+    TVector<ISubOperation::TPtr>& result
+) {
+    auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
     outTx.SetFailOnExist(true);
     outTx.SetInternal(true);
     auto cfg = outTx.MutableLockConfig();
@@ -39,26 +45,22 @@ namespace NIncrRestore {
 
 class TConfigurePartsAtTable: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "NIncrRestoreState::TConfigurePartsAtTable"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "NIncrRestoreState::TConfigurePartsAtTable"
+                                << " operationId: " << OperationId;
     }
 
     static bool IsExpectedTxType(TTxState::ETxType txType) {
         switch (txType) {
-        case TTxState::TxRestoreIncrementalBackupAtTable:
-            return true;
-        default:
-            return false;
+            case TTxState::TxRestoreIncrementalBackupAtTable:
+                return true;
+            default:
+                return false;
         }
     }
 
 protected:
-    void FillNotice(
-        const TPathId& pathId,
-        NKikimrTxDataShard::TFlatSchemeTransaction& tx,
-        TOperationContext& context) const
-    {
+    void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context)
+        const {
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
@@ -71,8 +73,7 @@ protected:
 public:
     explicit TConfigurePartsAtTable(TOperationId id, const NKikimrSchemeOp::TRestoreIncrementalBackup& restoreOp)
         : OperationId(id)
-        , RestoreOp(restoreOp)
-    {
+        , RestoreOp(restoreOp) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -127,24 +128,22 @@ private:
 
 class TProposeAtTable: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "NIncrRestoreState::TProposeAtTable"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "NIncrRestoreState::TProposeAtTable"
+                                << " operationId: " << OperationId;
     }
 
     static bool IsExpectedTxType(TTxState::ETxType txType) {
         switch (txType) {
-        case TTxState::TxRestoreIncrementalBackupAtTable:
-            return true;
-        default:
-            return false;
+            case TTxState::TxRestoreIncrementalBackupAtTable:
+                return true;
+            default:
+                return false;
         }
     }
 
 public:
     explicit TProposeAtTable(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
@@ -219,44 +218,42 @@ class TNewRestoreFromAtTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(OperationId, Transaction.GetRestoreIncrementalBackup());
-        case TTxState::Propose:
-            return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return MakeHolder<NIncrRestore::TConfigurePartsAtTable>(
+                    OperationId, Transaction.GetRestoreIncrementalBackup()
+                );
+            case TTxState::Propose:
+                return MakeHolder<NIncrRestore::TProposeAtTable>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
 public:
     explicit TNewRestoreFromAtTable(TOperationId id, const TTxTransaction& tx)
-        : TSubOperation(id, tx)
-    {
-    }
+        : TSubOperation(id, tx) {}
 
     explicit TNewRestoreFromAtTable(TOperationId id, TTxState::ETxState state)
-        : TSubOperation(id, state)
-    {
-    }
+        : TSubOperation(id, state) {}
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -270,15 +267,13 @@ public:
             << ", dst# " << workingDir << "/" << dstTableName);
 
         auto result = MakeHolder<TProposeResponse>(
-            NKikimrScheme::StatusAccepted,
-            ui64(OperationId.GetTxId()),
-            context.SS->TabletID());
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         const auto workingDirPath = TPath::Resolve(workingDir, context.SS);
         {
             const auto checks = workingDirPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -295,8 +290,7 @@ public:
         const auto tablePath = workingDirPath.Child(tableName);
         {
             const auto checks = tablePath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -316,8 +310,7 @@ public:
         const auto dstTablePath = workingDirPath.Child(dstTableName);
         {
             const auto checks = tablePath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -391,7 +384,8 @@ public:
 
 } // namespace NIncrRestore
 
-TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackup);
 
     LOG_N("CreateRestoreIncrementalBackup"
@@ -406,8 +400,7 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
     const auto srcTablePath = workingDirPath.Child(srcTableName);
     {
         const auto checks = srcTablePath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -425,8 +418,7 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
     const auto dstTablePath = workingDirPath.Child(dstTableName);
     {
         const auto checks = srcTablePath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -440,7 +432,6 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
             return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
         }
     }
-
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(srcTablePath.Base()->PathId));
     auto srcTable = context.SS->Tables.at(srcTablePath.Base()->PathId);
@@ -474,7 +465,9 @@ TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, c
     DoCreateLock(opId, workingDirPath, dstTablePath, result);
 
     {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable);
+        auto outTx = TransactionTemplate(
+            workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRestoreIncrementalBackupAtTable
+        );
         outTx.MutableRestoreIncrementalBackup()->CopyFrom(restoreOp);
         auto& restoreOp = *outTx.MutableRestoreIncrementalBackup();
         PathIdFromPathId(srcTablePath.Base()->PathId, restoreOp.MutableSrcPathId());

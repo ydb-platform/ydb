@@ -11,9 +11,14 @@ public:
         YDB_ACCESSOR(ui64, TabletId, 0);
         YDB_READONLY(ui64, HashIntervalLeftClosed, 0);
         YDB_READONLY(ui64, HashIntervalRightOpened, Max<ui64>());
+
     public:
         TConsistencyShardingTablet() = default;
-        TConsistencyShardingTablet(const ui64 tabletId, const ui64 hashIntervalLeftClosed, const ui64 hashIntervalRightOpened)
+        TConsistencyShardingTablet(
+            const ui64 tabletId,
+            const ui64 hashIntervalLeftClosed,
+            const ui64 hashIntervalRightOpened
+        )
             : TabletId(tabletId)
             , HashIntervalLeftClosed(hashIntervalLeftClosed)
             , HashIntervalRightOpened(hashIntervalRightOpened) {
@@ -76,7 +81,9 @@ private:
                 currentPos = i->GetHashIntervalRightOpened();
             }
             if (currentPos != Max<ui64>()) {
-                return TConclusionStatus::Fail("sharding special intervals not covered (reading) full ui64 line (final segment)");
+                return TConclusionStatus::Fail(
+                    "sharding special intervals not covered (reading) full ui64 line (final segment)"
+                );
             }
         }
         {
@@ -88,7 +95,9 @@ private:
                 currentPos = std::max<ui64>(currentPos, i->GetHashIntervalRightOpened());
             }
             if (currentPos != Max<ui64>()) {
-                return TConclusionStatus::Fail("sharding special intervals not covered (writing) full ui64 line (final segment)");
+                return TConclusionStatus::Fail(
+                    "sharding special intervals not covered (writing) full ui64 line (final segment)"
+                );
             }
         }
         return TConclusionStatus::Success();
@@ -149,7 +158,11 @@ public:
         }
     }
 
-    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto, const std::set<ui64>& closedForWrite, const std::set<ui64>& closedForRead) {
+    TConclusionStatus DeserializeFromProto(
+        const NKikimrSchemeOp::TColumnTableSharding& proto,
+        const std::set<ui64>& closedForWrite,
+        const std::set<ui64>& closedForRead
+    ) {
         for (auto&& i : proto.GetHashSharding().GetTabletsForConsistency()) {
             TConsistencyShardingTablet info;
             auto conclusion = info.DeserializeFromProto(i);
@@ -162,7 +175,8 @@ public:
         return BuildActivityIndex(closedForWrite, closedForRead);
     }
 
-    [[nodiscard]] TConclusionStatus BuildActivityIndex(const std::set<ui64>& closedForWrite, const std::set<ui64>& closedForRead) {
+    [[nodiscard]] TConclusionStatus
+    BuildActivityIndex(const std::set<ui64>& closedForWrite, const std::set<ui64>& closedForRead) {
         std::sort(SpecialSharding.begin(), SpecialSharding.end());
         ActiveWriteSpecialSharding.clear();
         ActiveReadSpecialSharding.clear();
@@ -243,7 +257,9 @@ public:
             return info.GetTabletId() == tabletId;
         };
         const ui32 sizeStart = SpecialSharding.size();
-        SpecialSharding.erase(std::remove_if(SpecialSharding.begin(), SpecialSharding.end(), pred), SpecialSharding.end());
+        SpecialSharding.erase(
+            std::remove_if(SpecialSharding.begin(), SpecialSharding.end(), pred), SpecialSharding.end()
+        );
         return sizeStart != SpecialSharding.size();
     }
 
@@ -258,7 +274,6 @@ public:
 
         IndexConstructed = false;
     }
-
 };
 
 class TConsistencySharding64: public THashShardingImpl {
@@ -266,13 +281,18 @@ public:
     static TString GetClassNameStatic() {
         return "CONSISTENCY";
     }
+
 private:
     using TBase = THashShardingImpl;
 
     std::optional<TSpecificShardingInfo> SpecialShardingInfo;
 
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const override;
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const override;
 
     bool UpdateShardInfo(const TSpecificShardingInfo::TConsistencyShardingTablet& info) {
         GetShardInfoVerified(info.GetTabletId()).IncrementVersion();
@@ -310,7 +330,9 @@ private:
         if (SpecialShardingInfo) {
             SpecialShardingInfo->SerializeToProto(proto);
         }
-        proto.MutableHashSharding()->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+        proto.MutableHashSharding()->SetFunction(
+            NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64
+        );
     }
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) override;
 
@@ -323,16 +345,17 @@ private:
         }
         return result;
     }
+
 public:
     using TBase::TBase;
 
     TConsistencySharding64() = default;
 
     TConsistencySharding64(const std::vector<ui64>& shardIds, const std::vector<TString>& columnNames, ui64 seed = 0)
-        : TBase(shardIds, columnNames, seed) {
-    }
+        : TBase(shardIds, columnNames, seed) {}
 
-    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch
+    ) const override;
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
@@ -344,12 +367,16 @@ public:
     static TString GetClassNameStatic() {
         return "CONSISTENCY";
     }
+
 private:
     using TBase = THashGranuleSharding;
     TSpecificShardingInfo::TConsistencyShardingTablet Interval;
-    static const inline TFactory::TRegistrator<TGranuleSharding> Registrator = TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
+    static const inline TFactory::TRegistrator<TGranuleSharding> Registrator =
+        TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
+
 protected:
-    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table) const override {
+    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table
+    ) const override {
         const std::vector<ui64> hashes = CalcHashes(table);
         auto result = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
         const auto getter = [&](const ui64 index) {
@@ -358,7 +385,6 @@ protected:
         };
         result->ResetWithLambda(hashes.size(), getter);
         return result;
-
     }
     virtual void DoSerializeToProto(TProto& proto) const override {
         *proto.MutableConsistency()->MutableHashing() = TBase::SerializeHashingToProto();
@@ -380,18 +406,20 @@ protected:
 
         return TConclusionStatus::Success();
     }
+
 public:
     TGranuleSharding() = default;
 
-    TGranuleSharding(const std::vector<TString>& columnNames, const TSpecificShardingInfo::TConsistencyShardingTablet& interval)
+    TGranuleSharding(
+        const std::vector<TString>& columnNames,
+        const TSpecificShardingInfo::TConsistencyShardingTablet& interval
+    )
         : TBase(columnNames)
-        , Interval(interval) {
-
-    }
+        , Interval(interval) {}
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
 };
 
-}
+} // namespace NKikimr::NSharding::NConsistency

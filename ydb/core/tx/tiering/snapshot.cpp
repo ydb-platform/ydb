@@ -11,8 +11,12 @@ namespace NKikimr::NColumnShard::NTiers {
 
 bool TConfigsSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
     Y_ABORT_UNLESS(rawDataResult.result_sets().size() == 2);
-    ParseSnapshotObjects<TTierConfig>(rawDataResult.result_sets()[0], [this](TTierConfig&& s) {TierConfigs.emplace(s.GetTierName(), s); });
-    ParseSnapshotObjects<TTieringRule>(rawDataResult.result_sets()[1], [this](TTieringRule&& s) {TableTierings.emplace(s.GetTieringRuleId(), s); });
+    ParseSnapshotObjects<TTierConfig>(rawDataResult.result_sets()[0], [this](TTierConfig&& s) {
+        TierConfigs.emplace(s.GetTierName(), s);
+    });
+    ParseSnapshotObjects<TTieringRule>(rawDataResult.result_sets()[1], [this](TTieringRule&& s) {
+        TableTierings.emplace(s.GetTieringRuleId(), s);
+    });
     return true;
 }
 
@@ -60,4 +64,4 @@ TString NTiers::TConfigsSnapshot::DoSerializeToString() const {
     return result.GetStringRobust();
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

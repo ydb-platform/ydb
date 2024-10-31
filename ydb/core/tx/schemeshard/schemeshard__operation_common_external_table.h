@@ -24,8 +24,7 @@ inline TPath::TChecker IsParentPathValid(const TPath& parentPath) {
         .IsLikeDirectory();
 }
 
-inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
-                              const TPath& parentPath) {
+inline bool IsParentPathValid(const THolder<TProposeResponse>& result, const TPath& parentPath) {
     const auto checks = IsParentPathValid(parentPath);
 
     if (!checks) {
@@ -35,15 +34,13 @@ inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
     return static_cast<bool>(checks);
 }
 
-bool Validate(const TString& sourceType,
-              const NKikimrSchemeOp::TExternalTableDescription& desc,
-              TString& errStr);
+bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDescription& desc, TString& errStr);
 
 std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
     const TString& sourceType,
     const NKikimrSchemeOp::TExternalTableDescription& desc,
     const NExternalSource::IExternalSourceFactory::TPtr& factory,
-    ui64 alterVersion);
+    ui64 alterVersion
+);
 
-
-} // namespace NKikimr::NSchemeShard::NExternalDataSource
+} // namespace NKikimr::NSchemeShard::NExternalTable

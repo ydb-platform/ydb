@@ -5,13 +5,14 @@
 
 namespace NKikimr::NOlap::NBackground {
 
-class TEvExecuteGeneralLocalTransaction: public TEventLocal<TEvExecuteGeneralLocalTransaction, TEvents::EvExecuteGeneralLocalTransaction> {
+class TEvExecuteGeneralLocalTransaction
+    : public TEventLocal<TEvExecuteGeneralLocalTransaction, TEvents::EvExecuteGeneralLocalTransaction> {
 private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> Transaction;
+
 public:
     TEvExecuteGeneralLocalTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& transaction)
-        : Transaction(std::move(transaction))
-    {
+        : Transaction(std::move(transaction)) {
         AFL_VERIFY(!!Transaction);
     }
 
@@ -21,13 +22,14 @@ public:
     }
 };
 
-class TEvLocalTransactionCompleted: public TEventLocal<TEvLocalTransactionCompleted, TEvents::EvLocalTransactionComplete> {
+class TEvLocalTransactionCompleted
+    : public TEventLocal<TEvLocalTransactionCompleted, TEvents::EvLocalTransactionComplete> {
 private:
     const ui64 InternalTxId;
+
 public:
     TEvLocalTransactionCompleted(const ui64 internalTxId)
-        : InternalTxId(internalTxId) {
-    }
+        : InternalTxId(internalTxId) {}
 
     ui64 GetInternalTxId() const {
         return InternalTxId;
@@ -38,13 +40,11 @@ class TEvRemoveSession: public TEventLocal<TEvRemoveSession, TEvents::EvRemoveSe
 private:
     YDB_READONLY_DEF(TString, ClassName);
     YDB_READONLY_DEF(TString, Identifier);
+
 public:
     TEvRemoveSession(const TString& className, const TString& identifier)
         : ClassName(className)
-        , Identifier(identifier)
-    {
-    }
-
+        , Identifier(identifier) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

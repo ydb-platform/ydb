@@ -7,19 +7,21 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     const TString& name,
     bool validateFeatureFlag,
     TOperationContext& context,
-    THolder<TProposeResponse>& result)
-{
+    THolder<TProposeResponse>& result
+) {
     bool backupServiceEnabled = AppData()->FeatureFlags.GetEnableBackupService();
     if (!backupServiceEnabled && validateFeatureFlag) {
-        result->SetError(NKikimrScheme::StatusPreconditionFailed, "Backup collections are disabled. Please contact your system administrator to enable it");
+        result->SetError(
+            NKikimrScheme::StatusPreconditionFailed,
+            "Backup collections are disabled. Please contact your system administrator to enable it"
+        );
         return std::nullopt;
     }
 
     const TPath& rootPath = TPath::Resolve(rootPathStr, context.SS);
     {
         const auto checks = rootPath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -40,7 +42,10 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     TPathSplitUnix absPathSplit(name);
 
     if (absPathSplit.size() > 1 && !absPathSplit.IsAbsolute) {
-        result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed directly in " << backupCollectionsDir);
+        result->SetError(
+            NKikimrScheme::EStatus::StatusSchemeError,
+            TStringBuilder() << "Backup collections must be placed directly in " << backupCollectionsDir
+        );
         return std::nullopt;
     }
 
@@ -67,9 +72,13 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
         parentPath = TPath::Resolve(realParent, context.SS);
     }
 
-    TPath dstPath = absPathSplit.IsAbsolute && parentPath ? parentPath->Child(TString(absPathSplit.back())) : rootPath.Child(name);
+    TPath dstPath =
+        absPathSplit.IsAbsolute && parentPath ? parentPath->Child(TString(absPathSplit.back())) : rootPath.Child(name);
     if (!dstPath.PathString().StartsWith(backupCollectionsDir + "/")) {
-        result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir);
+        result->SetError(
+            NKikimrScheme::EStatus::StatusSchemeError,
+            TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir
+        );
         return std::nullopt;
     }
 

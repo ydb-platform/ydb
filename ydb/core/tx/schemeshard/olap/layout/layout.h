@@ -16,6 +16,7 @@ class TLayoutIdSet {
 private:
     ui64 Hash = 0;
     THashSet<TSetElement> Elements;
+
 public:
     TLayoutIdSet() = default;
     TLayoutIdSet(const TSetElement elem) {
@@ -82,6 +83,7 @@ public:
     private:
         const TTableIdsGroup* TableIds = nullptr;
         YDB_READONLY_DEF(std::set<ui64>, ShardIds);
+
     public:
         TTablesGroup() = default;
         TTablesGroup(const TTableIdsGroup* tableIds, std::set<ui64>&& shardIds);
@@ -97,6 +99,7 @@ public:
 
 private:
     YDB_READONLY_DEF(std::vector<TTablesGroup>, Groups);
+
 public:
     TColumnTablesLayout(std::vector<TTablesGroup>&& groups);
 
@@ -112,4 +115,4 @@ public:
     static TColumnTablesLayout BuildTrivial(const std::vector<ui64>& tabletIds);
 };
 
-}
+} // namespace NKikimr::NSchemeShard

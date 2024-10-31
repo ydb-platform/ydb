@@ -7,4 +7,4 @@ TString TChunkAddress::DebugString() const {
     return TStringBuilder() << "(column_id=" << ColumnId << ";chunk=" << Chunk << ";)";
 }
 
-}
+} // namespace NKikimr::NOlap

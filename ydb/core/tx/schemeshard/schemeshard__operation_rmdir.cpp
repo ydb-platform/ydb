@@ -25,15 +25,14 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -47,7 +46,8 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                if (path.IsResolved() && path.Base()->IsDirectory() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
+                if (path.IsResolved() && path.Base()->IsDirectory() &&
+                    (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
@@ -125,7 +125,6 @@ public:
                        << ", step: " << step
                        << ", at schemeshard: " << ssId);
 
-
         TTxState* txState = context.SS->FindTx(OperationId);
 
         if (!txState) {
@@ -191,7 +190,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -204,4 +203,4 @@ ISubOperation::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TRmDir>(id);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

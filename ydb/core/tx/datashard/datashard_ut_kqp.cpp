@@ -8,7 +8,6 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
-
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;
@@ -17,18 +16,17 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
 
-
 namespace {
 
 ui32 CalcDrops(const NDqProto::TDqExecutionStats& profile) {
     ui32 count = 0;
     for (auto& stage : profile.GetStages()) {
         for (auto& ca : stage.GetComputeActors()) {
-            for (auto& task: ca.GetTasks()) {
-                for (auto& inputChannels: task.GetInputChannels()) {
+            for (auto& task : ca.GetTasks()) {
+                for (auto& inputChannels : task.GetInputChannels()) {
                     count += inputChannels.GetResentMessages();
                 }
-                for (auto& outputChannels: task.GetOutputChannels()) {
+                for (auto& outputChannels : task.GetOutputChannels()) {
                     count += outputChannels.GetResentMessages();
                 }
             }
@@ -39,7 +37,7 @@ ui32 CalcDrops(const NDqProto::TDqExecutionStats& profile) {
 
 } // namespace
 
-class KqpStabilityTests : public TTestBase {
+class KqpStabilityTests: public TTestBase {
 public:
     void SetUp() override;
 
@@ -87,56 +85,64 @@ private:
         bool ActionDone = false;
 
         bool Matches(TAutoPtr<NActors::IEventHandle>& event) const {
-            return event->GetTypeRewrite() == EventType
-                   && event->Cookie == ChannelId
-                   && (!SeqNoExtractor || SeqNoExtractor(event.Get()) == SeqNo);
+            return event->GetTypeRewrite() == EventType && event->Cookie == ChannelId &&
+                   (!SeqNoExtractor || SeqNoExtractor(event.Get()) == SeqNo);
         }
 
         void Attach(NActors::TTestActorRuntime* runtime) {
             runtime->SetObserverFunc([this, runtime](TAutoPtr<NActors::IEventHandle>& event) {
-
-                    if (event->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType) {
-                        auto status = event.Get()->Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
-                        if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
-                            StartedScans++;
-                            if (StartedScans == 3 && !ActionDone && Counter <= 0 && !Reason) {
-                                auto edge = runtime->AllocateEdgeActor(0);
-                                runtime->Send(new IEventHandle(runtime->GetInterconnectProxy(0, 1), edge,
-                                    new TEvInterconnect::TEvPoisonSession), 0, true);
-                                ActionDone = true;
-                            }
-                        }
-                    }
-
-                    if (Counter > 0 && Matches(event)) {
-                        Cerr << "-- DROP " << EventName << ", channel: " << ChannelId << ", seqNo: " << SeqNo << Endl;
-
-                        ++DroppedEvents;
-                        Counter--;
-
-                        if (Reason) {
-                            auto evUndelivered = new TEvents::TEvUndelivered(event->GetTypeRewrite(), *Reason);
-                            auto handle = new IEventHandle(event->Sender, TActorId(), evUndelivered, 0, event->Cookie);
-                            runtime->Send(handle, 0, true);
+                if (event->GetTypeRewrite() == TEvDataShard::TEvProposeTransactionResult::EventType) {
+                    auto status = event.Get()->Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
+                    if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
+                        StartedScans++;
+                        if (StartedScans == 3 && !ActionDone && Counter <= 0 && !Reason) {
+                            auto edge = runtime->AllocateEdgeActor(0);
+                            runtime->Send(
+                                new IEventHandle(
+                                    runtime->GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvPoisonSession
+                                ),
+                                0,
+                                true
+                            );
                             ActionDone = true;
-                        } else {
-                            if (Counter <= 0 && StartedScans == 3 && !ActionDone) {
-                                auto edge = runtime->AllocateEdgeActor(0);
-                                runtime->Send(new IEventHandle(runtime->GetInterconnectProxy(0, 1), edge,
-                                    new TEvInterconnect::TEvPoisonSession), 0, true);
-                                ActionDone = true;
-                            }
                         }
+                    }
+                }
 
-                        return NActors::TTestActorRuntime::EEventAction::DROP;
+                if (Counter > 0 && Matches(event)) {
+                    Cerr << "-- DROP " << EventName << ", channel: " << ChannelId << ", seqNo: " << SeqNo << Endl;
+
+                    ++DroppedEvents;
+                    Counter--;
+
+                    if (Reason) {
+                        auto evUndelivered = new TEvents::TEvUndelivered(event->GetTypeRewrite(), *Reason);
+                        auto handle = new IEventHandle(event->Sender, TActorId(), evUndelivered, 0, event->Cookie);
+                        runtime->Send(handle, 0, true);
+                        ActionDone = true;
+                    } else {
+                        if (Counter <= 0 && StartedScans == 3 && !ActionDone) {
+                            auto edge = runtime->AllocateEdgeActor(0);
+                            runtime->Send(
+                                new IEventHandle(
+                                    runtime->GetInterconnectProxy(0, 1), edge, new TEvInterconnect::TEvPoisonSession
+                                ),
+                                0,
+                                true
+                            );
+                            ActionDone = true;
+                        }
                     }
 
-                    if (Matches(event) && Counter <= 0 && !ActionDone) {
-                        return NActors::TTestActorRuntime::EEventAction::DROP;
-                    }
+                    return NActors::TTestActorRuntime::EEventAction::DROP;
+                }
 
-                    return NActors::TTestActorRuntime::EEventAction::PROCESS;
-                });
+                if (Matches(event) && Counter <= 0 && !ActionDone) {
+                    return NActors::TTestActorRuntime::EEventAction::DROP;
+                }
+
+                return NActors::TTestActorRuntime::EEventAction::PROCESS;
+            });
         }
     };
 
@@ -154,8 +160,12 @@ private:
 
         while (true) {
             TAutoPtr<IEventHandle> handle;
-            auto replies = Server->GetRuntime()->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvAbortExecution,
-                TEvKqpExecuter::TEvStreamData, TEvKqpExecuter::TEvStreamProfile>(handle);
+            auto replies = Server->GetRuntime()
+                               ->GrabEdgeEventsRethrow<
+                                   TEvKqp::TEvQueryResponse,
+                                   TEvKqp::TEvAbortExecution,
+                                   TEvKqpExecuter::TEvStreamData,
+                                   TEvKqpExecuter::TEvStreamProfile>(handle);
 
             if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
                 auto& response = ev->Record;
@@ -165,7 +175,8 @@ private:
                     UNIT_ASSERT(response.GetResponse().GetYdbResults().empty());
 
                     writer.OnEndList();
-                    UNIT_ASSERT_STRINGS_EQUAL(ReformatYson(R"(
+                    UNIT_ASSERT_STRINGS_EQUAL(
+                        ReformatYson(R"(
                         [[[1u];[1u]];
                         [[10u];[1u]];
                         [[100u];[1u]];
@@ -174,7 +185,9 @@ private:
                         [[4000000011u];[1u]];
                         [[4000000101u];[1u]];
                         [[4000001001u];[1u]]]
-                    )"), ReformatYson(out.Str()));
+                    )"),
+                        ReformatYson(out.Str())
+                    );
 
                     UNIT_ASSERT(profile.Defined());
                     UNIT_ASSERT(dropInfo.DroppedEvents > 0);
@@ -226,21 +239,21 @@ UNIT_TEST_SUITE_REGISTRATION(KqpStabilityTests);
 void KqpStabilityTests::SetUp() {
     Cerr << "-- SetUp\n";
     auto serverSettings = TServerSettings(PortManager.GetPort(2134))
-        .SetDomainName("Root")
-        .SetNodeCount(2)
-        .SetUseRealThreads(false)
-        .SetAppConfig(AppCfg);
+                              .SetDomainName("Root")
+                              .SetNodeCount(2)
+                              .SetUseRealThreads(false)
+                              .SetAppConfig(AppCfg);
 
     Server = new Tests::TServer(serverSettings);
     auto& runtime = *Server->GetRuntime();
 
-//    runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NActors::NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-//    runtime.SetLogPriority(NKikimrServices::KQP_RESOURCES_MANAGER, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::KQP_RESOURCES_MANAGER, NActors::NLog::PRI_DEBUG);
 
     auto sender = runtime.AllocateEdgeActor();
     InitRoot(Server, sender);
@@ -446,14 +459,21 @@ void KqpStabilityTests::AbortOnDisconnect() {
 
     while (true) {
         TAutoPtr<IEventHandle> handle;
-        auto replies = Server->GetRuntime()->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvAbortExecution,
-            TEvKqpExecuter::TEvStreamData, TEvKqpExecuter::TEvStreamProfile>(handle);
+        auto replies = Server->GetRuntime()
+                           ->GrabEdgeEventsRethrow<
+                               TEvKqp::TEvQueryResponse,
+                               TEvKqp::TEvAbortExecution,
+                               TEvKqpExecuter::TEvStreamData,
+                               TEvKqpExecuter::TEvStreamProfile>(handle);
 
         if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
             auto& response = ev->Record;
 
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
-            UNIT_ASSERT_STRINGS_EQUAL(response.GetResponse().GetQueryIssues()[0].issues()[0].message(), "Table /Root/table-1 scan failed, reason: 2");
+            UNIT_ASSERT_STRINGS_EQUAL(
+                response.GetResponse().GetQueryIssues()[0].issues()[0].message(),
+                "Table /Root/table-1 scan failed, reason: 2"
+            );
             return;
         }
 

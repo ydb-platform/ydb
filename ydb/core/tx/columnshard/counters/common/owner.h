@@ -14,6 +14,7 @@ private:
     const TString ModuleId;
     std::map<TString, TString> SignalKeys;
     TString NormalizeSignalName(const TString& name) const;
+
 protected:
     std::shared_ptr<TValueAggregationAgent> GetValueAutoAggregations(const TString& name) const;
     std::shared_ptr<TValueAggregationClient> GetValueAutoAggregationsClient(const TString& name) const;
@@ -21,9 +22,7 @@ protected:
     TCommonCountersOwner(const TCommonCountersOwner& sameAs)
         : SubGroup(sameAs.SubGroup)
         , ModuleId(sameAs.ModuleId)
-        , SignalKeys(sameAs.SignalKeys) {
-
-    }
+        , SignalKeys(sameAs.SignalKeys) {}
 
     TCommonCountersOwner(const TCommonCountersOwner& sameAs, const TString& componentName)
         : SubGroup(sameAs.SubGroup)
@@ -32,12 +31,17 @@ protected:
         DeepSubGroup("component", componentName);
     }
 
-    TCommonCountersOwner(const TCommonCountersOwner& sameAs, const TString& deepParamName, const TString& deepParamValue)
+    TCommonCountersOwner(
+        const TCommonCountersOwner& sameAs,
+        const TString& deepParamName,
+        const TString& deepParamValue
+    )
         : SubGroup(sameAs.SubGroup)
         , ModuleId(sameAs.ModuleId)
         , SignalKeys(sameAs.SignalKeys) {
         DeepSubGroup(deepParamName, deepParamValue);
     }
+
 public:
     const TString& GetModuleId() const {
         return ModuleId;
@@ -53,7 +57,8 @@ public:
     TCommonCountersOwner CreateSubGroup(const TString& param, const TString& value) const {
         return TCommonCountersOwner(*this, param, value);
     }
-    NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
+    NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector)
+        const;
 
     TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr);
 };
@@ -62,11 +67,10 @@ class TValueGuard {
 private:
     NMonitoring::TDynamicCounters::TCounterPtr Value;
     TAtomicCounter Counter;
+
 public:
     TValueGuard(NMonitoring::TDynamicCounters::TCounterPtr value)
-        : Value(value) {
-
-    }
+        : Value(value) {}
 
     ~TValueGuard() {
         Sub(Counter.Val());
@@ -82,4 +86,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

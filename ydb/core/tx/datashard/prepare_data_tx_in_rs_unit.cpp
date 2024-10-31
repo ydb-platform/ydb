@@ -7,42 +7,30 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TPrepareDataTxInRSUnit : public TExecutionUnit {
+class TPrepareDataTxInRSUnit: public TExecutionUnit {
 public:
-    TPrepareDataTxInRSUnit(TDataShard &dataShard,
-                           TPipeline &pipeline);
+    TPrepareDataTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TPrepareDataTxInRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TPrepareDataTxInRSUnit::TPrepareDataTxInRSUnit(TDataShard &dataShard,
-                                               TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::PrepareDataTxInRS, true, dataShard, pipeline)
-{
-}
+TPrepareDataTxInRSUnit::TPrepareDataTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::PrepareDataTxInRS, true, dataShard, pipeline) {}
 
-TPrepareDataTxInRSUnit::~TPrepareDataTxInRSUnit()
-{
-}
+TPrepareDataTxInRSUnit::~TPrepareDataTxInRSUnit() {}
 
-bool TPrepareDataTxInRSUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TPrepareDataTxInRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
-                                                 TTransactionContext &txc,
-                                                 const TActorContext &ctx)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+EExecutionStatus
+TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (tx->IsTxDataReleased()) {
@@ -56,7 +44,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
         }
     }
 
-    IEngineFlat *engine = tx->GetDataTx()->GetEngine();
+    IEngineFlat* engine = tx->GetDataTx()->GetEngine();
     Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
     // TODO: cancel tx in special execution unit.
@@ -64,7 +52,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
         engine->Cancel();
 
     try {
-        auto &inReadSets = op->InReadSets();
+        auto& inReadSets = op->InReadSets();
         auto result = engine->PrepareIncomingReadsets();
         Y_VERIFY_S(result == IEngineFlat::EResult::Ok,
                    "Cannot prepare input RS for " << *op << " at "
@@ -73,10 +61,9 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
         ui32 rsCount = engine->GetExpectedIncomingReadsetsCount();
         for (ui32 i = 0; i < rsCount; ++i) {
             ui64 shard = engine->GetExpectedIncomingReadsetOriginShard(i);
-            inReadSets.insert(std::make_pair(std::make_pair(shard, DataShard.TabletID()),
-                                             TVector<TRSData>()));
+            inReadSets.insert(std::make_pair(std::make_pair(shard, DataShard.TabletID()), TVector<TRSData>()));
         }
-    } catch (const TMemoryLimitExceededException &) {
+    } catch (const TMemoryLimitExceededException&) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Operation " << *op << " at " << DataShard.TabletID()
                     << " exceeded memory limit " << txc.GetMemoryLimit()
@@ -100,14 +87,9 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TPrepareDataTxInRSUnit::Complete(TOperation::TPtr,
-                                      const TActorContext &)
-{
-}
+void TPrepareDataTxInRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreatePrepareDataTxInRSUnit(TDataShard &dataShard,
-                                                    TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreatePrepareDataTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TPrepareDataTxInRSUnit(dataShard, pipeline));
 }
 

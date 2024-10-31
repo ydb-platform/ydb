@@ -62,8 +62,7 @@ private:
 
 public:
     TPortionsGroupInfo(const std::shared_ptr<TPortionCategoryCounters>& signals)
-        : Signals(signals) {
-    }
+        : Signals(signals) {}
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
         TBase::AddPortion(p);
@@ -282,8 +281,7 @@ public:
 
     TPortionsPool(const std::shared_ptr<TCounters>& counters, const TDuration futureDetector)
         : Counters(counters)
-        , FutureDetector(futureDetector) {
-    }
+        , FutureDetector(futureDetector) {}
 
     ~TPortionsPool() {
         for (auto&& i : Actuals) {
@@ -383,7 +381,8 @@ public:
         return Actuals;
     }
 
-    std::vector<TPortionInfo::TConstPtr> GetOptimizerTaskPortions(const ui64 sizeLimit, std::optional<NArrow::TReplaceKey>& separatePoint) const {
+    std::vector<TPortionInfo::TConstPtr>
+    GetOptimizerTaskPortions(const ui64 sizeLimit, std::optional<NArrow::TReplaceKey>& separatePoint) const {
         std::vector<TPortionInfo::TConstPtr> sorted;
         for (auto&& i : Actuals) {
             sorted.emplace_back(i.second);
@@ -397,7 +396,8 @@ public:
         std::sort(sorted.begin(), sorted.end(), pred);
 
         std::vector<TPortionInfo::TConstPtr> result;
-        std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor = NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
+        std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> predictor =
+            NCompaction::TGeneralCompactColumnEngineChanges::BuildMemoryPredictor();
         ui64 txSizeLimit = 0;
         for (auto&& i : sorted) {
             result.emplace_back(i);
@@ -564,11 +564,15 @@ public:
             return 0;
         }
 */
-        const bool isForce = NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force;
+        const bool isForce = NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() ==
+                             NYDBTest::EOptimizerCompactionWeightControl::Force;
         const ui64 count = BucketInfo.GetCount() + ((mainPortion && (!isFinal || isForce)) ? 1 : 0);
-        const ui64 recordsCount = BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
-        const ui64 sumBytes = BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
-        if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
+        const ui64 recordsCount =
+            BucketInfo.GetRecordsCount() + ((mainPortion && !isFinal) ? mainPortion->GetRecordsCount() : 0);
+        const ui64 sumBytes =
+            BucketInfo.GetBytes() + ((mainPortion && !isFinal) ? mainPortion->GetTotalBlobBytes() : 0);
+        if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() ==
+            NYDBTest::EOptimizerCompactionWeightControl::Disable) {
             return 0;
         }
         const ui64 weight = 10000000000.0 * count - sumBytes;
@@ -590,12 +594,16 @@ public:
             std::shared_ptr<TPortionInfo> youngestPortion = GetYoungestPortion(true);
             AFL_VERIFY(oldestPortion && youngestPortion);
             sb << "{"
-                << "oldest="
-                << "(" << oldestPortion->IndexKeyStart().DebugString() << ":" << oldestPortion->IndexKeyEnd().DebugString() << ":" << oldestPortion->RecordSnapshotMax().GetPlanStep() << ":" << oldestPortion->GetMeta().GetProduced() << ");"
-                << "youngest="
-                << "(" << youngestPortion->IndexKeyStart().DebugString() << ":" << youngestPortion->IndexKeyEnd().DebugString() << ":" << youngestPortion->RecordSnapshotMax().GetPlanStep() << ":" << youngestPortion->GetMeta().GetProduced() << ");"
-                << "}"
-                ;
+               << "oldest="
+               << "(" << oldestPortion->IndexKeyStart().DebugString() << ":"
+               << oldestPortion->IndexKeyEnd().DebugString() << ":" << oldestPortion->RecordSnapshotMax().GetPlanStep()
+               << ":" << oldestPortion->GetMeta().GetProduced() << ");"
+               << "youngest="
+               << "(" << youngestPortion->IndexKeyStart().DebugString() << ":"
+               << youngestPortion->IndexKeyEnd().DebugString() << ":"
+               << youngestPortion->RecordSnapshotMax().GetPlanStep() << ":" << youngestPortion->GetMeta().GetProduced()
+               << ");"
+               << "}";
             return sb;
         } else {
             return BucketInfo.DebugString();
@@ -633,7 +641,8 @@ public:
             }
             ui64 max = 0;
             for (auto&& i : Actuals) {
-                auto it = counters.upper_bound((i.second->RecordSnapshotMax().GetPlanInstant() - *baseInstant).Seconds());
+                auto it =
+                    counters.upper_bound((i.second->RecordSnapshotMax().GetPlanInstant() - *baseInstant).Seconds());
                 if (it == counters.end()) {
                     ++max;
                 } else {
@@ -680,9 +689,15 @@ private:
         if (!MainPortion) {
             return;
         }
-        MainPortion->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, Others.IsEmpty() && currentInstant > MainPortion->RecordSnapshotMax().GetPlanInstant() +
-            NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings());
+        MainPortion->InitRuntimeFeature(
+            TPortionInfo::ERuntimeFeature::Optimized,
+            Others.IsEmpty() &&
+                currentInstant >
+                    MainPortion->RecordSnapshotMax().GetPlanInstant() +
+                        NYDBTest::TControllers::GetColumnShardController()->GetLagForCompactionBeforeTierings()
+        );
     }
+
 public:
     TTaskDescription GetTaskDescription() const {
         TTaskDescription result(MainPortion ? MainPortion->GetPortionId() : 0);
@@ -762,13 +777,18 @@ public:
         return TModificationGuard(*this);
     }
 
-    TPortionsBucket(const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<TCounters>& counters)
+    TPortionsBucket(
+        const std::shared_ptr<TPortionInfo>& portion,
+        const std::shared_ptr<arrow::Schema>& pkSchema,
+        const std::shared_ptr<TCounters>& counters
+    )
         : MainPortion(portion)
         , Counters(counters)
-        , Others(Counters, GetCommonFreshnessCheckDuration())
-    {
+        , Others(Counters, GetCommonFreshnessCheckDuration()) {
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition sBatchPosition(MainPortion->IndexKeyStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition sBatchPosition(
+                MainPortion->IndexKeyStart().ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false
+            );
             StartPos = std::move(sBatchPosition);
             Counters->PortionsAlone->AddPortion(MainPortion);
         }
@@ -836,14 +856,21 @@ public:
         }
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule,
-        const std::shared_ptr<NDataLocks::TManager>& locksManager, const NArrow::TReplaceKey* nextBorder, const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
-        const std::shared_ptr<IStoragesManager>& storagesManager) const
-    {
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager,
+        const NArrow::TReplaceKey* nextBorder,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const std::shared_ptr<IStoragesManager>& storagesManager
+    ) const {
         auto youngestPortion = GetYoungestPortion(nextBorder);
         auto oldestPortion = GetOldestPortion(nextBorder);
         AFL_VERIFY(youngestPortion && oldestPortion);
-        Counters->OnNewTask(!NextBorder, TInstant::MilliSeconds(youngestPortion->RecordSnapshotMax().GetPlanStep()), TInstant::MilliSeconds(oldestPortion->RecordSnapshotMax().GetPlanStep()));
+        Counters->OnNewTask(
+            !NextBorder,
+            TInstant::MilliSeconds(youngestPortion->RecordSnapshotMax().GetPlanStep()),
+            TInstant::MilliSeconds(oldestPortion->RecordSnapshotMax().GetPlanStep())
+        );
         AFL_VERIFY(!!NextBorder == !!nextBorder);
         if (nextBorder) {
             AFL_VERIFY(NextBorder);
@@ -851,7 +878,8 @@ public:
         }
         std::optional<NArrow::TReplaceKey> stopPoint;
         std::optional<TInstant> stopInstant;
-        const ui64 memLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
+        const ui64 memLimit =
+            HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionMemoryLimit() : 512 * 1024 * 1024;
         std::vector<TPortionInfo::TConstPtr> portions = Others.GetOptimizerTaskPortions(memLimit, stopPoint);
         bool forceMergeForTests = false;
         if (nextBorder) {
@@ -864,7 +892,10 @@ public:
         } else {
             if (MainPortion) {
                 if (portions.size() == 1) {
-                    AFL_VERIFY(NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Force);
+                    AFL_VERIFY(
+                        NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() ==
+                        NYDBTest::EOptimizerCompactionWeightControl::Force
+                    );
                     forceMergeForTests = true;
                     portions.emplace_back(MainPortion);
                 } else {
@@ -886,7 +917,8 @@ public:
         for (auto&& i : portions) {
             size += i->GetTotalBlobBytes();
             if (locksManager->IsLocked(*i)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+                ("info", Others.DebugString())("event", "skip_optimization")("reason", "busy");
                 return nullptr;
             }
         }
@@ -898,17 +930,24 @@ public:
         for (auto&& i : portions) {
             accessors.emplace_back(i);
         }
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, accessors, saverContext);
+        auto result =
+            std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, accessors, saverContext);
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(
+                MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false
+            );
             result->AddCheckPoint(pos, false);
         }
         if (!nextBorder && MainPortion && !forceMergeForTests) {
-            NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(
+                MainPortion->IndexKeyEnd().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false
+            );
             result->AddCheckPoint(pos, true);
         }
         if (stopPoint) {
-            NArrow::NMerger::TSortableBatchPosition pos(stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(
+                stopPoint->ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false
+            );
             result->AddCheckPoint(pos, false);
         }
         return result;
@@ -933,7 +972,10 @@ public:
 
     void RemoveOther(const std::shared_ptr<TPortionInfo>& portion) {
         auto gChartsThis = StartModificationGuard();
-        AFL_VERIFY(Others.Remove(portion))("portion", portion->DebugString())("bucket_start", MainPortion ? MainPortion->DebugString(true) : "-inf")("bucket_finish", NextBorder ? NextBorder->DebugString() : "undef");
+        AFL_VERIFY(Others.Remove(portion))
+        ("portion", portion->DebugString())("bucket_start", MainPortion ? MainPortion->DebugString(true) : "-inf")(
+            "bucket_finish", NextBorder ? NextBorder->DebugString() : "undef"
+        );
     }
 
     void MergeOthersFrom(TPortionsBucket& dest) {
@@ -967,7 +1009,6 @@ public:
 
 class TPortionBuckets {
 private:
-
     struct TReverseComparator {
         bool operator()(const i64 l, const i64 r) const {
             return r < l;
@@ -980,7 +1021,8 @@ private:
     std::map<NArrow::TReplaceKey, std::shared_ptr<TPortionsBucket>> Buckets;
     std::map<i64, THashSet<TPortionsBucket*>, TReverseComparator> BucketsByWeight;
     std::shared_ptr<TCounters> Counters;
-    std::vector<std::shared_ptr<TPortionsBucket>> GetAffectedBuckets(const NArrow::TReplaceKey& fromInclude, const NArrow::TReplaceKey& toInclude) {
+    std::vector<std::shared_ptr<TPortionsBucket>>
+    GetAffectedBuckets(const NArrow::TReplaceKey& fromInclude, const NArrow::TReplaceKey& toInclude) {
         std::vector<std::shared_ptr<TPortionsBucket>> result;
         auto itFrom = Buckets.upper_bound(fromInclude);
         auto itTo = Buckets.upper_bound(toInclude);
@@ -1054,7 +1096,9 @@ private:
     }
 
     void AddBucket(const std::shared_ptr<TPortionInfo>& portion) {
-        auto insertInfo = Buckets.emplace(portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters));
+        auto insertInfo = Buckets.emplace(
+            portion->IndexKeyStart(), std::make_shared<TPortionsBucket>(portion, PrimaryKeysSchema, Counters)
+        );
         AFL_VERIFY(insertInfo.second);
         if (insertInfo.first == Buckets.begin()) {
             RemoveBucketFromRating(LeftBucket);
@@ -1071,8 +1115,11 @@ private:
     }
 
 public:
-    TPortionBuckets(const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<TCounters>& counters)
+    TPortionBuckets(
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<TCounters>& counters
+    )
         : PrimaryKeysSchema(primaryKeysSchema)
         , StoragesManager(storagesManager)
         , LeftBucket(std::make_shared<TPortionsBucket>(nullptr, primaryKeysSchema, counters))
@@ -1118,7 +1165,8 @@ public:
     }
 
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion) {
-        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
+        if (portion->GetTotalBlobBytes() <
+            NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
             Counters->SmallPortions->RemovePortion(portion);
         }
         if (!RemoveBucket(portion)) {
@@ -1126,7 +1174,10 @@ public:
         }
     }
 
-    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+    std::shared_ptr<TColumnEngineChanges> BuildOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager
+    ) const {
         AFL_VERIFY(BucketsByWeight.size());
         if (!BucketsByWeight.begin()->first) {
             return nullptr;
@@ -1135,18 +1186,26 @@ public:
         const TPortionsBucket* bucketForOptimization = *BucketsByWeight.begin()->second.begin();
         if (bucketForOptimization == LeftBucket.get()) {
             if (Buckets.size()) {
-                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(
+                    granule, locksManager, &Buckets.begin()->first, PrimaryKeysSchema, StoragesManager
+                );
             } else {
-                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(
+                    granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager
+                );
             }
         } else {
             auto it = Buckets.find(bucketForOptimization->GetPortion()->IndexKeyStart());
             AFL_VERIFY(it != Buckets.end());
             ++it;
             if (it != Buckets.end()) {
-                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, &it->first, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(
+                    granule, locksManager, &it->first, PrimaryKeysSchema, StoragesManager
+                );
             } else {
-                return bucketForOptimization->BuildOptimizationTask(granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager);
+                return bucketForOptimization->BuildOptimizationTask(
+                    granule, locksManager, nullptr, PrimaryKeysSchema, StoragesManager
+                );
             }
         }
     }
@@ -1160,7 +1219,8 @@ public:
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TInstant now) {
-        if (portion->GetTotalBlobBytes() < NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
+        if (portion->GetTotalBlobBytes() <
+            NYDBTest::TControllers::GetColumnShardController()->GetSmallPortionSizeDetector()) {
             Counters->SmallPortions->AddPortion(portion);
             AddOther(portion, now);
             return;
@@ -1175,8 +1235,11 @@ public:
         } else {
             if (itFrom == Buckets.end()) {
                 const TDuration freshness = now - TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
-                if (Y_LIKELY(!NYDBTest::TControllers::GetColumnShardController()->NeedForceCompactionBacketsConstruction())) {
-                    if (freshness < GetCommonFreshnessCheckDuration() || portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+                if (Y_LIKELY(
+                        !NYDBTest::TControllers::GetColumnShardController()->NeedForceCompactionBacketsConstruction()
+                    )) {
+                    if (freshness < GetCommonFreshnessCheckDuration() ||
+                        portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
                         AddOther(portion, now);
                         return;
                     }
@@ -1220,7 +1283,10 @@ protected:
         return Buckets.IsLocked(dataLocksManager);
     }
 
-    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(
+        const THashMap<ui64, TPortionInfo::TPtr>& add,
+        const THashMap<ui64, TPortionInfo::TPtr>& remove
+    ) override {
         const TInstant now = TInstant::Now();
         for (auto&& [_, i] : remove) {
             if (i->GetMeta().GetTierName() != IStoragesManager::DefaultStorageId && i->GetMeta().GetTierName() != "") {
@@ -1241,7 +1307,10 @@ protected:
             Buckets.AddPortion(i, now);
         }
     }
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager
+    ) const override {
         return Buckets.BuildOptimizationTask(granule, locksManager);
     }
     virtual void DoActualize(const TInstant currentInstant) override {
@@ -1263,17 +1332,19 @@ protected:
     }
 
 public:
-    
     virtual NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
         return Buckets.GetBucketPositions();
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+    TOptimizerPlanner(
+        const ui64 pathId,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema
+    )
         : TBase(pathId)
         , Counters(std::make_shared<TCounters>())
         , Buckets(primaryKeysSchema, storagesManager, Counters)
-        , StoragesManager(storagesManager) {
-    }
+        , StoragesManager(storagesManager) {}
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets

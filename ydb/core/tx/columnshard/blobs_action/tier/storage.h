@@ -28,19 +28,32 @@ private:
     virtual TString DoDebugString() const override {
         return GetCurrentOperator()->DebugString();
     }
+
 protected:
-    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) override;
+    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(
+        const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters
+    ) override;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() override;
-    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const override;
+    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters
+    ) const override;
     virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const override;
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) override;
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) override;
 
 public:
-    TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
-    TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
-        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation);
+    TOperator(
+        const TString& storageId,
+        const NColumnShard::TColumnShard& shard,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager
+    );
+    TOperator(
+        const TString& storageId,
+        const TActorId& shardActorId,
+        const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager,
+        const ui64 generation
+    );
 
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         auto result = GCInfo->GetBlobsToDelete();
@@ -55,7 +68,6 @@ public:
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
         return GCInfo->HasToDelete(blobId, tabletId);
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NTier

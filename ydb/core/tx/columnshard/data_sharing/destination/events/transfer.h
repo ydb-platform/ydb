@@ -25,7 +25,8 @@ private:
 
     TPathIdData() = default;
 
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
+    TConclusionStatus
+    DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
@@ -43,14 +44,17 @@ private:
 public:
     TPathIdData(const ui64 pathId, const std::vector<TPortionDataAccessor>& portions)
         : PathId(pathId)
-        , Portions(portions) {
-    }
+        , Portions(portions) {}
 
     std::vector<TPortionDataAccessor> DetachPortions() {
         return std::move(Portions);
     }
-    THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,
-        const TTransferContext& context, const TVersionedIndex& index);
+    THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(
+        const std::shared_ptr<IStoragesManager>& storages,
+        const TTabletId selfTabletId,
+        const TTransferContext& context,
+        const TVersionedIndex& index
+    );
 
     void InitPortionIds(ui64* lastPortionId, const std::optional<ui64> pathId = {}) {
         AFL_VERIFY(lastPortionId);
@@ -69,7 +73,8 @@ public:
         }
     };
 
-    static TConclusion<TPathIdData> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
+    static TConclusion<TPathIdData>
+    BuildFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
         TPathIdData result;
         auto resultParsing = result.DeserializeFromProto(proto, indexInfo);
         if (!resultParsing) {
@@ -80,12 +85,19 @@ public:
     }
 };
 
-struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NKikimrColumnShardDataSharingProto::TEvSendDataFromSource,
-                                  TEvColumnShard::EvDataSharingSendDataFromSource> {
+struct TEvSendDataFromSource
+    : public NActors::TEventPB<
+          TEvSendDataFromSource,
+          NKikimrColumnShardDataSharingProto::TEvSendDataFromSource,
+          TEvColumnShard::EvDataSharingSendDataFromSource> {
     TEvSendDataFromSource() = default;
 
     TEvSendDataFromSource(
-        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<ui64, TPathIdData>& pathIdData) {
+        const TString& sessionId,
+        const ui32 packIdx,
+        const TTabletId sourceTabletId,
+        const THashMap<ui64, TPathIdData>& pathIdData
+    ) {
         Record.SetSessionId(sessionId);
         Record.SetPackIdx(packIdx);
         Record.SetSourceTabletId((ui64)sourceTabletId);
@@ -95,8 +107,11 @@ struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NK
     }
 };
 
-struct TEvFinishedFromSource: public NActors::TEventPB<TEvFinishedFromSource, NKikimrColumnShardDataSharingProto::TEvFinishedFromSource,
-                                  TEvColumnShard::EvDataSharingFinishedFromSource> {
+struct TEvFinishedFromSource
+    : public NActors::TEventPB<
+          TEvFinishedFromSource,
+          NKikimrColumnShardDataSharingProto::TEvFinishedFromSource,
+          TEvColumnShard::EvDataSharingFinishedFromSource> {
     TEvFinishedFromSource() = default;
 
     TEvFinishedFromSource(const TString& sessionId, const TTabletId sourceTabletId) {

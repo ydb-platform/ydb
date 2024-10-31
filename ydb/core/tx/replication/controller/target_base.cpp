@@ -13,15 +13,18 @@ using ETargetKind = TReplication::ETargetKind;
 using EDstState = TReplication::EDstState;
 using EStreamState = TReplication::EStreamState;
 
-TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const TString& dstPath)
+TTargetBase::TTargetBase(
+    TReplication* replication,
+    ETargetKind kind,
+    ui64 id,
+    const TString& srcPath,
+    const TString& dstPath
+)
     : Replication(replication)
     , Id(id)
     , Kind(kind)
     , SrcPath(srcPath)
-    , DstPath(dstPath)
-{
-}
+    , DstPath(dstPath) {}
 
 ui64 TTargetBase::GetId() const {
     return Id;
@@ -46,12 +49,12 @@ EDstState TTargetBase::GetDstState() const {
 void TTargetBase::SetDstState(const EDstState value) {
     DstState = value;
     switch (DstState) {
-    case EDstState::Alter:
-        return Replication->AddPendingAlterTarget(Id);
-    case EDstState::Done:
-        return Replication->RemovePendingAlterTarget(Id);
-    default:
-        break;
+        case EDstState::Alter:
+            return Replication->AddPendingAlterTarget(Id);
+        case EDstState::Done:
+            return Replication->RemovePendingAlterTarget(Id);
+        default:
+            break;
     }
 }
 
@@ -127,34 +130,34 @@ const TMaybe<TDuration> TTargetBase::GetLag() const {
 
 void TTargetBase::Progress(const TActorContext& ctx) {
     switch (DstState) {
-    case EDstState::Creating:
-        if (!DstCreator) {
-            DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
-        }
-        break;
-    case EDstState::Ready:
-        if (!WorkerRegistar) {
-            WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
-        }
-        break;
-    case EDstState::Alter:
-        if (Workers) {
-            RemoveWorkers(ctx);
-        } else if (!DstAlterer) {
-            DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
-        }
-        break;
-    case EDstState::Done:
-        break;
-    case EDstState::Removing:
-        if (Workers) {
-            RemoveWorkers(ctx);
-        } else if (!DstRemover) {
-            DstRemover = ctx.Register(CreateDstRemover(Replication, Id, ctx));
-        }
-        break;
-    case EDstState::Error:
-        break;
+        case EDstState::Creating:
+            if (!DstCreator) {
+                DstCreator = ctx.Register(CreateDstCreator(Replication, Id, ctx));
+            }
+            break;
+        case EDstState::Ready:
+            if (!WorkerRegistar) {
+                WorkerRegistar = ctx.Register(CreateWorkerRegistar(ctx));
+            }
+            break;
+        case EDstState::Alter:
+            if (Workers) {
+                RemoveWorkers(ctx);
+            } else if (!DstAlterer) {
+                DstAlterer = ctx.Register(CreateDstAlterer(Replication, Id, ctx));
+            }
+            break;
+        case EDstState::Done:
+            break;
+        case EDstState::Removing:
+            if (Workers) {
+                RemoveWorkers(ctx);
+            } else if (!DstRemover) {
+                DstRemover = ctx.Register(CreateDstRemover(Replication, Id, ctx));
+            }
+            break;
+        case EDstState::Error:
+            break;
     }
 }
 
@@ -173,4 +176,4 @@ void TTargetBase::Shutdown(const TActorContext& ctx) {
     }
 }
 
-}
+} // namespace NKikimr::NReplication::NController

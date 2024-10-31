@@ -23,8 +23,7 @@ private:
 public:
     constexpr TSnapshot(const ui64 planStep, const ui64 txId) noexcept
         : PlanStep(planStep)
-        , TxId(txId) {
-    }
+        , TxId(txId) {}
 
     NJson::TJsonValue SerializeToJson() const;
 
@@ -65,7 +64,8 @@ public:
     constexpr auto operator<=>(const TSnapshot&) const noexcept = default;
 
     friend IOutputStream& operator<<(IOutputStream& out, const TSnapshot& s) {
-        return out << "{" << s.PlanStep << ':' << (s.TxId == std::numeric_limits<ui64>::max() ? "max" : ::ToString(s.TxId)) << "}";
+        return out << "{" << s.PlanStep << ':'
+                   << (s.TxId == std::numeric_limits<ui64>::max() ? "max" : ::ToString(s.TxId)) << "}";
     }
 
     template <class TProto>

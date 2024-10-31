@@ -14,15 +14,13 @@ private:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TDropParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropOlapStore TDropParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TDropParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -53,17 +51,14 @@ private:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropOlapStore TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(DebugHint(), {TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -137,18 +132,17 @@ private:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropOlapStore TProposedWaitParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TProposedWaitParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvColumnShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
@@ -212,19 +206,19 @@ private:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TProposedDeleteParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropOlapStore TProposedDeleteParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TProposedDeleteParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
             {TEvColumnShard::TEvProposeTransactionResult::EventType,
              TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -270,16 +264,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -291,7 +284,8 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                if (path.IsResolved() && path.Base()->IsOlapStore() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
+                if (path.IsResolved() && path.Base()->IsOlapStore() &&
+                    (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
@@ -302,13 +296,7 @@ public:
         TPath parent = path.Parent();
         {
             TPath::TChecker checks = parent.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotDeleted()
-                .IsLikeDirectory()
-                .IsCommonSensePath()
-                .NotUnderDeleting();
+            checks.NotEmpty().IsResolved().NotDeleted().IsLikeDirectory().IsCommonSensePath().NotUnderDeleting();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -413,34 +401,34 @@ private:
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::DropParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::ProposedDeleteParts;
-        default:
-            return TTxState::Invalid;
+            case TTxState::DropParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::ProposedDeleteParts;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<TProposedWaitParts>(OperationId);
-        case TTxState::ProposedDeleteParts:
-            return MakeHolder<TProposedDeleteParts>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::DropParts:
+                return MakeHolder<TDropParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<TProposedWaitParts>(OperationId);
+            case TTxState::ProposedDeleteParts:
+                return MakeHolder<TProposedDeleteParts>(OperationId);
+            default:
+                return nullptr;
         }
     }
 };
 
-}
+} // namespace
 
 ISubOperation::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TDropOlapStore>(id, tx);
@@ -451,4 +439,4 @@ ISubOperation::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState stat
     return MakeSubOperation<TDropOlapStore>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

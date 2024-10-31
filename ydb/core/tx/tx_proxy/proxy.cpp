@@ -6,8 +6,7 @@ TActorId MakeTxProxyID() {
     return TActorId(0, TStringBuf("TxProxyServ"));
 }
 
-}
-
+} // namespace NKikimr
 
 TString NKikimr::TEvTxUserProxy::TEvProposeTransactionStatus::ToString() const {
     TStringStream str;

@@ -13,11 +13,11 @@ void TSysParams::Reset() {
 
 void TSysParams::Load(ESysParam type, ISysParamLoader* loader) {
     switch (type) {
-    case ESysParam::NextReplicationId:
-        NextReplicationId = loader->LoadInt();
-        break;
-    default:
-        break; // ignore
+        case ESysParam::NextReplicationId:
+            NextReplicationId = loader->LoadInt();
+            break;
+        default:
+            break; // ignore
     }
 }
 
@@ -29,11 +29,11 @@ ui64 TSysParams::AllocateReplicationId(NIceDb::TNiceDb& db) {
     using Schema = TControllerSchema;
     const auto result = NextReplicationId++;
 
-    db.Table<Schema::SysParams>().Key(ui32(ESysParam::NextReplicationId)).Update(
-        NIceDb::TUpdate<Schema::SysParams::IntValue>(NextReplicationId)
-    );
+    db.Table<Schema::SysParams>()
+        .Key(ui32(ESysParam::NextReplicationId))
+        .Update(NIceDb::TUpdate<Schema::SysParams::IntValue>(NextReplicationId));
 
     return result;
 }
 
-}
+} // namespace NKikimr::NReplication::NController

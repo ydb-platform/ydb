@@ -20,14 +20,19 @@ struct TDirectTxResult {
 class IDirectTx {
 public:
     virtual ~IDirectTx() = default;
-    virtual bool Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) = 0;
+    virtual bool Execute(
+        TDataShard* self,
+        TTransactionContext& txc,
+        const TRowVersion& readVersion,
+        const TRowVersion& writeVersion,
+        ui64 globalTxId,
+        absl::flat_hash_set<ui64>& volatileReadDependencies
+    ) = 0;
     virtual TDirectTxResult GetResult(TDataShard* self) = 0;
     virtual TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const = 0;
 };
 
-class TDirectTransaction : public TOperation {
+class TDirectTransaction: public TOperation {
 public:
     TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
     TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
@@ -46,5 +51,5 @@ private:
     static constexpr ui32 Flags = NTxDataShard::TTxFlags::Immediate | NTxDataShard::TTxFlags::GlobalWriter;
 };
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

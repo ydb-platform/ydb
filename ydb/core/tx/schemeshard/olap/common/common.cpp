@@ -1,4 +1,3 @@
 #include "common.h"
 
-namespace NKikimr::NSchemeShard {
-}
+namespace NKikimr::NSchemeShard {}

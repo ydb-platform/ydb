@@ -17,4 +17,4 @@ void TTxAddSession::Complete(const TActorContext& /*ctx*/) {
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

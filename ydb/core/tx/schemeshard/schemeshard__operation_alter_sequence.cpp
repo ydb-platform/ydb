@@ -14,21 +14,18 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterSequence TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterSequence TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::TPtr& ev,
-            TOperationContext& context) override {
-
+    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::TPtr& ev, TOperationContext& context)
+        override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -152,15 +149,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterSequence TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterSequence TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::EventType});
     }
 
@@ -226,10 +221,12 @@ public:
 };
 
 std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription(
-        const NKikimrSchemeOp::TSequenceDescription& sequence, const NKikimrSchemeOp::TSequenceDescription& alter,
-        const NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled,
-        TString& errStr) {
-
+    const NKikimrSchemeOp::TSequenceDescription& sequence,
+    const NKikimrSchemeOp::TSequenceDescription& alter,
+    const NScheme::TTypeRegistry& typeRegistry,
+    bool pgTypesEnabled,
+    TString& errStr
+) {
     NKikimrSchemeOp::TSequenceDescription result = sequence;
 
     i64 minValue = result.GetMinValue();
@@ -297,7 +294,7 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
         return std::nullopt;
     }
     if (startValue < minValue) {
-        errStr = Sprintf("START value (%ld) cannot be less than MINVALUE (%ld)",  startValue, minValue);
+        errStr = Sprintf("START value (%ld) cannot be less than MINVALUE (%ld)", startValue, minValue);
         return std::nullopt;
     }
 
@@ -332,29 +329,29 @@ class TAlterSequence: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -382,8 +379,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -394,7 +390,8 @@ public:
                 if (parentPath->IsTable()) {
                     // allow immediately inside a normal table
                     if (parentPath.IsUnderOperation()) {
-                        checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId()
+                        ); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
@@ -412,8 +409,7 @@ public:
 
         {
             TPath::TChecker checks = dstPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -452,7 +448,8 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = GetAlterSequenceDescription(
-                sequenceInfo->Description, sequenceAlter, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+            sequenceInfo->Description, sequenceAlter, *typeRegistry, context.SS->EnableTablePgTypes, errStr
+        );
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);
@@ -510,7 +507,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -523,4 +520,4 @@ ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState stat
     return MakeSubOperation<TAlterSequence>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

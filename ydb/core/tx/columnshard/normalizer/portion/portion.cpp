@@ -13,12 +13,16 @@ class TPortionsNormalizer::TNormalizerResult: public INormalizerChanges {
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
 
 public:
-    TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TNormalizerResult(
+        std::vector<TPortionDataAccessor>&& portions,
+        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+    )
         : Portions(std::move(portions))
-        , Schemas(schemas) {
-    }
+        , Schemas(schemas) {}
 
-    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool
+    ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */)
+        const override {
         using namespace NColumnShard;
         TDbWrapper db(txc.DB, nullptr);
 
@@ -35,16 +39,20 @@ public:
     }
 };
 
-bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, const TPortionDataAccessor& portionInfo) const {
+bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, const TPortionDataAccessor& portionInfo)
+    const {
     return KnownPortions.contains(portionInfo.GetPortionInfo().GetAddress());
 }
 
 INormalizerTask::TPtr TPortionsNormalizer::BuildTask(
-    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions,
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+) const {
     return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 
-TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<bool>
+TPortionsNormalizer::DoInitImpl(const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
 
     NIceDb::TNiceDb db(txc.DB);
@@ -61,7 +69,9 @@ TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController
         }
 
         while (!rowset.EndOfSet()) {
-            TPortionAddress portionAddr(rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>());
+            TPortionAddress portionAddr(
+                rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>()
+            );
             KnownPortions.insert(portionAddr);
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

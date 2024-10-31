@@ -16,7 +16,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 template <typename TEvCancel>
-class TBackupRestoreUnitBase : public TExecutionUnit {
+class TBackupRestoreUnitBase: public TExecutionUnit {
 protected:
     using TBase = TBackupRestoreUnitBase<TEvCancel>;
 
@@ -46,15 +46,17 @@ protected:
 
 private:
     void ProcessEvent(TAutoPtr<NActors::IEventHandle>& ev, TOperation::TPtr op, const TActorContext& ctx) {
-        switch (ev->GetTypeRewrite()) {
-            OHFunc(TEvCancel, Handle);
-        }
+        switch (ev->GetTypeRewrite()) { OHFunc(TEvCancel, Handle); }
     }
 
     void Handle(typename TEvCancel::TPtr&, TOperation::TPtr op, const TActorContext& ctx) {
         if (IsWaiting(op)) {
-            Abort(op, ctx, TStringBuilder() << "Interrupted " << GetKind() << " operation " << *op
-                << " while waiting to finish at " << DataShard.TabletID());
+            Abort(
+                op,
+                ctx,
+                TStringBuilder() << "Interrupted " << GetKind() << " operation " << *op
+                                 << " while waiting to finish at " << DataShard.TabletID()
+            );
         }
     }
 
@@ -68,9 +70,7 @@ private:
 
 public:
     TBackupRestoreUnitBase(EExecutionUnitKind kind, TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(kind, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(kind, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr op) const override final {
         if (!IsWaiting(op)) {
@@ -134,8 +134,7 @@ public:
         return EExecutionStatus::Executed;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override final {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override final {}
 
 }; // TBackupRestoreUnitBase
 
@@ -148,7 +147,7 @@ enum class EStorageType {
     S3,
 };
 
-struct TLogMetadata : TSimpleRefCount<TLogMetadata> {
+struct TLogMetadata: TSimpleRefCount<TLogMetadata> {
     using TPtr = TIntrusivePtr<TLogMetadata>;
 
     const TVirtualTimestamp StartVts;
@@ -157,7 +156,7 @@ struct TLogMetadata : TSimpleRefCount<TLogMetadata> {
     TString StoragePath;
 };
 
-struct TFullBackupMetadata : TSimpleRefCount<TFullBackupMetadata> {
+struct TFullBackupMetadata: TSimpleRefCount<TFullBackupMetadata> {
     using TPtr = TIntrusivePtr<TFullBackupMetadata>;
 
     const TVirtualTimestamp SnapshotVts;
@@ -178,13 +177,14 @@ public:
 
     TString Serialize() const;
     static TMetadata Deserialize(const TString& metadata);
+
 private:
     TString ConsistencyKey;
     TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
 };
 
-} // NBackupRestore
+} // namespace NBackupRestore
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

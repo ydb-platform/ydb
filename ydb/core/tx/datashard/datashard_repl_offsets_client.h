@@ -4,8 +4,8 @@
 
 namespace NKikimr::NDataShard {
 
-    class TDataShard;
+class TDataShard;
 
-    IActor* CreateReplicationSourceOffsetsClient(TActorId owner, ui64 srcTabletId, const TPathId& pathId);
+IActor* CreateReplicationSourceOffsetsClient(TActorId owner, ui64 srcTabletId, const TPathId& pathId);
 
 } // namespace NKikimr::NDataShard

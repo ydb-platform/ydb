@@ -15,18 +15,16 @@ private:
     virtual TString DoDebugString() const {
         return "";
     }
+
 public:
     virtual ~ISubscriptionEvent() = default;
 
     ISubscriptionEvent(const EEventType type)
-        : Type(type)
-    {
-
-    }
+        : Type(type) {}
 
     TString DebugString() const {
         return DoDebugString();
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard::NSubscriber

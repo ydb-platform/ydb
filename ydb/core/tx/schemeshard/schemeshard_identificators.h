@@ -24,6 +24,7 @@ constexpr TLocalShardIdx InvalidLocalShardIdx = TLocalShardIdx();
 
 class TShardIdx: public std::pair<TOwnerId, TLocalShardIdx> {
     using TBase = std::pair<TOwnerId, TLocalShardIdx>;
+
 public:
     using TBase::TBase;
 
@@ -61,6 +62,7 @@ constexpr TSubTxId FirstSubTxId = TSubTxId(0);
 
 class TOperationId: public std::pair<TTxId, TSubTxId> {
     using TBase = std::pair<TTxId, TSubTxId>;
+
 public:
     using TBase::TBase;
 
@@ -123,38 +125,40 @@ enum class EIndexColumnKind : ui8 {
 
 class TPipeMessageId: public std::pair<ui64, ui64> {
     using TBase = std::pair<ui64, ui64>;
+
 public:
     using TBase::TBase;
 };
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr
 
-template<>
+template <>
 struct THash<NKikimr::NSchemeShard::TOperationId> {
-    inline ui64 operator()(const NKikimr::NSchemeShard::TOperationId &x) const noexcept {
+    inline ui64 operator()(const NKikimr::NSchemeShard::TOperationId& x) const noexcept {
         return x.Hash();
     }
 };
 
-template<>
-inline void Out<NKikimr::NSchemeShard::TOperationId>(IOutputStream &o, const NKikimr::NSchemeShard::TOperationId &x) {
+template <>
+inline void Out<NKikimr::NSchemeShard::TOperationId>(IOutputStream& o, const NKikimr::NSchemeShard::TOperationId& x) {
     o << x.GetTxId() << ":" << x.GetSubTxId();
 }
 
-template<>
-inline void Out<NKikimr::NSchemeShard::TPipeMessageId>(IOutputStream &o, const NKikimr::NSchemeShard::TPipeMessageId &x) {
+template <>
+inline void
+Out<NKikimr::NSchemeShard::TPipeMessageId>(IOutputStream& o, const NKikimr::NSchemeShard::TPipeMessageId& x) {
     o << x.first << ":" << x.second;
 }
 
-template<>
+template <>
 struct THash<NKikimr::NSchemeShard::TShardIdx> {
-    inline ui64 operator()(const NKikimr::NSchemeShard::TShardIdx &x) const noexcept {
+    inline ui64 operator()(const NKikimr::NSchemeShard::TShardIdx& x) const noexcept {
         return x.Hash();
     }
 };
 
-template<>
-inline void Out<NKikimr::NSchemeShard::TShardIdx>(IOutputStream &o, const NKikimr::NSchemeShard::TShardIdx &x) {
+template <>
+inline void Out<NKikimr::NSchemeShard::TShardIdx>(IOutputStream& o, const NKikimr::NSchemeShard::TShardIdx& x) {
     o << x.GetOwnerId() << ":" << x.GetLocalId();
 }

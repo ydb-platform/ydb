@@ -27,8 +27,7 @@ public:
 
     public:
         TBlobInfo(const std::shared_ptr<IBlobsStorageOperator>& bOperator)
-            : Operator(bOperator) {
-        }
+            : Operator(bOperator) {}
 
         class TBuilder {
         private:
@@ -38,8 +37,7 @@ public:
         public:
             TBuilder(TBlobInfo& blob, TWritePortionInfoWithBlobsConstructor& portion)
                 : OwnerBlob(&blob)
-                , OwnerPortion(&portion) {
-            }
+                , OwnerPortion(&portion) {}
             ui64 GetSize() const {
                 return OwnerBlob->GetSize();
             }
@@ -76,8 +74,7 @@ private:
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
     explicit TWritePortionInfoWithBlobsConstructor(TPortionInfoConstructor&& portionConstructor)
-        : PortionConstructor(std::move(portionConstructor)) {
-    }
+        : PortionConstructor(std::move(portionConstructor)) {}
 
     TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
         Blobs.emplace_back(TBlobInfo(bOperator));
@@ -88,13 +85,21 @@ private:
 public:
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 
-    static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const ui64 granule, const ui64 schemaVersion,
-        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
+    static TWritePortionInfoWithBlobsConstructor BuildByBlobs(
+        std::vector<TSplittedBlob>&& chunks,
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
+        const ui64 granule,
+        const ui64 schemaVersion,
+        const TSnapshot& snapshot,
+        const std::shared_ptr<IStoragesManager>& operators
+    );
 
-    static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionInfoConstructor&& constructor,
-        const std::shared_ptr<IStoragesManager>& operators);
+    static TWritePortionInfoWithBlobsConstructor BuildByBlobs(
+        std::vector<TSplittedBlob>&& chunks,
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
+        TPortionInfoConstructor&& constructor,
+        const std::shared_ptr<IStoragesManager>& operators
+    );
 
     std::vector<TBlobInfo>& GetBlobs() {
         return Blobs;
@@ -130,11 +135,14 @@ public:
             return ResultBlob.size();
         }
 
-        TBlobInfo(const TString& blobData, TBlobChunks&& chunks, const std::shared_ptr<IBlobsStorageOperator>& stOperator)
+        TBlobInfo(
+            const TString& blobData,
+            TBlobChunks&& chunks,
+            const std::shared_ptr<IBlobsStorageOperator>& stOperator
+        )
             : Chunks(std::move(chunks))
             , ResultBlob(blobData)
-            , Operator(stOperator) {
-        }
+            , Operator(stOperator) {}
 
         const TString& GetResultBlob() const {
             return ResultBlob;

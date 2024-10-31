@@ -40,17 +40,28 @@ public:
 
     TCSInitialization(TCommonCountersOwner& owner)
         : TBase(owner, "stage", "initialization")
-        , HistogramTabletInitializationMs(TBase::GetHistogram("TabletInitializationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxInitDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxUpdateSchemaDurationMs(TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramTxInitSchemaDurationMs(TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
-        , HistogramActivateExecutorFromActivationDurationMs(
-              TBase::GetHistogram("ActivateExecutorFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+        , HistogramTabletInitializationMs(
+              TBase::GetHistogram("TabletInitializationMs", NMonitoring::ExponentialHistogram(15, 2, 32))
+          )
+        , HistogramTxInitDurationMs(
+              TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))
+          )
+        , HistogramTxUpdateSchemaDurationMs(
+              TBase::GetHistogram("TxInitDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))
+          )
+        , HistogramTxInitSchemaDurationMs(
+              TBase::GetHistogram("TxInitSchemaDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))
+          )
+        , HistogramActivateExecutorFromActivationDurationMs(TBase::GetHistogram(
+              "ActivateExecutorFromActivationDurationMs",
+              NMonitoring::ExponentialHistogram(15, 2, 32)
+          ))
         , HistogramSwitchToWorkFromActivationDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32)))
+              TBase::GetHistogram("SwitchToWorkFromActivationDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))
+          )
         , HistogramSwitchToWorkFromCreateDurationMs(
-              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))) {
-    }
+              TBase::GetHistogram("SwitchToWorkFromCreateDurationMs", NMonitoring::ExponentialHistogram(15, 2, 32))
+          ) {}
 };
 
-}
+} // namespace NKikimr::NColumnShard

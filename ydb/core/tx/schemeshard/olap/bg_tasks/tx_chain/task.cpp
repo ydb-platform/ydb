@@ -7,4 +7,4 @@ std::shared_ptr<NKikimr::NOlap::NBackground::ISessionLogic> TTxChainTask::DoBuil
     return std::make_shared<TTxChainSession>(TxData);
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NBackground

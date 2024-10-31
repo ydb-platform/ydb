@@ -18,7 +18,10 @@ private:
     const TSaverContext& SaverContext;
 
 public:
-    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+    void AddBatch(
+        const std::shared_ptr<NArrow::TGeneralContainer>& batch,
+        const std::shared_ptr<NArrow::TColumnFilter>& filter
+    ) {
         AFL_VERIFY(batch);
         Batches.emplace_back(batch);
         Filters.emplace_back(filter);
@@ -26,11 +29,14 @@ public:
 
     TMerger(const TConstructionContext& context, const TSaverContext& saverContext)
         : Context(context)
-        , SaverContext(saverContext) {
-    }
+        , SaverContext(saverContext) {}
 
-    TMerger(const TConstructionContext& context, const TSaverContext& saverContext,
-        std::vector<std::shared_ptr<NArrow::TGeneralContainer>>&& batches, std::vector<std::shared_ptr<NArrow::TColumnFilter>>&& filters)
+    TMerger(
+        const TConstructionContext& context,
+        const TSaverContext& saverContext,
+        std::vector<std::shared_ptr<NArrow::TGeneralContainer>>&& batches,
+        std::vector<std::shared_ptr<NArrow::TColumnFilter>>&& filters
+    )
         : Batches(std::move(batches))
         , Filters(std::move(filters))
         , Context(context)
@@ -38,8 +44,12 @@ public:
         AFL_VERIFY(Batches.size() == Filters.size());
     }
 
-    std::vector<TWritePortionInfoWithBlobsResult> Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
-        const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
-        const ui64 pathId, const std::optional<ui64> shardingActualVersion);
+    std::vector<TWritePortionInfoWithBlobsResult> Execute(
+        const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
+        const NArrow::NMerger::TIntervalPositions& checkPoints,
+        const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
+        const ui64 pathId,
+        const std::optional<ui64> shardingActualVersion
+    );
 };
 }   // namespace NKikimr::NOlap::NCompaction

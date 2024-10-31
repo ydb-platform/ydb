@@ -76,7 +76,7 @@ public:
     void ProposeToCoordinator(TOperationId opId, TPathId pathId, TStepId minStep, TContainer txShards) {
         ProposeToCoordinator(opId, pathId, minStep);
 
-        for(auto& shard: txShards) {
+        for (auto& shard : txShards) {
             CoordinatorProposesShards.push_back(TProposeShards(opId, shard));
         }
     }
@@ -96,7 +96,8 @@ public:
     }
     void BindMsgToPipe(TOperationId opId, TTabletId dst, TPathId pathId, TAutoPtr<::NActors::IEventBase> message);
     void BindMsgToPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx, TAutoPtr<::NActors::IEventBase> message);
-    void BindMsgToPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie, TAutoPtr<::NActors::IEventBase> message);
+    void
+    BindMsgToPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie, TAutoPtr<::NActors::IEventBase> message);
 
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPathId pathId);
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx);
@@ -127,8 +128,8 @@ public:
 
     void ToProgress(TIndexBuildId id);
 
-    void ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
-    void ApplyOnComplete(TSchemeShard* ss, const TActorContext &ctx);
+    void ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
+    void ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx);
     TPublications ExtractPublicationsToSchemeBoard();
 
     void Barrier(TOperationId opId, TString barrierName);
@@ -139,9 +140,10 @@ private:
     void DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx);
     void DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx);
 
-    void DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext& ctx);
+    void DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
 
-    void DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
+    void
+    DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
     void DoPublishToSchemeBoard(TSchemeShard* ss, const TActorContext& ctx);
 
     void DoSend(TSchemeShard* ss, const TActorContext& ctx);
@@ -152,20 +154,22 @@ private:
     void DetachOperationFromPipe(TOperationId opId, TTabletId dst);
 
     void DoRegisterRelations(TSchemeShard* ss, const TActorContext& ctx);
-    void DoTriggerDeleteShards(TSchemeShard* ss, const TActorContext &ctx);
+    void DoTriggerDeleteShards(TSchemeShard* ss, const TActorContext& ctx);
 
-    void DoReleasePathState(TSchemeShard* ss, const TActorContext &ctx);
+    void DoReleasePathState(TSchemeShard* ss, const TActorContext& ctx);
     void DoDoneParts(TSchemeShard* ss, const TActorContext& ctx);
-    void DoDoneTransactions(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext& ctx);
+    void DoDoneTransactions(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
     void DoReadyToNotify(TSchemeShard* ss, const TActorContext& ctx);
 
-    void DoPersistDependencies(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+    void
+    DoPersistDependencies(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
     void DoActivateOps(TSchemeShard* ss, const TActorContext& ctx);
 
-    void DoPersistDeleteShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+    void
+    DoPersistDeleteShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
 
-    void DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx);
-    void DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext &ctx);
+    void DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext& ctx);
+    void DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx);
 
     void ResumeLongOps(TSchemeShard* ss, const TActorContext& ctx);
     void SetupRoutingLongOps(TSchemeShard* ss, const TActorContext& ctx);
@@ -176,8 +180,8 @@ private:
     void DoWaitPublication(TSchemeShard* ss, const TActorContext& ctx);
 
     void DoSetBarriers(TSchemeShard* ss, const TActorContext& ctx);
-    void DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
+    void DoCheckBarriers(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
 };
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

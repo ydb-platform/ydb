@@ -2,20 +2,23 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-void IColumnMerger::Start(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) {
+void IColumnMerger::Start(
+    const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input,
+    TMergingContext& mergeContext
+) {
     AFL_VERIFY(!Started);
     Started = true;
     for (auto&& i : input) {
         if (!i) {
             continue;
         }
-        AFL_VERIFY(i->GetDataType()->Equals(*Context.GetResultField()->type()))("input", i->GetDataType()->ToString())(
-                                                 "result", Context.GetResultField()->ToString());
+        AFL_VERIFY(i->GetDataType()->Equals(*Context.GetResultField()->type()))
+        ("input", i->GetDataType()->ToString())("result", Context.GetResultField()->ToString());
     }
     return DoStart(input, mergeContext);
 }
 
- TMergingChunkContext::TMergingChunkContext(const std::shared_ptr<arrow::RecordBatch>& pkAndAddresses) {
+TMergingChunkContext::TMergingChunkContext(const std::shared_ptr<arrow::RecordBatch>& pkAndAddresses) {
     auto columnPortionIdx = pkAndAddresses->GetColumnByName(IColumnMerger::PortionIdFieldName);
     auto columnPortionRecordIdx = pkAndAddresses->GetColumnByName(IColumnMerger::PortionRecordIndexFieldName);
     Y_ABORT_UNLESS(columnPortionIdx && columnPortionRecordIdx);

@@ -5,16 +5,15 @@ namespace NKikimr::NDataShard {
 
 using namespace NLongTxService;
 
-class TDataShard::TTxRemoveLock
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
-{
+class TDataShard::TTxRemoveLock: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxRemoveLock(TDataShard* self, ui64 lockId)
         : TBase(self)
-        , LockId(lockId)
-    { }
+        , LockId(lockId) {}
 
-    TTxType GetTxType() const override { return TXTYPE_REMOVE_LOCK; }
+    TTxType GetTxType() const override {
+        return TXTYPE_REMOVE_LOCK;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         // Remove the lock from memory, it's no longer needed
@@ -54,10 +53,10 @@ void TDataShard::SubscribeNewLocks(const TActorContext&) {
 
 void TDataShard::SubscribeNewLocks() {
     while (auto pendingSubscribeLock = SysLocks.NextPendingSubscribeLock()) {
-        Send(MakeLongTxServiceID(SelfId().NodeId()),
-            new TEvLongTxService::TEvSubscribeLock(
-                pendingSubscribeLock.LockId,
-                pendingSubscribeLock.LockNodeId));
+        Send(
+            MakeLongTxServiceID(SelfId().NodeId()),
+            new TEvLongTxService::TEvSubscribeLock(pendingSubscribeLock.LockId, pendingSubscribeLock.LockNodeId)
+        );
     }
 }
 

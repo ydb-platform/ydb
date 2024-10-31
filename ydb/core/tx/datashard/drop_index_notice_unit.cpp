@@ -5,13 +5,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDropIndexNoticeUnit : public TExecutionUnit {
+class TDropIndexNoticeUnit: public TExecutionUnit {
     THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
 
 public:
     TDropIndexNoticeUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::DropIndexNotice, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::DropIndexNotice, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -71,10 +70,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateDropIndexNoticeUnit(
-    TDataShard& dataShard,
-    TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateDropIndexNoticeUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TDropIndexNoticeUnit(dataShard, pipeline));
 }
 

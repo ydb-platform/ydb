@@ -16,7 +16,7 @@ void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSch
     out.MutableStorageRooms()->Clear();
 }
 
-}
+} // namespace
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -73,10 +73,8 @@ static void FillTableStats(NKikimrSchemeOp::TPathDescription& pathDescription, c
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats);
 }
 
-static void FillColumns(
-    const TTableInfo& tableInfo,
-    google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& out
-) {
+static void
+FillColumns(const TTableInfo& tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& out) {
     bool familyNamesBuilt = false;
     THashMap<ui32, TString> familyNames;
 
@@ -143,10 +141,13 @@ static void FillKeyColumns(
         *names.Add() = tableInfo.Columns.at(keyColId).Name;
         *ids.Add() = keyColId;
     }
-
 }
 
-void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
+void TPathDescriber::FillPathDescr(
+    NKikimrSchemeOp::TDirEntry* descr,
+    TPathElement::TPtr pathEl,
+    TPathElement::EPathSubType subType
+) {
     FillChildDescr(descr, pathEl);
 
     descr->SetACL(pathEl->ACL);
@@ -294,9 +295,8 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
     }
 }
 
-
 void TPathDescriber::DescribeDir(const TPath& path) {
-   DescribeChildren(path);
+    DescribeChildren(path);
 }
 
 void FillTableBoundaries(
@@ -310,7 +310,7 @@ void FillTableBoundaries(
         const auto& p = tableInfo.GetPartitions()[pi];
         TSerializedCellVec endKey(p.EndOfRange);
         auto boundary = result->Add()->MutableKeyPrefix();
-        for (ui32 ki = 0;  ki < endKey.GetCells().size(); ++ki){
+        for (ui32 ki = 0; ki < endKey.GetCells().size(); ++ki) {
             const auto& c = endKey.GetCells()[ki];
             auto type = tableInfo.Columns.at(tableInfo.KeyColumnIds[ki]).PType;
             bool ok = NMiniKQL::CellToValue(type, c, *boundary->AddTuple(), errStr);
@@ -347,14 +347,14 @@ const TString& GetSerializedTablePartitions(
     const THashMap<TShardIdx, TShardInfo>& shardInfos,
     bool returnRangeKey
 ) {
-    TString& cache = (returnRangeKey
-        ? tableInfo.PreserializedTablePartitions
-        : tableInfo.PreserializedTablePartitionsNoKeys
-    );
+    TString& cache =
+        (returnRangeKey ? tableInfo.PreserializedTablePartitions : tableInfo.PreserializedTablePartitionsNoKeys);
 
     if (cache.empty()) {
         NKikimrScheme::TEvDescribeSchemeResult result;
-        FillTablePartitions(result.MutablePathDescription()->MutableTablePartitions(), tableInfo, shardInfos, returnRangeKey);
+        FillTablePartitions(
+            result.MutablePathDescription()->MutableTablePartitions(), tableInfo, shardInfos, returnRangeKey
+        );
         Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&cache);
     }
 
@@ -394,7 +394,9 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
             auto& tableDesc = *preSerializedResult.MutablePathDescription()->MutableTable();
             FillTableBoundaries(tableDesc.MutableSplitBoundary(), tableInfo);
-            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&tableInfo.PreserializedTableSplitBoundaries);
+            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(
+                &tableInfo.PreserializedTableSplitBoundaries
+            );
         }
         Result->PreSerializedData += tableInfo.PreserializedTableSplitBoundaries;
     }
@@ -428,7 +430,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
     if (returnBackupInfo) {
         /* Find active backup */
-        for (const auto& pair: Self->TxInFlight) {
+        for (const auto& pair : Self->TxInFlight) {
             const auto& txId = pair.first.GetTxId();
             const auto& txState = pair.second;
             if (txState.TargetPathId != pathId)
@@ -446,33 +448,27 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 return !kv.second.Success;
             }));
             progress->SetStartTime(txState.StartTime.Seconds());
-            progress->MutableYTSettings()->CopyFrom(
-                tableInfo.BackupSettings.GetYTSettings());
+            progress->MutableYTSettings()->CopyFrom(tableInfo.BackupSettings.GetYTSettings());
             progress->SetDataTotalSize(txState.DataTotalSize);
             progress->SetTxId(ui64(txId));
 
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
-                      "Add backup process info");
+            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE, "Add backup process info");
             break;
         }
 
         /* Get information about last completed backup */
-        for (const auto& iter: tableInfo.BackupHistory) {
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
-                      "Add last backup info item to history");
+        for (const auto& iter : tableInfo.BackupHistory) {
+            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE, "Add last backup info item to history");
             auto protoResult = pathDescription->AddLastBackupResult();
             const auto& txId = iter.first;
             const auto& tInfoResult = iter.second;
-            protoResult->SetErrorCount(
-                tInfoResult.TotalShardCount - tInfoResult.SuccessShardCount);
-            protoResult->SetCompleteTimeStamp(
-                tInfoResult.CompletionDateTime);
+            protoResult->SetErrorCount(tInfoResult.TotalShardCount - tInfoResult.SuccessShardCount);
+            protoResult->SetCompleteTimeStamp(tInfoResult.CompletionDateTime);
             protoResult->SetStartTimeStamp(tInfoResult.StartDateTime);
-            protoResult->SetDataTotalSize(
-                tInfoResult.DataTotalSize);
+            protoResult->SetDataTotalSize(tInfoResult.DataTotalSize);
             protoResult->SetTxId(ui64(txId));
 
-            for (const auto& [shardId, status]: tInfoResult.ShardStatuses) {
+            for (const auto& [shardId, status] : tInfoResult.ShardStatuses) {
                 if (status.Success) {
                     continue;
                 }
@@ -500,22 +496,22 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
         }
 
         switch (childPath->PathType) {
-        case NKikimrSchemeOp::EPathTypeTableIndex:
-            Self->DescribeTableIndex(
-                childPathId, childName, returnConfig, returnIndexTableBoundaries, *entry->AddTableIndexes()
-            );
-            break;
-        case NKikimrSchemeOp::EPathTypeCdcStream:
-            Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
-            break;
-        case NKikimrSchemeOp::EPathTypeSequence:
-            Self->DescribeSequence(childPathId, childName, *entry->AddSequences(), returnSetVal);
-            break;
-        case NKikimrSchemeOp::EPathTypeTable:
+            case NKikimrSchemeOp::EPathTypeTableIndex:
+                Self->DescribeTableIndex(
+                    childPathId, childName, returnConfig, returnIndexTableBoundaries, *entry->AddTableIndexes()
+                );
+                break;
+            case NKikimrSchemeOp::EPathTypeCdcStream:
+                Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
+                break;
+            case NKikimrSchemeOp::EPathTypeSequence:
+                Self->DescribeSequence(childPathId, childName, *entry->AddSequences(), returnSetVal);
+                break;
+            case NKikimrSchemeOp::EPathTypeTable:
             // TODO: move BackupImplTable under special scheme element
-            break;
-        default:
-            Y_FAIL_S("Unexpected table's child"
+                break;
+            default:
+                Y_FAIL_S("Unexpected table's child"
                 << ": tableId# " << pathId
                 << ", childId# " << childPathId
                 << ", childName# " << childName
@@ -535,11 +531,11 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 if (cinfo.DefaultValue.StartsWith('/')) {
                     NSchemeShard::TPath sequencePath = NSchemeShard::TPath::Resolve(cinfo.DefaultValue, Self);
                     NSchemeShard::TPath::TChecker checks = sequencePath.Check();
-                    checks
-                        .IsResolved()
-                        .NotDeleted();
+                    checks.IsResolved().NotDeleted();
                     if (checks) {
-                        Self->DescribeSequence(sequencePath->PathId, cinfo.DefaultValue, *entry->AddSequences(), returnSetVal);
+                        Self->DescribeSequence(
+                            sequencePath->PathId, cinfo.DefaultValue, *entry->AddSequences(), returnSetVal
+                        );
                     }
                 }
                 break;
@@ -592,7 +588,9 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         auto& presetProto = storeInfo->GetDescription().GetSchemaPresets(preset.GetProtoIndex());
         *description->MutableSchema() = presetProto.GetSchema();
         if (description->HasSchemaPresetVersionAdj()) {
-            description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
+            description->MutableSchema()->SetVersion(
+                description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj()
+            );
         }
         if (tableInfo->GetStats().TableStats.contains(pathId)) {
             FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId).Aggregated);
@@ -635,8 +633,8 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
             auto entry = preSerializedResult.MutablePathDescription()->MutablePersQueueGroup();
 
             struct TPartitionDesc {
-            TTabletId TabletId;
-            const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
+                TTabletId TabletId;
+                const TTopicTabletInfo::TTopicPartitionInfo* Info = nullptr;
             };
 
             // it is sorted list of partitions by partition id
@@ -681,7 +679,9 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 }
             }
 
-            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPartitionsDescription);
+            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(
+                &pqGroupInfo->PreSerializedPartitionsDescription
+            );
         }
 
         Y_DEBUG_ABORT_UNLESS(!pqGroupInfo->PreSerializedPartitionsDescription.empty());
@@ -741,33 +741,40 @@ void TPathDescriber::DescribeRtmrVolume(TPathId pathId, TPathElement::TPtr pathE
     entry->SetPathId(pathId.LocalPathId);
     entry->SetPartitionsCount(rtmrVolumeInfo->Partitions.size());
 
-    for (const auto& partition: rtmrVolumeInfo->Partitions) {
+    for (const auto& partition : rtmrVolumeInfo->Partitions) {
         auto part = entry->AddPartitions();
         part->SetPartitionId((const char*)partition.second->Id.dw, sizeof(TGUID));
         part->SetBusKey(partition.second->BusKey);
         part->SetTabletId(ui64(partition.second->TabletId));
     }
 
-    Sort(entry->MutablePartitions()->begin(),
-         entry->MutablePartitions()->end(),
-         [](const auto& part1, const auto& part2){
-             return part1.GetBusKey() < part2.GetBusKey();
-         });
+    Sort(
+        entry->MutablePartitions()->begin(),
+        entry->MutablePartitions()->end(),
+        [](const auto& part1, const auto& part2) {
+            return part1.GetBusKey() < part2.GetBusKey();
+        }
+    );
 }
 
 void TPathDescriber::DescribeTableIndex(const TPath& path) {
     bool returnConfig = Params.GetReturnPartitionConfig();
     bool returnBoundaries = Params.HasOptions() && Params.GetOptions().GetReturnBoundaries();
 
-    Self->DescribeTableIndex(path.Base()->PathId, path.Base()->Name, returnConfig, returnBoundaries,
+    Self->DescribeTableIndex(
+        path.Base()->PathId,
+        path.Base()->Name,
+        returnConfig,
+        returnBoundaries,
         *Result->Record.MutablePathDescription()->MutableTableIndex()
     );
     DescribeChildren(path);
 }
 
 void TPathDescriber::DescribeCdcStream(const TPath& path) {
-    Self->DescribeCdcStream(path.Base()->PathId, path.Base()->Name,
-        *Result->Record.MutablePathDescription()->MutableCdcStreamDescription());
+    Self->DescribeCdcStream(
+        path.Base()->PathId, path.Base()->Name, *Result->Record.MutablePathDescription()->MutableCdcStreamDescription()
+    );
     DescribeChildren(path);
 }
 
@@ -786,7 +793,7 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
         entry->AddPartitions();
     }
 
-    for (const auto& partition: solomonVolumeInfo->Partitions) {
+    for (const auto& partition : solomonVolumeInfo->Partitions) {
         auto shardId = partition.first;
         auto shardInfo = Self->ShardInfos.FindPtr(shardId);
         Y_ABORT_UNLESS(shardInfo);
@@ -806,11 +813,9 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
         }
     }
 
-    Sort(entry->MutablePartitions()->begin(),
-         entry->MutablePartitions()->end(),
-         [] (auto& part1, auto& part2) {
-             return part1.GetPartitionId() < part2.GetPartitionId();
-         });
+    Sort(entry->MutablePartitions()->begin(), entry->MutablePartitions()->end(), [](auto& part1, auto& part2) {
+        return part1.GetPartitionId() < part2.GetPartitionId();
+    });
 }
 
 void TPathDescriber::DescribeUserAttributes(TPathElement::TPtr pathEl) {
@@ -819,7 +824,7 @@ void TPathDescriber::DescribeUserAttributes(TPathElement::TPtr pathEl) {
     }
 
     auto* userAttrs = Result->Record.MutablePathDescription()->MutableUserAttributes();
-    for (const auto& item: pathEl->UserAttrs->Attrs) {
+    for (const auto& item : pathEl->UserAttrs->Attrs) {
         auto* attr = userAttrs->Add();
         attr->SetKey(item.first);
         attr->SetValue(item.second);
@@ -850,7 +855,7 @@ void TPathDescriber::DescribeRevertedMigrations(TPathElement::TPtr pathEl) {
     }
 
     auto list = Result->Record.MutablePathDescription()->MutableAbandonedTenantsSchemeShards();
-    for (const TTabletId& abandonedSchemeShardId: Self->RevertedMigrations.at(pathEl->PathId)) {
+    for (const TTabletId& abandonedSchemeShardId : Self->RevertedMigrations.at(pathEl->PathId)) {
         list->Add(ui64(abandonedSchemeShardId));
     }
 }
@@ -861,13 +866,13 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     Y_ABORT_UNLESS(it, "SubDomain not found");
     auto subDomainInfo = *it;
 
-    NKikimrSubDomains::TDomainDescription * entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
+    NKikimrSubDomains::TDomainDescription* entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
 
     entry->SetSchemeShardId_Depricated(Self->ParentDomainId.OwnerId);
     entry->SetPathId_Depricated(Self->ParentDomainId.LocalPathId);
 
     auto domainKey = Self->GetDomainKey(pathEl->PathId);
-    NKikimrSubDomains::TDomainKey *key = entry->MutableDomainKey();
+    NKikimrSubDomains::TDomainKey* key = entry->MutableDomainKey();
     key->SetSchemeShard(domainKey.OwnerId);
     key->SetPathId(domainKey.LocalPathId);
 
@@ -880,11 +885,11 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside());
     entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions);
 
-    NKikimrSubDomains::TDomainKey *resourcesKey = entry->MutableResourcesDomainKey();
+    NKikimrSubDomains::TDomainKey* resourcesKey = entry->MutableResourcesDomainKey();
     resourcesKey->SetSchemeShard(subDomainInfo->GetResourcesDomainId().OwnerId);
     resourcesKey->SetPathId(subDomainInfo->GetResourcesDomainId().LocalPathId);
 
-    NKikimrSubDomains::TDiskSpaceUsage *diskSpaceUsage = entry->MutableDiskSpaceUsage();
+    NKikimrSubDomains::TDiskSpaceUsage* diskSpaceUsage = entry->MutableDiskSpaceUsage();
     diskSpaceUsage->MutableTables()->SetTotalSize(subDomainInfo->GetDiskSpaceUsage().Tables.TotalSize);
     diskSpaceUsage->MutableTables()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Tables.DataSize);
     diskSpaceUsage->MutableTables()->SetIndexSize(subDomainInfo->GetDiskSpaceUsage().Tables.IndexSize);
@@ -932,9 +937,9 @@ void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {
     Y_ABORT_UNLESS(it, "SubDomain not found");
     auto subDomainInfo = *it;
 
-    NKikimrSubDomains::TDomainDescription * entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
+    NKikimrSubDomains::TDomainDescription* entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
 
-    for (auto& pool: subDomainInfo->GetStoragePools()) {
+    for (auto& pool : subDomainInfo->GetStoragePools()) {
         *entry->AddStoragePools() = pool;
     }
     if (subDomainInfo->HasSecurityState()) {
@@ -1003,17 +1008,23 @@ void TPathDescriber::DescribeKesus(TPathId pathId, TPathElement::TPtr pathEl) {
 
 void TPathDescriber::DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl) {
     Y_ABORT_UNLESS(pathEl->IsSequence());
-    Self->DescribeSequence(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableSequenceDescription());
+    Self->DescribeSequence(
+        pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableSequenceDescription()
+    );
 }
 
 void TPathDescriber::DescribeReplication(TPathId pathId, TPathElement::TPtr pathEl) {
     Y_ABORT_UNLESS(pathEl->IsReplication());
-    Self->DescribeReplication(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableReplicationDescription());
+    Self->DescribeReplication(
+        pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableReplicationDescription()
+    );
 }
 
 void TPathDescriber::DescribeBlobDepot(const TPath& path) {
     Y_ABORT_UNLESS(path->IsBlobDepot());
-    Self->DescribeBlobDepot(path->PathId, path->Name, *Result->Record.MutablePathDescription()->MutableBlobDepotDescription());
+    Self->DescribeBlobDepot(
+        path->PathId, path->Name, *Result->Record.MutablePathDescription()->MutableBlobDepotDescription()
+    );
 }
 
 void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1127,15 +1138,10 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
 
-    TPath path = Params.HasPathId()
-        ? TPath::Init(pathId, Self)
-        : TPath::Resolve(pathStr, Self);
+    TPath path = Params.HasPathId() ? TPath::Init(pathId, Self) : TPath::Resolve(pathStr, Self);
     {
         TPath::TChecker checks = path.Check();
-        checks
-            .NotEmpty(NKikimrScheme::StatusPathDoesNotExist)
-            .IsAtLocalSchemeShard()
-            .IsResolved();
+        checks.NotEmpty(NKikimrScheme::StatusPathDoesNotExist).IsAtLocalSchemeShard().IsResolved();
 
         if (checks) {
             if (Params.HasPathId()) {
@@ -1145,8 +1151,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             }
         }
 
-        checks
-            .NotDeleted();
+        checks.NotDeleted();
 
         if (checks && ConsiderAsDropped(path)) {
             // KIKIMR-13173
@@ -1191,79 +1196,79 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
 
     if (base->IsCreateFinished()) {
         switch (base->PathType) {
-        case NKikimrSchemeOp::EPathTypeDir:
-            DescribeDir(path);
-            if (base->IsRoot()) {
+            case NKikimrSchemeOp::EPathTypeDir:
+                DescribeDir(path);
+                if (base->IsRoot()) {
+                    DescribeDomainExtra(base);
+                }
+                break;
+            case NKikimrSchemeOp::EPathTypeSubDomain:
+            case NKikimrSchemeOp::EPathTypeExtSubDomain:
+                DescribeDir(path);
                 DescribeDomainExtra(base);
-            }
-            break;
-        case NKikimrSchemeOp::EPathTypeSubDomain:
-        case NKikimrSchemeOp::EPathTypeExtSubDomain:
-            DescribeDir(path);
-            DescribeDomainExtra(base);
-            DescribeRevertedMigrations(base);
-            break;
-        case NKikimrSchemeOp::EPathTypeTable:
-            DescribeTable(ctx, base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeColumnStore:
-            DescribeDir(path);
-            DescribeOlapStore(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeColumnTable:
-            DescribeColumnTable(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypePersQueueGroup:
-            DescribePersQueueGroup(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeRtmrVolume:
-            DescribeRtmrVolume(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
-            DescribeBlockStoreVolume(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeFileStore:
-            DescribeFileStore(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeKesus:
-            DescribeKesus(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeSolomonVolume:
-            DescribeSolomonVolume(base->PathId, base, Params.GetOptions().GetReturnChannelsBinding());
-            break;
-        case NKikimrSchemeOp::EPathTypeTableIndex:
-            DescribeTableIndex(path);
-            break;
-        case NKikimrSchemeOp::EPathTypeCdcStream:
-            DescribeCdcStream(path);
-            break;
-        case NKikimrSchemeOp::EPathTypeSequence:
-            DescribeSequence(path.Base()->PathId, path.Base());
-            break;
-        case NKikimrSchemeOp::EPathTypeReplication:
-            DescribeReplication(path.Base()->PathId, path.Base());
-            break;
-        case NKikimrSchemeOp::EPathTypeBlobDepot:
-            DescribeBlobDepot(path);
-            break;
-        case NKikimrSchemeOp::EPathTypeExternalTable:
-            DescribeExternalTable(ctx, base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeExternalDataSource:
-            DescribeExternalDataSource(ctx, base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeView:
-            DescribeView(ctx, base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeResourcePool:
-            DescribeResourcePool(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeBackupCollection:
-            DescribeDir(path);
-            DescribeBackupCollection(base->PathId, base);
-            break;
-        case NKikimrSchemeOp::EPathTypeInvalid:
-            Y_UNREACHABLE();
+                DescribeRevertedMigrations(base);
+                break;
+            case NKikimrSchemeOp::EPathTypeTable:
+                DescribeTable(ctx, base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeColumnStore:
+                DescribeDir(path);
+                DescribeOlapStore(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeColumnTable:
+                DescribeColumnTable(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                DescribePersQueueGroup(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeRtmrVolume:
+                DescribeRtmrVolume(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
+                DescribeBlockStoreVolume(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeFileStore:
+                DescribeFileStore(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeKesus:
+                DescribeKesus(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeSolomonVolume:
+                DescribeSolomonVolume(base->PathId, base, Params.GetOptions().GetReturnChannelsBinding());
+                break;
+            case NKikimrSchemeOp::EPathTypeTableIndex:
+                DescribeTableIndex(path);
+                break;
+            case NKikimrSchemeOp::EPathTypeCdcStream:
+                DescribeCdcStream(path);
+                break;
+            case NKikimrSchemeOp::EPathTypeSequence:
+                DescribeSequence(path.Base()->PathId, path.Base());
+                break;
+            case NKikimrSchemeOp::EPathTypeReplication:
+                DescribeReplication(path.Base()->PathId, path.Base());
+                break;
+            case NKikimrSchemeOp::EPathTypeBlobDepot:
+                DescribeBlobDepot(path);
+                break;
+            case NKikimrSchemeOp::EPathTypeExternalTable:
+                DescribeExternalTable(ctx, base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeExternalDataSource:
+                DescribeExternalDataSource(ctx, base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeView:
+                DescribeView(ctx, base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeResourcePool:
+                DescribeResourcePool(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeBackupCollection:
+                DescribeDir(path);
+                DescribeBackupCollection(base->PathId, base);
+                break;
+            case NKikimrSchemeOp::EPathTypeInvalid:
+                Y_UNREACHABLE();
         }
     } else {
         // here we do not full any object specific information, like table description
@@ -1289,23 +1294,19 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return TPathDescriber(self, std::move(params)).Describe(ctx);
 }
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
-    TSchemeShard* self,
-    const TActorContext& ctx,
-    TPathId pathId
-) {
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>
+DescribePath(TSchemeShard* self, const TActorContext& ctx, TPathId pathId) {
     NKikimrSchemeOp::TDescribeOptions options;
     options.SetShowPrivateTable(true);
     return DescribePath(self, ctx, pathId, options);
 }
 
 void TSchemeShard::DescribeTable(
-        const TTableInfo& tableInfo,
-        const NScheme::TTypeRegistry* typeRegistry,
-        bool fillConfig,
-        NKikimrSchemeOp::TTableDescription* entry
-    ) const
-{
+    const TTableInfo& tableInfo,
+    const NScheme::TTypeRegistry* typeRegistry,
+    bool fillConfig,
+    NKikimrSchemeOp::TTableDescription* entry
+) const {
     Y_UNUSED(typeRegistry);
 
     entry->SetTableSchemaVersion(tableInfo.AlterVersion);
@@ -1331,9 +1332,13 @@ void TSchemeShard::DescribeTable(
     entry->SetIsBackup(tableInfo.IsBackup);
 }
 
-void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,
-    bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
-{
+void TSchemeShard::DescribeTableIndex(
+    const TPathId& pathId,
+    const TString& name,
+    bool fillConfig,
+    bool fillBoundaries,
+    NKikimrSchemeOp::TIndexDescription& entry
+) const {
     auto it = Indexes.FindPtr(pathId);
     Y_ABORT_UNLESS(it, "TableIndex is not found");
     TTableIndexInfo::TPtr indexInfo = *it;
@@ -1341,9 +1346,14 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     DescribeTableIndex(pathId, name, indexInfo, fillConfig, fillBoundaries, entry);
 }
 
-void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo,
-    bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TIndexDescription& entry) const
-{
+void TSchemeShard::DescribeTableIndex(
+    const TPathId& pathId,
+    const TString& name,
+    TTableIndexInfo::TPtr indexInfo,
+    bool fillConfig,
+    bool fillBoundaries,
+    NKikimrSchemeOp::TIndexDescription& entry
+) const {
     Y_ABORT_UNLESS(indexInfo, "Empty index info");
 
     entry.SetName(name);
@@ -1354,18 +1364,19 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     entry.SetState(indexInfo->State);
     entry.SetSchemaVersion(indexInfo->AlterVersion);
 
-    for (const auto& keyName: indexInfo->IndexKeys) {
+    for (const auto& keyName : indexInfo->IndexKeys) {
         *entry.MutableKeyColumnNames()->Add() = keyName;
     }
 
-    for (const auto& dataColumns: indexInfo->IndexDataColumns) {
+    for (const auto& dataColumns : indexInfo->IndexDataColumns) {
         *entry.MutableDataColumnNames()->Add() = dataColumns;
     }
 
     const auto* indexPathPtr = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPathPtr);
     const auto& indexPath = *indexPathPtr->Get();
-    if (const auto size = indexPath.GetChildren().size(); indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+    if (const auto size = indexPath.GetChildren().size();
+        indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
         // For vector index we have 2 impl tables and 2 build impl tables
         Y_VERIFY_S(2 <= size && size <= 4, size);
     } else {
@@ -1391,34 +1402,42 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         if (fillBoundaries) {
             // column info is necessary for split boundary type conversion
             FillColumns(tableInfo, *tableDescription->MutableColumns());
-            FillKeyColumns(tableInfo, *tableDescription->MutableKeyColumnNames(), *tableDescription->MutableKeyColumnIds());
+            FillKeyColumns(
+                tableInfo, *tableDescription->MutableKeyColumnNames(), *tableDescription->MutableKeyColumnIds()
+            );
             FillTableBoundaries(tableDescription->MutableSplitBoundary(), tableInfo);
         }
     }
     entry.SetDataSize(dataSize);
 
     if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {
-           *entry.MutableVectorIndexKmeansTreeDescription() = *vectorIndexKmeansTreeDescription;
+        if (const auto* vectorIndexKmeansTreeDescription =
+                std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription
+                )) {
+            *entry.MutableVectorIndexKmeansTreeDescription() = *vectorIndexKmeansTreeDescription;
         } else {
             Y_FAIL_S("SpecializedIndexDescription should be set");
         }
     }
-
 }
 
-void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TCdcStreamDescription& desc)
-{
+void TSchemeShard::DescribeCdcStream(
+    const TPathId& pathId,
+    const TString& name,
+    NKikimrSchemeOp::TCdcStreamDescription& desc
+) {
     Y_VERIFY_S(CdcStreams.contains(pathId), "Cdc stream not found"
         << ": pathId# " << pathId
         << ", name# " << name);
     DescribeCdcStream(pathId, name, CdcStreams.at(pathId), desc);
 }
 
-void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, TCdcStreamInfo::TPtr info,
-        NKikimrSchemeOp::TCdcStreamDescription& desc)
-{
+void TSchemeShard::DescribeCdcStream(
+    const TPathId& pathId,
+    const TString& name,
+    TCdcStreamInfo::TPtr info,
+    NKikimrSchemeOp::TCdcStreamDescription& desc
+) {
     Y_VERIFY_S(info, "Empty cdc stream info"
         << ": pathId# " << pathId
         << ", name# " << name);
@@ -1449,9 +1468,12 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     }
 }
 
-void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
-{
+void TSchemeShard::DescribeSequence(
+    const TPathId& pathId,
+    const TString& name,
+    NKikimrSchemeOp::TSequenceDescription& desc,
+    bool fillSetVal
+) {
     auto it = Sequences.find(pathId);
     Y_VERIFY_S(it != Sequences.end(), "Sequence not found"
         << " pathId# " << pathId
@@ -1459,9 +1481,13 @@ void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
     DescribeSequence(pathId, name, it->second, desc, fillSetVal);
 }
 
-void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
-        NKikimrSchemeOp::TSequenceDescription& desc, bool fillSetVal)
-{
+void TSchemeShard::DescribeSequence(
+    const TPathId& pathId,
+    const TString& name,
+    TSequenceInfo::TPtr info,
+    NKikimrSchemeOp::TSequenceDescription& desc,
+    bool fillSetVal
+) {
     Y_VERIFY_S(info, "Empty sequence info"
         << " pathId# " << pathId
         << " name# " << name);
@@ -1486,9 +1512,11 @@ void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, 
     }
 }
 
-void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& name,
-        NKikimrSchemeOp::TReplicationDescription& desc)
-{
+void TSchemeShard::DescribeReplication(
+    const TPathId& pathId,
+    const TString& name,
+    NKikimrSchemeOp::TReplicationDescription& desc
+) {
     auto it = Replications.find(pathId);
     Y_VERIFY_S(it != Replications.end(), "Replication not found"
         << " pathId# " << pathId
@@ -1516,9 +1544,12 @@ static void ClearSensitiveFields(google::protobuf::Message* message) {
     }
 }
 
-void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info,
-        NKikimrSchemeOp::TReplicationDescription& desc)
-{
+void TSchemeShard::DescribeReplication(
+    const TPathId& pathId,
+    const TString& name,
+    TReplicationInfo::TPtr info,
+    NKikimrSchemeOp::TReplicationDescription& desc
+) {
     Y_VERIFY_S(info, "Empty replication info"
         << " pathId# " << pathId
         << " name# " << name);
@@ -1540,7 +1571,11 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     }
 }
 
-void TSchemeShard::DescribeBlobDepot(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TBlobDepotDescription& desc) {
+void TSchemeShard::DescribeBlobDepot(
+    const TPathId& pathId,
+    const TString& name,
+    NKikimrSchemeOp::TBlobDepotDescription& desc
+) {
     auto it = BlobDepots.find(pathId);
     Y_ABORT_UNLESS(it != BlobDepots.end());
     desc = it->second->Description;
@@ -1550,5 +1585,5 @@ void TSchemeShard::DescribeBlobDepot(const TPathId& pathId, const TString& name,
     desc.SetTabletId(static_cast<ui64>(it->second->BlobDepotTabletId));
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

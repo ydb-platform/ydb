@@ -13,21 +13,21 @@ namespace NSchemeBoard {
 
 namespace {
 
-    TActorId CreateReplica(TTestActorRuntimeBase& runtime) {
-        const auto replica = runtime.Register(CreateSchemeBoardReplica(TIntrusivePtr<TStateStorageInfo>(), 0));
-        runtime.EnableScheduleForActor(replica, true);
+TActorId CreateReplica(TTestActorRuntimeBase& runtime) {
+    const auto replica = runtime.Register(CreateSchemeBoardReplica(TIntrusivePtr<TStateStorageInfo>(), 0));
+    runtime.EnableScheduleForActor(replica, true);
 
         // wait until replica is ready
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([&replica](IEventHandle& ev) {
-            return ev.Recipient == replica && ev.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
-        });
-        runtime.DispatchEvents(opts);
+    TDispatchOptions opts;
+    opts.FinalEvents.emplace_back([&replica](IEventHandle& ev) {
+        return ev.Recipient == replica && ev.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
+    });
+    runtime.DispatchEvents(opts);
 
-        return replica;
-    }
+    return replica;
+}
 
-} // anonymous
+} // namespace
 
 class TReplicaTest: public NUnitTest::TTestBase {
 public:
@@ -232,7 +232,6 @@ void TReplicaTest::Delete() {
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
         UNIT_ASSERT_VALUES_EQUAL(Max<ui64>(), ev->Get()->GetRecord().GetVersion());
     }
-
 }
 
 void TReplicaTest::UpdateWithoutHandshake() {
@@ -575,7 +574,6 @@ public:
     void MigratedPathRecreation();
     void UpdatesCombinationsMigratedPath();
 
-
 private:
     THolder<TTestContext> Context;
 }; // TReplicaCombinationTest
@@ -587,8 +585,8 @@ void TReplicaCombinationTest::UpdatesCombinationsDomainRoot() {
     TVector<TCombinationsArgs> combinations = GenerateCombinationsDomainRoot("/Root/Tenant", gssOwnerID);
 
     //make all the variants
-    for (const auto& argsLeft: combinations) {
-        for (const auto& argsRight: combinations) {
+    for (const auto& argsLeft : combinations) {
+        for (const auto& argsRight : combinations) {
             const TActorId replica = GetReplica();
 
             const TActorId populatorLeft = Context->AllocateEdgeActor();
@@ -612,75 +610,71 @@ void TReplicaCombinationTest::UpdatesCombinationsDomainRoot() {
                  << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString() << Endl;
 
             // KIKIMR-9236#5e70e0b141a0f221ddada730
-            if (argsLeft.PathId == TPathId(800, 2) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2)
-                && argsRight.PathId == TPathId(800, 3) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3))
-            {
+            if (argsLeft.PathId == TPathId(800, 2) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2) &&
+                argsRight.PathId == TPathId(800, 3) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3)) {
                 // 1 this is bug, skip it
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(900, 1) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2)
-                && argsRight.PathId == TPathId(800, 2) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2))
-            {
+            if (argsLeft.PathId == TPathId(900, 1) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2) &&
+                argsRight.PathId == TPathId(800, 2) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2)) {
                 // 2 this is bug, skip it
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(900, 1) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2)
-                && argsRight.PathId == TPathId(800, 3) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3))
-            {
+            if (argsLeft.PathId == TPathId(900, 1) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2) &&
+                argsRight.PathId == TPathId(800, 3) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3)) {
                 // 3 this is bug, skip it
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(800, 2) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2)
-                && argsRight.PathId == TPathId(900, 1) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2))
-            {
+            if (argsLeft.PathId == TPathId(800, 2) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 2) &&
+                argsRight.PathId == TPathId(900, 1) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2)) {
                 // 4 this is bug, skip it
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(910, 1) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3)
-                && argsRight.PathId == TPathId(gssOwnerID, 3) && argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3))
-            {
+            if (argsLeft.PathId == TPathId(910, 1) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3) &&
+                argsRight.PathId == TPathId(gssOwnerID, 3) && argsRight.IsDeletion &&
+                argsRight.DomainId == TPathId(800, 3)) {
                 // 5 this is bug, skip it
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(800, 3) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3)
-                && argsRight.PathId == TPathId(800, 2) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2))
-            {
+            if (argsLeft.PathId == TPathId(800, 3) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3) &&
+                argsRight.PathId == TPathId(800, 2) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2)) {
                 // 6 this is bug, skip it
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(800, 3) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3)
-                && argsRight.PathId == TPathId(900, 1) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2))
-            {
+            if (argsLeft.PathId == TPathId(800, 3) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3) &&
+                argsRight.PathId == TPathId(900, 1) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 2)) {
                 // 7 this is bug, skip it
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(800, 3) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3)
-                && argsRight.PathId == TPathId(910, 1) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3))
-            {
+            if (argsLeft.PathId == TPathId(800, 3) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(800, 3) &&
+                argsRight.PathId == TPathId(910, 1) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(800, 3)) {
                 // 8 this is bug, skip it
                 continue;
             }
-
-
 
             UNIT_ASSERT_VALUES_EQUAL("/Root/Tenant", ev->Get()->GetRecord().GetPath());
             UNIT_ASSERT_VALUES_EQUAL(std::get<1>(winId), ev->Get()->GetRecord().GetIsDeletion());
 
             if (!ev->Get()->GetRecord().GetIsDeletion()) {
-                UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<2>(winId),
+                    TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
+                );
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion());
 
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId())
+                );
             }
         }
     }
@@ -695,13 +689,8 @@ void TReplicaCombinationTest::MigratedPathRecreation() {
 
     auto recreatedPathId = TPathId(tssOwnerID, 11);
 
-    auto argsLeft = TCombinationsArgs{
-            "/root/db/dir_inside", migratedPathId, 1, domainId,
-            gssOwnerID, 1, false};
-    auto argsRight = TCombinationsArgs{
-            "/root/db/dir_inside", recreatedPathId, 1, domainId,
-            tssOwnerID, 1, false};
-
+    auto argsLeft = TCombinationsArgs{"/root/db/dir_inside", migratedPathId, 1, domainId, gssOwnerID, 1, false};
+    auto argsRight = TCombinationsArgs{"/root/db/dir_inside", recreatedPathId, 1, domainId, tssOwnerID, 1, false};
 
     const TActorId replica = GetReplica();
 
@@ -723,18 +712,16 @@ void TReplicaCombinationTest::MigratedPathRecreation() {
     auto ev = Context->SubscribeReplica(replica, finalSubscriber, "/root/db/dir_inside");
 
     Cerr << "=========== " << argsLeft.GenerateDescribe().ShortDebugString()
-         << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString()
-         << "\n==========="
-         << " DomainId: " << std::get<0>(winId)
-         << " IsDeletion: " << std::get<1>(winId)
-         << " PathId: " << std::get<2>(winId)
-         << " Versions: " << std::get<3>(winId)
-         << Endl;
+         << "\n=========== " << argsRight.GenerateDescribe().ShortDebugString() << "\n==========="
+         << " DomainId: " << std::get<0>(winId) << " IsDeletion: " << std::get<1>(winId)
+         << " PathId: " << std::get<2>(winId) << " Versions: " << std::get<3>(winId) << Endl;
 
     UNIT_ASSERT_VALUES_EQUAL("/root/db/dir_inside", ev->Get()->GetRecord().GetPath());
     UNIT_ASSERT_VALUES_EQUAL(std::get<1>(winId), ev->Get()->GetRecord().GetIsDeletion());
 
-    UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
+    UNIT_ASSERT_VALUES_EQUAL(
+        std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
+    );
     UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion());
 
     UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
@@ -749,11 +736,13 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
     ui64 tssIDrecreated = 910;
     ui64 gssLocalId = 5;
     ui64 tssLocalId = 9;
-    TVector<TCombinationsArgs> combinations = GenerateCombinationsMigratedPath("/Root/Tenant/table_inside", gssID, {tssID, tssIDrecreated}, gssLocalId, tssLocalId);
+    TVector<TCombinationsArgs> combinations = GenerateCombinationsMigratedPath(
+        "/Root/Tenant/table_inside", gssID, {tssID, tssIDrecreated}, gssLocalId, tssLocalId
+    );
 
     //make all the variants
-    for (const auto& argsLeft: combinations) {
-        for (const auto& argsRight: combinations) {
+    for (const auto& argsLeft : combinations) {
+        for (const auto& argsRight : combinations) {
             const TActorId replica = GetReplica();
 
             const TActorId populatorLeft = Context->AllocateEdgeActor();
@@ -776,95 +765,102 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
             Cerr << "=========== Left ==" << argsLeft.GenerateDescribe().ShortDebugString()
                  << "\n=========== Right ==" << argsRight.GenerateDescribe().ShortDebugString()
                  << "\n=========== super id =="
-                 << " DomainId: " << std::get<0>(winId)
-                 << " IsDeletion: " << std::get<1>(winId)
-                 << " PathId: " << std::get<2>(winId)
-                 << " Verions: " << std::get<3>(winId)
-                 << Endl;
-            Cerr << "=========== WIN =="
-                 << ev->Get()->GetRecord().GetPath()
-                 << " PathID: " <<  TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
-                 << " deleted: " <<  ev->Get()->GetRecord().GetIsDeletion()
+                 << " DomainId: " << std::get<0>(winId) << " IsDeletion: " << std::get<1>(winId)
+                 << " PathId: " << std::get<2>(winId) << " Verions: " << std::get<3>(winId) << Endl;
+            Cerr << "=========== WIN ==" << ev->Get()->GetRecord().GetPath() << " PathID: "
+                 << TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
+                 << " deleted: " << ev->Get()->GetRecord().GetIsDeletion()
                  << " version: " << ev->Get()->GetRecord().GetVersion()
-                 << " domainId: " << PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId())
-                 << Endl;
+                 << " domainId: " << PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()) << Endl;
 
-            if (argsLeft.PathId == TPathId(gssID, gssLocalId) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
-                && argsRight.PathId == TPathId(tssID, tssLocalId) && argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2))
-            {
+            if (argsLeft.PathId == TPathId(gssID, gssLocalId) && !argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 2) && argsRight.PathId == TPathId(tssID, tssLocalId) &&
+                argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2)) {
                 // 1 this is bug
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(gssID, gssLocalId) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
-              && argsRight.PathId == TPathId(tssID, tssLocalId) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2))
-            {
+            if (argsLeft.PathId == TPathId(gssID, gssLocalId) && argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 2) && argsRight.PathId == TPathId(tssID, tssLocalId) &&
+                !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2)) {
                 // 2 this is NOT bug, this is super id violation
 
                 UNIT_ASSERT_VALUES_EQUAL("/Root/Tenant/table_inside", ev->Get()->GetRecord().GetPath());
                 UNIT_ASSERT_VALUES_EQUAL(std::get<1>(argsRight.GetSuperId()), ev->Get()->GetRecord().GetIsDeletion());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<2>(argsRight.GetSuperId()), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<2>(argsRight.GetSuperId()),
+                    TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
+                );
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(argsRight.GetSuperId()), ev->Get()->GetRecord().GetVersion());
 
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsRight.GetSuperId()), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<0>(argsRight.GetSuperId()),
+                    PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId())
+                );
 
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(tssID, tssLocalId) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
-                && argsRight.PathId == TPathId(gssID, gssLocalId) && argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2))
-            {
+            if (argsLeft.PathId == TPathId(tssID, tssLocalId) && !argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 2) && argsRight.PathId == TPathId(gssID, gssLocalId) &&
+                argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2)) {
                 // 3 this is NOT bug, this is super id violation
 
                 UNIT_ASSERT_VALUES_EQUAL("/Root/Tenant/table_inside", ev->Get()->GetRecord().GetPath());
                 UNIT_ASSERT_VALUES_EQUAL(std::get<1>(argsLeft.GetSuperId()), ev->Get()->GetRecord().GetIsDeletion());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<2>(argsLeft.GetSuperId()), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<2>(argsLeft.GetSuperId()),
+                    TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
+                );
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(argsLeft.GetSuperId()), ev->Get()->GetRecord().GetVersion());
 
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(argsLeft.GetSuperId()), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<0>(argsLeft.GetSuperId()),
+                    PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId())
+                );
 
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(tssID, tssLocalId) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
-                && argsRight.PathId == TPathId(gssID, gssLocalId) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2))
-            {
+            if (argsLeft.PathId == TPathId(tssID, tssLocalId) && argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 2) && argsRight.PathId == TPathId(gssID, gssLocalId) &&
+                !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2)) {
                 // 4 this is bug
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(gssID, gssLocalId) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
-                && argsRight.PathId == TPathId(tssIDrecreated, tssLocalId) && argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 333))
-            {
+            if (argsLeft.PathId == TPathId(gssID, gssLocalId) && !argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 2) && argsRight.PathId == TPathId(tssIDrecreated, tssLocalId) &&
+                argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 333)) {
                 // 5 this is bug
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(tssID, tssLocalId) && !argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 2)
-                && argsRight.PathId == TPathId(tssIDrecreated, tssLocalId) && argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 333))
-            {
+            if (argsLeft.PathId == TPathId(tssID, tssLocalId) && !argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 2) && argsRight.PathId == TPathId(tssIDrecreated, tssLocalId) &&
+                argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 333)) {
                 // 6 this is bug
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(tssIDrecreated, tssLocalId) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 333)
-                && argsRight.PathId == TPathId(gssID, gssLocalId) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2))
-            {
+            if (argsLeft.PathId == TPathId(tssIDrecreated, tssLocalId) && argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 333) && argsRight.PathId == TPathId(gssID, gssLocalId) &&
+                !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2)) {
                 // 7 this is bug
                 continue;
             }
 
-            if (argsLeft.PathId == TPathId(tssIDrecreated, tssLocalId) && argsLeft.IsDeletion && argsLeft.DomainId == TPathId(gssID, 333)
-              && argsRight.PathId == TPathId(tssID, tssLocalId) && !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2))
-            {
+            if (argsLeft.PathId == TPathId(tssIDrecreated, tssLocalId) && argsLeft.IsDeletion &&
+                argsLeft.DomainId == TPathId(gssID, 333) && argsRight.PathId == TPathId(tssID, tssLocalId) &&
+                !argsRight.IsDeletion && argsRight.DomainId == TPathId(gssID, 2)) {
                 // 8 this is bug
                 continue;
             }
@@ -873,17 +869,22 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
             UNIT_ASSERT_VALUES_EQUAL(std::get<1>(winId), ev->Get()->GetRecord().GetIsDeletion());
 
             if (!ev->Get()->GetRecord().GetIsDeletion()) {
-                UNIT_ASSERT_VALUES_EQUAL(std::get<2>(winId), TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<2>(winId),
+                    TPathId(ev->Get()->GetRecord().GetPathOwnerId(), ev->Get()->GetRecord().GetLocalPathId())
+                );
                 UNIT_ASSERT_VALUES_EQUAL(std::get<3>(winId), ev->Get()->GetRecord().GetVersion());
 
                 UNIT_ASSERT(ev->Get()->GetRecord().HasDescribeSchemeResultSerialized());
                 UNIT_ASSERT(ev->Get()->GetRecord().HasPathSubdomainPathId());
 
-                UNIT_ASSERT_VALUES_EQUAL(std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    std::get<0>(winId), PathIdFromPathId(ev->Get()->GetRecord().GetPathSubdomainPathId())
+                );
             }
         }
     }
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

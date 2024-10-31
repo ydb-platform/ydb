@@ -16,15 +16,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TWaiting"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TWaiting"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TWait(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -44,14 +42,13 @@ public:
         // wait all transaction inside
         auto paths = context.SS->ListSubTree(txState->TargetPathId, context.Ctx);
         auto relatedTx = context.SS->GetRelatedTransactions(paths, context.Ctx);
-        for (auto otherTxId: relatedTx) {
+        for (auto otherTxId : relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
                 continue;
             }
             TStringBuilder errMsg;
             errMsg << "TWait ProgressState, dependence has found, but actually it is unexpected"
-                   << ", dependent transaction: " << OperationId.GetTxId()
-                   << ", parent transaction: " << otherTxId
+                   << ", dependent transaction: " << OperationId.GetTxId() << ", parent transaction: " << otherTxId
                    << ", at schemeshard: " << ssId;
 
             LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, errMsg);
@@ -87,15 +84,13 @@ private:
     THashSet<TPathId> PathsInside;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TConfigure"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TConfigure"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TConfigure(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -166,7 +161,7 @@ public:
         descr.SetType(info.TabletType);
         descr.SetTabletId(ui64(info.TabletID));
 
-        for (auto& binding: info.BindedChannels) {
+        for (auto& binding : info.BindedChannels) {
             descr.MutableBindedStoragePool()->Add()->CopyFrom(binding);
         }
 
@@ -191,7 +186,7 @@ public:
         descr.SetUserAttrsAlterVersion(elem->UserAttrs->AlterVersion);
         descr.SetACLVersion(elem->ACLVersion);
 
-        for (auto& item: elem->UserAttrs->Attrs) {
+        for (auto& item : elem->UserAttrs->Attrs) {
             auto add = descr.AddUserAttributes();
             add->SetKey(item.first);
             add->SetValue(item.second);
@@ -213,7 +208,7 @@ public:
         descr.SetAlterVersion(tableInfo->AlterVersion);
         descr.SetPartitioningVersion(tableInfo->PartitioningVersion);
 
-        for (auto& item: tableInfo->Columns) {
+        for (auto& item : tableInfo->Columns) {
             ui32 columnId = item.first;
             const TTableInfo::TColumn& column = item.second;
 
@@ -247,7 +242,8 @@ public:
             partDescr->MutableShardIdx()->SetLocalId(ui64(partition.ShardIdx.GetLocalId()));
             if (tableInfo->PerShardPartitionConfig.contains(partition.ShardIdx)) {
                 TString partitionConfig;
-                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition.ShardIdx).SerializeToString(&partitionConfig);
+                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition.ShardIdx)
+                    .SerializeToString(&partitionConfig);
                 partDescr->SetPartitionConfig(partitionConfig);
             }
         }
@@ -263,7 +259,7 @@ public:
         descr.SetType(indexInfo->Type);
         descr.SetState(indexInfo->State);
 
-        for (auto& keyName: indexInfo->IndexKeys) {
+        for (auto& keyName : indexInfo->IndexKeys) {
             descr.AddKeys(keyName);
         }
 
@@ -294,7 +290,6 @@ public:
         TPathId pathId = *PathsInside.begin();
         TPath path = TPath::Init(pathId, context.SS);
 
-
         auto event = MakeHolder<TEvSchemeShard::TEvMigrateSchemeShard>();
         event->Record.SetSchemeShardGeneration(context.SS->Generation());
 
@@ -315,14 +310,13 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
                 Y_ABORT("impossible to migrate subDomain or extSubDomain as part of the other subDomain");
                 break;
-            case NKikimrSchemeOp::EPathType::EPathTypeTable:
-            {
+            case NKikimrSchemeOp::EPathType::EPathTypeTable: {
                 Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
 
                 *event->Record.MutableTable() = DescribeTable(context, pathId);
 
                 TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
-                for (auto part: tableInfo->GetPartitions()) {
+                for (auto part : tableInfo->GetPartitions()) {
                     TShardIdx shardIdx = part.ShardIdx;
                     *migrateShards->Add() = DescribeShard(context, shardIdx);
                 }
@@ -330,8 +324,7 @@ public:
                 //tinfo->PerShardPartitionConfig add that data
                 break;
             }
-            case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
-            {
+            case NKikimrSchemeOp::EPathType::EPathTypeTableIndex: {
                 Y_ABORT_UNLESS(context.SS->Indexes.contains(pathId));
                 *event->Record.MutableTableIndex() = DescribeTableIndex(context, pathId);
 
@@ -339,8 +332,7 @@ public:
 
                 break;
             }
-            case NKikimrSchemeOp::EPathType::EPathTypeKesus:
-            {
+            case NKikimrSchemeOp::EPathType::EPathTypeKesus: {
                 Y_ABORT_UNLESS(context.SS->KesusInfos.contains(pathId));
                 *event->Record.MutableKesus() = DescribeKesus(context, pathId);
 
@@ -423,15 +415,22 @@ public:
 
         auto event = new TEvSchemeShard::TEvInitTenantSchemeShard(
             ui64(ssId),
-            pathId.LocalPathId, path.PathString(),
-            path.Base()->Owner, path.GetEffectiveACL(), path.GetEffectiveACLVersion(),
-            processing, storagePools,
-            path.Base()->UserAttrs->Attrs, path.Base()->UserAttrs->AlterVersion,
-            schemeLimits, ui64(InvalidTabletId));
+            pathId.LocalPathId,
+            path.PathString(),
+            path.Base()->Owner,
+            path.GetEffectiveACL(),
+            path.GetEffectiveACLVersion(),
+            processing,
+            storagePools,
+            path.Base()->UserAttrs->Attrs,
+            path.Base()->UserAttrs->AlterVersion,
+            schemeLimits,
+            ui64(InvalidTabletId)
+        );
         event->Record.SetInitiateMigration(true);
 
         Y_ABORT_UNLESS(1 == txState->Shards.size());
-        auto &shard = *txState->Shards.begin();
+        auto& shard = *txState->Shards.begin();
         shard.Operation = TTxState::ConfigureParts;
 
         TenantSchemeShardId = TTabletId(processing.GetSchemeShard());
@@ -444,7 +443,6 @@ public:
                         << " msg: " << event->Record.ShortDebugString());
         context.OnComplete.BindMsgToPipe(OperationId, TenantSchemeShardId, pathId, event);
 
-
         return false;
     }
 };
@@ -455,18 +453,19 @@ private:
     TTabletId TenantSchemeShardId = InvalidTabletId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TPublishTenantReadOnly"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TPublishTenantReadOnly"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TPublishTenantReadOnly(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+             TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType}
+        );
     }
 
     bool HandleReply(TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::TPtr& ev, TOperationContext& context) override {
@@ -494,7 +493,7 @@ public:
         Y_ABORT_UNLESS(txState);
 
         Y_ABORT_UNLESS(1 == txState->Shards.size());
-        auto &shard = *txState->Shards.begin();
+        auto& shard = *txState->Shards.begin();
         shard.Operation = TTxState::ConfigureParts;
         txState->UpdateShardsInProgress();
 
@@ -527,20 +526,21 @@ private:
     TPathElement::TChildrenCont HiddenChildren;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TPublishGlobal"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TPublishGlobal"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TPublishGlobal(TOperationId id, TTxState::ETxState& nextState)
         : OperationId(id)
-        , UpgradeDecision(nextState)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType});
+        , UpgradeDecision(nextState) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+             TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+             TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType}
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvCommitTenantUpdate::TPtr& /*ev*/, TOperationContext& context) override {
@@ -555,10 +555,11 @@ public:
         TPathId pathId = txState->TargetPathId;
         auto path = context.SS->PathsById.at(pathId);
 
-        path->SwapChildren(HiddenChildren); //return back children, now we do not pretend that there no children, we define them as Migrated
+        path->SwapChildren(HiddenChildren
+        ); //return back children, now we do not pretend that there no children, we define them as Migrated
         auto pathsInside = context.SS->ListSubTree(pathId, context.Ctx);
         pathsInside.erase(pathId);
-        for (auto pId: pathsInside) {
+        for (auto pId : pathsInside) {
             auto item = context.SS->PathsById.at(pId);
 
             context.SS->MarkAsMigrated(item, context.Ctx);
@@ -694,21 +695,22 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDeleteTenantSS"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TDeleteTenantSS"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TDeleteTenantSS(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
-                                     TEvSchemeShard::TEvRewriteOwnerResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+             TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+             TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
+             TEvSchemeShard::TEvRewriteOwnerResult::EventType,
+             TEvSchemeShard::TEvPublishTenantResult::EventType}
+        );
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -747,19 +749,20 @@ private:
     TSet<TTabletId> DatashardsInside;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TRewriteOwner"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TRewriteOwner"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TRewriteOwner(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+             TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+             TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, TOperationContext& context) override {
@@ -804,7 +807,6 @@ public:
         return false;
     }
 
-
     THolder<TEvDataShard::TEvMigrateSchemeShardRequest> NextRequest(TOperationContext& context) {
         if (!DatashardsInside) {
             return nullptr;
@@ -819,7 +821,6 @@ public:
 
         return ev;
     }
-
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
@@ -839,18 +840,17 @@ public:
 
         auto pathsInside = context.SS->ListSubTree(targetPathId, context.Ctx);
         pathsInside.erase(targetPathId);
-        for (auto pId: pathsInside) {
+        for (auto pId : pathsInside) {
             TPathElement::TPtr item = context.SS->PathsById.at(pId);
 
             switch (item->PathType) {
                 case NKikimrSchemeOp::EPathType::EPathTypeDir:
                     // no shards
                     break;
-                case NKikimrSchemeOp::EPathType::EPathTypeTable:
-                {
+                case NKikimrSchemeOp::EPathType::EPathTypeTable: {
                     Y_ABORT_UNLESS(context.SS->Tables.contains(pId));
                     TTableInfo::TPtr table = context.SS->Tables.at(pId);
-                    for (auto item: table->GetPartitions()) {
+                    for (auto item : table->GetPartitions()) {
                         auto shardIdx = item.ShardIdx;
                         const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
@@ -898,20 +898,21 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TPublishTenant"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TPublishTenant"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TPublishTenant(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
-                                     TEvSchemeShard::TEvRewriteOwnerResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+             TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+             TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
+             TEvSchemeShard::TEvRewriteOwnerResult::EventType}
+        );
     }
 
     bool HandleReply(TEvSchemeShard::TEvPublishTenantResult::TPtr& /*ev*/, TOperationContext& context) override {
@@ -960,21 +961,22 @@ private:
     bool IsInited = false;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDoneMigrateTree"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TDoneMigrateTree"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TDoneMigrateTree(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType,
-                                     TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
-                                     TEvSchemeShard::TEvRewriteOwnerResult::EventType,
-                                     TEvSchemeShard::TEvPublishTenantResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvSchemeShard::TEvMigrateSchemeShardResult::EventType,
+             TEvSchemeShard::TEvInitTenantSchemeShardResult::EventType,
+             TEvSchemeShard::TEvPublishTenantAsReadOnlyResult::EventType,
+             TEvSchemeShard::TEvRewriteOwnerResult::EventType,
+             TEvSchemeShard::TEvPublishTenantResult::EventType}
+        );
     }
 
     void Init(TPathId pathId, TOperationContext& context) {
@@ -1013,8 +1015,9 @@ public:
 
             shardInfo.PathId = txState->TargetPathId;
             db.Table<Schema::SubDomainShards>().Key(txState->TargetPathId.LocalPathId, shardIdx.GetLocalId()).Update();
-            db.Table<Schema::Shards>().Key(shardIdx.GetLocalId()).Update(
-                NIceDb::TUpdate<Schema::Shards::PathId>(txState->TargetPathId.LocalPathId));
+            db.Table<Schema::Shards>()
+                .Key(shardIdx.GetLocalId())
+                .Update(NIceDb::TUpdate<Schema::Shards::PathId>(txState->TargetPathId.LocalPathId));
 
             shardInfo.CurrentTxId = OperationId.GetTxId();
             context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
@@ -1023,7 +1026,6 @@ public:
             domainPath->IncShardsInside();
             TSubDomainInfo::TPtr domainInfo = context.SS->ResolveDomainInfo(txState->TargetPathId);
             domainInfo->AddPrivateShard(shardIdx);
-
 
             ShardsToRemember.pop_back();
             context.OnComplete.ActivateTx(OperationId);
@@ -1063,49 +1065,49 @@ class TUpgradeSubDomain: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-            return TTxState::CreateParts;
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::PublishTenantReadOnly;
-        case TTxState::PublishTenantReadOnly:
-            return TTxState::PublishGlobal;
-        case TTxState::PublishGlobal:
-            return UpgradeSubDomainDecision;
-        case TTxState::RewriteOwners:
-            return TTxState::PublishTenant;
-        case TTxState::PublishTenant:
-            return TTxState::DoneMigrateTree;
-        case TTxState::DeleteTenantSS:
-            return TTxState::Invalid;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+                return TTxState::CreateParts;
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::PublishTenantReadOnly;
+            case TTxState::PublishTenantReadOnly:
+                return TTxState::PublishGlobal;
+            case TTxState::PublishGlobal:
+                return UpgradeSubDomainDecision;
+            case TTxState::RewriteOwners:
+                return TTxState::PublishTenant;
+            case TTxState::PublishTenant:
+                return TTxState::DoneMigrateTree;
+            case TTxState::DeleteTenantSS:
+                return TTxState::Invalid;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-            return MakeHolder<TWait>(OperationId);
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigure>(OperationId);
-        case TTxState::PublishTenantReadOnly:
-            return MakeHolder<TPublishTenantReadOnly>(OperationId);
-        case TTxState::PublishGlobal:
-            return MakeHolder<TPublishGlobal>(OperationId, UpgradeSubDomainDecision);
-        case TTxState::RewriteOwners:
-            return MakeHolder<TRewriteOwner>(OperationId);
-        case TTxState::PublishTenant:
-            return MakeHolder<TPublishTenant>(OperationId);
-        case TTxState::DoneMigrateTree:
-            return MakeHolder<TDoneMigrateTree>(OperationId);
-        case TTxState::DeleteTenantSS:
-            return MakeHolder<TDeleteTenantSS>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+                return MakeHolder<TWait>(OperationId);
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigure>(OperationId);
+            case TTxState::PublishTenantReadOnly:
+                return MakeHolder<TPublishTenantReadOnly>(OperationId);
+            case TTxState::PublishGlobal:
+                return MakeHolder<TPublishGlobal>(OperationId, UpgradeSubDomainDecision);
+            case TTxState::RewriteOwners:
+                return MakeHolder<TRewriteOwner>(OperationId);
+            case TTxState::PublishTenant:
+                return MakeHolder<TPublishTenant>(OperationId);
+            case TTxState::DoneMigrateTree:
+                return MakeHolder<TDoneMigrateTree>(OperationId);
+            case TTxState::DeleteTenantSS:
+                return MakeHolder<TDeleteTenantSS>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -1126,20 +1128,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;
 
         TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
         TPath path = parentPath.Child(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotDeleted()
-                .IsSubDomain()
-                .NotUnderOperation()
-                .ShardsLimit(1);
+            checks.NotEmpty().IsResolved().NotDeleted().IsSubDomain().NotUnderOperation().ShardsLimit(1);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -1157,7 +1154,10 @@ public:
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
         TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(pathId);
         if (!subDomain->IsSupportTransactions()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, "There are no sense to upgrade subdomain with out transactions support (NBS?).");
+            result->SetError(
+                NKikimrScheme::StatusSchemeError,
+                "There are no sense to upgrade subdomain with out transactions support (NBS?)."
+            );
             return result;
         }
 
@@ -1175,7 +1175,7 @@ public:
         };
 
         auto pathsInside = context.SS->ListSubTree(pathId, context.Ctx);
-        for (auto pId: pathsInside) {
+        for (auto pId : pathsInside) {
             if (pId == pathId) {
                 continue;
             }
@@ -1186,31 +1186,31 @@ public:
             }
 
             TString msg = TStringBuilder() << "Unable to upgrade subdomain"
-                                           << ", path type " << NKikimrSchemeOp::EPathType_Name(pElem->PathType) << " is forbidden to migrate"
+                                           << ", path type " << NKikimrSchemeOp::EPathType_Name(pElem->PathType)
+                                           << " is forbidden to migrate"
                                            << ", pathId: " << pId;
             result->SetError(NKikimrScheme::StatusPreconditionFailed, msg);
             return result;
         }
 
-        for (auto pId: pathsInside) {
+        for (auto pId : pathsInside) {
             if (!context.SS->LockedPaths.contains(pId)) {
                 continue;
             }
 
             auto pElem = context.SS->PathsById.at(pId);
-            TString msg = TStringBuilder() << "Unable to upgrade subdomain"
-                                           << "path under lock has been found"
-                                           << ", path id: " << pId
-                                           << ", path type: " << NKikimrSchemeOp::EPathType_Name(pElem->PathType)
-                                           << ", path state: " << NKikimrSchemeOp::EPathState_Name(pElem->PathState)
-                                           << ", locked by: " << context.SS->LockedPaths.at(pId);
+            TString msg = TStringBuilder()
+                          << "Unable to upgrade subdomain"
+                          << "path under lock has been found"
+                          << ", path id: " << pId << ", path type: " << NKikimrSchemeOp::EPathType_Name(pElem->PathType)
+                          << ", path state: " << NKikimrSchemeOp::EPathState_Name(pElem->PathState)
+                          << ", locked by: " << context.SS->LockedPaths.at(pId);
             result->SetError(NKikimrScheme::StatusMultipleModifications, msg);
             return result;
         }
 
-        TSubDomainInfo::TPtr alterData = new TSubDomainInfo(*subDomain,
-                                                            subDomain->GetPlanResolution(),
-                                                            subDomain->GetTCB());
+        TSubDomainInfo::TPtr alterData =
+            new TSubDomainInfo(*subDomain, subDomain->GetPlanResolution(), subDomain->GetTCB());
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxUpgradeSubDomain, pathId);
         txState.State = TTxState::Waiting;
@@ -1218,13 +1218,12 @@ public:
 
         // add tenant schemeshard into tx shards
         const TShardIdx shardIdx = context.SS->RegisterShardInfo(
-            TShardInfo(OperationId.GetTxId(), pathId, TTabletTypes::SchemeShard)
-                .WithBindedChannels(channelBindings));
+            TShardInfo(OperationId.GetTxId(), pathId, TTabletTypes::SchemeShard).WithBindedChannels(channelBindings)
+        );
         const TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
         txState.Shards.emplace_back(shardIdx, TTabletTypes::SchemeShard, TTxState::CreateParts);
         alterData->AddPrivateShard(shardIdx);
         subDomain->SetAlter(alterData);
-
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistUpdateNextShardIdx(db);
@@ -1232,14 +1231,16 @@ public:
         context.SS->PersistTxState(db, OperationId);
         context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
 
-        context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, shardInfo.PathId, shardInfo.CurrentTxId, shardInfo.TabletType);
+        context.SS->PersistShardMapping(
+            db, shardIdx, InvalidTabletId, shardInfo.PathId, shardInfo.CurrentTxId, shardInfo.TabletType
+        );
         context.SS->PersistChannelsBinding(db, shardIdx, shardInfo.BindedChannels);
 
         context.SS->PersistSubDomainAlter(db, pathId, *alterData);
 
         // wait all transaction inside
         auto relatedTx = context.SS->GetRelatedTransactions(pathsInside, context.Ctx);
-        for (auto otherTxId: relatedTx) {
+        for (auto otherTxId : relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
                 continue;
             }
@@ -1283,8 +1284,10 @@ public:
             Y_ABORT_UNLESS(operation->Parts.size());
 
             THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
-            TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
+            TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv =
+                (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*)new IEventHandle(
+                    context.SS->SelfId(), context.SS->SelfId(), msg.Release()
+                );
             operation->Parts.front()->HandleReply(personalEv, context);
         }
 
@@ -1297,14 +1300,12 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDecisionDone operationId#" << OperationId;
+        return TStringBuilder() << "TDecisionDone operationId#" << OperationId;
     }
 
 public:
     TDecisionDone(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
     }
 
@@ -1342,20 +1343,20 @@ class TUpgradeSubDomainDecision: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Done:
-            return MakeHolder<TDecisionDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Done:
+                return MakeHolder<TDecisionDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -1377,18 +1378,14 @@ public:
                        << " decision: " << NKikimrSchemeOp::TUpgradeSubDomain::EDecision_Name(decision)
                        << ", at tablet" << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotDeleted()
-                .IsExternalSubDomain()
-                .IsUnderOperation();
+            checks.NotEmpty().IsResolved().NotDeleted().IsExternalSubDomain().IsUnderOperation();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -1425,27 +1422,32 @@ public:
         }
 
         switch (decision) {
-        case NKikimrSchemeOp::TUpgradeSubDomain::Commit: {
-            THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>();
-            TEvPrivate::TEvCommitTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCommitTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
-            operation->Parts.front()->HandleReply(personalEv, context);
-            break;
-        }
-        case NKikimrSchemeOp::TUpgradeSubDomain::Undo: {
-            THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
-            TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
-            operation->Parts.front()->HandleReply(personalEv, context);
-            break;
-        }
-        case NKikimrSchemeOp::TUpgradeSubDomain::Invalid:
-            errStr = "Invalid task param";
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
+            case NKikimrSchemeOp::TUpgradeSubDomain::Commit: {
+                THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>();
+                TEvPrivate::TEvCommitTenantUpdate::TPtr personalEv =
+                    (TEventHandle<TEvPrivate::TEvCommitTenantUpdate>*)new IEventHandle(
+                        context.SS->SelfId(), context.SS->SelfId(), msg.Release()
+                    );
+                operation->Parts.front()->HandleReply(personalEv, context);
+                break;
+            }
+            case NKikimrSchemeOp::TUpgradeSubDomain::Undo: {
+                THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
+                TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv =
+                    (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*)new IEventHandle(
+                        context.SS->SelfId(), context.SS->SelfId(), msg.Release()
+                    );
+                operation->Parts.front()->HandleReply(personalEv, context);
+                break;
+            }
+            case NKikimrSchemeOp::TUpgradeSubDomain::Invalid:
+                errStr = "Invalid task param";
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
         }
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxUpgradeSubDomainDecision, path.Base()->PathId);
+        TTxState& txState =
+            context.SS->CreateTx(OperationId, TTxState::TxUpgradeSubDomainDecision, path.Base()->PathId);
         txState.State = TTxState::Waiting;
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -1454,8 +1456,7 @@ public:
 
         TStringBuilder errMsg;
         errMsg << "TWait ProgressState"
-               << ", dependent transaction: " << OperationId.GetTxId()
-               << ", parent transaction: " << txId
+               << ", dependent transaction: " << OperationId.GetTxId() << ", parent transaction: " << txId
                << ", at schemeshard: " << ssId;
 
         LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, errMsg);
@@ -1482,7 +1483,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -1514,10 +1515,7 @@ ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId
 
     {
         TPath::TChecker checks = path.Check();
-        checks
-            .NotEmpty()
-            .IsResolved()
-            .NotDeleted();
+        checks.NotEmpty().IsResolved().NotDeleted();
 
         if (!checks) {
             return CreateForceDropSubDomain(id, tx);
@@ -1531,7 +1529,8 @@ ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId
     return CreateForceDropSubDomain(id, tx);
 }
 
-TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     const auto& info = tx.GetSubDomain();
 
     const TString& parentPathStr = tx.GetWorkingDir();
@@ -1541,10 +1540,7 @@ TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, con
 
     {
         TPath::TChecker checks = path.Check();
-        checks
-            .NotEmpty()
-            .IsResolved()
-            .NotDeleted();
+        checks.NotEmpty().IsResolved().NotDeleted();
 
         if (!checks) {
             return {CreateAlterSubDomain(id, tx)};
@@ -1559,4 +1555,4 @@ TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, con
     return {CreateAlterSubDomain(id, tx)};
 }
 
-}
+} // namespace NKikimr::NSchemeShard

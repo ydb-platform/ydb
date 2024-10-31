@@ -24,13 +24,12 @@ template <typename T, typename TQueue, int Ev, int LogServiceId, ui32 ActivityTy
 class TOperationQueueWithTimer
     : public TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId, ActivityType>>
     , public ITimer
-    , public TOperationQueue<T, TQueue>
-{
+    , public TOperationQueue<T, TQueue> {
     using TThis = ::NKikimr::NOperationQueue::TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId, ActivityType>;
     using TActorBase = TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId, ActivityType>>;
     using TBase = TOperationQueue<T, TQueue>;
 
-    struct TEvWakeupQueue : public TEventLocal<TEvWakeupQueue, Ev> {
+    struct TEvWakeupQueue: public TEventLocal<TEvWakeupQueue, Ev> {
         TEvWakeupQueue() = default;
     };
 
@@ -40,32 +39,33 @@ private:
     TMonotonic When;
 
 public:
-    TOperationQueueWithTimer(const typename TBase::TConfig& config,
-                             typename TBase::IStarter& starter)
+    TOperationQueueWithTimer(const typename TBase::TConfig& config, typename TBase::IStarter& starter)
         : TActorBase(&TThis::StateWork)
-        , TBase(config, starter, *this)
-    {}
+        , TBase(config, starter, *this) {}
 
     template <typename TReadyQueueConfig>
-    TOperationQueueWithTimer(const typename TBase::TConfig& config,
-                             const TReadyQueueConfig& queueConfig,
-                             typename TBase::IStarter& starter)
+    TOperationQueueWithTimer(
+        const typename TBase::TConfig& config,
+        const TReadyQueueConfig& queueConfig,
+        typename TBase::IStarter& starter
+    )
         : TActorBase(&TThis::StateWork)
-        , TBase(config, queueConfig, starter, *this)
-    {}
+        , TBase(config, queueConfig, starter, *this) {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::EType(ActivityType);
     }
 
-    void Shutdown(const TActorContext &ctx) {
+    void Shutdown(const TActorContext& ctx) {
         if (LongTimerId)
             ctx.Send(LongTimerId, new TEvents::TEvPoison);
 
         TActorBase::PassAway();
     }
 
-    TDuration GetWakeupDelta() const { return When - const_cast<TThis*>(this)->Now(); }
+    TDuration GetWakeupDelta() const {
+        return When - const_cast<TThis*>(this)->Now();
+    }
 
 private:
     // ITimer, note that it is made private,
@@ -76,9 +76,12 @@ private:
 
         When = this->Now() + delta;
         auto ctx = TActorBase::ActorContext();
-        LongTimerId = CreateLongTimer(ctx, delta,
+        LongTimerId = CreateLongTimer(
+            ctx,
+            delta,
             new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue),
-            AppData(ctx)->UserPoolId);
+            AppData(ctx)->UserPoolId
+        );
 
         LOG_DEBUG_S(ctx, ServiceId,
             "Operation queue set wakeup after delta# " << delta.Seconds() << " seconds");
@@ -88,7 +91,7 @@ private:
         return AppData()->MonotonicTimeProvider->Now();
     }
 
-    void HandleWakeup(const TActorContext &ctx) {
+    void HandleWakeup(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, ServiceId, "Operation queue wakeup");
         When = {};
         LongTimerId = {};
@@ -96,13 +99,11 @@ private:
     }
 
     STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            CFunc(TEvWakeupQueue::EventType, HandleWakeup);
-        }
+        switch (ev->GetTypeRewrite()) { CFunc(TEvWakeupQueue::EventType, HandleWakeup); }
     }
 };
 
-} // NOperationQueue
+} // namespace NOperationQueue
 
 namespace NSchemeShard {
 
@@ -117,8 +118,7 @@ struct TShardCompactionInfo {
     ui64 PartCount = 0;
 
     explicit TShardCompactionInfo(const TShardIdx& id)
-        : ShardIdx(id)
-    {}
+        : ShardIdx(id) {}
 
     TShardCompactionInfo(const TShardIdx& id, const TPartitionStats& stats)
         : ShardIdx(id)
@@ -126,14 +126,13 @@ struct TShardCompactionInfo {
         , LastFullCompactionTs(stats.FullCompactionTs)
         , RowCount(stats.RowCount)
         , RowDeletes(stats.RowDeletes)
-        , PartCount(stats.PartCount)
-    {}
+        , PartCount(stats.PartCount) {}
 
     TShardCompactionInfo(const TShardCompactionInfo&) = default;
 
-    TShardCompactionInfo& operator =(const TShardCompactionInfo& rhs) = default;
+    TShardCompactionInfo& operator=(const TShardCompactionInfo& rhs) = default;
 
-    bool operator ==(const TShardCompactionInfo& rhs) const {
+    bool operator==(const TShardCompactionInfo& rhs) const {
         // note that only identity intentionally checked
         return ShardIdx == rhs.ShardIdx;
     }
@@ -169,10 +168,7 @@ struct TShardCompactionInfo {
 
     TString ToString() const {
         TStringStream ss;
-        ss << "{" << ShardIdx
-           << ", SH# " << SearchHeight
-           << ", Rows# " << RowCount
-           << ", Deletes# " << RowDeletes
+        ss << "{" << ShardIdx << ", SH# " << SearchHeight << ", Rows# " << RowCount << ", Deletes# " << RowDeletes
            << ", Compaction# " << TInstant::Seconds(LastFullCompactionTs) << "}";
         return ss.Str();
     }
@@ -213,17 +209,14 @@ public:
     };
 
 private:
-    using TCompactionQueueLastCompaction = NOperationQueue::TQueueWithPriority<
-        TShardCompactionInfo,
-        TShardCompactionInfo::TLessByCompactionTs>;
+    using TCompactionQueueLastCompaction =
+        NOperationQueue::TQueueWithPriority<TShardCompactionInfo, TShardCompactionInfo::TLessByCompactionTs>;
 
-     using TCompactionQueueSearchHeight = NOperationQueue::TQueueWithPriority<
-        TShardCompactionInfo,
-        TShardCompactionInfo::TLessBySearchHeight>;
+    using TCompactionQueueSearchHeight =
+        NOperationQueue::TQueueWithPriority<TShardCompactionInfo, TShardCompactionInfo::TLessBySearchHeight>;
 
-     using TCompactionQueueRowDeletes = NOperationQueue::TQueueWithPriority<
-        TShardCompactionInfo,
-        TShardCompactionInfo::TLessByRowDeletes>;
+    using TCompactionQueueRowDeletes =
+        NOperationQueue::TQueueWithPriority<TShardCompactionInfo, TShardCompactionInfo::TLessByRowDeletes>;
 
 private:
     TConfig Config;
@@ -244,15 +237,16 @@ public:
     TCompactionQueueImpl() = default;
 
     TCompactionQueueImpl(const TConfig& config)
-        : Config(config)
-    {}
+        : Config(config) {}
 
     void UpdateConfig(const TConfig& config) {
         if (&Config != &config)
             Config = config;
     }
 
-    const TConfig& GetConfig() const { return Config; }
+    const TConfig& GetConfig() const {
+        return Config;
+    }
 
     bool Enqueue(const TShardCompactionInfo& info) {
         // ignore empty shard (we don't check memtable, because it's up to DS to compact it),
@@ -326,70 +320,70 @@ public:
 
     const TShardCompactionInfo& Front() const {
         switch (ActiveQueue) {
-        case EActiveQueue::ByLastCompaction:
-            Y_ABORT_UNLESS(!QueueLastCompaction.Empty(), "QueueLastCompaction empty");
-            return QueueLastCompaction.Front();
-        case EActiveQueue::BySearchHeight:
-            Y_ABORT_UNLESS(!QueueSearchHeight.Empty(), "QueueSearchHeight empty");
-            return QueueSearchHeight.Front();
-        case EActiveQueue::ByRowDeletes:
-            Y_ABORT_UNLESS(!QueueRowDeletes.Empty(), "QueueRowDeletes empty");
-            return QueueRowDeletes.Front();
+            case EActiveQueue::ByLastCompaction:
+                Y_ABORT_UNLESS(!QueueLastCompaction.Empty(), "QueueLastCompaction empty");
+                return QueueLastCompaction.Front();
+            case EActiveQueue::BySearchHeight:
+                Y_ABORT_UNLESS(!QueueSearchHeight.Empty(), "QueueSearchHeight empty");
+                return QueueSearchHeight.Front();
+            case EActiveQueue::ByRowDeletes:
+                Y_ABORT_UNLESS(!QueueRowDeletes.Empty(), "QueueRowDeletes empty");
+                return QueueRowDeletes.Front();
         }
     }
 
     void PopFront() {
         const auto& front = Front();
         switch (ActiveQueue) {
-        case EActiveQueue::ByLastCompaction: {
-            QueueSearchHeight.Remove(front);
-            QueueRowDeletes.Remove(front);
-            QueueLastCompaction.PopFront();
-            break;
-        }
-        case EActiveQueue::BySearchHeight: {
-            QueueLastCompaction.Remove(front);
-            QueueRowDeletes.Remove(front);
-            QueueSearchHeight.PopFront();
-            break;
-        }
-        case EActiveQueue::ByRowDeletes: {
-            QueueLastCompaction.Remove(front);
-            QueueSearchHeight.Remove(front);
-            QueueRowDeletes.PopFront();
-            break;
-        }
+            case EActiveQueue::ByLastCompaction: {
+                QueueSearchHeight.Remove(front);
+                QueueRowDeletes.Remove(front);
+                QueueLastCompaction.PopFront();
+                break;
+            }
+            case EActiveQueue::BySearchHeight: {
+                QueueLastCompaction.Remove(front);
+                QueueRowDeletes.Remove(front);
+                QueueSearchHeight.PopFront();
+                break;
+            }
+            case EActiveQueue::ByRowDeletes: {
+                QueueLastCompaction.Remove(front);
+                QueueSearchHeight.Remove(front);
+                QueueRowDeletes.PopFront();
+                break;
+            }
         }
 
         switch (ActiveQueue) {
-        case EActiveQueue::ByLastCompaction:
+            case EActiveQueue::ByLastCompaction:
                 ActiveQueue = EActiveQueue::BySearchHeight;
                 break;
-        case EActiveQueue::BySearchHeight:
+            case EActiveQueue::BySearchHeight:
                 ActiveQueue = EActiveQueue::ByRowDeletes;
                 break;
-        case EActiveQueue::ByRowDeletes:
-            ActiveQueue = EActiveQueue::ByLastCompaction;
+            case EActiveQueue::ByRowDeletes:
+                ActiveQueue = EActiveQueue::ByLastCompaction;
         }
         UpdateActiveQueue();
     }
 
     void UpdateActiveQueue() {
         switch (ActiveQueue) {
-        case EActiveQueue::ByLastCompaction:
+            case EActiveQueue::ByLastCompaction:
             // if this queue is empty, all other queues are empty too,
             // thus no reason to do any check
-            return;
-        case EActiveQueue::BySearchHeight:
-            if (!QueueSearchHeight.Empty())
                 return;
-            ActiveQueue = EActiveQueue::ByRowDeletes;
-            [[fallthrough]];
-        case EActiveQueue::ByRowDeletes:
-            if (!QueueRowDeletes.Empty()) {
-                return;
-            }
-            ActiveQueue = EActiveQueue::ByLastCompaction;
+            case EActiveQueue::BySearchHeight:
+                if (!QueueSearchHeight.Empty())
+                    return;
+                ActiveQueue = EActiveQueue::ByRowDeletes;
+                [[fallthrough]];
+            case EActiveQueue::ByRowDeletes:
+                if (!QueueRowDeletes.Empty()) {
+                    return;
+                }
+                ActiveQueue = EActiveQueue::ByLastCompaction;
         }
     }
 
@@ -412,12 +406,12 @@ public:
     // for tests
     size_t ActiveQueueSize() const {
         switch (ActiveQueue) {
-        case EActiveQueue::ByLastCompaction:
-            return QueueLastCompaction.Size();
-        case EActiveQueue::BySearchHeight:
-            return QueueSearchHeight.Size();
-        case EActiveQueue::ByRowDeletes:
-            return QueueRowDeletes.Size();
+            case EActiveQueue::ByLastCompaction:
+                return QueueLastCompaction.Size();
+            case EActiveQueue::BySearchHeight:
+                return QueueSearchHeight.Size();
+            case EActiveQueue::ByRowDeletes:
+                return QueueRowDeletes.Size();
         }
     }
 
@@ -442,13 +436,13 @@ public:
     }
 };
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr
 
-template<>
+template <>
 inline void Out<NKikimr::NSchemeShard::TShardCompactionInfo>(
     IOutputStream& o,
-    const NKikimr::NSchemeShard::TShardCompactionInfo& info)
-{
+    const NKikimr::NSchemeShard::TShardCompactionInfo& info
+) {
     o << info.ToString();
 }

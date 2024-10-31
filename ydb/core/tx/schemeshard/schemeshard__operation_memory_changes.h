@@ -99,4 +99,4 @@ public:
     void UnDo(TSchemeShard* ss);
 };
 
-}
+} // namespace NKikimr::NSchemeShard

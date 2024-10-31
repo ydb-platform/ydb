@@ -20,23 +20,27 @@ private:
         YDB_ACCESSOR_DEF(TString, TargetTierName);
         YDB_ACCESSOR_DEF(ISnapshotSchema::TPtr, TargetScheme);
         i64 WaitDurationValue;
+
     public:
         TString DebugString() const {
-            return TStringBuilder() << "{address=" << Address.DebugString() << ";target_tier=" << TargetTierName << ";wait_duration=" << TDuration::FromValue(WaitDurationValue) << "}";
+            return TStringBuilder() << "{address=" << Address.DebugString() << ";target_tier=" << TargetTierName
+                                    << ";wait_duration=" << TDuration::FromValue(WaitDurationValue) << "}";
         }
 
         const TRWAddress& GetAddress() const {
             return Address;
         }
 
-        TFullActualizationInfo(TRWAddress&& address, const TString& targetTierName, const i64 waitDurationValue, const ISnapshotSchema::TPtr& targetScheme)
+        TFullActualizationInfo(
+            TRWAddress&& address,
+            const TString& targetTierName,
+            const i64 waitDurationValue,
+            const ISnapshotSchema::TPtr& targetScheme
+        )
             : Address(std::move(address))
             , TargetTierName(targetTierName)
             , TargetScheme(targetScheme)
-            , WaitDurationValue(waitDurationValue)
-        {
-
-        }
+            , WaitDurationValue(waitDurationValue) {}
 
         TInstant GetWaitInstant(const TInstant now) const {
             if (WaitDurationValue >= 0) {
@@ -59,6 +63,7 @@ private:
     private:
         TRWAddress RWAddress;
         YDB_READONLY_DEF(TInstant, WaitInstant);
+
     public:
         const TRWAddress& GetRWAddress() const {
             return RWAddress;
@@ -66,14 +71,13 @@ private:
 
         TFindActualizationInfo(TRWAddress&& rwAddress, const TInstant waitInstant)
             : RWAddress(std::move(rwAddress))
-            , WaitInstant(waitInstant) {
-
-        }
+            , WaitInstant(waitInstant) {}
     };
 
     class TRWAddressPortionsInfo {
     private:
         std::map<TInstant, THashSet<ui64>> Portions;
+
     public:
         const std::map<TInstant, THashSet<ui64>>& GetPortions() const {
             return Portions;
@@ -125,17 +129,20 @@ private:
 
     virtual void DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) override;
     virtual void DoRemovePortion(const ui64 portionId) override;
-    virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
+    virtual void DoExtractTasks(
+        TTieringProcessContext& tasksContext,
+        const TExternalTasksContext& externalContext,
+        TInternalTasksContext& internalContext
+    ) override;
 
 public:
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);
 
     TTieringActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
         : PathId(pathId)
-        , VersionedIndex(versionedIndex)
-    {
+        , VersionedIndex(versionedIndex) {
         Y_UNUSED(PathId);
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

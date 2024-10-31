@@ -16,7 +16,8 @@ private:
     std::shared_ptr<arrow::RecordBatch> OriginalBatch;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
     const TWritingContext Context;
-    void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
+    void
+    ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 protected:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
@@ -26,13 +27,16 @@ public:
         return "Write::ConstructBlobs::Slices";
     }
 
-    TBuildSlicesTask(const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
-        const TWritingContext& context)
+    TBuildSlicesTask(
+        const NActors::TActorId bufferActorId,
+        NEvWrite::TWriteData&& writeData,
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        const TWritingContext& context
+    )
         : WriteData(std::move(writeData))
         , TabletId(WriteData.GetWriteMeta().GetTableId())
         , BufferActorId(bufferActorId)
         , OriginalBatch(batch)
-        , Context(context) {
-    }
+        , Context(context) {}
 };
 }   // namespace NKikimr::NOlap

@@ -17,8 +17,7 @@ public:
         , ReplyTo(replyTo)
         , Cookie(cookie)
         , ShardTabletId(shardTabletId)
-        , StartKey(std::move(startKey))
-    {}
+        , StartKey(std::move(startKey)) {}
 
     void Describe(IOutputStream& o) const noexcept override {
         o << "StatisticsScan";
@@ -98,20 +97,18 @@ private:
     std::vector<std::unique_ptr<TCountMinSketch>> CountMinSketches;
 };
 
-class TDataShard::TTxHandleSafeStatisticsScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxHandleSafeStatisticsScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxHandleSafeStatisticsScan(TDataShard* self, NStat::TEvStatistics::TEvStatisticsRequest::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev))
-    {}
+        , Ev(std::move(ev)) {}
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) {
         Self->HandleSafe(Ev, ctx);
         return true;
     }
 
-    void Complete(const TActorContext&) {
-    }
+    void Complete(const TActorContext&) {}
 
 private:
     NStat::TEvStatistics::TEvStatisticsRequest::TPtr Ev;
@@ -156,12 +153,12 @@ void TDataShard::HandleSafe(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev
     auto scan = std::make_unique<TStatisticsScan>(ev->Sender, ev->Cookie, TabletID(), std::move(startKey));
 
     auto scanOptions = TScanOptions()
-        .SetResourceBroker("statistics_scan", 20)
-        .SetReadAhead(524288, 1048576)
-        .SetReadPrio(TScanOptions::EReadPrio::Low);
+                           .SetResourceBroker("statistics_scan", 20)
+                           .SetReadAhead(524288, 1048576)
+                           .SetReadPrio(TScanOptions::EReadPrio::Low);
 
     StatisticsScanTableId = tableInfo->LocalTid;
     StatisticsScanId = QueueScan(StatisticsScanTableId, scan.release(), -1, scanOptions);
 }
 
-} // NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

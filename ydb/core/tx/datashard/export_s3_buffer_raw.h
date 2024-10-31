@@ -24,8 +24,12 @@ public:
     TString GetError() const override;
 
 protected:
-    inline ui64 GetRowsLimit() const { return RowsLimit; }
-    inline ui64 GetBytesLimit() const { return BytesLimit; }
+    inline ui64 GetRowsLimit() const {
+        return RowsLimit;
+    }
+    inline ui64 GetBytesLimit() const {
+        return BytesLimit;
+    }
 
     bool Collect(const NTable::IScan::TRow& row, IOutputStream& out);
     virtual TMaybe<TBuffer> Flush(bool prepare);
@@ -45,7 +49,7 @@ protected:
     TString ErrorString;
 }; // TS3BufferRaw
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

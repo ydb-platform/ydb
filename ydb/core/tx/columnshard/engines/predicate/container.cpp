@@ -3,7 +3,8 @@
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
-std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {
+std::partial_ordering
+TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {
     Y_ABORT_UNLESS(l.Batch);
     Y_ABORT_UNLESS(r.Batch);
     Y_ABORT_UNLESS(l.Batch->num_columns());
@@ -116,16 +117,20 @@ bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) {
 }
 
 TConclusion<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredicateFrom(
-    std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::shared_ptr<NOlap::TPredicate> object,
+    const std::shared_ptr<arrow::Schema>& pkSchema
+) {
     if (!object || object->Empty()) {
         return TPredicateContainer(NArrow::ECompareType::GREATER_OR_EQUAL);
     } else {
         if (!object->Good()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not good 'from' predicate");
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+            ("event", "add_range_filter")("problem", "not good 'from' predicate");
             return TConclusionStatus::Fail("not good 'from' predicate");
         }
         if (!object->IsFrom()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "'from' predicate not is from");
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+            ("event", "add_range_filter")("problem", "'from' predicate not is from");
             return TConclusionStatus::Fail("'from' predicate not is from");
         }
         if (pkSchema) {
@@ -138,23 +143,28 @@ TConclusion<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredi
                     break;
                 }
             }
-            AFL_VERIFY(countSortingFields == object->Batch->num_columns())("count", countSortingFields)("object", object->Batch->num_columns());
+            AFL_VERIFY(countSortingFields == object->Batch->num_columns())
+            ("count", countSortingFields)("object", object->Batch->num_columns());
         }
         return TPredicateContainer(object, pkSchema ? ExtractKey(*object, pkSchema) : nullptr);
     }
 }
 
 TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(
-    std::shared_ptr<TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::shared_ptr<TPredicate> object,
+    const std::shared_ptr<arrow::Schema>& pkSchema
+) {
     if (!object || object->Empty()) {
         return TPredicateContainer(NArrow::ECompareType::LESS_OR_EQUAL);
     } else {
         if (!object->Good()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not good 'to' predicate");
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+            ("event", "add_range_filter")("problem", "not good 'to' predicate");
             return TConclusionStatus::Fail("not good 'to' predicate");
         }
         if (!object->IsTo()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "'to' predicate not is to");
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)
+            ("event", "add_range_filter")("problem", "'to' predicate not is to");
             return TConclusionStatus::Fail("'to' predicate not is to");
         }
         if (pkSchema) {
@@ -173,4 +183,4 @@ TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(
     }
 }
 
-}
+} // namespace NKikimr::NOlap

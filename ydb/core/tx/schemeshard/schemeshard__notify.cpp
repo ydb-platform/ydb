@@ -7,16 +7,15 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxNotifyCompletion: public TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvNotifyTxCompletion::TPtr Ev;
     TAutoPtr<IEventBase> Result;
 
-    TTxNotifyCompletion(TSelf *self, TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev)
+    TTxNotifyCompletion(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletion::TPtr& ev)
         : TRwTxBase(self)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
         Y_UNUSED(ctx);
         auto rawTxId = Ev->Get()->Record.GetTxId();
@@ -95,7 +94,8 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
 
             importInfo->AddNotifySubscriber(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
-        } else if (const auto txId = TIndexBuildId(rawTxId); const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(txId)) {
+        } else if (const auto txId = TIndexBuildId(rawTxId);
+                   const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(txId)) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "NotifyTxCompletion"
                             << " index build in-flight"
@@ -131,15 +131,18 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                        << ", at schemeshard: " << Self->TabletID());
     }
 
-    void DoComplete(const TActorContext &ctx) override {
+    void DoComplete(const TActorContext& ctx) override {
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release());
         }
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxNotifyTxCompletion(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxNotifyTxCompletion(
+    TEvSchemeShard::TEvNotifyTxCompletion::TPtr& ev
+) {
     return new TTxNotifyCompletion(this, ev);
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

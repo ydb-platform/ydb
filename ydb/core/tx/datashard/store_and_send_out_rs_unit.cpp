@@ -8,49 +8,38 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TStoreAndSendOutRSUnit : public TExecutionUnit {
+class TStoreAndSendOutRSUnit: public TExecutionUnit {
 public:
-    TStoreAndSendOutRSUnit(TDataShard &dataShard,
-                           TPipeline &pipeline);
+    TStoreAndSendOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TStoreAndSendOutRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TStoreAndSendOutRSUnit::TStoreAndSendOutRSUnit(TDataShard &dataShard,
-                                               TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::StoreAndSendOutRS, false, dataShard, pipeline)
-{
-}
+TStoreAndSendOutRSUnit::TStoreAndSendOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::StoreAndSendOutRS, false, dataShard, pipeline) {}
 
-TStoreAndSendOutRSUnit::~TStoreAndSendOutRSUnit()
-{
-}
+TStoreAndSendOutRSUnit::~TStoreAndSendOutRSUnit() {}
 
-bool TStoreAndSendOutRSUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TStoreAndSendOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
-                                                 TTransactionContext &txc,
-                                                 const TActorContext &ctx)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+EExecutionStatus
+TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     bool newArtifact = false;
     // TODO: move artifact flags into operation flags.
     if (!tx->IsOutRSStored() && !op->OutReadSets().empty()) {
-        DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(),
-                                            op->PreparedOutReadSets(), txc, ctx);
+        DataShard.PrepareAndSaveOutReadSets(
+            op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx
+        );
         tx->MarkOutRSStored();
         newArtifact = true;
     }
@@ -88,16 +77,12 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TStoreAndSendOutRSUnit::Complete(TOperation::TPtr op,
-                                      const TActorContext &ctx)
-{
+void TStoreAndSendOutRSUnit::Complete(TOperation::TPtr op, const TActorContext& ctx) {
     if (!op->PreparedOutReadSets().empty())
         DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
 }
 
-THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard,
-                                                    TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TStoreAndSendOutRSUnit(dataShard, pipeline));
 }
 

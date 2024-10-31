@@ -42,4 +42,4 @@ void IBlobsStorageOperator::Stop() {
     Stopped = true;
 }
 
-}
+} // namespace NKikimr::NOlap

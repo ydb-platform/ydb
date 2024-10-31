@@ -17,10 +17,12 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
-                                               const NKikimrSchemeOp::TPersQueueGroupDescription& op,
-                                               TEvSchemeShard::EStatus& status, TString& errStr)
-{
+TTopicInfo::TPtr CreatePersQueueGroup(
+    TOperationContext& context,
+    const NKikimrSchemeOp::TPersQueueGroupDescription& op,
+    TEvSchemeShard::EStatus& status,
+    TString& errStr
+) {
     TTopicInfo::TPtr pqGroupInfo = new TTopicInfo;
 
     ui32 partitionCount = 0;
@@ -53,7 +55,11 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (op.HasPQTabletConfig() && op.GetPQTabletConfig().HasPartitionStrategy()) {
         const auto strategy = op.GetPQTabletConfig().GetPartitionStrategy();
         if (strategy.GetMaxPartitionCount() < strategy.GetMinPartitionCount()) {
-            errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
+            errStr = Sprintf(
+                "Invalid min and max partition count specified: %u > %u",
+                strategy.GetMinPartitionCount(),
+                strategy.GetMaxPartitionCount()
+            );
             return nullptr;
         }
     }
@@ -64,11 +70,14 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() > TSchemeShard::MaxPQWriteSpeedPerPartition) {
+    if ((ui32)op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() >
+        TSchemeShard::MaxPQWriteSpeedPerPartition) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = TStringBuilder() << "Invalid write speed"
-            << ": specified: " << op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond() << "bps"
-            << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps";
+                                  << ": specified: "
+                                  << op.GetPQTabletConfig().GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
+                                  << "bps"
+                                  << ", max: " << TSchemeShard::MaxPQWriteSpeedPerPartition << "bps";
         return nullptr;
     }
 
@@ -76,17 +85,20 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     if (lifetimeSeconds <= 0 || (ui32)lifetimeSeconds > TSchemeShard::MaxPQLifetimeSeconds) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = TStringBuilder() << "Invalid retention period"
-            << ": specified: " << lifetimeSeconds << "s"
-            << ", min: " << 1 << "s"
-            << ", max: " << TSchemeShard::MaxPQLifetimeSeconds << "s";
+                                  << ": specified: " << lifetimeSeconds << "s"
+                                  << ", min: " << 1 << "s"
+                                  << ", max: " << TSchemeShard::MaxPQLifetimeSeconds << "s";
         return nullptr;
     }
 
     if (op.GetPQTabletConfig().PartitionKeySchemaSize()) {
         if (op.PartitionBoundariesSize() != (partitionCount - 1)) {
             status = NKikimrScheme::StatusInvalidParameter;
-            errStr = Sprintf("Partition count and partition boundaries size mismatch: %lu, %u",
-                op.PartitionBoundariesSize(), partitionCount);
+            errStr = Sprintf(
+                "Partition count and partition boundaries size mismatch: %lu, %u",
+                op.PartitionBoundariesSize(),
+                partitionCount
+            );
             return nullptr;
         }
 
@@ -104,7 +116,8 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
+    bool splitMergeEnabled =
+        AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
@@ -123,8 +136,16 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                     TVector<TCell> cells;
                     TString error;
                     TVector<TString> memoryOwner;
-                    if (!NMiniKQL::CellsFromTuple(nullptr, op.GetPartitionBoundaries(i), pqGroupInfo->KeySchema, {},
-                                                  false, cells, error, memoryOwner)) {
+                    if (!NMiniKQL::CellsFromTuple(
+                            nullptr,
+                            op.GetPartitionBoundaries(i),
+                            pqGroupInfo->KeySchema,
+                            {},
+                            false,
+                            cells,
+                            error,
+                            memoryOwner
+                        )) {
                         status = NKikimrScheme::StatusSchemeError;
                         errStr = Sprintf("Invalid partition boundary at position: %u, error: %s", i, error.data());
                         return nullptr;
@@ -198,13 +219,15 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     return pqGroupInfo;
 }
 
-void ApplySharding(TTxId txId,
-                   TPathId pathId,
-                   TTopicInfo::TPtr pqGroup,
-                   TTxState& txState,
-                   const TChannelsBindings& rbBindedChannels,
-                   const TChannelsBindings& pqBindedChannels,
-                   TSchemeShard* ss) {
+void ApplySharding(
+    TTxId txId,
+    TPathId pathId,
+    TTopicInfo::TPtr pqGroup,
+    TTxState& txState,
+    const TChannelsBindings& rbBindedChannels,
+    const TChannelsBindings& pqBindedChannels,
+    TSchemeShard* ss
+) {
     pqGroup->AlterVersion = 0;
     TShardInfo shardInfo = TShardInfo::PersQShardInfo(txId, pathId);
     shardInfo.BindedChannels = pqBindedChannels;
@@ -223,9 +246,7 @@ void ApplySharding(TTxId txId,
     }
 
     const auto idx = ss->NextShardIdx(startShardIdx, count);
-    ss->RegisterShardInfo(idx,
-        TShardInfo::PQBalancerShardInfo(txId, pathId)
-            .WithBindedChannels(rbBindedChannels));
+    ss->RegisterShardInfo(idx, TShardInfo::PQBalancerShardInfo(txId, pathId).WithBindedChannels(rbBindedChannels));
     txState.Shards.emplace_back(idx, ETabletType::PersQueueReadBalancer, TTxState::CreateParts);
     pqGroup->BalancerShardIdx = idx;
 
@@ -252,31 +273,31 @@ class TCreatePQ: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<NPQState::TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<NPQState::TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<NPQState::TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<NPQState::TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -309,8 +330,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -319,13 +339,10 @@ public:
 
             if (checks) {
                 if (parentPath.Base()->IsCdcStream()) {
-                    checks
-                        .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                    checks.IsUnderCreating(NKikimrScheme::StatusNameConflict)
                         .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else {
-                    checks
-                        .IsCommonSensePath()
-                        .IsLikeDirectory();
+                    checks.IsCommonSensePath().IsLikeDirectory();
                 }
             }
 
@@ -342,23 +359,15 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypePersQueueGroup, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypePersQueueGroup, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .IsValidACL(acl);
+                checks.IsValidLeafName().DepthLimit().PathsLimit().DirChildrenLimit().IsValidACL(acl);
             }
 
             if (!checks) {
@@ -378,8 +387,7 @@ public:
             return result;
         }
 
-        TTopicInfo::TPtr pqGroup = CreatePersQueueGroup(
-            context, createDEscription, status, errStr);
+        TTopicInfo::TPtr pqGroup = CreatePersQueueGroup(context, createDEscription, status, errStr);
 
         if (!pqGroup.Get()) {
             result->SetError(status, errStr);
@@ -400,8 +408,7 @@ public:
 
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
-            checks
-                .ShardsLimit(shardsToCreate)
+            checks.ShardsLimit(shardsToCreate)
                 .PathShardsLimit(shardsToCreate)
                 .PQPartitionsLimit(partitionsToCreate)
                 .PQReservedStorageLimit(reserve.Storage);
@@ -422,8 +429,10 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.GetPathIdForDomain(), tabletChannelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
+            result->SetError(
+                NKikimrScheme::StatusInvalidParameter,
+                "Unable to construct channel binding for PQ with the storage pool"
+            );
             return result;
         }
 
@@ -435,9 +444,11 @@ public:
             const auto& ecps = partConfig.GetExplicitChannelProfiles();
 
             if (ecps.size() < 3 || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
-                auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
-                                    ecps.size(),
-                                    NHive::MAX_TABLET_CHANNELS);
+                auto errStr = Sprintf(
+                    "ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
+                    ecps.size(),
+                    NHive::MAX_TABLET_CHANNELS
+                );
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
@@ -449,12 +460,13 @@ public:
             }
 
             const auto resolved = context.SS->ResolveChannelsByPoolKinds(
-                partitionPoolKinds,
-                dstPath.GetPathIdForDomain(),
-                pqChannelsBinding);
+                partitionPoolKinds, dstPath.GetPathIdForDomain(), pqChannelsBinding
+            );
             if (!resolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "Unable to construct channel binding for PersQueue with the storage pool"
+                );
                 return result;
             }
 
@@ -472,7 +484,9 @@ public:
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreatePQGroup, pathId);
 
-        ApplySharding(OperationId.GetTxId(), pathId, pqGroup, txState, tabletChannelsBinding, pqChannelsBinding, context.SS);
+        ApplySharding(
+            OperationId.GetTxId(), pathId, pqGroup, txState, tabletChannelsBinding, pqChannelsBinding, context.SS
+        );
 
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;
@@ -507,7 +521,8 @@ public:
         dstPath.Base()->PathType = TPathElement::EPathType::EPathTypePersQueueGroup;
 
         if (parentPath.Base()->HasActiveChanges()) {
-            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+            TTxId parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -581,7 +596,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -594,4 +609,4 @@ ISubOperation::TPtr CreateNewPQ(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreatePQ>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

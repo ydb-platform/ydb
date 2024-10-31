@@ -4,7 +4,8 @@
 
 namespace NKikimr::NSchemeShard {
 
-TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
+TConclusion<TOlapStoreInfo::TLayoutInfo>
+TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
     auto result = DoLayout(currentLayout, shardsCount);
     if (result.IsFail()) {
         return result;
@@ -13,10 +14,15 @@ TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::ILayoutPolicy::Layout(c
     return result;
 }
 
-TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
+TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(
+    const TColumnTablesLayout& currentLayout,
+    const ui32 shardsCount
+) const {
     for (auto&& i : currentLayout.GetGroups()) {
         if (i.GetTableIds().Size() == 0 && i.GetShardIds().size() >= shardsCount) {
-            return TOlapStoreInfo::TLayoutInfo(std::vector<ui64>(i.GetShardIds().begin(), std::next(i.GetShardIds().begin(), shardsCount)), true);
+            return TOlapStoreInfo::TLayoutInfo(
+                std::vector<ui64>(i.GetShardIds().begin(), std::next(i.GetShardIds().begin(), shardsCount)), true
+            );
         }
         if (i.GetShardIds().size() != shardsCount) {
             continue;
@@ -26,7 +32,10 @@ TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TIdentityGroupsLayout::
     return TConclusionStatus::Fail("cannot find appropriate group for " + ::ToString(shardsCount) + " shards");
 }
 
-TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const {
+TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(
+    const TColumnTablesLayout& currentLayout,
+    const ui32 shardsCount
+) const {
     bool isNewGroup = true;
     std::vector<ui64> resultLocal;
     for (auto&& i : currentLayout.GetGroups()) {
@@ -46,18 +55,20 @@ TConclusion<TOlapStoreInfo::TLayoutInfo> TOlapStoreInfo::TMinimalTablesCountLayo
 TOlapStoreInfo::TOlapStoreInfo(
     ui64 alterVersion,
     NKikimrSchemeOp::TColumnStoreSharding&& sharding,
-    TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody)
+    TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody
+)
     : AlterVersion(alterVersion)
     , Sharding(std::move(sharding))
     , AlterBody(std::move(alterBody)) {
     for (const auto& shardIdx : Sharding.GetColumnShards()) {
-        ColumnShards.push_back(TShardIdx(
-            TOwnerId(shardIdx.GetOwnerId()),
-            TLocalShardIdx(shardIdx.GetLocalId())));
+        ColumnShards.push_back(TShardIdx(TOwnerId(shardIdx.GetOwnerId()), TLocalShardIdx(shardIdx.GetLocalId())));
     }
 }
 
-TOlapStoreInfo::TPtr TOlapStoreInfo::BuildStoreWithAlter(const TOlapStoreInfo& initialStore, const NKikimrSchemeOp::TAlterColumnStore& alterBody) {
+TOlapStoreInfo::TPtr TOlapStoreInfo::BuildStoreWithAlter(
+    const TOlapStoreInfo& initialStore,
+    const NKikimrSchemeOp::TAlterColumnStore& alterBody
+) {
     TOlapStoreInfo::TPtr alterData = std::make_shared<TOlapStoreInfo>(initialStore);
     alterData->AlterVersion++;
     alterData->AlterBody.ConstructInPlace(alterBody);
@@ -94,7 +105,11 @@ void TOlapStoreInfo::ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescrip
     SerializeDescription(Description);
 }
 
-bool TOlapStoreInfo::UpdatePreset(const TString& presetName, const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
+bool TOlapStoreInfo::UpdatePreset(
+    const TString& presetName,
+    const TOlapSchemaUpdate& schemaUpdate,
+    IErrorCollector& errors
+) {
     const ui32 presetId = SchemaPresetByName.at(presetName);
     auto& currentPreset = SchemaPresets.at(presetId);
     if (!currentPreset.Update(schemaUpdate, errors)) {
@@ -109,7 +124,10 @@ bool TOlapStoreInfo::UpdatePreset(const TString& presetName, const TOlapSchemaUp
     return true;
 }
 
-bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors) {
+bool TOlapStoreInfo::ParseFromRequest(
+    const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto,
+    IErrorCollector& errors
+) {
     AlterVersion = 1;
     if (descriptionProto.GetRESERVED_MetaShardCount() != 0) {
         errors.AddError("trying to create OLAP store with meta shards (not supported yet)");
@@ -146,7 +164,10 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
             return false;
         }
         if (SchemaPresets.contains(NextSchemaPresetId) || SchemaPresetByName.contains(preset.GetName())) {
-            errors.AddError(TStringBuilder() << "Duplicate schema preset " << NextSchemaPresetId << " with name '" << preset.GetName() << "'");
+            errors.AddError(
+                TStringBuilder() << "Duplicate schema preset " << NextSchemaPresetId << " with name '"
+                                 << preset.GetName() << "'"
+            );
             return false;
         }
         preset.SetId(NextSchemaPresetId++);
@@ -187,4 +208,4 @@ TOlapStoreInfo::ILayoutPolicy::TPtr TOlapStoreInfo::GetTablesLayoutPolicy() cons
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

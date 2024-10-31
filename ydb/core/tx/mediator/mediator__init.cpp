@@ -8,20 +8,21 @@ namespace NTxMediator {
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
 
-struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
+struct TTxMediator::TTxInit: public TTransactionBase<TTxMediator> {
     ui64 Version;
     TVector<TCoordinatorId> Coordinators;
     ui32 TimeCastBuketsPerMediator;
 
-    TTxInit(TSelf *mediator)
+    TTxInit(TSelf* mediator)
         : TBase(mediator)
         , Version(0)
-        , TimeCastBuketsPerMediator(0)
-    {}
+        , TimeCastBuketsPerMediator(0) {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
         auto rowset = db.Table<Schema::DomainConfiguration>().Range().Select();
@@ -47,8 +48,8 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
         return true;
     }
 
-    bool IsTabletInStaticDomain(const TAppData *appdata) {
-        for (auto domainMediatorId: appdata->DomainsInfo->GetDomain()->Mediators) {
+    bool IsTabletInStaticDomain(const TAppData* appdata) {
+        for (auto domainMediatorId : appdata->DomainsInfo->GetDomain()->Mediators) {
             if (Self->TabletID() == domainMediatorId) {
                 return true;
             }
@@ -57,7 +58,7 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
         return false;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         if (Coordinators.size()) {
             LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR
                        , "tablet# " << Self->TabletID()
@@ -93,5 +94,5 @@ ITransaction* TTxMediator::CreateTxInit() {
     return new TTxMediator::TTxInit(this);
 }
 
-}
-}
+} // namespace NTxMediator
+} // namespace NKikimr

@@ -7,7 +7,10 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
-    const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
+    const TVersionedIndex* vIndex,
+    const NKikimrTxDataShard::TEvKqpScan& proto,
+    TReadDescription& read
+) const {
     AFL_VERIFY(vIndex);
     auto& indexInfo = vIndex->GetSchema(Snapshot)->GetIndexInfo();
     TIndexColumnResolver columnResolver(indexInfo);
@@ -20,7 +23,9 @@ std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const N
 }
 
 NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
-    const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+    const NColumnShard::TColumnShard* self,
+    const TReadDescription& read
+) const {
     auto& insertTable = self->InsertTable;
     auto& index = self->TablesManager.GetPrimaryIndex();
     if (!insertTable || !index) {
@@ -28,14 +33,21 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     }
 
     if (read.GetSnapshot().GetPlanInstant() < self->GetMinReadSnapshot().GetPlanInstant()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
-                                                        << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
+        return TConclusionStatus::Fail(
+            TStringBuilder() << "Snapshot too old: " << read.GetSnapshot()
+                             << ". CS min read snapshot: " << self->GetMinReadSnapshot() << ". now: " << TInstant::Now()
+        );
     }
 
     TDataStorageAccessor dataAccessor(insertTable, index);
     AFL_VERIFY(read.PathId);
-    auto readMetadata = std::make_shared<TReadMetadata>(read.PathId, index->CopyVersionedIndexPtr(), read.GetSnapshot(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram());
+    auto readMetadata = std::make_shared<TReadMetadata>(
+        read.PathId,
+        index->CopyVersionedIndexPtr(),
+        read.GetSnapshot(),
+        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
+        read.GetProgram()
+    );
 
     auto initResult = readMetadata->Init(self, read, dataAccessor);
     if (!initResult) {

@@ -5,20 +5,23 @@
 namespace NKikimr {
 namespace NDataShard {
 
-TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev)
+TDirectTransaction::TDirectTransaction(
+    TInstant receivedAt,
+    ui64 tieBreakerIndex,
+    TEvDataShard::TEvUploadRowsRequest::TPtr& ev
+)
     : TOperation(TBasicOpInfo(EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
-    , Impl(new TDirectTxUpload(ev))
-{
-}
+    , Impl(new TDirectTxUpload(ev)) {}
 
-TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
+TDirectTransaction::TDirectTransaction(
+    TInstant receivedAt,
+    ui64 tieBreakerIndex,
+    TEvDataShard::TEvEraseRowsRequest::TPtr& ev
+)
     : TOperation(TBasicOpInfo(EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
-    , Impl(new TDirectTxErase(ev))
-{
-}
+    , Impl(new TDirectTxErase(ev)) {}
 
-void TDirectTransaction::BuildExecutionPlan(bool loaded)
-{
+void TDirectTransaction::BuildExecutionPlan(bool loaded) {
     Y_ABORT_UNLESS(GetExecutionPlan().empty());
     Y_ABORT_UNLESS(!loaded);
 
@@ -65,5 +68,5 @@ TVector<IDataShardChangeCollector::TChange> TDirectTransaction::GetCollectedChan
     return Impl->GetCollectedChanges();
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

@@ -8,9 +8,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 namespace {
-void PrintDepTx(const TOperation *op,
-                IOutputStream &os)
-{
+void PrintDepTx(const TOperation* op, IOutputStream& os) {
     os << " " << op->GetTxId();
     if (op->IsWaitingDependencies())
         os << "(W)";
@@ -20,21 +18,16 @@ void PrintDepTx(const TOperation *op,
         os << "(C)";
 }
 
-void PrintDeps(const TOperation *op,
-               IOutputStream &os)
-{
+void PrintDeps(const TOperation* op, IOutputStream& os) {
     os << "OPERATION " << *op << " DEPS IN";
-    for (auto &dep: op->GetDependencies())
-        PrintDepTx(dep.Get(), os);
+    for (auto& dep : op->GetDependencies()) PrintDepTx(dep.Get(), os);
     os << " OUT";
-    for (auto &dep: op->GetDependents())
-        PrintDepTx(dep.Get(), os);
+    for (auto& dep : op->GetDependents()) PrintDepTx(dep.Get(), os);
     os << Endl;
 }
-}
+} // namespace
 
-void TBasicOpInfo::Serialize(NKikimrTxDataShard::TBasicOpInfo &info) const
-{
+void TBasicOpInfo::Serialize(NKikimrTxDataShard::TBasicOpInfo& info) const {
     info.SetTxId(GetTxId());
     info.SetStep(Step);
     info.SetKind(ToString(Kind));
@@ -49,16 +42,12 @@ void TBasicOpInfo::Serialize(NKikimrTxDataShard::TBasicOpInfo &info) const
 
 NMiniKQL::IEngineFlat::TValidationInfo TOperation::EmptyKeysInfo;
 
-void TOperation::AddInReadSet(const NKikimrTx::TEvReadSet& rs)
-{
+void TOperation::AddInReadSet(const NKikimrTx::TEvReadSet& rs) {
     AddInReadSet(TReadSetKey(rs), rs.GetBalanceTrackList(), rs.GetReadSet());
 }
 
 // Adjust incomplete readsets counter (track incapsulates logic required to handle merge/split of datashards)
-void TOperation::AddInReadSet(const TReadSetKey &rsKey,
-                              const NKikimrTx::TBalanceTrackList &btList,
-                              TString readSet)
-{
+void TOperation::AddInReadSet(const TReadSetKey& rsKey, const NKikimrTx::TBalanceTrackList& btList, TString readSet) {
     auto it = CoverageBuilders().find(std::make_pair(rsKey.From, rsKey.To));
     if (it != CoverageBuilders().end()) {
         if (it->second->AddResult(btList)) {
@@ -78,7 +67,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
     }
 }
 
-void TOperation::AddDependency(const TOperation::TPtr &op) {
+void TOperation::AddDependency(const TOperation::TPtr& op) {
     Y_ABORT_UNLESS(this != op.Get());
 
     if (Dependencies.insert(op).second) {
@@ -86,7 +75,7 @@ void TOperation::AddDependency(const TOperation::TPtr &op) {
     }
 }
 
-void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
+void TOperation::AddSpecialDependency(const TOperation::TPtr& op) {
     Y_ABORT_UNLESS(this != op.Get());
 
     if (SpecialDependencies.insert(op).second) {
@@ -94,14 +83,12 @@ void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
     }
 }
 
-void TOperation::AddImmediateConflict(const TOperation::TPtr &op) {
+void TOperation::AddImmediateConflict(const TOperation::TPtr& op) {
     Y_ABORT_UNLESS(this != op.Get());
     Y_DEBUG_ABORT_UNLESS(!IsImmediate());
     Y_DEBUG_ABORT_UNLESS(op->IsImmediate());
 
-    if (HasFlag(TTxFlags::BlockingImmediateOps) ||
-        HasFlag(TTxFlags::BlockingImmediateWrites) && !op->IsReadOnly())
-    {
+    if (HasFlag(TTxFlags::BlockingImmediateOps) || HasFlag(TTxFlags::BlockingImmediateWrites) && !op->IsReadOnly()) {
         return op->AddDependency(this);
     }
 
@@ -136,7 +123,7 @@ void TOperation::PromoteImmediateWriteConflicts() {
 }
 
 void TOperation::ClearDependents() {
-    for (auto &op : Dependents) {
+    for (auto& op : Dependents) {
         Y_DEBUG_ABORT_UNLESS(op->Dependencies.contains(this));
         op->Dependencies.erase(this);
     }
@@ -144,7 +131,7 @@ void TOperation::ClearDependents() {
 }
 
 void TOperation::ClearDependencies() {
-    for (auto &op : Dependencies) {
+    for (auto& op : Dependencies) {
         Y_DEBUG_ABORT_UNLESS(op->Dependents.contains(this));
         op->Dependents.erase(this);
     }
@@ -152,7 +139,7 @@ void TOperation::ClearDependencies() {
 }
 
 void TOperation::ClearSpecialDependents() {
-    for (auto &op : SpecialDependents) {
+    for (auto& op : SpecialDependents) {
         Y_DEBUG_ABORT_UNLESS(op->SpecialDependencies.contains(this));
         op->SpecialDependencies.erase(this);
     }
@@ -160,7 +147,7 @@ void TOperation::ClearSpecialDependents() {
 }
 
 void TOperation::ClearSpecialDependencies() {
-    for (auto &op : SpecialDependencies) {
+    for (auto& op : SpecialDependencies) {
         Y_DEBUG_ABORT_UNLESS(op->SpecialDependents.contains(this));
         op->SpecialDependents.erase(this);
     }
@@ -168,7 +155,7 @@ void TOperation::ClearSpecialDependencies() {
 }
 
 void TOperation::ClearPlannedConflicts() {
-    for (auto &op : PlannedConflicts) {
+    for (auto& op : PlannedConflicts) {
         Y_DEBUG_ABORT_UNLESS(op->ImmediateConflicts.contains(this));
         op->ImmediateConflicts.erase(this);
     }
@@ -176,14 +163,14 @@ void TOperation::ClearPlannedConflicts() {
 }
 
 void TOperation::ClearImmediateConflicts() {
-    for (auto &op : ImmediateConflicts) {
+    for (auto& op : ImmediateConflicts) {
         Y_DEBUG_ABORT_UNLESS(op->PlannedConflicts.contains(this));
         op->PlannedConflicts.erase(this);
     }
     ImmediateConflicts.clear();
 }
 
-void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
+void TOperation::AddRepeatableReadConflict(const TOperation::TPtr& op) {
     Y_ABORT_UNLESS(this != op.Get());
     Y_DEBUG_ABORT_UNLESS(IsImmediate());
     Y_DEBUG_ABORT_UNLESS(!op->IsImmediate());
@@ -229,27 +216,23 @@ void TOperation::RemoveVolatileDependency(ui64 txId, bool success) {
     }
 }
 
-TString TOperation::DumpDependencies() const
-{
+TString TOperation::DumpDependencies() const {
     TStringStream ss;
     PrintDeps(this, ss);
     return ss.Str();
 }
 
-EExecutionUnitKind TOperation::GetCurrentUnit() const
-{
+EExecutionUnitKind TOperation::GetCurrentUnit() const {
     if (IsExecutionPlanFinished())
         return EExecutionUnitKind::Unspecified;
     return ExecutionPlan[CurrentUnit];
 }
 
-const TVector<EExecutionUnitKind> &TOperation::GetExecutionPlan() const
-{
+const TVector<EExecutionUnitKind>& TOperation::GetExecutionPlan() const {
     return ExecutionPlan;
 }
 
-void TOperation::RewriteExecutionPlan(const TVector<EExecutionUnitKind> &plan)
-{
+void TOperation::RewriteExecutionPlan(const TVector<EExecutionUnitKind>& plan) {
     if (IsExecutionPlanFinished())
         ExecutionProfile.StartUnitAt = AppData()->TimeProvider->Now();
     else
@@ -257,8 +240,7 @@ void TOperation::RewriteExecutionPlan(const TVector<EExecutionUnitKind> &plan)
     ExecutionPlan.insert(ExecutionPlan.end(), plan.begin(), plan.end());
 }
 
-void TOperation::RewriteExecutionPlan(EExecutionUnitKind unit)
-{
+void TOperation::RewriteExecutionPlan(EExecutionUnitKind unit) {
     if (IsExecutionPlanFinished())
         ExecutionProfile.StartUnitAt = AppData()->TimeProvider->Now();
     else
@@ -266,18 +248,16 @@ void TOperation::RewriteExecutionPlan(EExecutionUnitKind unit)
     ExecutionPlan.push_back(unit);
 }
 
-bool TOperation::IsExecutionPlanFinished() const
-{
+bool TOperation::IsExecutionPlanFinished() const {
     return CurrentUnit >= ExecutionPlan.size();
 }
 
-void TOperation::AdvanceExecutionPlan()
-{
+void TOperation::AdvanceExecutionPlan() {
     TInstant now = AppData()->TimeProvider->Now();
-    auto &profile = ExecutionProfile.UnitProfiles[ExecutionPlan[CurrentUnit]];
+    auto& profile = ExecutionProfile.UnitProfiles[ExecutionPlan[CurrentUnit]];
 
-    profile.WaitTime = now - ExecutionProfile.StartUnitAt - profile.ExecuteTime
-        - profile.CommitTime - profile.CompleteTime - profile.DelayedCommitTime;
+    profile.WaitTime = now - ExecutionProfile.StartUnitAt - profile.ExecuteTime - profile.CommitTime -
+                       profile.CompleteTime - profile.DelayedCommitTime;
 
     Y_ABORT_UNLESS(!IsExecutionPlanFinished());
     ++CurrentUnit;
@@ -285,53 +265,45 @@ void TOperation::AdvanceExecutionPlan()
     ExecutionProfile.StartUnitAt = now;
 }
 
-void TOperation::Abort()
-{
+void TOperation::Abort() {
     SetAbortedFlag();
 }
 
-void TOperation::Abort(EExecutionUnitKind unit)
-{
+void TOperation::Abort(EExecutionUnitKind unit) {
     SetAbortedFlag();
     RewriteExecutionPlan(unit);
 }
 
-TString TOperation::ExecutionProfileLogString(ui64 tabletId) const
-{
+TString TOperation::ExecutionProfileLogString(ui64 tabletId) const {
     TStringStream ss;
     ss << "Execution profile for slow op " << *this << " at " << tabletId
        << " (W - Wait, E - Execution, C - commit, CP - Complete):";
-    for (auto &unit : ExecutionPlan) {
+    for (auto& unit : ExecutionPlan) {
         if (ExecutionProfile.UnitProfiles.contains(unit)) {
-            auto &profile = ExecutionProfile.UnitProfiles.at(unit);
-            ss << " " << unit << " W:" << profile.WaitTime
-               << " E:" << profile.ExecuteTime << " C:" << profile.CommitTime
-               << " CP:" << profile.CompleteTime;
+            auto& profile = ExecutionProfile.UnitProfiles.at(unit);
+            ss << " " << unit << " W:" << profile.WaitTime << " E:" << profile.ExecuteTime
+               << " C:" << profile.CommitTime << " CP:" << profile.CompleteTime;
         }
     }
     return ss.Str();
 }
 
-bool TOperation::HasRuntimeConflicts() const noexcept
-{
+bool TOperation::HasRuntimeConflicts() const noexcept {
     // We may acquire some new dependencies at runtime
     return !Dependencies.empty() || !VolatileDependencies.empty();
 }
 
-void TOperation::SetFinishProposeTs() noexcept
-{
+void TOperation::SetFinishProposeTs() noexcept {
     SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
 }
 
-bool TOperation::OnStopping(TDataShard&, const TActorContext&)
-{
+bool TOperation::OnStopping(TDataShard&, const TActorContext&) {
     // By default operations don't do anything when stopping
     // However they may become ready so add to candidates
     return true;
 }
 
-void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle>>&)
-{
+void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle>>&) {
     // By default operation does nothing
 }
 

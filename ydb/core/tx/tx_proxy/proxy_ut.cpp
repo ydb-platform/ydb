@@ -8,16 +8,16 @@ using namespace NTxProxyUT;
 using namespace NHelpers;
 
 Y_UNIT_TEST_SUITE(TSubDomainTest) {
-    NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString &name) {
+    NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString& name) {
         NKikimrSchemeOp::TTableDescription tableDescr;
         tableDescr.SetName(name);
         {
-            auto *c1 = tableDescr.AddColumns();
+            auto* c1 = tableDescr.AddColumns();
             c1->SetName("key");
             c1->SetType("Uint64");
         }
         {
-            auto *c2 = tableDescr.AddColumns();
+            auto* c2 = tableDescr.AddColumns();
             c2->SetName("value");
             c2->SetType("Uint64");
         }
@@ -27,18 +27,25 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         return tableDescr;
     }
 
-    void SetRowInSimpletable(TTestEnv& env, ui64 key, ui64 value, const TString &path) {
+    void SetRowInSimpletable(TTestEnv & env, ui64 key, ui64 value, const TString& path) {
         NKikimrMiniKQL::TResult res;
-        TString query = Sprintf("("
-                                "(let row '('('key (Uint64 '%" PRIu64 "))))"
-                                "(let myUpd '("
-                                "    '('value (Uint64 '%" PRIu64 "))"
-                                "))"
-                                "(let pgmReturn (AsList"
-                                "    (UpdateRow '%s row myUpd)"
-                                "))"
-                                "(return pgmReturn)"
-                                ")", key, value, path.c_str());
+        TString query = Sprintf(
+            "("
+            "(let row '('('key (Uint64 '%" PRIu64
+            "))))"
+            "(let myUpd '("
+            "    '('value (Uint64 '%" PRIu64
+            "))"
+            "))"
+            "(let pgmReturn (AsList"
+            "    (UpdateRow '%s row myUpd)"
+            "))"
+            "(return pgmReturn)"
+            ")",
+            key,
+            value,
+            path.c_str()
+        );
 
         env.GetClient().FlatQuery(query, res);
     }
@@ -93,7 +100,10 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         {
             auto subdomain = GetSubDomainDefaultSetting("USER_0");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, env.GetClient().AlterSubdomain("/dc-1", subdomain, TDuration::MilliSeconds(500)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_INPROGRESS,
+                env.GetClient().AlterSubdomain("/dc-1", subdomain, TDuration::MilliSeconds(500))
+            );
         }
 
         {
@@ -112,26 +122,22 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateTablet) {
-        TTestEnv env(3,2);
+        TTestEnv env(3, 2);
 
         ui64 owner = THash<TString>()("CreateTablet");
         ui64 index = 1;
-        TAutoPtr<NMsgBusProxy::TBusResponse> resp = env.GetClient().HiveCreateTablet(
-                    env.GetSettings().Domain, owner, index, TTabletTypes::Dummy, {}, {});
+        TAutoPtr<NMsgBusProxy::TBusResponse> resp =
+            env.GetClient().HiveCreateTablet(env.GetSettings().Domain, owner, index, TTabletTypes::Dummy, {}, {});
         NKikimrClient::TResponse& record = resp->Record;
 
         UNIT_ASSERT_VALUES_EQUAL(record.CreateTabletResultSize(), 1);
         const auto& result = record.GetCreateTabletResult(0);
 
-        UNIT_ASSERT_EQUAL(
-            NKikimrProto::OK,
-            result.GetStatus());
+        UNIT_ASSERT_EQUAL(NKikimrProto::OK, result.GetStatus());
 
-        UNIT_ASSERT(
-            env.GetClient().TabletExistsInHive(&env.GetRuntime(), result.GetTabletId()));
+        UNIT_ASSERT(env.GetClient().TabletExistsInHive(&env.GetRuntime(), result.GetTabletId()));
 
-        UNIT_ASSERT(
-             env.GetClient().WaitForTabletAlive(&env.GetRuntime(), result.GetTabletId(), true, WaitTimeOut));
+        UNIT_ASSERT(env.GetClient().WaitForTabletAlive(&env.GetRuntime(), result.GetTabletId(), true, WaitTimeOut));
     }
 
     Y_UNIT_TEST(CreateTabletForUnknownDomain) {
@@ -143,25 +149,20 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         allowed_domains.push_back(TSubDomainKey(999, 999));
 
         TAutoPtr<NMsgBusProxy::TBusResponse> resp = env.GetClient().HiveCreateTablet(
-                    env.GetSettings().Domain, owner, index, TTabletTypes::Dummy, {}, allowed_domains);
+            env.GetSettings().Domain, owner, index, TTabletTypes::Dummy, {}, allowed_domains
+        );
         NKikimrClient::TResponse& record = resp->Record;
 
         UNIT_ASSERT_VALUES_EQUAL(record.CreateTabletResultSize(), 1);
         const auto& result = record.GetCreateTabletResult(0);
 
-        UNIT_ASSERT_EQUAL(
-            NKikimrProto::OK,
-            result.GetStatus());
+        UNIT_ASSERT_EQUAL(NKikimrProto::OK, result.GetStatus());
 
-        UNIT_ASSERT(
-            env.GetClient().TabletExistsInHive(&env.GetRuntime(), result.GetTabletId()));
+        UNIT_ASSERT(env.GetClient().TabletExistsInHive(&env.GetRuntime(), result.GetTabletId()));
 
-        UNIT_ASSERT(
-            env.GetClient().WaitForTabletDown(&env.GetRuntime(), result.GetTabletId(), true, WaitTimeOut));
+        UNIT_ASSERT(env.GetClient().WaitForTabletDown(&env.GetRuntime(), result.GetTabletId(), true, WaitTimeOut));
 
-        UNIT_ASSERT_EQUAL(
-            Max<ui32>(),
-            env.GetClient().GetLeaderNode(&env.GetRuntime(), result.GetTabletId()));
+        UNIT_ASSERT_EQUAL(Max<ui32>(), env.GetClient().GetLeaderNode(&env.GetRuntime(), result.GetTabletId()));
     }
 
     Y_UNIT_TEST(CreateDummyTabletsInDifferentDomains) {
@@ -214,7 +215,10 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         {
             auto subdomain = GetSubDomainDefaultSetting("USER_0");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, env.GetClient().AlterSubdomain("/dc-1", subdomain, TDuration::MilliSeconds(500)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_INPROGRESS,
+                env.GetClient().AlterSubdomain("/dc-1", subdomain, TDuration::MilliSeconds(500))
+            );
 
             {
                 auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -227,8 +231,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetTenants().Run("/dc-1/USER_0");
 
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc), NMsgBusProxy::MSTATUS_OK);
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
@@ -276,8 +279,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         }
 
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc), NMsgBusProxy::MSTATUS_OK);
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
@@ -304,17 +306,19 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
 
         env.GetTenants().Run("/dc-1/USER_0");
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"))
+        );
 
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc), NMsgBusProxy::MSTATUS_OK);
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
@@ -340,8 +344,10 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -352,8 +358,9 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         env.GetTenants().Run("/dc-1/USER_0");
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"))
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -362,8 +369,10 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateTable("/dc-1/USER_0", GetTableSimpleDescription("SimpleTable")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateTable("/dc-1/USER_0", GetTableSimpleDescription("SimpleTable"))
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -383,27 +392,32 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500))
+        );
         env.GetTenants().Run("/dc-1/USER_0");
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1", env.GetPools())));
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1"), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1", env.GetPools()))
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1"), TDuration::MilliSeconds(500))
+        );
         env.GetTenants().Run("/dc-1/USER_1");
 
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc), NMsgBusProxy::MSTATUS_OK);
 
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_1", tableDesc),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_1", tableDesc), NMsgBusProxy::MSTATUS_OK);
 
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1", tableDesc),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1", tableDesc), NMsgBusProxy::MSTATUS_OK);
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
@@ -432,7 +446,8 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             expectedResponse.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
             expectedResponse.SetProxyErrorCode(NTxProxy::TResultStatus::DomainLocalityError);
 
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(
+                "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/SimpleTable row0_ cols_))"
@@ -442,7 +457,11 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
                 "    (SetResult 'res1_ select1_)"
                 "))"
                 "(return ret_)"
-                ")", opts, res, expectedResponse);
+                ")",
+                opts,
+                res,
+                expectedResponse
+            );
         }
 
         {//transation intersect SubDomain and another SubDomain
@@ -453,7 +472,8 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             expectedResponse.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
             expectedResponse.SetProxyErrorCode(NTxProxy::TResultStatus::DomainLocalityError);
 
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(
+                "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_1/SimpleTable row0_ cols_))"
@@ -463,20 +483,27 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
                 "    (SetResult 'res1_ select1_)"
                 "))"
                 "(return ret_)"
-                ")", opts, res, expectedResponse);
+                ")",
+                opts,
+                res,
+                expectedResponse
+            );
         }
     }
-
 
     Y_UNIT_TEST(GenericCases) {
         TTestEnv env(1, 1);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500))
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -516,14 +543,18 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         {
             auto tableDesc = GetTableSimpleDescription("table");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_0", tableDesc));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_0", tableDesc)
+            );
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/dir_0/table");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
         }
 
         {
             auto tableDesc = GetTableSimpleDescription("table");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_1", tableDesc));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_1", tableDesc)
+            );
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/dir_1/table");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
         }
@@ -533,7 +564,8 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         {
             NKikimrMiniKQL::TResult result;
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(
+                "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_0/dir/dir_0/table row0_ cols_))"
@@ -543,7 +575,9 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
                 "    (SetResult 'res1_ select1_)"
                 "))"
                 "(return ret_)"
-                ")", result);
+                ")",
+                result
+            );
         }
     }
 
@@ -552,11 +586,15 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500))
+        );
 
         env.GetTenants().Run("/dc-1/USER_0");
 
@@ -592,11 +630,15 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"), TDuration::MilliSeconds(500))
+        );
 
         env.GetTenants().Run("/dc-1/USER_0", 2);
         UNIT_ASSERT_VALUES_EQUAL(2, env.GetTenants().Size("/dc-1/USER_0"));
@@ -720,17 +762,25 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         {
             auto subdomain = GetSubDomainDefaultSetting("USER_0");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, env.GetClient().AlterSubdomain("/dc-1", subdomain, TDuration::MilliSeconds(500)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_INPROGRESS,
+                env.GetClient().AlterSubdomain("/dc-1", subdomain, TDuration::MilliSeconds(500))
+            );
         }
 
         {
             auto tableDesc = GetTableSimpleDescription("table");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS, env.GetClient().CreateTable("/dc-1/USER_0", tableDesc, TDuration::Seconds(1)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_INPROGRESS,
+                env.GetClient().CreateTable("/dc-1/USER_0", tableDesc, TDuration::Seconds(1))
+            );
         }
 
         env.GetTenants().Run("/dc-1/USER_0", active_tenants_nodes);
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().WaitCreateTx(&env.GetRuntime(), "/dc-1/USER_0/table", WaitTimeOut));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().WaitCreateTx(&env.GetRuntime(), "/dc-1/USER_0/table", WaitTimeOut)
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1");
@@ -761,11 +811,14 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA1", "ValA1"}}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA1", "ValA1"}})
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -778,11 +831,14 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA1", "ValA1"}}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA1", "ValA1"}})
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -791,13 +847,14 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 4);
         }
 
-
         auto pathVer = env.GetClient().ExtractPathVersion(env.GetClient().Ls("/dc-1/USER_0"));
         UNIT_ASSERT_VALUES_EQUAL(pathVer.PathId, 2);
         UNIT_ASSERT_VALUES_EQUAL(pathVer.Version, 4);
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA2", "ValA2"}}, {"AttrA1"}, {pathVer}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA2", "ValA2"}}, {"AttrA1"}, {pathVer})
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -807,8 +864,10 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(ver.Version, 5);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_ERROR,
-                                 env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA3", "ValA3"}}, {"AttrA2"}, {pathVer}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_ERROR,
+            env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA3", "ValA3"}}, {"AttrA2"}, {pathVer})
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -822,8 +881,10 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         UNIT_ASSERT_VALUES_EQUAL(pathVer.PathId, 2);
         UNIT_ASSERT_VALUES_EQUAL(pathVer.Version, 5);
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA3", "ValA3"}}, {"AttrA2"}, {pathVer}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/dc-1", "USER_0", {{"AttrA3", "ValA3"}}, {"AttrA2"}, {pathVer})
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0");
@@ -838,22 +899,27 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         TTestEnv env(1, 2);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
         env.GetTenants().Run("/dc-1/USER_0", 1);
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"))
+        );
         env.GetClient().ModifyOwner("/dc-1", "USER_0", "user0@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1", env.GetPools()))
+        );
         env.GetTenants().Run("/dc-1/USER_1", 1);
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1"))
+        );
         env.GetClient().ModifyOwner("/dc-1", "USER_1", "user1@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_1");
-
 
         {
             env.GetClient().SetSecurityToken("user0@builtin");
@@ -863,7 +929,9 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().MkDir("/dc-1/USER_0/a", "b"));
 
             auto tableDesc = GetTableSimpleDescription("table");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/a/b", tableDesc));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/a/b", tableDesc)
+            );
 
             NTestLs::CheckStatus(env.GetClient().Ls("/dc-1/USER_0/a"));
             NTestLs::CheckStatus(env.GetClient().Ls("/dc-1/USER_0/a/b"));
@@ -874,14 +942,17 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             env.GetClient().SetSecurityToken("user0@builtin");
 
             //no rights to create table in /dc-1/USER_1
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_ERROR, env.GetClient().CopyTable("/dc-1/USER_1", "copy", "/dc-1/USER_0/a/b/table"));
-        }
-;
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_ERROR, env.GetClient().CopyTable("/dc-1/USER_1", "copy", "/dc-1/USER_0/a/b/table")
+            );
+        };
         {
             env.GetClient().SetSecurityToken("user1@builtin");
 
             //no rights to read table fom /dc-1/USER_0
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_ERROR, env.GetClient().CopyTable("/dc-1/USER_1", "copy", "/dc-1/USER_0/a/b/table"));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_ERROR, env.GetClient().CopyTable("/dc-1/USER_1", "copy", "/dc-1/USER_0/a/b/table")
+            );
         }
     }
 
@@ -889,22 +960,27 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         TTestEnv env(1, 2);
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0", env.GetPools()))
+        );
         env.GetTenants().Run("/dc-1/USER_0", 1);
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0"))
+        );
         env.GetClient().ModifyOwner("/dc-1", "USER_0", "user0@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_0");
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1", env.GetPools())));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1", env.GetPools()))
+        );
         env.GetTenants().Run("/dc-1/USER_1", 1);
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1"))
+        );
         env.GetClient().ModifyOwner("/dc-1", "USER_1", "user1@builtin");
         env.GetClient().RefreshPathCache(&env.GetRuntime(), "/dc-1/USER_1");
-
 
         {
             env.GetClient().SetSecurityToken("user0@builtin");
@@ -913,13 +989,18 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().MkDir("/dc-1/USER_0", "a"));
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().MkDir("/dc-1/USER_0/a", "b"));
 
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().CreateTable("/dc-1/USER_0/", GetTableSimpleDescription("table")));
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().CreateTable("/dc-1/USER_0/a", GetTableSimpleDescription("table")));
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().CreateTable("/dc-1/USER_0/a/b", GetTableSimpleDescription("table")));
-
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK,
+                env.GetClient().CreateTable("/dc-1/USER_0/", GetTableSimpleDescription("table"))
+            );
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK,
+                env.GetClient().CreateTable("/dc-1/USER_0/a", GetTableSimpleDescription("table"))
+            );
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK,
+                env.GetClient().CreateTable("/dc-1/USER_0/a/b", GetTableSimpleDescription("table"))
+            );
 
             NTestLs::CheckStatus(env.GetClient().Ls("/dc-1/USER_0/table"));
             NTestLs::CheckStatus(env.GetClient().Ls("/dc-1/USER_0/a"));
@@ -933,11 +1014,14 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().MkDir("/dc-1/USER_0", "backup"));
 
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().ConsistentCopyTables(
-                                        {{"/dc-1/USER_0/table", "/dc-1/USER_0/backup/table"},
-                                         {"/dc-1/USER_0/a/table", "/dc-1/USER_0/backup/table_a"},
-                                         {"/dc-1/USER_0/a/b/table", "/dc-1/USER_0/backup/table_a_b"}}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK,
+                env.GetClient().ConsistentCopyTables(
+                    {{"/dc-1/USER_0/table", "/dc-1/USER_0/backup/table"},
+                     {"/dc-1/USER_0/a/table", "/dc-1/USER_0/backup/table_a"},
+                     {"/dc-1/USER_0/a/b/table", "/dc-1/USER_0/backup/table_a_b"}}
+                )
+            );
 
             NTestLs::CheckStatus(env.GetClient().Ls("/dc-1/USER_0/backup"));
             NTestLs::CheckStatus(env.GetClient().Ls("/dc-1/USER_0/backup/table"));
@@ -948,19 +1032,23 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         {
             env.GetClient().SetSecurityToken("user0@builtin");
 
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_ERROR,
-                                     env.GetClient().ConsistentCopyTables(
-                                        {{"/dc-1/USER_0/table", "/dc-1/USER_1/table"},
-                                         {"/dc-1/USER_0/a/table", "/dc-1/USER_1/table_a"}}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_ERROR,
+                env.GetClient().ConsistentCopyTables(
+                    {{"/dc-1/USER_0/table", "/dc-1/USER_1/table"}, {"/dc-1/USER_0/a/table", "/dc-1/USER_1/table_a"}}
+                )
+            );
         }
 
         {
             env.GetClient().SetSecurityToken("user1@builtin");
 
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_ERROR,
-                                     env.GetClient().ConsistentCopyTables(
-                                        {{"/dc-1/USER_0/table", "/dc-1/USER_1/table"},
-                                         {"/dc-1/USER_0/a/table", "/dc-1/USER_1/table_a"}}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_ERROR,
+                env.GetClient().ConsistentCopyTables(
+                    {{"/dc-1/USER_0/table", "/dc-1/USER_1/table"}, {"/dc-1/USER_0/a/table", "/dc-1/USER_1/table_a"}}
+                )
+            );
         }
     }
 }

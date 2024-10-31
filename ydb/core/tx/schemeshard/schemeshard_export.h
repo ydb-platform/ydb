@@ -38,9 +38,7 @@ struct TEvExport {
         TEvCreateExportRequest() = default;
 
         explicit TEvCreateExportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const NKikimrExport::TCreateExportRequest& request
+            const ui64 txId, const TString& dbName, const NKikimrExport::TCreateExportRequest& request
         ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
@@ -70,27 +68,20 @@ struct TEvExport {
         }
     };
 
-    DECLARE_EVENT_CLASS(EvGetExportResponse) {
-    };
+    DECLARE_EVENT_CLASS(EvGetExportResponse) {};
 
     DECLARE_EVENT_CLASS(EvCancelExportRequest) {
         TEvCancelExportRequest() = default;
 
         explicit TEvCancelExportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const NKikimrExport::TCancelExportRequest& request
+            const ui64 txId, const TString& dbName, const NKikimrExport::TCancelExportRequest& request
         ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->CopyFrom(request);
         }
 
-        explicit TEvCancelExportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const ui64 exportId
-        ) {
+        explicit TEvCancelExportRequest(const ui64 txId, const TString& dbName, const ui64 exportId) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->SetId(exportId);
@@ -109,20 +100,14 @@ struct TEvExport {
         TEvForgetExportRequest() = default;
 
         explicit TEvForgetExportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const NKikimrExport::TForgetExportRequest& request
+            const ui64 txId, const TString& dbName, const NKikimrExport::TForgetExportRequest& request
         ) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->CopyFrom(request);
         }
 
-        explicit TEvForgetExportRequest(
-            const ui64 txId,
-            const TString& dbName,
-            const ui64 exportId
-        ) {
+        explicit TEvForgetExportRequest(const ui64 txId, const TString& dbName, const ui64 exportId) {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             Record.MutableRequest()->SetId(exportId);
@@ -146,10 +131,7 @@ struct TEvExport {
         }
 
         explicit TEvListExportsRequest(
-            const TString& dbName,
-            const ui64 pageSize,
-            const TString& pageToken,
-            const TString& kind
+            const TString& dbName, const ui64 pageSize, const TString& pageToken, const TString& kind
         ) {
             Record.SetDatabaseName(dbName);
 
@@ -160,12 +142,11 @@ struct TEvExport {
         }
     };
 
-    DECLARE_EVENT_CLASS(EvListExportsResponse) {
-    };
+    DECLARE_EVENT_CLASS(EvListExportsResponse) {};
 
 #undef DECLARE_EVENT_CLASS
 
 }; // TEvExport
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

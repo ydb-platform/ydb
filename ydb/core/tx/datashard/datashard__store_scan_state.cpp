@@ -5,17 +5,11 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxStoreScanState::TTxStoreScanState(
-    TDataShard *ds,
-    TEvPrivate::TEvPersistScanState::TPtr ev)
+TDataShard::TTxStoreScanState::TTxStoreScanState(TDataShard* ds, TEvPrivate::TEvPersistScanState::TPtr ev)
     : TBase(ds)
-    , Ev(ev)
-{
-}
+    , Ev(ev) {}
 
-bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
-    const TActorContext &ctx)
-{
+bool TDataShard::TTxStoreScanState::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     const TEvPrivate::TEvPersistScanState* event = Ev->Get();
     ui64 txId = event->TxId;
     auto op = Self->Pipeline.FindOp(txId);
@@ -46,7 +40,8 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
     db.Table<Schema::ScanProgress>().Key(txId).Update(
         NIceDb::TUpdate<Schema::ScanProgress::LastKey>(event->LastKey),
         NIceDb::TUpdate<Schema::ScanProgress::LastStatus>(event->StatusCode),
-        NIceDb::TUpdate<Schema::ScanProgress::LastIssues>(binaryIssues));
+        NIceDb::TUpdate<Schema::ScanProgress::LastIssues>(binaryIssues)
+    );
 
     schemaOp->ScanState.StatusCode = event->StatusCode;
     schemaOp->ScanState.Issues = event->Issues;
@@ -56,8 +51,7 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
     return true;
 }
 
-void TDataShard::TTxStoreScanState::Complete(const TActorContext &ctx)
-{
+void TDataShard::TTxStoreScanState::Complete(const TActorContext& ctx) {
     ctx.Send(Ev->Sender, new TDataShard::TEvPrivate::TEvPersistScanStateAck());
 }
 

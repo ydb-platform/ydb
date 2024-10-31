@@ -9,4 +9,4 @@ public:
     static std::shared_ptr<arrow::Schema> GetMetaSchema();
 };
 
-};
+}; // namespace NKikimr::NOlap::NEngines::NTest

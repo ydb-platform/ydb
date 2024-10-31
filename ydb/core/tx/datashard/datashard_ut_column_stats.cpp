@@ -9,24 +9,22 @@ namespace NKikimr::NDataShard {
 using namespace Tests;
 
 namespace {
-    TString FillTableQuery() {
-        TStringBuilder sql;
-        sql << "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
-        for (size_t i = 0; i < 10; ++i) {
-            sql << " (" << i << ", " << i * 2 << "),";
-        }
-        sql << " (10, 20);";
-        return sql;
+TString FillTableQuery() {
+    TStringBuilder sql;
+    sql << "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
+    for (size_t i = 0; i < 10; ++i) {
+        sql << " (" << i << ", " << i * 2 << "),";
     }
+    sql << " (10, 20);";
+    return sql;
 }
+} // namespace
 
 Y_UNIT_TEST_SUITE(StatisticsScan) {
-
     Y_UNIT_TEST(RunScanOnShard) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -69,4 +67,4 @@ Y_UNIT_TEST_SUITE(StatisticsScan) {
     }
 }
 
-} // NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

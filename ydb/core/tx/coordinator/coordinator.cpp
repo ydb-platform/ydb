@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 
-IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info) {
+IActor* CreateFlatTxCoordinator(const TActorId& tablet, TTabletStorageInfo* info) {
     return new NFlatTxCoordinator::TTxCoordinator(info, tablet);
 }
 

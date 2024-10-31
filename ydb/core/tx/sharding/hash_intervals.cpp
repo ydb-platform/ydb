@@ -2,14 +2,17 @@
 
 namespace NKikimr::NSharding::NConsistency {
 
-NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySharding64::DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySharding64::DoBuildSplitShardsModifiers(
+    const std::vector<ui64>& newTabletIds
+) const {
     if (newTabletIds.size() != GetOrderedShardIds().size()) {
         return TConclusionStatus::Fail("can multiple 2 only for add shards count");
     }
     if (!!SpecialShardingInfo) {
         return TConclusionStatus::Fail("not unified shards distribution for consistency intervals modification");
     }
-    const TSpecificShardingInfo shardingInfo = SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
+    const TSpecificShardingInfo shardingInfo =
+        SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {
         ui32 idx = 0;
@@ -28,7 +31,10 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
                 auto& transfer = *alter.MutableTransfer()->AddTransfers();
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(i);
-                transfer.SetSessionId("SPLIT_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
+                transfer.SetSessionId(
+                    "SPLIT_TO::" + ::ToString(::ToString(newTabletIds[idx])) +
+                    "::" + TGUID::CreateTimebased().AsGuidString()
+                );
                 result.emplace_back(alter);
             }
             {
@@ -45,14 +51,17 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
     return result;
 }
 
-NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySharding64::DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySharding64::DoBuildMergeShardsModifiers(
+    const std::vector<ui64>& newTabletIds
+) const {
     if (newTabletIds.size() * 2 != GetOrderedShardIds().size()) {
         return TConclusionStatus::Fail("can div 2 only for reduce shards count");
     }
     if (!!SpecialShardingInfo) {
         return TConclusionStatus::Fail("not unified shards distribution for consistency intervals modification");
     }
-    const TSpecificShardingInfo shardingInfo = SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
+    const TSpecificShardingInfo shardingInfo =
+        SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {
         ui32 idx = 0;
@@ -64,7 +73,9 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
             AFL_VERIFY(source1.GetHashIntervalRightOpened() == source2.GetHashIntervalLeftClosed());
             {
                 NKikimrSchemeOp::TAlterShards alter;
-                TSpecificShardingInfo::TConsistencyShardingTablet newInterval(i, source1.GetHashIntervalLeftClosed(), source2.GetHashIntervalRightOpened());
+                TSpecificShardingInfo::TConsistencyShardingTablet newInterval(
+                    i, source1.GetHashIntervalLeftClosed(), source2.GetHashIntervalRightOpened()
+                );
                 alter.MutableModification()->AddOpenWriteIds(i);
                 *alter.MutableModification()->MutableConsistency()->AddShards() = newInterval.SerializeToProto();
                 result.emplace_back(alter);
@@ -75,7 +86,10 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(from1);
                 transfer.AddSourceTabletIds(from2);
-                transfer.SetSessionId("MERGE_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
+                transfer.SetSessionId(
+                    "MERGE_TO::" + ::ToString(::ToString(newTabletIds[idx])) +
+                    "::" + TGUID::CreateTimebased().AsGuidString()
+                );
                 transfer.SetMoving(true);
                 result.emplace_back(alter);
             }
@@ -94,7 +108,9 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> TConsistencySha
     return result;
 }
 
-NKikimr::TConclusionStatus TConsistencySharding64::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
+NKikimr::TConclusionStatus TConsistencySharding64::DoApplyModification(
+    const NKikimrSchemeOp::TShardingModification& proto
+) {
     AFL_VERIFY(!!SpecialShardingInfo);
     for (auto&& i : proto.GetDeleteShardIds()) {
         if (!DeleteShardInfo(i)) {
@@ -121,7 +137,9 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoApplyModification(const NKi
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TConsistencySharding64::DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) {
+NKikimr::TConclusionStatus TConsistencySharding64::DoDeserializeFromProto(
+    const NKikimrSchemeOp::TColumnTableSharding& proto
+) {
     auto conclusion = TBase::DoDeserializeFromProto(proto);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -129,10 +147,14 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoDeserializeFromProto(const 
     if (!proto.HasHashSharding()) {
         return TConclusionStatus::Fail("no data for consistency sharding");
     }
-    AFL_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+    AFL_VERIFY(
+        proto.GetHashSharding().GetFunction() ==
+        NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64
+    );
     {
         TSpecificShardingInfo specSharding;
-        auto parseResult = specSharding.DeserializeFromProto(proto, GetClosedWritingShardIds(), GetClosedReadingShardIds());
+        auto parseResult =
+            specSharding.DeserializeFromProto(proto, GetClosedWritingShardIds(), GetClosedReadingShardIds());
         if (parseResult.IsFail()) {
             return parseResult;
         }
@@ -159,7 +181,8 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoOnAfterModification() {
     return TConclusionStatus::Success();
 }
 
-THashMap<ui64, std::vector<ui32>> TConsistencySharding64::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+THashMap<ui64, std::vector<ui32>> TConsistencySharding64::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch
+) const {
     std::vector<ui64> hashes = MakeHashes(batch);
 
     if (!SpecialShardingInfo) {
@@ -185,9 +208,13 @@ THashMap<ui64, std::vector<ui32>> TConsistencySharding64::MakeSharding(const std
     }
 }
 
-std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> TConsistencySharding64::DoGetTabletShardingInfoOptional(const ui64 tabletId) const {
+std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> TConsistencySharding64::DoGetTabletShardingInfoOptional(
+    const ui64 tabletId
+) const {
     if (SpecialShardingInfo) {
-        return std::make_shared<TGranuleSharding>(GetShardingColumns(), SpecialShardingInfo->GetShardingTabletVerified(tabletId));
+        return std::make_shared<TGranuleSharding>(
+            GetShardingColumns(), SpecialShardingInfo->GetShardingTabletVerified(tabletId)
+        );
     } else {
         TSpecificShardingInfo info(GetOrderedShardIds());
         return std::make_shared<TGranuleSharding>(GetShardingColumns(), info.GetShardingTabletVerified(tabletId));
@@ -207,4 +234,4 @@ ui64 TSpecificShardingInfo::GetUnifiedDistributionBorder(const ui32 idx, const u
 #endif
 }
 
-}
+} // namespace NKikimr::NSharding::NConsistency

@@ -39,13 +39,17 @@ public:
         return GetColumnSaver(TString(columnName.data(), columnName.size()));
     }
 
-    std::vector<std::shared_ptr<arrow::Field>> GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const;
+    std::vector<std::shared_ptr<arrow::Field>> GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema
+    ) const;
 
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const std::string& columnName) const;
     std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
 
     TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
-        const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const;
+        const std::vector<std::shared_ptr<arrow::Field>>& fields,
+        const ui32 rowsCount,
+        const bool force
+    ) const;
     TConclusionStatus CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const;
 
     std::vector<std::string> GetPKColumnNames() const;
@@ -74,15 +78,27 @@ public:
     std::set<ui32> GetPkColumnsIds() const;
 
     static std::set<ui32> GetColumnsWithDifferentDefaults(
-        const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema);
+        const THashMap<ui64, ISnapshotSchema::TPtr>& schemas,
+        const ISnapshotSchema::TPtr& targetSchema
+    );
 
-    [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(const ISnapshotSchema& dataSchema,
-        const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(
+        const ISnapshotSchema& dataSchema,
+        const std::shared_ptr<NArrow::TGeneralContainer>& batch,
+        const std::set<ui32>& restoreColumnIds
+    ) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
-        const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
-    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
-        const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
+        const std::shared_ptr<arrow::RecordBatch>& incomingBatch,
+        const NEvWrite::EModificationType mType
+    ) const;
+    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(
+        const ISnapshotSchema::TPtr& selfPtr,
+        const ui64 pathId,
+        const std::shared_ptr<arrow::RecordBatch>& incomingBatch,
+        const NEvWrite::EModificationType mType,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters
+    ) const;
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;

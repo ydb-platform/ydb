@@ -23,16 +23,16 @@ namespace NSchemeBoard {
 
 namespace {
 
-    bool IsDir(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-        const auto& self = record.GetPathDescription().GetSelf();
-        return self.GetParentPathId() == NSchemeShard::RootPathId;
-    }
+bool IsDir(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    const auto& self = record.GetPathDescription().GetSelf();
+    return self.GetParentPathId() == NSchemeShard::RootPathId;
+}
 
-    bool IsDir(const TTwoPartDescription& desc) {
-        return IsDir(desc.Record);
-    }
+bool IsDir(const TTwoPartDescription& desc) {
+    return IsDir(desc.Record);
+}
 
-} // anonymous
+} // namespace
 
 class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     using TDescription = NKikimrScheme::TEvDescribeSchemeResult;
@@ -155,8 +155,10 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         describeSchemeResult->Record.CopyFrom(description);
         Send(Populator, std::move(describeSchemeResult));
 
-        Modify(TPathId(description.GetPathDescription().GetSelf().GetSchemeshardId(),
-                       description.GetPathDescription().GetSelf().GetParentPathId()));
+        Modify(TPathId(
+            description.GetPathDescription().GetSelf().GetSchemeshardId(),
+            description.GetPathDescription().GetSelf().GetParentPathId()
+        ));
         Descriptions.erase(pathId);
 
         ++*DeletedPaths;
@@ -192,7 +194,10 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
     void Populate() {
         Descriptions = GenerateDescriptions(Owner, Config, NextPathId);
         Populator = Register(CreateSchemeBoardPopulator(
-            Owner, Max<ui64>(), std::vector<std::pair<TPathId, TTwoPartDescription>>(Descriptions.begin(), Descriptions.end()), NextPathId
+            Owner,
+            Max<ui64>(),
+            std::vector<std::pair<TPathId, TTwoPartDescription>>(Descriptions.begin(), Descriptions.end()),
+            NextPathId
         ));
 
         TPathId pathId(Owner, NextPathId - 1);
@@ -200,10 +205,8 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         const TString& topPath = Descriptions.at(pathId).Record.GetPath();
 
         // subscriber will help us to know when sync is completed
-        Subscriber = Register(CreateSchemeBoardSubscriber(
-            SelfId(), topPath,
-            ESchemeBoardSubscriberDeletionPolicy::Majority
-        ));
+        Subscriber =
+            Register(CreateSchemeBoardSubscriber(SelfId(), topPath, ESchemeBoardSubscriberDeletionPolicy::Majority));
 
         *TotalPaths = NextPathId - 1 - NSchemeShard::RootPathId;
 
@@ -242,17 +245,17 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
-        case TAG_MODIFY:
-            Modify();
-            break;
+            case TAG_MODIFY:
+                Modify();
+                break;
 
-        case TAG_CHANGE:
-            Change();
-            break;
+            case TAG_CHANGE:
+                Change();
+                break;
 
-        default:
-            Y_DEBUG_ABORT("Unknown wakeup tag");
-            break;
+            default:
+                Y_DEBUG_ABORT("Unknown wakeup tag");
+                break;
         }
     }
 
@@ -269,8 +272,7 @@ public:
     explicit TLoadProducer(ui64 owner, const TTestConfig& config)
         : Owner(owner)
         , Config(config)
-        , NextPathId(NSchemeShard::RootPathId + 1)
-    {
+        , NextPathId(NSchemeShard::RootPathId + 1) {
         SyncDuration = Config.Counters->GetCounter("Producer/SyncDuration", false);
         TotalPaths = Config.Counters->GetCounter("Producer/TotalPaths", false);
         ModifiedPaths = Config.Counters->GetCounter("Producer/ModifiedPaths", false);
@@ -323,10 +325,8 @@ private:
 class TLoadConsumer: public TActorBootstrapped<TLoadConsumer> {
     void Subscribe(const TPathId& pathId) {
         for (ui32 i = 0; i < Config.SubscriberMulti; ++i) {
-            const TActorId subscriber = Register(CreateSchemeBoardSubscriber(
-                SelfId(), pathId,
-                ESchemeBoardSubscriberDeletionPolicy::Majority
-            ));
+            const TActorId subscriber =
+                Register(CreateSchemeBoardSubscriber(SelfId(), pathId, ESchemeBoardSubscriberDeletionPolicy::Majority));
 
             Subscribers.push_back(subscriber);
             ++*SubscribersCount;
@@ -372,11 +372,8 @@ class TLoadConsumer: public TActorBootstrapped<TLoadConsumer> {
 public:
     explicit TLoadConsumer(ui64 owner, const TTestConfig& config)
         : Owner(owner)
-        , Config(config)
-    {
-        MaxPathId = NSchemeShard::RootPathId
-                    + Config.Dirs
-                    + Config.Dirs * Config.ObjectsPerDir;
+        , Config(config) {
+        MaxPathId = NSchemeShard::RootPathId + Config.Dirs + Config.Dirs * Config.ObjectsPerDir;
 
         Latency = Config.Counters->GetHistogram("Consumer/Latency", NMonitoring::ExponentialHistogram(15, 2, 1));
         LatencyDir = Config.Counters->GetHistogram("Consumer/LatencyDir", NMonitoring::ExponentialHistogram(10, 4, 1));
@@ -408,7 +405,7 @@ private:
 
 }; // TLoadConsumer
 
-} // NSchemeBoard
+} // namespace NSchemeBoard
 
 IActor* CreateSchemeBoardLoadProducer(ui64 owner, const NSchemeBoard::TTestConfig& config) {
     return new NSchemeBoard::TLoadProducer(owner, config);
@@ -418,4 +415,4 @@ IActor* CreateSchemeBoardLoadConsumer(ui64 owner, const NSchemeBoard::TTestConfi
     return new NSchemeBoard::TLoadConsumer(owner, config);
 }
 
-} // NKikimr
+} // namespace NKikimr

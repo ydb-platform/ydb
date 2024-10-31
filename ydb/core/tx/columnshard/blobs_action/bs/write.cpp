@@ -3,7 +3,11 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
-void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+void TWriteAction::DoOnExecuteTxAfterWrite(
+    NColumnShard::TColumnShard& /*self*/,
+    TBlobManagerDb& dbBlobs,
+    const bool blobsWroteSuccessfully
+) {
     AFL_VERIFY(!!BlobBatch);
     if (blobsWroteSuccessfully) {
         Manager->SaveBlobBatchOnExecute(BlobBatch, dbBlobs);
@@ -27,4 +31,4 @@ void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlo
     return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

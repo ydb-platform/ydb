@@ -10,15 +10,13 @@ using namespace Tests;
 using namespace NDataShardReadTableTest;
 
 Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
-
     Y_UNIT_TEST(ReadTableSnapshot) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -36,31 +34,34 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
 
         auto table1head = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
-        UNIT_ASSERT_VALUES_EQUAL(table1head,
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1head,
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
             "key = 3, value = 33\n"
-            "key = 4, value = 44\n");
+            "key = 4, value = 44\n"
+        );
 
         Cerr << "---Rebooting tablet---" << Endl;
         RebootTablet(runtime, shards[0], sender);
 
         // We must be able to finish reading from the acquired snapshot
         auto table1snapshot = table1state.All();
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot,
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1snapshot,
             "key = 1, value = 1\n"
             "key = 2, value = 2\n"
-            "key = 3, value = 3\n");
+            "key = 3, value = 3\n"
+        );
     }
 
     Y_UNIT_TEST(ReadTableSplitAfter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -91,25 +92,28 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         Cerr << "--- split finished ---" << Endl;
 
         TDuration elapsed = TInstant::Now() - splitStart;
-        UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)),
-            "Split needed " << elapsed.ToString() << " to complete, which is too long");
+        UNIT_ASSERT_C(
+            elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)),
+            "Split needed " << elapsed.ToString() << " to complete, which is too long"
+        );
 
         // We should be able to gather the whole table
-        UNIT_ASSERT_VALUES_EQUAL(table1state.All(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1state.All(),
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
             "key = 3, value = 33\n"
-            "key = 4, value = 44\n");
+            "key = 4, value = 44\n"
+        );
     }
 
     Y_UNIT_TEST(ReadTableSplitBefore) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -142,25 +146,28 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         Cerr << "--- split finished ---" << Endl;
 
         TDuration elapsed = TInstant::Now() - splitStart;
-        UNIT_ASSERT_C(elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)),
-            "Split needed " << elapsed.ToString() << " to complete, which is too long");
+        UNIT_ASSERT_C(
+            elapsed < TDuration::Seconds(NValgrind::PlainOrUnderValgrind(2, 10)),
+            "Split needed " << elapsed.ToString() << " to complete, which is too long"
+        );
 
         // We should be able to gather the whole table
-        UNIT_ASSERT_VALUES_EQUAL(table1state.All(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1state.All(),
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
             "key = 3, value = 33\n"
-            "key = 4, value = 44\n");
+            "key = 4, value = 44\n"
+        );
     }
 
     Y_UNIT_TEST(ReadTableSplitFinished) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -175,7 +182,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);"
+        );
 
         // Split on key=3 boundary
         {
@@ -225,23 +236,24 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         }
 
         // We should be able to gather the whole table
-        UNIT_ASSERT_VALUES_EQUAL(table1state.All(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1state.All(),
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
             "key = 3, value = 33\n"
             "key = 4, value = 44\n"
             "key = 5, value = 55\n"
-            "key = 6, value = 66\n");
+            "key = 6, value = 66\n"
+        );
     }
 
     Y_UNIT_TEST(ReadTableDropColumn) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -256,7 +268,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);"
+        );
 
         // Split on key=3 boundary
         {
@@ -280,20 +296,21 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         }
 
         // We should receive an error starting with the second shard
-        UNIT_ASSERT_VALUES_EQUAL(table1state.All(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1state.All(),
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
-            "ERROR: ResolveError\n");
+            "ERROR: ResolveError\n"
+        );
     }
 
     Y_UNIT_TEST(ReadTableDropColumnLatePropose) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -308,7 +325,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);"
+        );
 
         // Split on key=3 boundary
         {
@@ -326,7 +347,8 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::TEvProposeTransaction::EventType: {
                     const auto* msg = ev->Get<TEvDataShard::TEvProposeTransaction>();
-                    if (msg->Record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCAN && ev->GetRecipientRewrite() == shard2actor) {
+                    if (msg->Record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCAN &&
+                        ev->GetRecipientRewrite() == shard2actor) {
                         Cerr << "... captured scan propose at " << shard2actor << Endl;
                         capturedPropose.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;
@@ -356,7 +378,12 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         UNIT_ASSERT(table1state.Next());
         UNIT_ASSERT_VALUES_EQUAL(table1state.LastResult, "key = 1, value = 11\n");
 
-        waitFor([&]{ return capturedPropose.size() > 0; }, "propose at second shard");
+        waitFor(
+            [&] {
+                return capturedPropose.size() > 0;
+            },
+            "propose at second shard"
+        );
         runtime.SetObserverFunc(prevObserverFunc);
 
         // Drop the value column
@@ -371,20 +398,21 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         }
 
         // We should receive an error starting with the second shard
-        UNIT_ASSERT_VALUES_EQUAL(table1state.All(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1state.All(),
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
-            "ERROR: ResolveError\n");
+            "ERROR: ResolveError\n"
+        );
     }
 
     Y_UNIT_TEST(ReadTableMaxRows) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -399,7 +427,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);"
+        );
 
         // Split on key=4 boundary
         {
@@ -416,8 +448,8 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
                 case TEvTxProcessing::TEvStreamQuotaResponse::EventType: {
                     const auto* msg = ev->Get<TEvTxProcessing::TEvStreamQuotaResponse>();
                     if (msg->Record.HasRowLimit()) {
-                        Cerr << "... observed row limit of "
-                            << msg->Record.GetRowLimit() << " rows at " << ev->GetRecipientRewrite() << Endl;
+                        Cerr << "... observed row limit of " << msg->Record.GetRowLimit() << " rows at "
+                             << ev->GetRecipientRewrite() << Endl;
                         rowLimits.push_back(msg->Record.GetRowLimit());
                     }
                     break;
@@ -431,12 +463,14 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1", true, 5));
 
         // We should only receive 4 rows
-        UNIT_ASSERT_VALUES_EQUAL(table1state.All(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1state.All(),
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
             "key = 3, value = 33\n"
             "key = 4, value = 44\n"
-            "key = 5, value = 55\n");
+            "key = 5, value = 55\n"
+        );
 
         UNIT_ASSERT_VALUES_EQUAL(rowLimits.size(), 6u);
         UNIT_ASSERT_VALUES_EQUAL(rowLimits[0], 5u); // first shard is asked for 5 rows
@@ -450,11 +484,10 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
     Y_UNIT_TEST(ReadTableSplitNewTxIdResolveResultReorder) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -469,7 +502,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(
+            server,
+            sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);"
+        );
 
         // Split on key=4 boundary
         {
@@ -543,8 +580,18 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             UNIT_ASSERT_VALUES_EQUAL(shards.size(), 3u);
         }
 
-        waitFor([&]{ return capturedTxIds.size() > 0; }, "captured second tx id");
-        waitFor([&]{ return capturedResolveKeySetResults.size() > 0; }, "captured new partitions");
+        waitFor(
+            [&] {
+                return capturedTxIds.size() > 0;
+            },
+            "captured second tx id"
+        );
+        waitFor(
+            [&] {
+                return capturedResolveKeySetResults.size() > 0;
+            },
+            "captured new partitions"
+        );
 
         runtime.SetObserverFunc(prevObserverFunc);
 
@@ -556,23 +603,24 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         }
 
         // We should be able to gather the whole table
-        UNIT_ASSERT_VALUES_EQUAL(table1state.All(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            table1state.All(),
             "key = 1, value = 11\n"
             "key = 2, value = 22\n"
             "key = 3, value = 33\n"
             "key = 4, value = 44\n"
             "key = 5, value = 55\n"
-            "key = 6, value = 66\n");
+            "key = 6, value = 66\n"
+        );
     }
 
     Y_UNIT_TEST(CorruptedDyNumber) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -580,17 +628,22 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "Table",
-            TShardedTableOptions().Columns({
-                {"key", "Uint32", true, false},
-                {"value", "DyNumber", false, false}
-            }));
+        CreateShardedTable(
+            server,
+            sender,
+            "/Root",
+            "Table",
+            TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "DyNumber", false, false}})
+        );
 
         // Write bad DyNumber
-        UploadRows(runtime, "/Root/Table", 
+        UploadRows(
+            runtime,
+            "/Root/Table",
             {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::DYNUMBER}},
-            {TCell::Make(ui32(1))}, {TCell::Make(ui32(55555))}
-            );
+            {TCell::Make(ui32(1))},
+            {TCell::Make(ui32(55555))}
+        );
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/Table", true));
 
@@ -598,7 +651,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         UNIT_ASSERT(table1state.IsError);
         UNIT_ASSERT_VALUES_EQUAL(table1state.LastResult, "ERROR: ExecError\n");
-    }    
+    }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)
 

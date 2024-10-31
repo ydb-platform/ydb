@@ -7,8 +7,13 @@ class TOneHeadLogic: public IOptimizationLogic {
 private:
     const TDuration FreshnessCheckDuration = TDuration::Seconds(300);
 
-    std::vector<TPortionInfo::TConstPtr> GetPortionsForMerge(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket,
-        std::vector<NArrow::TReplaceKey>* stopPoints, TInstant* stopInstant) const;
+    std::vector<TPortionInfo::TConstPtr> GetPortionsForMerge(
+        const TInstant now,
+        const ui64 memLimit,
+        const TBucketInfo& bucket,
+        std::vector<NArrow::TReplaceKey>* stopPoints,
+        TInstant* stopInstant
+    ) const;
 
     virtual TCalcWeightResult DoCalcWeight(const TInstant now, const TBucketInfo& bucket) const override {
         TInstant nextInstant = TInstant::Max();
@@ -25,17 +30,17 @@ private:
         }
     }
 
-    virtual TCompactionTaskResult DoBuildTask(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const override {
+    virtual TCompactionTaskResult DoBuildTask(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket)
+        const override {
         std::vector<NArrow::TReplaceKey> stopPoints;
-        std::vector<TPortionInfo::TConstPtr> portions = GetPortionsForMerge(now, memLimit, bucket, &stopPoints, nullptr);
+        std::vector<TPortionInfo::TConstPtr> portions =
+            GetPortionsForMerge(now, memLimit, bucket, &stopPoints, nullptr);
         return TCompactionTaskResult(std::move(portions), std::move(stopPoints));
     }
+
 public:
     TOneHeadLogic(const TDuration freshnessCheckDuration)
-        : FreshnessCheckDuration(freshnessCheckDuration)
-    {
-
-    }
+        : FreshnessCheckDuration(freshnessCheckDuration) {}
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets

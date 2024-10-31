@@ -8,12 +8,11 @@ class TBlobAddress {
 private:
     YDB_READONLY(ui32, GroupId, 0);
     YDB_READONLY(ui32, ChannelId, 0);
+
 public:
     TBlobAddress(const ui32 groupId, const ui32 channelId)
         : GroupId(groupId)
-        , ChannelId(channelId) {
-
-    }
+        , ChannelId(channelId) {}
 
     TString DebugString() const;
 
@@ -25,4 +24,4 @@ public:
         return GroupId == item.GroupId && ChannelId == item.ChannelId;
     }
 };
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

@@ -6,7 +6,10 @@ namespace NKikimr::NColumnShard::NTiers {
 TFetcherCheckUserTieringPermissions::TFactory::TRegistrator<TFetcherCheckUserTieringPermissions>
     TFetcherCheckUserTieringPermissions::Registrator(TFetcherCheckUserTieringPermissions::GetTypeIdStatic());
 
-void TFetcherCheckUserTieringPermissions::DoProcess(NSchemeShard::TSchemeShard& schemeShard, NKikimrScheme::TEvProcessingResponse& result) const {
+void TFetcherCheckUserTieringPermissions::DoProcess(
+    NSchemeShard::TSchemeShard& schemeShard,
+    NKikimrScheme::TEvProcessingResponse& result
+) const {
     TResult content;
     content.MutableContent().SetOperationAllow(true);
     ui32 access = 0;
@@ -62,7 +65,8 @@ bool TFetcherCheckUserTieringPermissions::DoDeserializeFromProto(const TProtoCla
     return true;
 }
 
-NKikimr::NColumnShard::NTiers::TFetcherCheckUserTieringPermissions::TProtoClass TFetcherCheckUserTieringPermissions::DoSerializeToProto() const {
+NKikimr::NColumnShard::NTiers::TFetcherCheckUserTieringPermissions::TProtoClass
+TFetcherCheckUserTieringPermissions::DoSerializeToProto() const {
     TProtoClass result;
     result.SetActivityType(::ToString(ActivityType));
     if (UserToken) {
@@ -74,4 +78,4 @@ NKikimr::NColumnShard::NTiers::TFetcherCheckUserTieringPermissions::TProtoClass 
     return result;
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

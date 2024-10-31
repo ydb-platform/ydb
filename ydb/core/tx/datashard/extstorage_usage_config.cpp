@@ -8,6 +8,6 @@ Aws::S3::Model::StorageClass TS3Settings::GetStorageClass() const {
     return NKikimr::NWrappers::NExternalStorage::TS3ExternalStorageConfig::ConvertStorageClass(StorageClass);
 }
 
-}
+} // namespace NKikimr::NDataShard
 
 #endif // KIKIMR_DISABLE_S3_OPS

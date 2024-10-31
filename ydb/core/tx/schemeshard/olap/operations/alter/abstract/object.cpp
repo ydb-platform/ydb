@@ -3,7 +3,8 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
-std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntity> ISSEntity::GetEntityVerified(TOperationContext& context, const TPath& path) {
+std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntity>
+ISSEntity::GetEntityVerified(TOperationContext& context, const TPath& path) {
     if (path->IsColumnTable()) {
         auto readGuard = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
         TEntityInitializationContext iContext(&context);
@@ -13,4 +14,4 @@ std::shared_ptr<NKikimr::NSchemeShard::NOlap::NAlter::ISSEntity> ISSEntity::GetE
     return nullptr;
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

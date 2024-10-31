@@ -15,16 +15,13 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterExternalDataSource TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TAlterExternalDataSource TPropose"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(std::move(id))
-    {
-    }
+        : OperationId(std::move(id)) {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
@@ -63,34 +60,35 @@ public:
     }
 };
 
-class TAlterExternalDataSource : public TSubOperation {
-    static TTxState::ETxState NextState() { return TTxState::Propose; }
+class TAlterExternalDataSource: public TSubOperation {
+    static TTxState::ETxState NextState() {
+        return TTxState::Propose;
+    }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result,
-                                       const TPath& dstPath,
-                                       const TString& acl) {
+    static bool
+    IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
@@ -113,8 +111,7 @@ class TAlterExternalDataSource : public TSubOperation {
         return static_cast<bool>(checks);
     }
 
-    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result,
-                               const TOperationContext& context) const {
+    bool IsApplyIfChecksPassed(const THolder<TProposeResponse>& result, const TOperationContext& context) const {
         TString errorMessage;
         if (!context.SS->CheckApplyIf(Transaction, errorMessage)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errorMessage);
@@ -126,7 +123,8 @@ class TAlterExternalDataSource : public TSubOperation {
     static bool IsDescriptionValid(
         const THolder<TProposeResponse>& result,
         const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
-        const NExternalSource::IExternalSourceFactory::TPtr& factory) {
+        const NExternalSource::IExternalSourceFactory::TPtr& factory
+    ) {
         TString errorMessage;
         if (!NExternalDataSource::Validate(desc, factory, errorMessage)) {
             result->SetError(NKikimrScheme::StatusSchemeError, errorMessage);
@@ -135,8 +133,7 @@ class TAlterExternalDataSource : public TSubOperation {
         return true;
     }
 
-    static void AddPathInSchemeShard(
-        const THolder<TProposeResponse>& result, const TPath& dstPath) {
+    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, const TPath& dstPath) {
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
@@ -144,31 +141,26 @@ class TAlterExternalDataSource : public TSubOperation {
         TPathElement::TPtr externalDataSource = dstPath.Base();
 
         externalDataSource->PathState = TPathElement::EPathState::EPathStateAlter;
-        externalDataSource->LastTxId  = OperationId.GetTxId();
+        externalDataSource->LastTxId = OperationId.GetTxId();
 
         return externalDataSource;
     }
 
-    void CreateTransaction(const TOperationContext& context,
-                           const TPathId& externalDataSourcePathId) const {
-        TTxState& txState = context.SS->CreateTx(OperationId,
-                                                 TTxState::TxAlterExternalDataSource,
-                                                 externalDataSourcePathId);
+    void CreateTransaction(const TOperationContext& context, const TPathId& externalDataSourcePathId) const {
+        TTxState& txState =
+            context.SS->CreateTx(OperationId, TTxState::TxAlterExternalDataSource, externalDataSourcePathId);
         txState.Shards.clear();
     }
 
-    void RegisterParentPathDependencies(const TOperationContext& context,
-                                        const TPath& parentPath) const {
+    void RegisterParentPathDependencies(const TOperationContext& context, const TPath& parentPath) const {
         if (parentPath.Base()->HasActiveChanges()) {
-            const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
-                                         ? parentPath.Base()->CreateTxId
-                                         : parentPath.Base()->LastTxId;
+            const TTxId parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
     }
 
-    void AdvanceTransactionStateToPropose(const TOperationContext& context,
-                                          NIceDb::TNiceDb& db) const {
+    void AdvanceTransactionStateToPropose(const TOperationContext& context, NIceDb::TNiceDb& db) const {
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         context.OnComplete.ActivateTx(OperationId);
     }
@@ -178,7 +170,8 @@ class TAlterExternalDataSource : public TSubOperation {
         NIceDb::TNiceDb& db,
         const TPathElement::TPtr& externalDataSourcePath,
         const TExternalDataSourceInfo::TPtr& externalDataSourceInfo,
-        const TString& acl) const {
+        const TString& acl
+    ) const {
         const auto& externalDataSourcePathId = externalDataSourcePath->PathId;
 
         context.SS->ExternalDataSources[externalDataSourcePathId] = externalDataSourceInfo;
@@ -188,62 +181,61 @@ class TAlterExternalDataSource : public TSubOperation {
         }
         context.SS->PersistPath(db, externalDataSourcePathId);
 
-        context.SS->PersistExternalDataSource(db,
-                                              externalDataSourcePathId,
-                                              externalDataSourceInfo);
+        context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSourceInfo);
         context.SS->PersistTxState(db, OperationId);
     }
 
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner,
-                                      TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         Y_UNUSED(owner);
-        const auto ssId              = context.SS->SelfTabletId();
+        const auto ssId = context.SS->SelfTabletId();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const auto& externalDataSourceDescription =
-            Transaction.GetCreateExternalDataSource();
+        const auto& externalDataSourceDescription = Transaction.GetCreateExternalDataSource();
         const TString& name = externalDataSourceDescription.GetName();
 
         LOG_N("TAlterExternalDataSource Propose"
               << ": opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                   static_cast<ui64>(OperationId.GetTxId()),
-                                                   static_cast<ui64>(ssId));
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, static_cast<ui64>(OperationId.GetTxId()), static_cast<ui64>(ssId)
+        );
 
         if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
             if (!context.SS->EnableExternalDataSourcesOnServerless) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "External data sources are disabled for serverless domains. Please contact your system administrator to enable it");
+                result->SetError(
+                    NKikimrScheme::StatusPreconditionFailed,
+                    "External data sources are disabled for serverless domains. Please contact your system "
+                    "administrator to enable it"
+                );
                 return result;
             }
         }
 
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
-            result, parentPath, Transaction, /* isCreate */ false));
+        RETURN_RESULT_UNLESS(
+            NExternalDataSource::IsParentPathValid(result, parentPath, Transaction, /* isCreate */ false)
+        );
 
-        const TString acl   = Transaction.GetModifyACL().GetDiffACL();
+        const TString acl = Transaction.GetModifyACL().GetDiffACL();
         const TPath dstPath = parentPath.Child(name);
 
         RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
-        RETURN_RESULT_UNLESS(IsDescriptionValid(result,
-                                externalDataSourceDescription,
-                                context.SS->ExternalSourceFactory));
+        RETURN_RESULT_UNLESS(
+            IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory)
+        );
 
-        const auto oldExternalDataSourceInfo =
-        context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
+        const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldExternalDataSourceInfo);
-        const TExternalDataSourceInfo::TPtr externalDataSourceInfo =
-            NExternalDataSource::CreateExternalDataSource(externalDataSourceDescription,
-                                     oldExternalDataSourceInfo->AlterVersion + 1);
+        const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(
+            externalDataSourceDescription, oldExternalDataSourceInfo->AlterVersion + 1
+        );
         Y_ABORT_UNLESS(externalDataSourceInfo);
 
         AddPathInSchemeShard(result, dstPath);
-        const TPathElement::TPtr externalDataSource =
-            ReplaceExternalDataSourcePathElement(dstPath);
+        const TPathElement::TPtr externalDataSource = ReplaceExternalDataSourcePathElement(dstPath);
         CreateTransaction(context, externalDataSource->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -252,13 +244,9 @@ public:
 
         AdvanceTransactionStateToPropose(context, db);
 
-        PersistExternalDataSource(
-            context, db, externalDataSource, externalDataSourceInfo, acl);
+        PersistExternalDataSource(context, db, externalDataSource, externalDataSourceInfo, acl);
 
-        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
-                                                          dstPath,
-                                                          context.SS,
-                                                          context.OnComplete);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         SetState(NextState());
         return result;
@@ -290,4 +278,4 @@ ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, TTxState::ETx
     return MakeSubOperation<TAlterExternalDataSource>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

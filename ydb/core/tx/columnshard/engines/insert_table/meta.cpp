@@ -6,7 +6,9 @@ NKikimrTxColumnShard::TLogicalMetadata TInsertedDataMeta::SerializeToProto() con
     return OriginalProto;
 }
 
-std::shared_ptr<NArrow::TFirstLastSpecialKeys> TInsertedDataMeta::GetSpecialKeys(const std::shared_ptr<arrow::Schema>& schema) const {
+std::shared_ptr<NArrow::TFirstLastSpecialKeys> TInsertedDataMeta::GetSpecialKeys(
+    const std::shared_ptr<arrow::Schema>& schema
+) const {
     if (KeyInitialized.Val()) {
         return SpecialKeysParsed;
     }
@@ -25,4 +27,4 @@ std::shared_ptr<NArrow::TFirstLastSpecialKeys> TInsertedDataMeta::GetSpecialKeys
     return result;
 }
 
-}
+} // namespace NKikimr::NOlap

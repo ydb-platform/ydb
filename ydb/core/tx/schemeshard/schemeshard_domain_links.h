@@ -28,7 +28,6 @@ public:
     bool HasPipeTo(TTabletId tabletId, TActorId clientId);
 };
 
-
 class TSubDomainsLinks {
 public:
     struct TLink {
@@ -46,7 +45,7 @@ public:
         TString TenantRootACL;
 
         TLink() = default;
-        TLink& operator = (TLink&&) = default;
+        TLink& operator=(TLink&&) = default;
         TLink(const NKikimrScheme::TEvSyncTenantSchemeShard& record, const TActorId& actorId);
         void Out(IOutputStream& stream) const;
     };
@@ -57,8 +56,7 @@ private:
 
 public:
     TSubDomainsLinks(TSchemeShard* self)
-        : Self(self)
-    {}
+        : Self(self) {}
 
     bool IsActive(TPathId pathId) const {
         return ActiveLink.contains(pathId);
@@ -71,10 +69,13 @@ public:
     bool Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
 };
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr
 
-
-template<>
-inline void Out<NKikimr::NSchemeShard::TSubDomainsLinks::TLink>(IOutputStream& o, const NKikimr::NSchemeShard::TSubDomainsLinks::TLink& x) {
+template <>
+inline void Out<NKikimr::NSchemeShard::TSubDomainsLinks::TLink>(
+    IOutputStream& o,
+    const NKikimr::NSchemeShard::TSubDomainsLinks::TLink& x
+) {
     return x.Out(o);
 }

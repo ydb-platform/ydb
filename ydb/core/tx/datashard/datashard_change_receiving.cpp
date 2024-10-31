@@ -10,9 +10,7 @@ class TDataShard::TTxChangeExchangeHandshake: public TTransactionBase<TDataShard
 
 public:
     explicit TTxChangeExchangeHandshake(TDataShard* self)
-        : TTransactionBase(self)
-    {
-    }
+        : TTransactionBase(self) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CHANGE_EXCHANGE_HANDSHAKE;
@@ -58,7 +56,11 @@ public:
         return true;
     }
 
-    bool ExecuteHandshake(NIceDb::TNiceDb& db, const NKikimrChangeExchange::TEvHandshake& req, NKikimrChangeExchange::TEvStatus& resp) {
+    bool ExecuteHandshake(
+        NIceDb::TNiceDb& db,
+        const NKikimrChangeExchange::TEvHandshake& req,
+        NKikimrChangeExchange::TEvStatus& resp
+    ) {
         if (Self->State != TShardState::Ready) {
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
@@ -141,10 +143,13 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         }
     }
 
-    void AddRecordStatus(const TActorContext& ctx, ui64 order, NKikimrChangeExchange::TEvStatus::EStatus status,
-            NKikimrChangeExchange::TEvStatus::EReason reason = NKikimrChangeExchange::TEvStatus::REASON_NONE,
-            const TString& error = {})
-    {
+    void AddRecordStatus(
+        const TActorContext& ctx,
+        ui64 order,
+        NKikimrChangeExchange::TEvStatus::EStatus status,
+        NKikimrChangeExchange::TEvStatus::EReason reason = NKikimrChangeExchange::TEvStatus::REASON_NONE,
+        const TString& error = {}
+    ) {
         auto& recordStatus = *Status->Record.AddRecordStatuses();
         recordStatus.SetOrder(order);
         recordStatus.SetStatus(status);
@@ -171,27 +176,39 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
     }
 
     static bool ValidChangeKind(const NKikimrChangeExchange::TChangeRecord& record) {
-        return record.GetKindCase() == NKikimrChangeExchange::TChangeRecord::kAsyncIndex
-            || record.GetKindCase() == NKikimrChangeExchange::TChangeRecord::kIncrementalRestore;
+        return record.GetKindCase() == NKikimrChangeExchange::TChangeRecord::kAsyncIndex ||
+               record.GetKindCase() == NKikimrChangeExchange::TChangeRecord::kIncrementalRestore;
     }
 
-    bool ProcessRecord(const NKikimrChangeExchange::TChangeRecord& record, TTransactionContext& txc, const TActorContext& ctx) {
+    bool ProcessRecord(
+        const NKikimrChangeExchange::TChangeRecord& record,
+        TTransactionContext& txc,
+        const TActorContext& ctx
+    ) {
         Key.clear();
         Value.clear();
 
         if (!ValidChangeKind(record)) {
-            AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+            AddRecordStatus(
+                ctx,
+                record.GetOrder(),
+                NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                 NKikimrChangeExchange::TEvStatus::REASON_UNEXPECTED_KIND,
-                TStringBuilder() << "Unexpected kind: " << static_cast<ui32>(record.GetKindCase()));
+                TStringBuilder() << "Unexpected kind: " << static_cast<ui32>(record.GetKindCase())
+            );
             return false;
         }
 
         const auto& userTables = Self->GetUserTables();
         auto it = userTables.find(record.GetLocalPathId());
         if (it == userTables.end()) {
-            AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+            AddRecordStatus(
+                ctx,
+                record.GetOrder(),
+                NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                 NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
-                TStringBuilder() << "Unknown table with id: " << record.GetLocalPathId());
+                TStringBuilder() << "Unknown table with id: " << record.GetLocalPathId()
+            );
             return false;
         }
 
@@ -201,35 +218,52 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         const auto& serializedKey = change.GetKey();
 
         if (serializedKey.TagsSize() != tableInfo.KeyColumnIds.size()) {
-            AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+            AddRecordStatus(
+                ctx,
+                record.GetOrder(),
+                NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                 NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
                 TStringBuilder() << "Key column count mismatch"
-                    << ": got " << serializedKey.TagsSize()
-                    << ", expected " << tableInfo.KeyColumnIds.size());
+                                 << ": got " << serializedKey.TagsSize() << ", expected "
+                                 << tableInfo.KeyColumnIds.size()
+            );
             return false;
         }
 
         for (size_t i = 0; i < tableInfo.KeyColumnIds.size(); ++i) {
             if (serializedKey.GetTags(i) != tableInfo.KeyColumnIds.at(i)) {
-                AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                AddRecordStatus(
+                    ctx,
+                    record.GetOrder(),
+                    NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                     NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
-                    TStringBuilder() << "Key column schema mismatch at position: " << i);
+                    TStringBuilder() << "Key column schema mismatch at position: " << i
+                );
                 return false;
             }
         }
 
         if (!TSerializedCellVec::TryParse(serializedKey.GetData(), KeyCells)) {
-            AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
-                NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR, "Cannot parse key");
+            AddRecordStatus(
+                ctx,
+                record.GetOrder(),
+                NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
+                "Cannot parse key"
+            );
             return false;
         }
 
         if (KeyCells.GetCells().size() != tableInfo.KeyColumnTypes.size()) {
-            AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+            AddRecordStatus(
+                ctx,
+                record.GetOrder(),
+                NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                 NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
                 TStringBuilder() << "Cell count doesn't match row scheme"
-                    << ": got " << KeyCells.GetCells().size()
-                    << ", expected " << tableInfo.KeyColumnTypes.size());
+                                 << ": got " << KeyCells.GetCells().size() << ", expected "
+                                 << tableInfo.KeyColumnTypes.size()
+            );
             return false;
         }
 
@@ -239,9 +273,13 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             const auto& cell = KeyCells.GetCells().at(i);
 
             if (type == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127) {
-                AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                AddRecordStatus(
+                    ctx,
+                    record.GetOrder(),
+                    NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                     NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
-                    "Keys with Uint8 column values >127 are currently prohibited");
+                    "Keys with Uint8 column values >127 are currently prohibited"
+                );
                 return false;
             }
 
@@ -250,11 +288,15 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         }
 
         if (keyBytes > NLimits::MaxWriteKeySize) {
-            AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+            AddRecordStatus(
+                ctx,
+                record.GetOrder(),
+                NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                 NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
                 TStringBuilder() << "Key is too big"
-                    << ": actual " << keyBytes << " bytes"
-                    << ", limit " << NLimits::MaxWriteKeySize << " bytes");
+                                 << ": actual " << keyBytes << " bytes"
+                                 << ", limit " << NLimits::MaxWriteKeySize << " bytes"
+            );
             return false;
         }
 
@@ -265,17 +307,26 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                 const auto& serializedValue = GetValue(change);
 
                 if (!TSerializedCellVec::TryParse(serializedValue.GetData(), ValueCells)) {
-                    AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
-                        NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR, "Cannot parse value");
+                    AddRecordStatus(
+                        ctx,
+                        record.GetOrder(),
+                        NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                        NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
+                        "Cannot parse value"
+                    );
                     return false;
                 }
 
                 if (serializedValue.TagsSize() != ValueCells.GetCells().size()) {
-                    AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                    AddRecordStatus(
+                        ctx,
+                        record.GetOrder(),
+                        NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                         NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
                         TStringBuilder() << "Cell count doesn't match row scheme"
-                            << ": got " << ValueCells.GetCells().size()
-                            << ", expected " << serializedValue.TagsSize());
+                                         << ": got " << ValueCells.GetCells().size() << ", expected "
+                                         << serializedValue.TagsSize()
+                    );
                     return false;
                 }
 
@@ -284,23 +335,33 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
 
                     const auto* column = tableInfo.Columns.FindPtr(tag);
                     if (!column) {
-                        AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                        AddRecordStatus(
+                            ctx,
+                            record.GetOrder(),
+                            NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                             NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
-                            TStringBuilder() << "Missing column with id: " << tag);
+                            TStringBuilder() << "Missing column with id: " << tag
+                        );
                         return false;
                     }
 
                     const auto& cell = ValueCells.GetCells().at(i);
                     if (cell.Size() > NLimits::MaxWriteValueSize) {
-                        AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                        AddRecordStatus(
+                            ctx,
+                            record.GetOrder(),
+                            NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                             NKikimrChangeExchange::TEvStatus::REASON_SCHEME_ERROR,
                             TStringBuilder() << "Value cell is too big"
-                                << ": actual " << cell.Size() << " bytes"
-                                << ", limit " << NLimits::MaxWriteValueSize << " bytes");
+                                             << ": actual " << cell.Size() << " bytes"
+                                             << ", limit " << NLimits::MaxWriteValueSize << " bytes"
+                        );
                         return false;
                     }
 
-                    Value.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type.GetTypeId()));
+                    Value.emplace_back(
+                        tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type.GetTypeId())
+                    );
                 }
 
                 break;
@@ -310,8 +371,13 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                 break;
 
             case NTable::ERowOp::Absent:
-                AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
-                    NKikimrChangeExchange::TEvStatus::REASON_UNEXPECTED_ROW_OPERATION, "Row operation is absent");
+                AddRecordStatus(
+                    ctx,
+                    record.GetOrder(),
+                    NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                    NKikimrChangeExchange::TEvStatus::REASON_UNEXPECTED_ROW_OPERATION,
+                    "Row operation is absent"
+                );
                 return false;
         }
 
@@ -325,11 +391,15 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         if (UseStepTxId(record)) {
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
         } else {
-            Self->SysLocksTable().BreakLocks(tableId, KeyCells.GetCells()); // probably redundant, we expect target table to be locked until complete restore
+            Self->SysLocksTable().BreakLocks(
+                tableId, KeyCells.GetCells()
+            ); // probably redundant, we expect target table to be locked until complete restore
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, *MvccReadWriteVersion);
         }
 
-        Self->GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(KeyCells.GetCells(), txc.DB);
+        Self->GetConflictsCache()
+            .GetTableCache(tableInfo.LocalTid)
+            .RemoveUncommittedWrites(KeyCells.GetCells(), txc.DB);
         tableInfo.Stats.UpdateTime = TAppData::TimeProvider->Now();
         AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_OK);
 
@@ -341,9 +411,7 @@ public:
         : TTransactionBase(self)
         , Pipeline(pipeline)
         , Ev(std::move(ev))
-        , Status(new TEvChangeExchange::TEvStatus)
-    {
-    }
+        , Status(new TEvChangeExchange::TEvStatus) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_APPLY_CHANGE_RECORDS;
@@ -376,9 +444,13 @@ public:
         auto completeEdge = TRowVersion::Min();
         for (const auto& record : msg.GetRecords()) {
             if (record.GetOrder() <= it->second.LastRecordOrder) {
-                AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                AddRecordStatus(
+                    ctx,
+                    record.GetOrder(),
+                    NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                     NKikimrChangeExchange::TEvStatus::REASON_ORDER_VIOLATION,
-                    TStringBuilder() << "Last record order: " << it->second.LastRecordOrder);
+                    TStringBuilder() << "Last record order: " << it->second.LastRecordOrder
+                );
                 break;
             }
             if (ProcessRecord(record, txc, ctx)) {
@@ -479,4 +551,4 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
     Execute(new TTxApplyChangeRecords(this, Pipeline, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NDataShard

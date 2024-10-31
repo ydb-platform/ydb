@@ -5,7 +5,7 @@
 #include <ydb/core/protos/tx.pb.h>
 
 namespace NKikimr {
-IActor* CreateTxAllocator(const TActorId &tablet, TTabletStorageInfo *info);
+IActor* CreateTxAllocator(const TActorId& tablet, TTabletStorageInfo* info);
 }
 
 namespace NKikimr {
@@ -16,30 +16,28 @@ struct TEvTxAllocator {
 
         EvEnd
     };
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_ALLOCATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_ALLOCATOR)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_ALLOCATOR),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_ALLOCATOR)"
+    );
 
-    struct TEvAllocate : public TEventPB<TEvAllocate, NKikimrTx::TEvTxAllocate, EvAllocate> {
-        TEvAllocate()
-        {}
+    struct TEvAllocate: public TEventPB<TEvAllocate, NKikimrTx::TEvTxAllocate, EvAllocate> {
+        TEvAllocate() {}
 
-        TEvAllocate(ui64 count)
-        {
+        TEvAllocate(ui64 count) {
             Record.SetRangeSize(count);
         }
     };
 
-    struct TEvAllocateResult : public TEventPB<TEvAllocateResult, NKikimrTx::TEvTxAllocateResult, EvAllocateResult> {
-        TEvAllocateResult()
-        {}
+    struct TEvAllocateResult: public TEventPB<TEvAllocateResult, NKikimrTx::TEvTxAllocateResult, EvAllocateResult> {
+        TEvAllocateResult() {}
 
-        TEvAllocateResult(NKikimrTx::TEvTxAllocateResult::EStatus status)
-        {
+        TEvAllocateResult(NKikimrTx::TEvTxAllocateResult::EStatus status) {
             Y_ABORT_UNLESS(status != NKikimrTx::TEvTxAllocateResult::SUCCESS);
             Record.SetStatus(status);
         }
 
-        TEvAllocateResult(ui64 begin, ui64 end)
-        {
+        TEvAllocateResult(ui64 begin, ui64 end) {
             Y_ABORT_UNLESS(ExtractPrivateMarker(begin) != 0, "privat marker hasn't found in allocation");
             Y_ABORT_UNLESS(ExtractPrivateMarker(begin) == ExtractPrivateMarker(end), "privat marker incorrect");
 
@@ -52,12 +50,10 @@ struct TEvTxAllocator {
         ui64 ExtractPrivateMarker(ui64 item);
     };
 };
-}
+} // namespace NKikimr
 
-template<>
+template <>
 inline void Out<NKikimrTx::TEvTxAllocateResult::EStatus>(IOutputStream& o, NKikimrTx::TEvTxAllocateResult::EStatus x) {
     o << NKikimrTx::TEvTxAllocateResult::EStatus_Name(x).data();
     return;
 }
-
-

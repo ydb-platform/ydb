@@ -14,8 +14,7 @@ namespace NDataShard {
 
 TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid)
     : LocalTid(localTid)
-    , ShadowTid(shadowTid)
-{
+    , ShadowTid(shadowTid) {
     Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema);
     Name = ExtractBase(descr.GetPath());
     Path = descr.GetPath();
@@ -23,22 +22,19 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
 }
 
 TUserTable::TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr)
-    : TUserTable(table)
-{
+    : TUserTable(table) {
     Y_VERIFY_S(Name == descr.GetName(), "Name: " << Name << " descr.Name: " << descr.GetName());
     ParseProto(descr);
     AlterSchema();
 }
 
-void TUserTable::SetPath(const TString &path)
-{
+void TUserTable::SetPath(const TString& path) {
     Name = ExtractBase(path);
     Path = path;
     AlterSchema();
 }
 
-void TUserTable::SetTableSchemaVersion(ui64 schemaVersion)
-{
+void TUserTable::SetTableSchemaVersion(ui64 schemaVersion) {
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
     schema.SetTableSchemaVersion(schemaVersion);
@@ -47,8 +43,7 @@ void TUserTable::SetTableSchemaVersion(ui64 schemaVersion)
     TableSchemaVersion = schemaVersion;
 }
 
-bool TUserTable::ResetTableSchemaVersion()
-{
+bool TUserTable::ResetTableSchemaVersion() {
     if (TableSchemaVersion) {
         NKikimrSchemeOp::TTableDescription schema;
         GetSchema(schema);
@@ -136,12 +131,12 @@ bool TUserTable::HasAsyncIndexes() const {
 
 static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
     switch (format) {
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDynamoDBStreamsJson:
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
-        return true;
-    default:
-        return false;
+        case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
+        case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDynamoDBStreamsJson:
+        case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -232,11 +227,11 @@ bool TUserTable::IsReplicated() const {
 }
 
 bool TUserTable::IsIncrementalRestore() const {
-    return IncrementalBackupConfig.Mode == NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP;
+    return IncrementalBackupConfig.Mode ==
+           NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP;
 }
 
-void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
-{
+void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr) {
     // We expect schemeshard to send us full list of storage rooms
     if (descr.GetPartitionConfig().StorageRoomsSize()) {
         Rooms.clear();
@@ -266,8 +261,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     for (const auto& col : descr.GetColumns()) {
         TUserColumn& column = Columns[col.GetId()];
         if (column.Name.empty()) {
-            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(),
-                col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+            auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(
+                col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr
+            );
             column = TUserColumn(typeInfoMod.TypeInfo, typeInfoMod.TypeMod, col.GetName());
         }
         column.Family = col.GetFamily();
@@ -295,7 +291,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
             ui32 keyColId = descr.GetKeyColumnIds(i);
             KeyColumnIds.push_back(keyColId);
 
-            TUserColumn * col = Columns.FindPtr(keyColId);
+            TUserColumn* col = Columns.FindPtr(keyColId);
             Y_ABORT_UNLESS(col);
             col->IsKey = true;
             KeyColumnTypes[i] = col->Type;
@@ -306,10 +302,12 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     if (descr.HasPartitionRangeBegin()) {
         Y_ABORT_UNLESS(descr.HasPartitionRangeEnd());
-        Range = TSerializedTableRange(descr.GetPartitionRangeBegin(),
-                                      descr.GetPartitionRangeEnd(),
-                                      descr.GetPartitionRangeBeginIsInclusive(),
-                                      descr.GetPartitionRangeEndIsInclusive());
+        Range = TSerializedTableRange(
+            descr.GetPartitionRangeBegin(),
+            descr.GetPartitionRangeEnd(),
+            descr.GetPartitionRangeBeginIsInclusive(),
+            descr.GetPartitionRangeEndIsInclusive()
+        );
     }
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
@@ -321,7 +319,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     for (const auto& indexDesc : descr.GetTableIndexes()) {
         Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
-        Indexes.emplace(TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns));
+        Indexes.emplace(
+            TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns)
+        );
         AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
     }
 
@@ -337,9 +337,9 @@ void TUserTable::CheckSpecialColumns() {
     SpecialColEpoch = Max<ui32>();
     SpecialColUpdateNo = Max<ui32>();
 
-    for (const auto &xpair : Columns) {
+    for (const auto& xpair : Columns) {
         const ui32 colId = xpair.first;
-        const auto &column = xpair.second;
+        const auto& column = xpair.second;
 
         if (column.IsKey || column.Type.GetTypeId() != NScheme::NTypeIds::Uint64)
             continue;
@@ -407,28 +407,32 @@ void TUserTable::AlterSchema() {
 }
 
 void TUserTable::ApplyCreate(
-        TTransactionContext& txc, const TString& tableName,
-        const NKikimrSchemeOp::TPartitionConfig& partConfig) const
-{
+    TTransactionContext& txc,
+    const TString& tableName,
+    const NKikimrSchemeOp::TPartitionConfig& partConfig
+) const {
     DoApplyCreate(txc, tableName, false, partConfig);
 }
 
 void TUserTable::ApplyCreateShadow(
-        TTransactionContext& txc, const TString& tableName,
-        const NKikimrSchemeOp::TPartitionConfig& partConfig) const
-{
+    TTransactionContext& txc,
+    const TString& tableName,
+    const NKikimrSchemeOp::TPartitionConfig& partConfig
+) const {
     DoApplyCreate(txc, tableName, true, partConfig);
 }
 
 void TUserTable::DoApplyCreate(
-        TTransactionContext& txc, const TString& tableName, bool shadow,
-        const NKikimrSchemeOp::TPartitionConfig& partConfig) const
-{
+    TTransactionContext& txc,
+    const TString& tableName,
+    bool shadow,
+    const NKikimrSchemeOp::TPartitionConfig& partConfig
+) const {
     const ui32 tid = shadow ? ShadowTid : LocalTid;
 
     Y_ABORT_UNLESS(tid != 0 && tid != Max<ui32>(), "Creating table %s with bad id %" PRIu32, tableName.c_str(), tid);
 
-    auto &alter = txc.DB.Alter();
+    auto& alter = txc.DB.Alter();
     alter.AddTable(tableName, tid);
 
     THashSet<ui32> appliedRooms;
@@ -441,7 +445,9 @@ void TUserTable::DoApplyCreate(
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
-            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+            alter.SetRoom(
+                tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel()
+            );
         }
     }
 
@@ -484,7 +490,9 @@ void TUserTable::DoApplyCreate(
             alter.SetExecutorFastLogPolicy(partConfig.GetExecutorFastLogPolicy());
         }
 
-        alter.SetEraseCache(tid, partConfig.GetEnableEraseCache(), partConfig.GetEraseCacheMinRows(), partConfig.GetEraseCacheMaxBytes());
+        alter.SetEraseCache(
+            tid, partConfig.GetEnableEraseCache(), partConfig.GetEraseCacheMinRows(), partConfig.GetEraseCacheMaxBytes()
+        );
 
         if (IsBackup) {
             alter.SetColdBorrow(tid, true);
@@ -493,15 +501,17 @@ void TUserTable::DoApplyCreate(
 }
 
 void TUserTable::ApplyAlter(
-        TTransactionContext& txc, const TUserTable& oldTable,
-        const NKikimrSchemeOp::TTableDescription& delta, TString& strError)
-{
+    TTransactionContext& txc,
+    const TUserTable& oldTable,
+    const NKikimrSchemeOp::TTableDescription& delta,
+    TString& strError
+) {
     const auto& configDelta = delta.GetPartitionConfig();
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
     auto& config = *schema.MutablePartitionConfig();
 
-    auto &alter = txc.DB.Alter();
+    auto& alter = txc.DB.Alter();
 
     // Check if we need to drop shadow table first
     if (configDelta.HasShadowData()) {
@@ -541,7 +551,9 @@ void TUserTable::ApplyAlter(
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
             for (ui32 tid : tids) {
-                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+                alter.SetRoom(
+                    tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel()
+                );
             }
         }
     }
@@ -553,7 +565,9 @@ void TUserTable::ApplyAlter(
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
+                alter.AddColumnWithTypeInfo(
+                    tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull
+                );
             }
         }
 
@@ -564,7 +578,7 @@ void TUserTable::ApplyAlter(
 
     for (const auto& col : delta.GetDropColumns()) {
         ui32 colId = col.GetId();
-        const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId);
+        const TUserTable::TUserColumn* oldCol = oldTable.Columns.FindPtr(colId);
         Y_ABORT_UNLESS(oldCol);
         Y_ABORT_UNLESS(oldCol->Name == col.GetName());
         Y_ABORT_UNLESS(!Columns.contains(colId));
@@ -582,7 +596,7 @@ void TUserTable::ApplyAlter(
 
     if (configDelta.HasCompactionPolicy()) {
         TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> oldPolicy =
-                txc.DB.GetScheme().Tables.find(LocalTid)->second.CompactionPolicy;
+            txc.DB.GetScheme().Tables.find(LocalTid)->second.CompactionPolicy;
         NLocalDb::TCompactionPolicy newPolicy(configDelta.GetCompactionPolicy());
 
         if (NLocalDb::ValidateCompactionPolicyChange(*oldPolicy, newPolicy, strError)) {
@@ -620,7 +634,8 @@ void TUserTable::ApplyAlter(
         alter.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy());
     }
 
-    if (configDelta.HasEnableEraseCache() || configDelta.HasEraseCacheMinRows() || configDelta.HasEraseCacheMaxBytes()) {
+    if (configDelta.HasEnableEraseCache() || configDelta.HasEraseCacheMinRows() ||
+        configDelta.HasEraseCacheMaxBytes()) {
         if (configDelta.HasEnableEraseCache()) {
             config.SetEnableEraseCache(configDelta.GetEnableEraseCache());
         }
@@ -630,7 +645,9 @@ void TUserTable::ApplyAlter(
         if (configDelta.HasEraseCacheMaxBytes()) {
             config.SetEraseCacheMaxBytes(configDelta.GetEraseCacheMaxBytes());
         }
-        alter.SetEraseCache(LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes());
+        alter.SetEraseCache(
+            LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes()
+        );
     }
 
     schema.SetTableSchemaVersion(delta.GetTableSchemaVersion());
@@ -638,8 +655,7 @@ void TUserTable::ApplyAlter(
     SetSchema(schema);
 }
 
-void TUserTable::ApplyDefaults(TTransactionContext& txc) const
-{
+void TUserTable::ApplyDefaults(TTransactionContext& txc) const {
     const auto* tableInfo = txc.DB.GetScheme().GetTableInfo(LocalTid);
     if (!tableInfo) {
         // Local table does not exist, no need to apply any defaults
@@ -651,24 +667,25 @@ void TUserTable::ApplyDefaults(TTransactionContext& txc) const
     const auto& config = schema.GetPartitionConfig();
 
     if ((!config.HasEnableEraseCache() && config.GetEnableEraseCache() != tableInfo->EraseCacheEnabled) ||
-        (config.GetEnableEraseCache() && !config.HasEraseCacheMinRows() && config.GetEraseCacheMinRows() != tableInfo->EraseCacheMinRows) ||
-        (config.GetEnableEraseCache() && !config.HasEraseCacheMaxBytes() && config.GetEraseCacheMaxBytes() != tableInfo->EraseCacheMaxBytes))
-    {
+        (config.GetEnableEraseCache() && !config.HasEraseCacheMinRows() &&
+         config.GetEraseCacheMinRows() != tableInfo->EraseCacheMinRows) ||
+        (config.GetEnableEraseCache() && !config.HasEraseCacheMaxBytes() &&
+         config.GetEraseCacheMaxBytes() != tableInfo->EraseCacheMaxBytes)) {
         // Protobuf defaults for erase cache changed, apply to local database
-        txc.DB.Alter().SetEraseCache(LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes());
+        txc.DB.Alter().SetEraseCache(
+            LocalTid, config.GetEnableEraseCache(), config.GetEraseCacheMinRows(), config.GetEraseCacheMaxBytes()
+        );
     }
 }
 
-void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db) const
-{
+void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db) const {
     Fix_KIKIMR_17222(db, LocalTid);
     if (ShadowTid) {
         Fix_KIKIMR_17222(db, ShadowTid);
     }
 }
 
-void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const
-{
+void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const {
     const auto* tableInfo = db.GetScheme().GetTableInfo(tid);
     if (!tableInfo) {
         // Local table does not exist, nothing to fix
@@ -690,4 +707,5 @@ void TUserTable::Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const
     }
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

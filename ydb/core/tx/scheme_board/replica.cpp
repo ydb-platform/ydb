@@ -46,21 +46,21 @@ class TReplica: public TMonitorableActor<TReplica> {
             EvEnd,
         };
 
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+        static_assert(
+            EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
+            "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"
+        );
 
         struct TEvSendStrongNotifications: public TEventLocal<TEvSendStrongNotifications, EvSendStrongNotifications> {
             static constexpr ui32 BatchSize = 1000;
             const ui64 Owner;
 
             explicit TEvSendStrongNotifications(ui64 owner)
-                : Owner(owner)
-            {
-            }
+                : Owner(owner) {}
 
             TString ToString() const override {
                 return TStringBuilder() << ToStringHeader() << " {"
-                    << " Owner: " << Owner
-                << " }";
+                                        << " Owner: " << Owner << " }";
             }
         };
     };
@@ -83,9 +83,7 @@ private:
             , LastVersionSent(0)
             , NotifiedStrongly(true)
             , SyncRequestCookie(0)
-            , SyncResponseCookie(0)
-        {
-        }
+            , SyncResponseCookie(0) {}
 
         ESubscriptionType GetType() const {
             return Type;
@@ -231,36 +229,33 @@ public:
     public:
         explicit TDescription(TReplica* owner, const TString& path)
             : Owner(owner)
-            , Path(path)
-        {
+            , Path(path) {
             TrackMemory();
         }
 
         explicit TDescription(TReplica* owner, const TPathId& pathId)
             : Owner(owner)
-            , PathId(pathId)
-        {
+            , PathId(pathId) {
             TrackMemory();
         }
 
         explicit TDescription(TReplica* owner, const TString& path, const TPathId& pathId)
             : Owner(owner)
             , Path(path)
-            , PathId(pathId)
-        {
+            , PathId(pathId) {
             TrackMemory();
         }
 
         explicit TDescription(
-                TReplica* owner,
-                const TString& path,
-                const TPathId& pathId,
-                TOpaquePathDescription&& pathDescription)
+            TReplica* owner,
+            const TString& path,
+            const TPathId& pathId,
+            TOpaquePathDescription&& pathDescription
+        )
             : Owner(owner)
             , Path(path)
             , PathId(pathId)
-            , PathDescription(std::move(pathDescription))
-        {
+            , PathDescription(std::move(pathDescription)) {
             TrackMemory();
         }
 
@@ -346,20 +341,15 @@ public:
 
         TString ToString() const {
             return TStringBuilder() << "{"
-                << " Path# " << Path
-                << " PathId# " << PathId
-                << " PathDescription# " << PathDescription.ToString()
-                << " ExplicitlyDeleted# " << (ExplicitlyDeleted ? "true" : "false")
-            << " }";
+                                    << " Path# " << Path << " PathId# " << PathId << " PathDescription# "
+                                    << PathDescription.ToString() << " ExplicitlyDeleted# "
+                                    << (ExplicitlyDeleted ? "true" : "false") << " }";
         }
 
         TString ToLogString() const {
             return TStringBuilder() << "{"
-                << " Path# " << Path
-                << " PathId# " << PathId
-                << " Version# " << GetVersion()
-                << " ExplicitlyDeleted# " << (ExplicitlyDeleted ? "true" : "false")
-            << " }";
+                                    << " Path# " << Path << " PathId# " << PathId << " Version# " << GetVersion()
+                                    << " ExplicitlyDeleted# " << (ExplicitlyDeleted ? "true" : "false") << " }";
         }
 
         const TString& GetPath() const {
@@ -441,11 +431,13 @@ public:
             return notify;
         }
 
-        void Subscribe(const TActorId& subscriber, const TString&, ui64 domainOwnerId, const TCapabilities& capabilities) {
+        void
+        Subscribe(const TActorId& subscriber, const TString&, ui64 domainOwnerId, const TCapabilities& capabilities) {
             Subscribers.emplace(subscriber, TSubscriberInfo(SUBSCRIPTION_BY_PATH, domainOwnerId, capabilities));
         }
 
-        void Subscribe(const TActorId& subscriber, const TPathId&, ui64 domainOwnerId, const TCapabilities& capabilities) {
+        void
+        Subscribe(const TActorId& subscriber, const TPathId&, ui64 domainOwnerId, const TCapabilities& capabilities) {
             Subscribers.emplace(subscriber, TSubscriberInfo(SUBSCRIPTION_BY_PATH_ID, domainOwnerId, capabilities));
         }
 
@@ -459,7 +451,8 @@ public:
             return it->second;
         }
 
-        THashMap<TActorId, TSubscriberInfo> GetSubscribers(const ESubscriptionType type = SUBSCRIPTION_UNSPECIFIED) const {
+        THashMap<TActorId, TSubscriberInfo> GetSubscribers(const ESubscriptionType type = SUBSCRIPTION_UNSPECIFIED)
+            const {
             THashMap<TActorId, TSubscriberInfo> result;
 
             for (const auto& [subscriber, info] : Subscribers) {
@@ -532,7 +525,8 @@ private:
     }
 
     // upsert description only by pathId
-    TDescription& UpsertDescriptionByPathId(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
+    TDescription&
+    UpsertDescriptionByPathId(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
         SBR_LOG_I("Upsert description"
             << ": pathId# " << pathId
             << ", pathDescription# " << pathDescription.ToString()
@@ -542,7 +536,8 @@ private:
     }
 
     // upsert description by path AND pathId both
-    TDescription& UpsertDescription(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
+    TDescription&
+    UpsertDescription(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
         SBR_LOG_I("Upsert description"
             << ": path# " << path
             << ", pathId# " << pathId
@@ -635,7 +630,8 @@ private:
     }
 
     template <typename TPath>
-    void Subscribe(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities) {
+    void
+    Subscribe(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities) {
         TDescription* desc = Descriptions.FindPtr(path);
         Y_ABORT_UNLESS(desc);
 
@@ -666,8 +662,13 @@ private:
     }
 
     template <typename TPath>
-    void SubscribeBy(const TActorId& subscriber, const TPath& path, ui64 domainOwnerId, const TCapabilities& capabilities,
-            bool needNotify = true) {
+    void SubscribeBy(
+        const TActorId& subscriber,
+        const TPath& path,
+        ui64 domainOwnerId,
+        const TCapabilities& capabilities,
+        bool needNotify = true
+    ) {
         TDescription* desc = Descriptions.FindPtr(path);
         if (!desc) {
             desc = &UpsertDescription(path);
@@ -784,7 +785,7 @@ private:
         const TString& path = ev->Get()->GetPath();
         const TPathId& pathId = ev->Get()->GetPathId();
 
-       {
+        {
             auto& record = *ev->Get()->MutableRecord();
             const ui64 owner = record.GetOwner();
             const ui64 generation = record.GetGeneration();
@@ -825,7 +826,7 @@ private:
                 SoftDeleteDescription(pathId, true);
                 return AckUpdate(ev);
             }
-       }
+        }
 
         if (TDescription* desc = Descriptions.FindPtr(pathId)) {
             if (desc->IsExplicitlyDeleted()) {
@@ -1064,7 +1065,9 @@ private:
             SubscribeBy(ev->Sender, record.GetPath(), domainOwnerId, capabilities);
         } else {
             Y_ABORT_UNLESS(record.HasPathOwnerId() && record.HasLocalPathId());
-            SubscribeBy(ev->Sender, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()), domainOwnerId, capabilities);
+            SubscribeBy(
+                ev->Sender, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()), domainOwnerId, capabilities
+            );
         }
     }
 
@@ -1303,10 +1306,10 @@ private:
 
 }; // TReplica
 
-} // NSchemeBoard
+} // namespace NSchemeBoard
 
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32) {
     return new NSchemeBoard::TReplica();
 }
 
-} // NKikimr
+} // namespace NKikimr

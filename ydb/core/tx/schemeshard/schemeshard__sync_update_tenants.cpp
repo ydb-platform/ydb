@@ -8,18 +8,19 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxSyncTenant : public TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxSyncTenant: public TSchemeShard::TRwTxBase {
     TPathId PathId;
     TSideEffects SideEffects;
 
-    TTxSyncTenant(TSelf *self, TPathId pathId)
+    TTxSyncTenant(TSelf* self, TPathId pathId)
         : TRwTxBase(self)
-          , PathId(pathId)
-    {}
+        , PathId(pathId) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SYNC_TENANT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SYNC_TENANT;
+    }
 
-    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxSyncTenant DoExecute"
                         << ", pathId: " << PathId
@@ -29,7 +30,7 @@ struct TSchemeShard::TTxSyncTenant : public TSchemeShard::TRwTxBase {
         SideEffects.UpdateTenants({PathId});
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
-    void DoComplete(const TActorContext &ctx) override {
+    void DoComplete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxSyncTenant DoComplete"
                         << ", pathId: " << PathId
@@ -42,17 +43,18 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxSyncTenant(TPathId path
     return new TTxSyncTenant(this, pathId);
 }
 
-struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxUpdateTenant: public TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr Ev;
     THolder<TEvSchemeShard::TEvSyncTenantSchemeShard> SyncEv;
     TSideEffects SideEffects;
 
-    TTxUpdateTenant(TSelf *self, TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr &ev)
+    TTxUpdateTenant(TSelf* self, TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev)
         : TRwTxBase(self)
-          , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_UPDATE_TENANT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_UPDATE_TENANT;
+    }
 
     bool HasSync() {
         return bool(SyncEv);
@@ -69,7 +71,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
         return SyncEv.Release();
     }
 
-    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
         const auto& record = Ev->Get()->Record;
 
@@ -87,7 +89,9 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             Self->ParentDomainEffectiveACLVersion = record.GetEffectiveACLVersion();
             Self->ParentDomainCachedEffectiveACL.Init(Self->ParentDomainEffectiveACL);
 
-            Self->PersistParentDomainEffectiveACL(db, record.GetOwner(), record.GetEffectiveACL(), record.GetEffectiveACLVersion());
+            Self->PersistParentDomainEffectiveACL(
+                db, record.GetOwner(), record.GetEffectiveACL(), record.GetEffectiveACLVersion()
+            );
             for (const TPathId pathId : Self->ListSubTree(Self->RootPathId(), ctx)) {
                 SideEffects.PublishToSchemeBoard(InvalidOperationId, pathId);
             }
@@ -133,7 +137,8 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             {
                 TString errStr;
                 TUserAttributes::TPtr userAttrs = new TUserAttributes(record.GetUserAttributesVersion());
-                bool isOk = userAttrs->ApplyPatch(EUserAttributesOp::SyncUpdateTenants, record.GetUserAttributes(), errStr);
+                bool isOk =
+                    userAttrs->ApplyPatch(EUserAttributesOp::SyncUpdateTenants, record.GetUserAttributes(), errStr);
                 Y_VERIFY_S(isOk, errStr);
                 path->UserAttrs->AlterData = userAttrs;
             }
@@ -143,10 +148,9 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             MakeSync();
         }
 
-        auto addPrivateShard = [&] (TTabletId tabletId, TTabletTypes::EType tabletType) {
-            const auto shardIdx = Self->RegisterShardInfo(
-                TShardInfo(InvalidTxId, Self->RootPathId(), tabletType)
-                    .WithTabletID(tabletId));
+        auto addPrivateShard = [&](TTabletId tabletId, TTabletTypes::EType tabletType) {
+            const auto shardIdx =
+                Self->RegisterShardInfo(TShardInfo(InvalidTxId, Self->RootPathId(), tabletType).WithTabletID(tabletId));
             Self->PersistUpdateNextShardIdx(db);
 
             Self->PersistShardMapping(db, shardIdx, tabletId, Self->RootPathId(), InvalidTxId, tabletType);
@@ -216,7 +220,7 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
 
             // this is just a transformation ACL to TDiffACL
             NACLib::TDiffACL diffACL;
-            for (auto ace: tenantRootACL.GetACE()) {
+            for (auto ace : tenantRootACL.GetACE()) {
                 diffACL.AddAccess(ace);
             }
 
@@ -243,13 +247,16 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
 
-    void DoComplete(const TActorContext &ctx) override {
+    void DoComplete(const TActorContext& ctx) override {
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUpdateTenant(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUpdateTenant(
+    TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev
+) {
     return new TTxUpdateTenant(this, ev);
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

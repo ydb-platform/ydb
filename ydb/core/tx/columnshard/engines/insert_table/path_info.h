@@ -25,8 +25,7 @@ private:
 public:
     TPathInfoIndexPriority(const EIndexationPriority category, const ui32 weight)
         : Category(category)
-        , Weight(weight) {
-    }
+        , Weight(weight) {}
 
     bool operator!() const {
         return !Weight;

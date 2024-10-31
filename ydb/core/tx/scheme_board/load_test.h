@@ -24,15 +24,13 @@ struct TTestConfig {
         , ObjectsPerDir(10000)
         , SubscriberMulti(1)
         , InFlightModifications(100)
-        , InFlightChanges(100)
-    {
-    }
+        , InFlightChanges(100) {}
 
 }; // TTestConfig
 
-} // NSchemeBoard
+} // namespace NSchemeBoard
 
 IActor* CreateSchemeBoardLoadProducer(ui64 owner, const NSchemeBoard::TTestConfig& config);
 IActor* CreateSchemeBoardLoadConsumer(ui64 owner, const NSchemeBoard::TTestConfig& config);
 
-} // NKikimr
+} // namespace NKikimr

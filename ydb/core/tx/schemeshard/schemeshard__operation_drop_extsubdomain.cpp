@@ -12,8 +12,7 @@ using namespace NSchemeShard;
 class TDeletePrivateShards: public TDeleteParts {
 public:
     explicit TDeletePrivateShards(const TOperationId& id)
-        : TDeleteParts(id, TTxState::Done)
-    {
+        : TDeleteParts(id, TTxState::Done) {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
     }
 };
@@ -23,15 +22,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropExtSubdomain TDeleteExternalShards"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TDropExtSubdomain TDeleteExternalShards"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     TDeleteExternalShards(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         TSet<ui32> toIgnore = AllIncomingEvents();
         toIgnore.erase(TEvHive::TEvDeleteOwnerTabletsReply::EventType);
 
@@ -71,12 +68,11 @@ public:
                                << ", Owner: " << record.GetOwner()
                                << ", at schemeshard: " << ssId);
 
-        if (record.GetStatus() != NKikimrProto::EReplyStatus::OK && record.GetStatus() != NKikimrProto::EReplyStatus::ALREADY) {
+        if (record.GetStatus() != NKikimrProto::EReplyStatus::OK &&
+            record.GetStatus() != NKikimrProto::EReplyStatus::ALREADY) {
             TStringBuilder errMsg;
-            errMsg << DebugHint()
-                   << " Unexpected answer status from hive "
-                   << ", msg: " << record.ShortDebugString()
-                   << ", at schemeshard: " << ssId;
+            errMsg << DebugHint() << " Unexpected answer status from hive "
+                   << ", msg: " << record.ShortDebugString() << ", at schemeshard: " << ssId;
             LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, errMsg);
             Y_VERIFY_DEBUG_S(false, errMsg);
             return false;
@@ -93,7 +89,6 @@ public:
 
         return true;
     }
-
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
@@ -118,7 +113,8 @@ public:
             return true;
         }
 
-        TTabletId hiveToRequest = context.SS->ResolveHive(txState->TargetPathId, context.Ctx, TSchemeShard::EHiveSelection::IGNORE_TENANT);
+        TTabletId hiveToRequest =
+            context.SS->ResolveHive(txState->TargetPathId, context.Ctx, TSchemeShard::EHiveSelection::IGNORE_TENANT);
 
         auto event = MakeHolder<TEvHive::TEvDeleteOwnerTablets>(ui64(tenantSchemeshard), ui64(OperationId.GetTxId()));
         context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, TPipeMessageId(0, 0), event.Release());
@@ -132,14 +128,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropExtSubdomain TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TDropExtSubdomain TPropose"
+                                << ", operationId: " << OperationId;
     }
+
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         TSet<ui32> toIgnore = AllIncomingEvents();
         toIgnore.erase(TEvPrivate::TEvOperationPlan::EventType);
 
@@ -178,7 +173,7 @@ public:
         paths.erase(pathId);
         context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
 
-        for (auto id: paths) {
+        for (auto id : paths) {
             context.OnComplete.PublishToSchemeBoard(OperationId, id);
         }
 
@@ -217,30 +212,30 @@ class TDropExtSubdomain: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::DeleteExternalShards;
-        case TTxState::DeleteExternalShards:
-            return TTxState::DeletePrivateShards;
-        case TTxState::DeletePrivateShards:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::DeleteExternalShards;
+            case TTxState::DeleteExternalShards:
+                return TTxState::DeletePrivateShards;
+            case TTxState::DeletePrivateShards:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::DeleteExternalShards:
-            return MakeHolder<TDeleteExternalShards>(OperationId);
-        case TTxState::DeletePrivateShards:
-            return MakeHolder<TDeletePrivateShards>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::DeleteExternalShards:
+                return MakeHolder<TDeleteExternalShards>(OperationId);
+            case TTxState::DeletePrivateShards:
+                return MakeHolder<TDeletePrivateShards>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -262,16 +257,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotRoot()
@@ -283,8 +277,9 @@ public:
                 if (path.IsUnderCreating()) {
                     TPath parent = path.Parent();
                     if (parent.IsUnderCreating()) {
-                        checks
-                            .NotUnderTheSameOperation(parent.ActiveOperation(), NKikimrScheme::StatusMultipleModifications);
+                        checks.NotUnderTheSameOperation(
+                            parent.ActiveOperation(), NKikimrScheme::StatusMultipleModifications
+                        );
                     }
                 }
             }
@@ -309,7 +304,7 @@ public:
 
         auto relatedTx = context.SS->GetRelatedTransactions({path.Base()->PathId}, context.Ctx);
 
-        for (auto otherTxId: relatedTx) {
+        for (auto otherTxId : relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
                 continue;
             }
@@ -360,7 +355,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -373,4 +368,4 @@ ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxSt
     return MakeSubOperation<TDropExtSubdomain>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

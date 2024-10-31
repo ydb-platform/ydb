@@ -14,7 +14,9 @@ NKikimr::TConclusionStatus TCursor::DeserializeFromProto(const NKikimrColumnShar
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusion<NKikimr::NOlap::NExport::TCursor> TCursor::BuildFromProto(const NKikimrColumnShardExportProto::TCursor& proto) {
+NKikimr::TConclusion<NKikimr::NOlap::NExport::TCursor> TCursor::BuildFromProto(
+    const NKikimrColumnShardExportProto::TCursor& proto
+) {
     TCursor result;
     auto parsedResult = result.DeserializeFromProto(proto);
     if (!parsedResult) {
@@ -33,4 +35,4 @@ NKikimrColumnShardExportProto::TCursor TCursor::SerializeToProto() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NOlap::NExport

@@ -9,42 +9,30 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TBuildDataTxOutRSUnit : public TExecutionUnit {
+class TBuildDataTxOutRSUnit: public TExecutionUnit {
 public:
-    TBuildDataTxOutRSUnit(TDataShard &dataShard,
-                          TPipeline &pipeline);
+    TBuildDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TBuildDataTxOutRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TBuildDataTxOutRSUnit::TBuildDataTxOutRSUnit(TDataShard &dataShard,
-                                             TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::BuildDataTxOutRS, true, dataShard, pipeline)
-{
-}
+TBuildDataTxOutRSUnit::TBuildDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::BuildDataTxOutRS, true, dataShard, pipeline) {}
 
-TBuildDataTxOutRSUnit::~TBuildDataTxOutRSUnit()
-{
-}
+TBuildDataTxOutRSUnit::~TBuildDataTxOutRSUnit() {}
 
-bool TBuildDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TBuildDataTxOutRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
-                                                TTransactionContext &txc,
-                                                const TActorContext &ctx)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+EExecutionStatus
+TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
     DataShard.ReleaseCache(*tx);
@@ -64,9 +52,9 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
     TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
     tx->GetDataTx()->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
-    IEngineFlat *engine = tx->GetDataTx()->GetEngine();
+    IEngineFlat* engine = tx->GetDataTx()->GetEngine();
     try {
-        auto &outReadSets = op->OutReadSets();
+        auto& outReadSets = op->OutReadSets();
 
         if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID()))
             engine->Cancel();
@@ -87,7 +75,7 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
         }
 
         engine->AfterOutgoingReadsetsExtracted();
-    } catch (const TMemoryLimitExceededException &) {
+    } catch (const TMemoryLimitExceededException&) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Operation " << *op << " at " << DataShard.TabletID()
                     << " exceeded memory limit " << txc.GetMemoryLimit()
@@ -118,14 +106,9 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TBuildDataTxOutRSUnit::Complete(TOperation::TPtr,
-                                     const TActorContext &)
-{
-}
+void TBuildDataTxOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard,
-                                                   TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TBuildDataTxOutRSUnit(dataShard, pipeline));
 }
 

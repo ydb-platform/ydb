@@ -11,10 +11,14 @@ Y_UNIT_TEST_SUITE(TRtmrTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateRtmrVolume(runtime, txId++,  "/MyRoot",
-                            "Name: \"rtmr1\" "
-                            "PartitionsCount: 0",
-                            {NKikimrScheme::StatusAccepted});
+        TestCreateRtmrVolume(
+            runtime,
+            txId++,
+            "/MyRoot",
+            "Name: \"rtmr1\" "
+            "PartitionsCount: 0",
+            {NKikimrScheme::StatusAccepted}
+        );
 
         env.TestWaitNotification(runtime, 100);
 

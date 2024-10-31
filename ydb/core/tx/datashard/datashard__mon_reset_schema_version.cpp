@@ -12,16 +12,13 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDataShard::TTxMonitoringResetSchemaVersion
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
-{
+class TDataShard::TTxMonitoringResetSchemaVersion: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxMonitoringResetSchemaVersion(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
+    TTxMonitoringResetSchemaVersion(TDataShard* self, NMon::TEvRemoteHttpInfo::TPtr ev)
         : TBase(self)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) override {
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
         Updates = 0;
@@ -58,5 +55,5 @@ void TDataShard::HandleMonResetSchemaVersion(NMon::TEvRemoteHttpInfo::TPtr& ev) 
     Execute(new TTxMonitoringResetSchemaVersion(this, ev));
 }
 
-}
-}
+} // namespace NDataShard
+} // namespace NKikimr

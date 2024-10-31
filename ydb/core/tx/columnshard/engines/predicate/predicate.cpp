@@ -41,7 +41,8 @@ std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString
     return types;
 }
 
-TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+TString
+FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     Y_ABORT_UNLESS(cells.size() == columns.size());
     if (cells.empty()) {
         return {};
@@ -64,7 +65,9 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pai
 }
 
 std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::DeserializePredicatesRange(
-    const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    const TSerializedTableRange& range,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns
+) {
     std::vector<TCell> leftCells;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
     bool leftTrailingNull = false;
@@ -115,8 +118,17 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
     auto rightSchema = NArrow::MakeArrowSchema(rightColumns);
     Y_ASSERT(rightSchema.ok());
     return std::make_pair(
-        TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema.ValueUnsafe()),
-        TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema.ValueUnsafe()));
+        TPredicate(
+            fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater,
+            leftBorder,
+            leftSchema.ValueUnsafe()
+        ),
+        TPredicate(
+            toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less,
+            rightBorder,
+            rightSchema.ValueUnsafe()
+        )
+    );
 }
 
 std::shared_ptr<arrow::RecordBatch> TPredicate::CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch) {

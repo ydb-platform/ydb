@@ -24,7 +24,9 @@ bool ValidateLocation(const TString& location, TString& errStr) {
         return false;
     }
     if (location.size() > MAX_FIELD_SIZE) {
-        errStr = Sprintf("Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.size());
+        errStr = Sprintf(
+            "Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.size()
+        );
         return false;
     }
     return true;
@@ -32,7 +34,9 @@ bool ValidateLocation(const TString& location, TString& errStr) {
 
 bool ValidateContent(const TString& content, TString& errStr) {
     if (content.size() > MAX_PROTOBUF_SIZE) {
-        errStr = Sprintf("Maximum size of content must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, content.size());
+        errStr = Sprintf(
+            "Maximum size of content must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, content.size()
+        );
         return false;
     }
     return true;
@@ -47,17 +51,16 @@ bool ValidateDataSourcePath(const TString& dataSourcePath, TString& errStr) {
 }
 
 bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDescription& desc, TString& errStr) {
-    return ValidateSourceType(sourceType, errStr)
-        && ValidateLocation(desc.GetLocation(), errStr)
-        && ValidateContent(desc.GetContent(), errStr)
-        && ValidateDataSourcePath(desc.GetDataSourcePath(), errStr);
+    return ValidateSourceType(sourceType, errStr) && ValidateLocation(desc.GetLocation(), errStr) &&
+           ValidateContent(desc.GetContent(), errStr) && ValidateDataSourcePath(desc.GetDataSourcePath(), errStr);
 }
 
 std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
     const TString& sourceType,
     const NKikimrSchemeOp::TExternalTableDescription& desc,
     const NExternalSource::IExternalSourceFactory::TPtr& factory,
-    ui64 alterVersion) {
+    ui64 alterVersion
+) {
     TString errStr;
 
     if (!desc.ColumnsSize()) {
@@ -116,7 +119,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
         column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
 
-        auto& schemaColumn= *schema.add_column();
+        auto& schemaColumn = *schema.add_column();
         schemaColumn.set_name(colName);
         NScheme::ProtoFromTypeInfo(typeInfo, *schemaColumn.mutable_type(), col.GetNotNull());
     }
@@ -138,5 +141,4 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
     return std::make_pair(externalTableInfo, Nothing());
 }
 
-
-} // namespace NKikimr::NSchemeShard::NExternalDataSource
+} // namespace NKikimr::NSchemeShard::NExternalTable

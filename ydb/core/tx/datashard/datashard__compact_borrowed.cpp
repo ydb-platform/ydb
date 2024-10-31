@@ -3,14 +3,15 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDataShard::TTxCompactBorrowed : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxCompactBorrowed: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxCompactBorrowed(TDataShard* self, TEvDataShard::TEvCompactBorrowed::TPtr&& ev)
         : TTransactionBase(self)
-        , Ev(std::move(ev))
-    {}
+        , Ev(std::move(ev)) {}
 
-    TTxType GetTxType() const override { return TXTYPE_COMPACT_BORROWED; }
+    TTxType GetTxType() const override {
+        return TXTYPE_COMPACT_BORROWED;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
@@ -33,7 +34,7 @@ public:
             return true;
         }
         const TUserTable& tableInfo = *it->second;
-     
+
         THashSet<ui32> tablesToCompact;
         if (txc.DB.HasBorrowed(tableInfo.LocalTid, Self->TabletID())) {
             tablesToCompact.insert(tableInfo.LocalTid);
@@ -90,4 +91,5 @@ void TDataShard::Handle(TEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActor
     Execute(new TTxCompactBorrowed(this, std::move(ev)), ctx);
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

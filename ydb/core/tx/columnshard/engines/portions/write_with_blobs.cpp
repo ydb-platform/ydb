@@ -3,7 +3,10 @@
 
 namespace NKikimr::NOlap {
 
-void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(TWritePortionInfoWithBlobsConstructor& owner, const std::shared_ptr<IPortionDataChunk>& chunk) {
+void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(
+    TWritePortionInfoWithBlobsConstructor& owner,
+    const std::shared_ptr<IPortionDataChunk>& chunk
+) {
     AFL_VERIFY(chunk);
     Y_ABORT_UNLESS(!Finished);
     const TString& data = chunk->GetData();
@@ -17,7 +20,10 @@ void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(TWritePortionInf
     chunk->AddIntoPortionBeforeBlob(bRange, owner.GetPortionConstructor());
 }
 
-void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) {
+void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(
+    TWritePortionInfoWithBlobsResult& owner,
+    const TUnifiedBlobId& blobId
+) {
     AFL_VERIFY(!BlobId);
     BlobId = blobId;
     const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
@@ -26,10 +32,14 @@ void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionIn
     }
 }
 
-TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
+TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
+    std::vector<TSplittedBlob>&& chunks,
     const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
-    const ui64 granule, const ui64 schemaVersion, const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators)
-{
+    const ui64 granule,
+    const ui64 schemaVersion,
+    const TSnapshot& snapshot,
+    const std::shared_ptr<IStoragesManager>& operators
+) {
     TPortionInfoConstructor constructor(granule);
     constructor.SetMinSnapshotDeprecated(snapshot);
     constructor.SetSchemaVersion(schemaVersion);
@@ -37,7 +47,11 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
 }
 
 TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(
-    std::vector<TSplittedBlob>&& chunks, const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionInfoConstructor&& constructor, const std::shared_ptr<IStoragesManager>& operators) {
+    std::vector<TSplittedBlob>&& chunks,
+    const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks,
+    TPortionInfoConstructor&& constructor,
+    const std::shared_ptr<IStoragesManager>& operators
+) {
     TWritePortionInfoWithBlobsConstructor result(std::move(constructor));
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());
@@ -47,14 +61,21 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
         }
     }
     for (auto&& [_, i] : inplaceChunks) {
-        result.GetPortionConstructor().AddIndex(
-            TIndexChunk(i->GetEntityId(), i->GetChunkIdxVerified(), i->GetRecordsCountVerified(), i->GetRawBytesVerified(), i->GetData()));
+        result.GetPortionConstructor().AddIndex(TIndexChunk(
+            i->GetEntityId(),
+            i->GetChunkIdxVerified(),
+            i->GetRecordsCountVerified(),
+            i->GetRawBytesVerified(),
+            i->GetData()
+        ));
     }
 
     return result;
 }
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TWritePortionInfoWithBlobsConstructor::GetEntityChunks(const ui32 entityId) const {
+std::vector<std::shared_ptr<IPortionDataChunk>> TWritePortionInfoWithBlobsConstructor::GetEntityChunks(
+    const ui32 entityId
+) const {
     std::map<TChunkAddress, std::shared_ptr<IPortionDataChunk>> sortedChunks;
     for (auto&& b : GetBlobs()) {
         for (auto&& i : b.GetChunks()) {
@@ -65,7 +86,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TWritePortionInfoWithBlobsConstr
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> result;
     for (auto&& i : sortedChunks) {
-        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())("idx", i.second->GetChunkIdxVerified())("size", result.size());
+        AFL_VERIFY(i.second->GetChunkIdxVerified() == result.size())
+        ("idx", i.second->GetChunkIdxVerified())("size", result.size());
         result.emplace_back(i.second);
     }
     return result;
@@ -90,4 +112,4 @@ TString TWritePortionInfoWithBlobsResult::GetBlobByRangeVerified(const ui32 enti
     return "";
 }
 
-}
+} // namespace NKikimr::NOlap

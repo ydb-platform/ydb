@@ -3,8 +3,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-void TEffectiveACL::Init(const TString &effectiveACL)
-{
+void TEffectiveACL::Init(const TString& effectiveACL) {
     NACLibProto::TSecurityObject object;
     Y_ABORT_UNLESS(object.MutableACL()->ParseFromString(effectiveACL));
 
@@ -18,8 +17,7 @@ void TEffectiveACL::Init(const TString &effectiveACL)
     ForSelf = effectiveACL;
 }
 
-void TEffectiveACL::Update(const TEffectiveACL &parent, const TString &selfACL, bool isContainer)
-{
+void TEffectiveACL::Update(const TEffectiveACL& parent, const TString& selfACL, bool isContainer) {
     Y_DEBUG_ABORT_UNLESS(parent);
 
     if (!selfACL) {
@@ -42,7 +40,7 @@ void TEffectiveACL::Update(const TEffectiveACL &parent, const TString &selfACL, 
     ForSelf = effectiveObj.GetACL().SerializeAsString();
 }
 
-void TEffectiveACL::InheritFrom(const TEffectiveACL &parent, bool isContainer) {
+void TEffectiveACL::InheritFrom(const TEffectiveACL& parent, bool isContainer) {
     Inited = parent.Inited;
 
     ForContainers = parent.ForContainers;
@@ -51,7 +49,7 @@ void TEffectiveACL::InheritFrom(const TEffectiveACL &parent, bool isContainer) {
     ForSelf = isContainer ? ForContainers : ForObjects;
 }
 
-void TEffectiveACL::Split(const NACLibProto::TSecurityObject &obj) {
+void TEffectiveACL::Split(const NACLibProto::TSecurityObject& obj) {
     auto equalResult = Filter(obj, NACLib::EInheritanceType::InheritContainer, ForContainers);
 
     if (equalResult) {
@@ -61,14 +59,15 @@ void TEffectiveACL::Split(const NACLibProto::TSecurityObject &obj) {
     }
 }
 
-bool TEffectiveACL::Filter(const NACLibProto::TSecurityObject &obj, NACLib::EInheritanceType byType, TString &result) {
+bool TEffectiveACL::Filter(const NACLibProto::TSecurityObject& obj, NACLib::EInheritanceType byType, TString& result) {
     bool resultsIsEqualForAllInheritTypes = true;
 
     NACLibProto::TSecurityObject filtered;
 
-    for (const auto& ace: obj.GetACL().GetACE()) {
+    for (const auto& ace : obj.GetACL().GetACE()) {
         resultsIsEqualForAllInheritTypes = resultsIsEqualForAllInheritTypes &&
-                !((ace.GetInheritanceType() & NACLib::EInheritanceType::InheritContainer) ^ (ace.GetInheritanceType() & NACLib::EInheritanceType::InheritObject));
+                                           !((ace.GetInheritanceType() & NACLib::EInheritanceType::InheritContainer) ^
+                                             (ace.GetInheritanceType() & NACLib::EInheritanceType::InheritObject));
 
         if (ace.GetInheritanceType() & byType) {
             NACLibProto::TACE& addition = *filtered.MutableACL()->AddACE();
@@ -83,5 +82,5 @@ bool TEffectiveACL::Filter(const NACLibProto::TSecurityObject &obj, NACLib::EInh
     return resultsIsEqualForAllInheritTypes;
 }
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

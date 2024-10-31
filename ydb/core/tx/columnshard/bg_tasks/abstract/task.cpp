@@ -25,4 +25,4 @@ NKikimr::TConclusionStatus TTask::DeserializeFromProto(const NKikimrTxBackground
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

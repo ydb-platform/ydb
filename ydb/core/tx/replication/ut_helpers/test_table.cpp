@@ -11,28 +11,28 @@ void TTestTableDescription::TColumn::SerializeTo(NKikimrSchemeOp::TColumnDescrip
 
 void TTestTableDescription::TReplicationConfig::SerializeTo(NKikimrSchemeOp::TTableReplicationConfig& proto) const {
     switch (Mode) {
-    case MODE_NONE:
-        proto.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-        break;
-    case MODE_READ_ONLY:
-        proto.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-        break;
-    default:
-        Y_ABORT("Unexpected mode");
+        case MODE_NONE:
+            proto.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
+            break;
+        case MODE_READ_ONLY:
+            proto.SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+            break;
+        default:
+            Y_ABORT("Unexpected mode");
     }
 
     switch (Consistency) {
-    case CONSISTENCY_UNKNOWN:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN);
-        break;
-    case CONSISTENCY_STRONG:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG);
-        break;
-    case CONSISTENCY_WEAK:
-        proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
-        break;
-    default:
-        Y_ABORT("Unexpected consistency");
+        case CONSISTENCY_UNKNOWN:
+            proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN);
+            break;
+        case CONSISTENCY_STRONG:
+            proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG);
+            break;
+        case CONSISTENCY_WEAK:
+            proto.SetConsistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK);
+            break;
+        default:
+            Y_ABORT("Unexpected consistency");
     }
 }
 
@@ -69,4 +69,4 @@ THolder<NKikimrSchemeOp::TTableDescription> MakeTableDescription(const TTestTabl
     return result;
 }
 
-}
+} // namespace NKikimr::NReplication::NTestHelpers

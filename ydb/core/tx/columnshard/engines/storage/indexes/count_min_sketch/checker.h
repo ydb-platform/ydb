@@ -8,6 +8,7 @@ public:
     static TString GetClassNameStatic() {
         return "COUNT_MIN_SKETCH";
     }
+
 private:
     using TBase = TSimpleIndexChecker;
     static inline auto Registrator = TFactory::TRegistrator<TCountMinSketchChecker>(GetClassNameStatic());
@@ -21,12 +22,11 @@ protected:
 public:
     TCountMinSketchChecker() = default;
     TCountMinSketchChecker(const ui32 indexId)
-        : TBase(indexId)
-    {}
+        : TBase(indexId) {}
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

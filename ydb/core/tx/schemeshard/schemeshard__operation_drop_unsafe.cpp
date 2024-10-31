@@ -12,8 +12,7 @@ using namespace NSchemeShard;
 class TProposedDeletePart: public TDeletePartsAndDone {
 public:
     explicit TProposedDeletePart(const TOperationId& id)
-        : TDeletePartsAndDone(id)
-    {
+        : TDeletePartsAndDone(id) {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
     }
 };
@@ -23,14 +22,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropForceUnsafe TPropose"
-                << ", operationId: " << OperationId;
+        return TStringBuilder() << "TDropForceUnsafe TPropose"
+                                << ", operationId: " << OperationId;
     }
+
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         TSet<ui32> toIgnore = AllIncomingEvents();
         toIgnore.erase(TEvPrivate::TEvOperationPlan::EventType);
 
@@ -103,36 +101,32 @@ class TDropForceUnsafe: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::ProposedDeleteParts;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::ProposedDeleteParts;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedDeleteParts:
-            return MakeHolder<TProposedDeletePart>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedDeleteParts:
+                return MakeHolder<TProposedDeletePart>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
 public:
     explicit TDropForceUnsafe(const TOperationId& id, const TTxTransaction& tx, TPathElement::EPathType expectedType)
         : TSubOperation(id, tx)
-        , ExpectedType(expectedType)
-    {
-    }
+        , ExpectedType(expectedType) {}
 
     explicit TDropForceUnsafe(const TOperationId& id, TTxState::ETxState state)
-        : TSubOperation(id, state)
-    {
-    }
+        : TSubOperation(id, state) {}
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
@@ -165,20 +159,15 @@ public:
                              << ", at schemeshard: " << ssId);
         }
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotRoot()
-                .NotDeleted()
-                .IsCommonSensePath();
+            checks.NotEmpty().IsResolved().NotRoot().NotDeleted().IsCommonSensePath();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -190,8 +179,7 @@ public:
             TPath parent = path.Parent();
             if (parent.IsUnderCreating()) {
                 TPath::TChecker checks = parent.Check();
-                checks
-                    .NotUnderTheSameOperation(path.ActiveOperation(), NKikimrScheme::StatusMultipleModifications);
+                checks.NotUnderTheSameOperation(path.ActiveOperation(), NKikimrScheme::StatusMultipleModifications);
 
                 if (!checks) {
                     result->SetError(checks.GetStatus(), checks.GetError());
@@ -222,7 +210,7 @@ public:
         auto paths = context.SS->ListSubTree(path.Base()->PathId, context.Ctx);
 
         auto relatedTx = context.SS->GetRelatedTransactions(paths, context.Ctx);
-        for (auto otherTxId: relatedTx) {
+        for (auto otherTxId : relatedTx) {
             if (otherTxId == OperationId.GetTxId()) {
                 continue;
             }
@@ -275,7 +263,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -297,4 +285,4 @@ ISubOperation::TPtr CreateForceDropSubDomain(TOperationId id, TTxState::ETxState
     return MakeSubOperation<TDropForceUnsafe>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

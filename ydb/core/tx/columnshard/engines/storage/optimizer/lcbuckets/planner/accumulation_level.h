@@ -11,12 +11,13 @@ private:
 
     std::set<TOrderedPortion> Portions;
 
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(
-        const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+    virtual std::optional<TPortionsChain>
+    DoGetAffectedPortions(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
         return std::nullopt;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& /*from*/, const NArrow::TReplaceKey& /*to*/)
+        const override {
         return 0;
     }
 
@@ -27,8 +28,9 @@ private:
 
         THashSet<ui64> portionIds;
         ui64 affectedRawBytes = 0;
-        auto chain =
-            NextLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
+        auto chain = NextLevel->GetAffectedPortions(
+            Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd()
+        );
         if (chain) {
             auto it = Portions.begin();
             auto itNext = chain->GetPortions().begin();
@@ -51,10 +53,13 @@ private:
     }
 
 public:
-    TAccumulationLevelPortions(const ui64 levelId, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters)
+    TAccumulationLevelPortions(
+        const ui64 levelId,
+        const std::shared_ptr<IPortionsLevel>& nextLevel,
+        const TLevelCounters& levelCounters
+    )
         : TBase(levelId, nextLevel)
-        , LevelCounters(levelCounters) {
-    }
+        , LevelCounters(levelCounters) {}
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         for (auto&& i : Portions) {
@@ -65,7 +70,10 @@ public:
         return false;
     }
 
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add,
+        const std::vector<TPortionInfo::TPtr>& remove
+    ) override {
         for (auto&& i : remove) {
             auto it = Portions.find(i);
             AFL_VERIFY(it != Portions.end());
@@ -75,8 +83,8 @@ public:
             LevelCounters.Portions->RemovePortion(i);
         }
         for (auto&& i : add) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "add_accum")("portion_id", i->GetPortionId())(
-                "blob_size", i->GetTotalBlobBytes());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "add_accum")("portion_id", i->GetPortionId())("blob_size", i->GetTotalBlobBytes());
             AFL_VERIFY(Portions.emplace(i).second);
             PortionsInfo.AddPortion(i);
             LevelCounters.Portions->AddPortion(i);
@@ -91,7 +99,10 @@ public:
         {
             for (auto&& i : Portions) {
                 result.AddCurrentLevelPortion(
-                    i.GetPortion(), targetLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
+                    i.GetPortion(),
+                    targetLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()),
+                    true
+                );
                 if (!result.CanTakeMore()) {
                     result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
                     break;
@@ -101,7 +112,8 @@ public:
         return result;
     }
 
-    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
+    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/)
+        const override {
         AFL_VERIFY(false);
         NArrow::NMerger::TIntervalPositions result;
         return result;

@@ -36,22 +36,40 @@ public:
         , RepackCompactedPortions("COMPACTED", CreateSubGroup("action", "repack")) {
         for (ui32 i = 0; i < 10; ++i) {
             RepackPortionsFromLevel.emplace(
-                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "from")));
+                i,
+                TPortionGroupCounters(
+                    "level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "from")
+                )
+            );
             RepackPortionsToLevel.emplace(
-                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "to")));
+                i,
+                TPortionGroupCounters(
+                    "level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "to")
+                )
+            );
             MovePortionsFromLevel.emplace(
-                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "from")));
+                i,
+                TPortionGroupCounters(
+                    "level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "from")
+                )
+            );
             MovePortionsToLevel.emplace(
-                i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "to")));
+                i,
+                TPortionGroupCounters(
+                    "level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "to")
+                )
+            );
         }
         FullBlobsAppendCount = TBase::GetDeriviative("FullBlobsAppend/Count");
         FullBlobsAppendBytes = TBase::GetDeriviative("FullBlobsAppend/Bytes");
         SplittedBlobsAppendCount = TBase::GetDeriviative("SplittedBlobsAppend/Count");
         SplittedBlobsAppendBytes = TBase::GetDeriviative("SplittedBlobsAppend/Bytes");
-        HistogramRepackPortionsRawBytes = TBase::GetHistogram("RepackPortions/Raw/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
+        HistogramRepackPortionsRawBytes =
+            TBase::GetHistogram("RepackPortions/Raw/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
         HistogramRepackPortionsBlobBytes =
             TBase::GetHistogram("RepackPortions/Blob/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
-        HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::LinearHistogram(15, 10, 16));
+        HistogramRepackPortionsCount =
+            TBase::GetHistogram("RepackPortions/Count", NMonitoring::LinearHistogram(15, 10, 16));
     }
 
     static void OnRepackPortions(const TSimplePortionsGroupInfo& portions) {
@@ -61,20 +79,24 @@ public:
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes->Collect(portions.GetRawBytes());
     }
 
-    static void OnRepackPortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {
+    static void
+    OnRepackPortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {
         for (auto&& i : portions) {
-            auto& counters = (i.first == targetLevelIdx) ? Singleton<TGeneralCompactionCounters>()->RepackPortionsToLevel
-                                                         : Singleton<TGeneralCompactionCounters>()->RepackPortionsFromLevel;
+            auto& counters = (i.first == targetLevelIdx)
+                                 ? Singleton<TGeneralCompactionCounters>()->RepackPortionsToLevel
+                                 : Singleton<TGeneralCompactionCounters>()->RepackPortionsFromLevel;
             auto it = counters.find(i.first);
             AFL_VERIFY(it != counters.end());
             it->second.OnData(i.second);
         }
     }
 
-    static void OnMovePortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {
+    static void
+    OnMovePortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {
         for (auto&& i : portions) {
-            auto& counters = (i.first == targetLevelIdx) ? Singleton<TGeneralCompactionCounters>()->MovePortionsToLevel
-                                                         : Singleton<TGeneralCompactionCounters>()->MovePortionsFromLevel;
+            auto& counters = (i.first == targetLevelIdx)
+                                 ? Singleton<TGeneralCompactionCounters>()->MovePortionsToLevel
+                                 : Singleton<TGeneralCompactionCounters>()->MovePortionsFromLevel;
             auto it = counters.find(i.first);
             AFL_VERIFY(it != counters.end());
             it->second.OnData(i.second);

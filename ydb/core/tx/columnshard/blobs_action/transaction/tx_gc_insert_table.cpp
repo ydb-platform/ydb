@@ -34,4 +34,4 @@ void TTxInsertTableCleanup::Complete(const TActorContext& /*ctx*/) {
     Self->SetupCleanupInsertTable();
 }
 
-}
+} // namespace NKikimr::NColumnShard

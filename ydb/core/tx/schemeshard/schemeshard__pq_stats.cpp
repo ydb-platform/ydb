@@ -12,22 +12,33 @@ class TTxStoreTopicStats: public TTxStoreStats<TEvPersQueue::TEvPeriodicTopicSta
     TSideEffects MergeOpSideEffects;
 
 public:
-    TTxStoreTopicStats(TSchemeShard* ss, TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>& queue, bool& persistStatsPending)
-        : TTxStoreStats(ss, queue, persistStatsPending)
-    {
-    }
+    TTxStoreTopicStats(
+        TSchemeShard* ss,
+        TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>& queue,
+        bool& persistStatsPending
+    )
+        : TTxStoreStats(ss, queue, persistStatsPending) {}
 
     virtual ~TTxStoreTopicStats() = default;
 
-    void Complete(const TActorContext& ) override;
+    void Complete(const TActorContext&) override;
 
     // returns true to continue batching
-    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
+    bool PersistSingleStats(
+        const TPathId& pathId,
+        const TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>::TItem& item,
+        TTransactionContext& txc,
+        const TActorContext& ctx
+    ) override;
     void ScheduleNextBatch(const TActorContext& ctx) override;
 };
 
-
-bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQueueItem<TEvPersQueue::TEvPeriodicTopicStats>& item, TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxStoreTopicStats::PersistSingleStats(
+    const TPathId& pathId,
+    const TStatsQueueItem<TEvPersQueue::TEvPeriodicTopicStats>& item,
+    TTransactionContext& txc,
+    const TActorContext& ctx
+) {
     const auto& rec = item.Ev->Get()->Record;
 
     TTopicStats newStats;
@@ -88,7 +99,6 @@ void TTxStoreTopicStats::ScheduleNextBatch(const TActorContext& ctx) {
     Self->ExecuteTopicStatsBatch(ctx);
 }
 
-
 void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
 
@@ -100,7 +110,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
                                                         << " UsedReserveSize " << rec.GetUsedReserveSize());
 
     TStatsId statsId(pathId);
-    switch(TopicStatsQueue.Add(statsId, ev.Release())) {
+    switch (TopicStatsQueue.Add(statsId, ev.Release())) {
         case READY:
             ExecuteTopicStatsBatch(ctx);
             break;
@@ -110,7 +120,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
             break;
 
         default:
-          Y_ABORT("Unknown batch status");
+            Y_ABORT("Unknown batch status");
     }
 }
 
@@ -145,5 +155,5 @@ void TSchemeShard::ScheduleTopicStatsBatch(const TActorContext& ctx) {
     }
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

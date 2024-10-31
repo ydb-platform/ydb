@@ -14,10 +14,14 @@ using namespace NKikimr::NSchemeShard;
 
 namespace {
 
-void ApplySharding(TTxId txId, TPathId pathId, TOlapStoreInfo::TPtr storeInfo,
-                   const TChannelsBindings& channelsBindings,
-                   TTxState& txState, TSchemeShard* ss)
-{
+void ApplySharding(
+    TTxId txId,
+    TPathId pathId,
+    TOlapStoreInfo::TPtr storeInfo,
+    const TChannelsBindings& channelsBindings,
+    TTxState& txState,
+    TSchemeShard* ss
+) {
     ui32 numShards = storeInfo->GetColumnShards().size();
     txState.Shards.reserve(numShards);
 
@@ -41,20 +45,18 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateOlapStore TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateOlapStore TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -98,8 +100,10 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody, seqNo,
-                    context.SS->SelectProcessingParams(txState->TargetPathId));
+                    columnShardTxBody,
+                    seqNo,
+                    context.SS->SelectProcessingParams(txState->TargetPathId)
+                );
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
@@ -122,18 +126,17 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateOlapStore TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateOlapStore TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            {TEvHive::TEvCreateTabletReply::EventType,
-             TEvColumnShard::TEvProposeTransactionResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType}
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -207,19 +210,19 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateOlapStore TProposedWaitParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateOlapStore TProposedWaitParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TProposedWaitParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
             {TEvHive::TEvCreateTabletReply::EventType,
              TEvColumnShard::TEvProposeTransactionResult::EventType,
-             TEvPrivate::TEvOperationPlan::EventType});
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
@@ -275,17 +278,17 @@ class TCreateOlapStore: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
@@ -293,19 +296,19 @@ class TCreateOlapStore: public TSubOperation {
         using TPtr = TSubOperationState::TPtr;
 
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TPtr(new TCreateParts(OperationId));
-        case TTxState::ConfigureParts:
-            return TPtr(new TConfigureParts(OperationId));
-        case TTxState::Propose:
-            return TPtr(new TPropose(OperationId));
-        case TTxState::ProposedWaitParts:
-            return TPtr(new TProposedWaitParts(OperationId));
-        case TTxState::Done:
-            return TPtr(new TDone(OperationId));
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TPtr(new TCreateParts(OperationId));
+            case TTxState::ConfigureParts:
+                return TPtr(new TConfigureParts(OperationId));
+            case TTxState::Propose:
+                return TPtr(new TPropose(OperationId));
+            case TTxState::ProposedWaitParts:
+                return TPtr(new TProposedWaitParts(OperationId));
+            case TTxState::Done:
+                return TPtr(new TDone(OperationId));
+            default:
+                return nullptr;
         }
     }
 
@@ -330,16 +333,14 @@ public:
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->OlapStores.empty()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "OLAP schema operations are not supported");
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "OLAP schema operations are not supported");
             return result;
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -361,23 +362,15 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeColumnStore, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeColumnStore, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .IsValidACL(acl);
+                checks.IsValidLeafName().DepthLimit().PathsLimit().DirChildrenLimit().IsValidACL(acl);
             }
 
             if (!checks) {
@@ -412,7 +405,9 @@ public:
 
         // Construct channels bindings for columnshards
         TChannelsBindings channelsBindings;
-        if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storeInfo->GetStorageConfig(), channelsBindings, errStr)) {
+        if (!context.SS->GetOlapChannelsBindings(
+                dstPath.GetPathIdForDomain(), storeInfo->GetStorageConfig(), channelsBindings, errStr
+            )) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -420,9 +415,7 @@ public:
         const ui64 shardsToCreate = storeInfo->GetColumnShards().size();
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
-            checks
-                .ShardsLimit(shardsToCreate)
-                .PathShardsLimit(shardsToCreate);
+            checks.ShardsLimit(shardsToCreate).PathShardsLimit(shardsToCreate);
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -455,7 +448,9 @@ public:
 
         for (auto shard : txState.Shards) {
             Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
-            context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, OperationId.GetTxId(), shard.TabletType);
+            context.SS->PersistShardMapping(
+                db, shard.Idx, InvalidTabletId, pathId, OperationId.GetTxId(), shard.TabletType
+            );
             switch (shard.TabletType) {
                 case ETabletType::ColumnShard: {
                     context.SS->PersistChannelsBinding(db, shard.Idx, channelsBindings);
@@ -474,7 +469,8 @@ public:
         dstPath.Base()->PathType = TPathElement::EPathType::EPathTypeColumnStore;
 
         if (parentPath.Base()->HasActiveChanges()) {
-            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+            TTxId parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -523,7 +519,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -536,4 +532,4 @@ ISubOperation::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state
     return MakeSubOperation<TCreateOlapStore>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

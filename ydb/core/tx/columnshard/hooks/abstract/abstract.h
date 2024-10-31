@@ -44,8 +44,7 @@ class ILocalDBModifier {
 public:
     using TPtr = std::shared_ptr<ILocalDBModifier>;
 
-    virtual ~ILocalDBModifier() {
-    }
+    virtual ~ILocalDBModifier() {}
 
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const = 0;
 };
@@ -70,20 +69,20 @@ protected:
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& /*batch*/) {
         return true;
     }
-    virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+    virtual bool DoOnWriteIndexComplete(
+        const NOlap::TColumnEngineChanges& /*changes*/,
+        const ::NKikimr::NColumnShard::TColumnShard& /*shard*/
+    ) {
         return true;
     }
     virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, NOlap::TColumnEngineChanges& /*change*/) {
         return true;
     }
-    virtual void DoOnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& /*shard*/) {
-    }
-    virtual void DoOnAfterGCAction(const NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& /*action*/) {
-    }
-    virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
-    }
-    virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
-    }
+    virtual void DoOnAfterSharingSessionsManagerStart(const NColumnShard::TColumnShard& /*shard*/) {}
+    virtual void
+    DoOnAfterGCAction(const NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& /*action*/) {}
+    virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {}
+    virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {}
 
     virtual TDuration DoGetPingCheckPeriod(const TDuration defaultValue) const {
         return defaultValue;
@@ -143,8 +142,9 @@ private:
 
 public:
     virtual void OnRequestTracingChanges(
-        const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
-    }
+        const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/,
+        const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/
+    ) {}
 
     TDuration GetPingCheckPeriod() const {
         const TDuration defaultValue = 0.6 * GetReadTimeoutClean();
@@ -163,8 +163,7 @@ public:
         return DoGetOverridenGCPeriod(defaultValue);
     }
 
-    virtual void OnSelectShardingFilter() {
-    }
+    virtual void OnSelectShardingFilter() {}
 
     TDuration GetCompactionActualizationLag() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetCompactionActualizationLagMs());
@@ -172,7 +171,9 @@ public:
     }
 
     virtual NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
-        const NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& /*actions*/) const {
+        const NColumnShard::TBlobPutResult::TPtr original,
+        const NOlap::TWriteActionsCollection& /*actions*/
+    ) const {
         return original;
     }
 
@@ -196,14 +197,10 @@ public:
         const ui64 defaultValue = GetConfig().GetSmallPortionDetectSizeLimit();
         return DoGetSmallPortionSizeDetector(defaultValue);
     }
-    virtual void OnExportFinished() {
-    }
-    virtual void OnActualizationRefreshScheme() {
-    }
-    virtual void OnActualizationRefreshTiering() {
-    }
-    virtual void AddPortionForActualizer(const i32 /*portionsCount*/) {
-    }
+    virtual void OnExportFinished() {}
+    virtual void OnActualizationRefreshScheme() {}
+    virtual void OnActualizationRefreshTiering() {}
+    virtual void AddPortionForActualizer(const i32 /*portionsCount*/) {}
 
     void OnDataSharingFinished(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingFinished(tabletId, sessionId);
@@ -211,12 +208,9 @@ public:
     void OnDataSharingStarted(const ui64 tabletId, const TString& sessionId) {
         return DoOnDataSharingStarted(tabletId, sessionId);
     }
-    virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {
-    }
-    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {
-    }
-    virtual void OnMaxValueUsage() {
-    }
+    virtual void OnStatisticsUsage(const NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) {}
+    virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) {}
+    virtual void OnMaxValueUsage() {}
 
     virtual TDuration GetLagForCompactionBeforeTierings() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetLagForCompactionBeforeTieringsMs());
@@ -247,8 +241,7 @@ public:
     bool OnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
         return DoOnWriteIndexStart(tabletId, change);
     }
-    virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
-    }
+    virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {}
     TDuration GetReadTimeoutClean() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetReadTimeoutClean(defaultValue);
@@ -265,8 +258,7 @@ public:
         return DoGetOptimizerFreshnessCheckDuration(defaultValue);
     }
 
-    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {
-    }
+    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {}
 
     virtual ILocalDBModifier::TPtr BuildLocalBaseModifier() const {
         return nullptr;

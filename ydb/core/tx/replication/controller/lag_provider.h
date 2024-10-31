@@ -22,4 +22,4 @@ private:
     THashSet<ui64> Pending;
 };
 
-}
+} // namespace NKikimr::NReplication::NController

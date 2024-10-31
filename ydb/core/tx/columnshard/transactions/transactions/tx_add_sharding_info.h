@@ -3,7 +3,7 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxAddShardingInfo : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+class TTxAddShardingInfo: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
     NSharding::TGranuleShardingLogicContainer GranuleShardingLogic;
@@ -16,12 +16,16 @@ public:
         SnapshotVersion = ss;
     }
 
-    TTxAddShardingInfo(TColumnShard& owner, const NSharding::TGranuleShardingLogicContainer& granuleShardingLogic, const ui64 pathId, const ui64 version)
+    TTxAddShardingInfo(
+        TColumnShard& owner,
+        const NSharding::TGranuleShardingLogicContainer& granuleShardingLogic,
+        const ui64 pathId,
+        const ui64 version
+    )
         : TBase(&owner)
         , GranuleShardingLogic(granuleShardingLogic)
         , PathId(pathId)
-        , ShardingVersion(version)
-    {
+        , ShardingVersion(version) {
         AFL_VERIFY(!!GranuleShardingLogic);
     }
 
@@ -29,4 +33,4 @@ public:
     virtual void Complete(const TActorContext& ctx) override;
 };
 
-}
+} // namespace NKikimr::NColumnShard

@@ -8,22 +8,27 @@ public:
     static TString GetClassNameStatic() {
         return "S3";
     }
+
 private:
     TString StorageName;
     NKikimrSchemeOp::TS3Settings S3Settings;
-    static inline const TFactory::TRegistrator<TS3StorageInitializer> Registrator = TFactory::TRegistrator<TS3StorageInitializer>(GetClassNameStatic());
+    static inline const TFactory::TRegistrator<TS3StorageInitializer> Registrator =
+        TFactory::TRegistrator<TS3StorageInitializer>(GetClassNameStatic());
+
 protected:
-    virtual TConclusion<std::shared_ptr<IBlobsStorageOperator>> DoInitializeOperator(const std::shared_ptr<IStoragesManager>& storages) const override;
+    virtual TConclusion<std::shared_ptr<IBlobsStorageOperator>> DoInitializeOperator(
+        const std::shared_ptr<IStoragesManager>& storages
+    ) const override;
+
 public:
     TS3StorageInitializer() = default;
     TS3StorageInitializer(const TString& storageName, const NKikimrSchemeOp::TS3Settings& s3Settings)
         : StorageName(storageName)
-        , S3Settings(s3Settings)
-    {
+        , S3Settings(s3Settings) {}
 
-    }
-
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto) override {
+    virtual TConclusionStatus DoDeserializeFromProto(
+        const NKikimrColumnShardExportProto::TStorageInitializerContainer& proto
+    ) override {
         if (!proto.HasExternalS3()) {
             return TConclusionStatus::Fail("has not s3 configuration");
         }
@@ -41,4 +46,4 @@ public:
         return GetClassNameStatic();
     }
 };
-}
+} // namespace NKikimr::NOlap::NExport

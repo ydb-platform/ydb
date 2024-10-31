@@ -23,9 +23,7 @@ class TSessionInfo {
 public:
     explicit TSessionInfo(const TActorId& actorId)
         : ActorId(actorId)
-        , Generation(0)
-    {
-    }
+        , Generation(0) {}
 
     operator TActorId() const {
         return ActorId;
@@ -89,7 +87,9 @@ public:
         Y_ABORT_UNLESS(it != ActorIdToWorkerId.end());
 
         // actor already stopped
-        SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
+        SendWorkerStatus(
+            ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...
+        );
 
         Workers.erase(it->second);
         ActorIdToWorkerId.erase(it);
@@ -111,7 +111,13 @@ public:
         ops->Send(ActorId, ev.Release());
     }
 
-    void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId, const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds) {
+    void SendWorkerDataEnd(
+        IActorOps* ops,
+        const TWorkerId& id,
+        ui64 partitionId,
+        const TVector<ui64>&& adjacentPartitionsIds,
+        const TVector<ui64>&& childPartitionsIds
+    ) {
         auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
         auto& record = ev->Record;
 
@@ -143,9 +149,7 @@ private:
 
 struct TConnectionParams: std::tuple<TString, TString, bool, TString> {
     explicit TConnectionParams(const TString& endpoint, const TString& database, bool ssl, const TString& user)
-        : std::tuple<TString, TString, bool, TString>(endpoint, database, ssl, user)
-    {
-    }
+        : std::tuple<TString, TString, bool, TString>(endpoint, database, ssl, user) {}
 
     const TString& Endpoint() const {
         return std::get<0>(*this);
@@ -165,21 +169,21 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString> {
         const bool ssl = params.GetEnableSsl();
 
         switch (params.GetCredentialsCase()) {
-        case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            return TConnectionParams(endpoint, database, ssl, params.GetStaticCredentials().GetUser());
-        case NKikimrReplication::TConnectionParams::kOAuthToken:
-            return TConnectionParams(endpoint, database, ssl, params.GetOAuthToken().GetToken());
-        default:
-            Y_ABORT("Unexpected credentials");
+            case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                return TConnectionParams(endpoint, database, ssl, params.GetStaticCredentials().GetUser());
+            case NKikimrReplication::TConnectionParams::kOAuthToken:
+                return TConnectionParams(endpoint, database, ssl, params.GetOAuthToken().GetToken());
+            default:
+                Y_ABORT("Unexpected credentials");
         }
     }
 
 }; // TConnectionParams
 
-} // NKikimr::NReplication::NService
+} // namespace NKikimr::NReplication::NService
 
 template <>
-struct THash<NKikimr::NReplication::NService::TConnectionParams> : THash<std::tuple<TString, TString, bool, TString>> {};
+struct THash<NKikimr::NReplication::NService::TConnectionParams>: THash<std::tuple<TString, TString, bool, TString>> {};
 
 namespace NKikimr::NReplication {
 
@@ -188,9 +192,7 @@ namespace NService {
 class TReplicationService: public TActorBootstrapped<TReplicationService> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[Service]"
-                << SelfId() << " ";
+            LogPrefix = TStringBuilder() << "[Service]" << SelfId() << " ";
         }
 
         return LogPrefix.GetRef();
@@ -236,7 +238,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     const TActorId& GetOrCreateYdbProxy(TConnectionParams&& params, Args&&... args) {
         auto it = YdbProxies.find(params);
         if (it == YdbProxies.end()) {
-            auto ydbProxy = Register(CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...));
+            auto ydbProxy = Register(
+                CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...)
+            );
             auto res = YdbProxies.emplace(std::move(params), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
@@ -249,23 +253,22 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
-        case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetStaticCredentials());
-            break;
-        case NKikimrReplication::TConnectionParams::kOAuthToken:
-            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
-            break;
-        default:
-            Y_ABORT("Unexpected credentials");
+            case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetStaticCredentials());
+                break;
+            case NKikimrReplication::TConnectionParams::kOAuthToken:
+                ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
+                break;
+            default:
+                Y_ABORT("Unexpected credentials");
         }
 
         auto topicReaderSettings = TEvYdbProxy::TTopicReaderSettings()
-            .MaxMemoryUsageBytes(1_MB)
-            .ConsumerName(settings.GetConsumerName())
-            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
-                .Path(settings.GetTopicPath())
-                .AppendPartitionIds(settings.GetTopicPartitionId())
-            );
+                                       .MaxMemoryUsageBytes(1_MB)
+                                       .ConsumerName(settings.GetConsumerName())
+                                       .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                                                         .Path(settings.GetTopicPath())
+                                                         .AppendPartitionIds(settings.GetTopicPartitionId()));
 
         return [ydbProxy, settings = std::move(topicReaderSettings)]() {
             return CreateRemoteTopicReader(ydbProxy, settings);
@@ -315,8 +318,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         const auto& writerSettings = cmd.GetLocalTableWriter();
-        const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings)));
+        const auto actorId = session.RegisterWorker(
+            this, id, CreateWorker(SelfId(), ReaderFn(readerSettings), WriterFn(writerSettings))
+        );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -372,7 +376,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         LOG_I("Worker has ended"
             << ": worker# " << ev->Sender);
-        session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId, std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
+        session->SendWorkerDataEnd(
+            this,
+            session->GetWorkerId(ev->Sender),
+            ev->Get()->PartitionId,
+            std::move(ev->Get()->AdjacentPartitionsIds),
+            std::move(ev->Get()->ChildPartitionsIds)
+        );
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
@@ -425,10 +435,10 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     static NKikimrReplication::TEvWorkerStatus::EReason ToReason(TEvWorker::TEvGone::EStatus status) {
         switch (status) {
-        case TEvWorker::TEvGone::SCHEME_ERROR:
-            return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
-        default:
-            return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;
+            case TEvWorker::TEvGone::SCHEME_ERROR:
+                return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
+            default:
+                return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;
         }
     }
 
@@ -479,10 +489,10 @@ private:
 
 }; // TReplicationService
 
-} // NService
+} // namespace NService
 
 IActor* CreateReplicationService() {
     return new NService::TReplicationService();
 }
 
-}
+} // namespace NKikimr::NReplication

@@ -52,54 +52,46 @@ enum class EExecutionStatus {
     DelayCompleteNoMoreRestarts,
 };
 
-class TExecutionUnit
-{
+class TExecutionUnit {
 public:
-
-    TExecutionUnit(EExecutionUnitKind kind,
-                   bool executionMightRestart,
-                   TDataShard &dataShard,
-                   TPipeline &pipeline)
+    TExecutionUnit(EExecutionUnitKind kind, bool executionMightRestart, TDataShard& dataShard, TPipeline& pipeline)
         : Kind(kind)
         , ExecutionMightRestart(executionMightRestart)
         , DataShard(dataShard)
-        , Pipeline(pipeline)
-    {
-    }
+        , Pipeline(pipeline) {}
 
-    virtual ~TExecutionUnit()
-    {
-    }
+    virtual ~TExecutionUnit() {}
 
-    void AddOperation(TOperation::TPtr op)
-    {
+    void AddOperation(TOperation::TPtr op) {
         OpsInFly.insert(op);
     }
 
-    void RemoveOperation(TOperation::TPtr op)
-    {
+    void RemoveOperation(TOperation::TPtr op) {
         OpsInFly.erase(op);
     }
 
-    ui64 GetInFly() const { return OpsInFly.size(); }
+    ui64 GetInFly() const {
+        return OpsInFly.size();
+    }
 
-    EExecutionUnitKind GetKind() const { return Kind; }
+    EExecutionUnitKind GetKind() const {
+        return Kind;
+    }
 
     // Return true if Execute method might return
     // EExecutionStatus::Restart.
-    bool GetExecutionMightRestart() const { return ExecutionMightRestart; }
+    bool GetExecutionMightRestart() const {
+        return ExecutionMightRestart;
+    }
 
     virtual bool IsReadyToExecute(TOperation::TPtr op) const = 0;
-    virtual TOperation::TPtr FindReadyOperation() const
-    {
+    virtual TOperation::TPtr FindReadyOperation() const {
         Y_FAIL_S("FindReadyOperation is not implemented for execution unit " << Kind);
     }
 
-    virtual EExecutionStatus Execute(TOperation::TPtr op,
-                                     TTransactionContext &txc,
-                                     const TActorContext &ctx) = 0;
-    virtual void Complete(TOperation::TPtr op,
-                          const TActorContext &ctx) = 0;
+    virtual EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) = 0;
+    virtual void Complete(TOperation::TPtr op, const TActorContext& ctx) = 0;
+
 protected:
     // Call during unit execution when it's ok to reject operation before completion
     // Returns true if operation has been rejected as a result of this call
@@ -108,12 +100,13 @@ protected:
     // Returns true if CheckRejectDataTx will reject operation when called
     bool WillRejectDataTx(TOperation::TPtr op) const;
 
-    TOutputOpData::TResultPtr &BuildResult(TOperation::TPtr op,
-                                           NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+    TOutputOpData::TResultPtr& BuildResult(
+        TOperation::TPtr op,
+        NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status =
+            NKikimrTxDataShard::TEvProposeTransactionResult::ERROR
+    );
 
-    bool MaybeRequestMoreTxMemory(ui64 usage,
-                                  NTabletFlatExecutor::TTransactionContext &txc)
-    {
+    bool MaybeRequestMoreTxMemory(ui64 usage, NTabletFlatExecutor::TTransactionContext& txc) {
         if (usage > txc.GetMemoryLimit()) {
             ui64 request = Max(usage - txc.GetMemoryLimit(), txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);
             txc.RequestMemory(request);
@@ -124,14 +117,12 @@ protected:
 
     const EExecutionUnitKind Kind;
     bool ExecutionMightRestart;
-    TDataShard &DataShard;
-    TPipeline &Pipeline;
+    TDataShard& DataShard;
+    TPipeline& Pipeline;
     THashSet<TOperation::TPtr> OpsInFly;
 };
 
-THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
-                                            TDataShard &dataShard,
-                                            TPipeline &pipeline);
+THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind, TDataShard& dataShard, TPipeline& pipeline);
 
 } // namespace NDataShard
 } // namespace NKikimr

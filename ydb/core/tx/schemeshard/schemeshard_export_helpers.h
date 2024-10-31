@@ -2,12 +2,7 @@
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_W
+#if defined LOG_T || defined LOG_D || defined LOG_I || defined LOG_N || defined LOG_W || defined LOG_W
 #error log macro redefinition
 #endif
 
@@ -19,7 +14,11 @@
 #define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, stream)
 
 template <typename T>
-void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR) {
+void AddIssue(
+    T& response,
+    const TString& message,
+    NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR
+) {
     auto& issue = *response.AddIssues();
     issue.set_severity(severity);
     issue.set_message(message);

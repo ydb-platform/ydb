@@ -10,7 +10,7 @@
 #include <util/generic/maybe.h>
 
 namespace NKikimrTxDataShard {
-    class TEvCdcStreamScanResponse_TStats;
+class TEvCdcStreamScanResponse_TStats;
 }
 
 namespace NKikimr::NDataShard {
@@ -37,7 +37,12 @@ private:
 public:
     void Reset();
     bool Load(NIceDb::TNiceDb& db);
-    void Add(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId, const TRowVersion& snapshotVersion);
+    void Add(
+        NTable::TDatabase& db,
+        const TPathId& tablePathId,
+        const TPathId& streamPathId,
+        const TRowVersion& snapshotVersion
+    );
     void Forget(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId);
 
     void Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId);
@@ -56,12 +61,15 @@ public:
 
     ui32 Size() const;
 
-    void PersistAdd(NIceDb::TNiceDb& db,
-        const TPathId& tablePathId, const TPathId& streamPathId, const TScanInfo& info);
-    void PersistRemove(NIceDb::TNiceDb& db,
-        const TPathId& tablePathId, const TPathId& streamPathId);
-    void PersistProgress(NIceDb::TNiceDb& db,
-        const TPathId& tablePathId, const TPathId& streamPathId, const TScanInfo& info);
+    void
+    PersistAdd(NIceDb::TNiceDb& db, const TPathId& tablePathId, const TPathId& streamPathId, const TScanInfo& info);
+    void PersistRemove(NIceDb::TNiceDb& db, const TPathId& tablePathId, const TPathId& streamPathId);
+    void PersistProgress(
+        NIceDb::TNiceDb& db,
+        const TPathId& tablePathId,
+        const TPathId& streamPathId,
+        const TScanInfo& info
+    );
 
 private:
     THashMap<TPathId, TScanInfo> Scans;
@@ -69,4 +77,4 @@ private:
     THashMap<ui64, TPathId> TxIdToPathId;
 };
 
-}
+} // namespace NKikimr::NDataShard

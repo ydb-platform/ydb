@@ -13,32 +13,40 @@
 Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     using namespace NKikimr;
 
-    class TAllocation: public NOlap::NGroupedMemoryManager::IAllocation, public TObjectCounter<TAllocation> {
+    class TAllocation
+        : public NOlap::NGroupedMemoryManager::IAllocation
+        , public TObjectCounter<TAllocation> {
     private:
         using TBase = NOlap::NGroupedMemoryManager::IAllocation;
-        virtual bool DoOnAllocated(std::shared_ptr<NOlap::NGroupedMemoryManager::TAllocationGuard>&& /*guard*/,
-            const std::shared_ptr<NOlap::NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
+        virtual bool DoOnAllocated(
+            std::shared_ptr<NOlap::NGroupedMemoryManager::TAllocationGuard>&& /*guard*/,
+            const std::shared_ptr<NOlap::NGroupedMemoryManager::IAllocation>& /*allocation*/
+        ) override {
             return true;
         }
 
     public:
         TAllocation(const ui64 mem)
-            : TBase(mem) {
-        }
+            : TBase(mem) {}
     };
 
     Y_UNIT_TEST(Simplest) {
-        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
+        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), "test"
+        );
         NOlap::NGroupedMemoryManager::TConfig config;
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
             AFL_VERIFY(config.DeserializeFromProto(protoConfig));
         }
-        std::unique_ptr<NActors::IActor> actor(
-            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(
+            config, MakeIntrusive<NMonitoring::TDynamicCounters>()
+        ));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(
+            NActors::TActorId(), config, "test", counters, stage
+        );
         {
             auto alloc1 = std::make_shared<TAllocation>(50);
             manager->RegisterProcess(0, {});
@@ -70,16 +78,22 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     }
 
     Y_UNIT_TEST(Simple) {
-        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
+        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), "test"
+        );
         NOlap::NGroupedMemoryManager::TConfig config;
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
             AFL_VERIFY(config.DeserializeFromProto(protoConfig));
         }
-        std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(
+            config, MakeIntrusive<NMonitoring::TDynamicCounters>()
+        ));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(
+            NActors::TActorId(), config, "test", counters, stage
+        );
         {
             manager->RegisterProcess(0, {});
             manager->RegisterProcessScope(0, 0);
@@ -122,17 +136,22 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     }
 
     Y_UNIT_TEST(CommonUsage) {
-        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
+        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), "test"
+        );
         NOlap::NGroupedMemoryManager::TConfig config;
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
             AFL_VERIFY(config.DeserializeFromProto(protoConfig));
         }
-        std::unique_ptr<NActors::IActor> actor(
-            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(
+            config, MakeIntrusive<NMonitoring::TDynamicCounters>()
+        ));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(
+            NActors::TActorId(), config, "test", counters, stage
+        );
         {
             manager->RegisterProcess(0, {});
             manager->RegisterProcessScope(0, 0);
@@ -182,17 +201,22 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     }
 
     Y_UNIT_TEST(Update) {
-        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
+        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(
+            MakeIntrusive<NMonitoring::TDynamicCounters>(), "test"
+        );
         NOlap::NGroupedMemoryManager::TConfig config;
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
             AFL_VERIFY(config.DeserializeFromProto(protoConfig));
         }
-        std::unique_ptr<NActors::IActor> actor(
-            NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(
+            config, MakeIntrusive<NMonitoring::TDynamicCounters>()
+        ));
         auto stage = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::GetDefaultStageFeatures();
-        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(
+            NActors::TActorId(), config, "test", counters, stage
+        );
         {
             manager->RegisterProcess(0, {});
             manager->RegisterProcessScope(0, 0);

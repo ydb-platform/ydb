@@ -25,9 +25,7 @@ class TReplication::TImpl: public TLagProvider {
         THolder<ITarget> Ptr;
 
         explicit TTarget(ITarget* iface)
-            : Ptr(iface)
-        {
-        }
+            : Ptr(iface) {}
     };
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
@@ -41,10 +39,10 @@ class TReplication::TImpl: public TLagProvider {
     template <typename... Args>
     ITarget* CreateTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) const {
         switch (kind) {
-        case ETargetKind::Table:
-            return new TTargetTable(self, id, std::forward<Args>(args)...);
-        case ETargetKind::IndexTable:
-            return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
+            case ETargetKind::Table:
+                return new TTargetTable(self, id, std::forward<Args>(args)...);
+            case ETargetKind::IndexTable:
+                return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
         }
     }
 
@@ -63,7 +61,8 @@ class TReplication::TImpl: public TLagProvider {
                     paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
                 }
 
-                TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
+                TargetDiscoverer =
+                    ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, std::move(paths)));
                 break;
             }
 
@@ -83,9 +82,7 @@ public:
     explicit TImpl(ui64 id, const TPathId& pathId, T&& config)
         : ReplicationId(id)
         , PathId(pathId)
-        , Config(std::forward<T>(config))
-    {
-    }
+        , Config(std::forward<T>(config)) {}
 
     template <typename... Args>
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
@@ -102,9 +99,7 @@ public:
 
     ITarget* FindTarget(ui64 id) {
         auto it = Targets.find(id);
-        return it != Targets.end()
-            ? it->second.Ptr.Get()
-            : nullptr;
+        return it != Targets.end() ? it->second.Ptr.Get() : nullptr;
     }
 
     void RemoveTarget(ui64 id) {
@@ -120,21 +115,21 @@ public:
             const bool ssl = params.GetEnableSsl();
 
             switch (params.GetCredentialsCase()) {
-            case NKikimrReplication::TConnectionParams::kStaticCredentials:
-                if (!params.GetStaticCredentials().HasPassword()) {
-                    return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
-                }
-                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
-                break;
-            case NKikimrReplication::TConnectionParams::kOAuthToken:
-                if (!params.GetOAuthToken().HasToken()) {
-                    return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
-                }
-                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
-                break;
-            default:
-                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
-                break;
+                case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                    if (!params.GetStaticCredentials().HasPassword()) {
+                        return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
+                    }
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
+                    break;
+                case NKikimrReplication::TConnectionParams::kOAuthToken:
+                    if (!params.GetOAuthToken().HasToken()) {
+                        return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
+                    }
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
+                    break;
+                default:
+                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                    break;
             }
 
             if (ydbProxy) {
@@ -147,21 +142,21 @@ public:
         }
 
         switch (State) {
-        case EState::Ready:
-            if (!Targets) {
-                return DiscoverTargets(ctx);
-            } else {
-                return ProgressTargets(ctx);
-            }
-        case EState::Removing:
-            if (!Targets) {
-                return (void)ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropReplication(ReplicationId));
-            } else {
-                return ProgressTargets(ctx);
-            }
-        case EState::Done:
-        case EState::Error:
-            return;
+            case EState::Ready:
+                if (!Targets) {
+                    return DiscoverTargets(ctx);
+                } else {
+                    return ProgressTargets(ctx);
+                }
+            case EState::Removing:
+                if (!Targets) {
+                    return (void)ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropReplication(ReplicationId));
+                } else {
+                    return ProgressTargets(ctx);
+                }
+            case EState::Done:
+            case EState::Error:
+                return;
         }
     }
 
@@ -218,14 +213,10 @@ private:
 }; // TImpl
 
 TReplication::TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, config))
-{
-}
+    : Impl(std::make_shared<TImpl>(id, pathId, config)) {}
 
 TReplication::TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, std::move(config)))
-{
-}
+    : Impl(std::make_shared<TImpl>(id, pathId, std::move(config))) {}
 
 static auto ParseConfig(const TString& config) {
     NKikimrReplication::TReplicationConfig cfg;
@@ -234,15 +225,14 @@ static auto ParseConfig(const TString& config) {
 }
 
 TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, ParseConfig(config)))
-{
-}
+    : Impl(std::make_shared<TImpl>(id, pathId, ParseConfig(config))) {}
 
 ui64 TReplication::AddTarget(ETargetKind kind, const TString& srcPath, const TString& dstPath) {
     return Impl->AddTarget(this, kind, srcPath, dstPath);
 }
 
-TReplication::ITarget* TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath) {
+TReplication::ITarget*
+TReplication::AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath) {
     Impl->AddTarget(this, id, kind, srcPath, dstPath);
     return Impl->FindTarget(id);
 }
@@ -314,14 +304,14 @@ ui64 TReplication::GetNextTargetId() const {
 void TReplication::UpdateSecret(const TString& secretValue) {
     auto& params = *Impl->Config.MutableSrcConnectionParams();
     switch (params.GetCredentialsCase()) {
-    case NKikimrReplication::TConnectionParams::kStaticCredentials:
-        params.MutableStaticCredentials()->SetPassword(secretValue);
-        break;
-    case NKikimrReplication::TConnectionParams::kOAuthToken:
-        params.MutableOAuthToken()->SetToken(secretValue);
-        break;
-    default:
-        Y_ABORT("unreachable");
+        case NKikimrReplication::TConnectionParams::kStaticCredentials:
+            params.MutableStaticCredentials()->SetPassword(secretValue);
+            break;
+        case NKikimrReplication::TConnectionParams::kOAuthToken:
+            params.MutableOAuthToken()->SetToken(secretValue);
+            break;
+        default:
+            Y_ABORT("unreachable");
     }
 }
 
@@ -362,7 +352,7 @@ const TMaybe<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
 }
 
-}
+} // namespace NKikimr::NReplication::NController
 
 Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream, value) {
     stream << static_cast<int>(value);

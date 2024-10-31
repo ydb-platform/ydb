@@ -52,9 +52,16 @@ bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFiel
     return true;
 }
 
-TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
-                                      const bool shadowDataAllowed, const THashSet<TString>& localSequences,
-                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
+TTableInfo::TAlterDataPtr ParseParams(
+    const TPath& path,
+    TTableInfo::TPtr table,
+    const NKikimrSchemeOp::TTableDescription& alter,
+    const bool shadowDataAllowed,
+    const THashSet<TString>& localSequences,
+    TString& errStr,
+    NKikimrScheme::EStatus& status,
+    TOperationContext& context
+) {
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
@@ -73,22 +80,16 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     auto copyAlter = alter;
 
-    const bool hasSchemaChanges = (
-            copyAlter.ColumnsSize() != 0 ||
-            copyAlter.DropColumnsSize() != 0);
+    const bool hasSchemaChanges = (copyAlter.ColumnsSize() != 0 || copyAlter.DropColumnsSize() != 0);
 
-    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() !=  table->IsBackup) {
+    if (copyAlter.HasIsBackup() && copyAlter.GetIsBackup() != table->IsBackup) {
         errStr = Sprintf("Cannot add/remove 'IsBackup' property");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
 
-    if (!hasSchemaChanges
-        && !copyAlter.HasPartitionConfig()
-        && !copyAlter.HasTTLSettings()
-        && !copyAlter.HasReplicationConfig()
-        && !copyAlter.HasIncrementalBackupConfig())
-    {
+    if (!hasSchemaChanges && !copyAlter.HasPartitionConfig() && !copyAlter.HasTTLSettings() &&
+        !copyAlter.HasReplicationConfig() && !copyAlter.HasIncrementalBackupConfig()) {
         errStr = Sprintf("No changes specified");
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -136,8 +137,12 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     }
 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, errStr)
-        || !TPartitionConfigMerger::VerifyAlterParams(table->PartitionConfig(), compilationPartitionConfig, appData, shadowDataAllowed, errStr)) {
+    if (!TPartitionConfigMerger::ApplyChanges(
+            compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, errStr
+        ) ||
+        !TPartitionConfigMerger::VerifyAlterParams(
+            table->PartitionConfig(), compilationPartitionConfig, appData, shadowDataAllowed, errStr
+        )) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
@@ -151,10 +156,9 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
     };
 
-
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
-        table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        featureFlags, errStr, localSequences);
+        table, copyAlter, *appData->TypeRegistry, limits, subDomain, featureFlags, errStr, localSequences
+    );
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -163,8 +167,13 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     return alterData;
 }
 
-void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr table, const TBindingsRoomsChanges& bindingChanges, TOperationContext& context) {
-
+void PrepareChanges(
+    TOperationId opId,
+    TPathElement::TPtr path,
+    TTableInfo::TPtr table,
+    const TBindingsRoomsChanges& bindingChanges,
+    TOperationContext& context
+) {
     path->LastTxId = opId.GetTxId();
     path->PathState = TPathElement::EPathState::EPathStateAlter;
 
@@ -173,9 +182,7 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
 
     NIceDb::TNiceDb db(context.GetDB());
 
-    TTxState::ETxState commonShardOp = table->NeedRecreateParts()
-            ? TTxState::CreateParts
-            : TTxState::ConfigureParts;
+    TTxState::ETxState commonShardOp = table->NeedRecreateParts() ? TTxState::CreateParts : TTxState::ConfigureParts;
 
     txState.Shards.reserve(table->GetPartitions().size());
     for (const auto& shard : table->GetPartitions()) {
@@ -206,18 +213,22 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
     context.SS->PersistAddAlterTable(db, path->PathId, table->AlterData);
     context.SS->PersistTxState(db, opId);
 
-
-    for (auto splitTx: table->GetSplitOpsInFlight()) {
+    for (auto splitTx : table->GetSplitOpsInFlight()) {
         context.OnComplete.Dependence(splitTx.GetTxId(), opId.GetTxId());
     }
 
     context.OnComplete.ActivateTx(opId);
 }
 
-bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableDescription& alter, const TPath& tablePath, TString& errStr) {
+bool CheckDroppingColumns(
+    const TSchemeShard* ss,
+    const NKikimrSchemeOp::TTableDescription& alter,
+    const TPath& tablePath,
+    TString& errStr
+) {
     TSet<TString> deletedColumns;
 
-    for (const auto& colDescr: alter.GetDropColumns()) {
+    for (const auto& colDescr : alter.GetDropColumns()) {
         if (colDescr.GetName()) {
             deletedColumns.insert(colDescr.GetName());
         }
@@ -233,24 +244,20 @@ bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
         }
 
         const TTableIndexInfo::TPtr indexInfo = ss->Indexes.at(childPathId);
-        for (const auto& indexKey: indexInfo->IndexKeys) {
+        for (const auto& indexKey : indexInfo->IndexKeys) {
             if (deletedColumns.contains(indexKey)) {
-                errStr = TStringBuilder ()
-                    << "Impossible drop column because table has an index with that column"
-                    << ", column name: " << indexKey
-                    << ", table name: " << tablePath.PathString()
-                    << ", index name: " << childName;
+                errStr = TStringBuilder() << "Impossible drop column because table has an index with that column"
+                                          << ", column name: " << indexKey << ", table name: " << tablePath.PathString()
+                                          << ", index name: " << childName;
                 return false;
             }
         }
 
-        for (const auto& col: indexInfo->IndexDataColumns) {
+        for (const auto& col : indexInfo->IndexDataColumns) {
             if (deletedColumns.contains(col)) {
-                errStr = TStringBuilder ()
-                    << "Impossible drop column because table index covers that column"
-                    << ", column name: " << col
-                    << ", table name: " << tablePath.PathString()
-                    << ", index name: " << childName;
+                errStr = TStringBuilder() << "Impossible drop column because table index covers that column"
+                                          << ", column name: " << col << ", table name: " << tablePath.PathString()
+                                          << ", index name: " << childName;
                 return false;
             }
         }
@@ -264,15 +271,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterTable TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -323,15 +328,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterTable TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
@@ -394,7 +397,8 @@ public:
 
             for (auto& shard : table->GetPartitions()) {
                 if (auto& lag = shard.LastCondEraseLag) {
-                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds()
+                    );
                     lag.Clear();
                 } else {
                     Y_DEBUG_ABORT_UNLESS(false);
@@ -443,35 +447,35 @@ class TAlterTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -496,9 +500,8 @@ public:
 
         TPathId pathId;
         if (alter.HasId_Deprecated() || alter.HasPathId()) {
-            pathId = alter.HasPathId()
-                ? PathIdFromPathId(alter.GetPathId())
-                : context.SS->MakeLocalId(alter.GetId_Deprecated());
+            pathId = alter.HasPathId() ? PathIdFromPathId(alter.GetPathId())
+                                       : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -508,20 +511,18 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!alter.HasName() && !pathId) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "No table name or pathId in Alter");
             return result;
         }
 
-        TPath path = pathId
-            ? TPath::Init(pathId, context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = pathId ? TPath::Init(pathId, context.SS) : TPath::Resolve(parentPathStr, context.SS).Dive(name);
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -530,9 +531,7 @@ public:
                 .NotUnderOperation();
 
             if (checks && !Transaction.GetInternal()) {
-                checks
-                    .NotAsyncReplicaTable()
-                    .NotBackupTable();
+                checks.NotAsyncReplicaTable().NotBackupTable();
             }
 
             if (!context.IsAllowedPrivateTables) {
@@ -547,15 +546,14 @@ public:
 
         THashSet<TString> localSequences;
 
-        for (const auto& column: alter.GetColumns()) {
+        for (const auto& column : alter.GetColumns()) {
             if (column.HasDefaultFromSequence()) {
                 TString defaultFromSequence = column.GetDefaultFromSequence();
 
                 const auto sequencePath = TPath::Resolve(defaultFromSequence, context.SS);
                 {
                     const auto checks = sequencePath.Check();
-                    checks
-                        .NotEmpty()
+                    checks.NotEmpty()
                         .NotUnderDomainUpgrade()
                         .IsAtLocalSchemeShard()
                         .IsResolved()
@@ -617,8 +615,8 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TTableInfo::TAlterDataPtr alterData = ParseParams(
-            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
+        TTableInfo::TAlterDataPtr alterData =
+            ParseParams(path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
@@ -638,7 +636,9 @@ public:
                     return result;
                 }
                 if (column.DeleteVersion == alterData->AlterVersion) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table");
+                    result->SetError(
+                        NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table"
+                    );
                     return result;
                 }
             }
@@ -647,7 +647,13 @@ public:
         TBindingsRoomsChanges bindingChanges;
 
         if (context.SS->IsStorageConfigLogic(table)) {
-            if (!context.SS->GetBindingsRoomsChanges(path.GetPathIdForDomain(), table->GetPartitions(), alterData->PartitionConfigFull(), bindingChanges, errStr)) {
+            if (!context.SS->GetBindingsRoomsChanges(
+                    path.GetPathIdForDomain(),
+                    table->GetPartitions(),
+                    alterData->PartitionConfigFull(),
+                    bindingChanges,
+                    errStr
+                )) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
@@ -675,7 +681,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -701,7 +707,8 @@ ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState:
     return obj.Release();
 }
 
-TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
     const auto& alter = tx.GetAlterTable();
@@ -715,9 +722,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
         return {CreateAlterTable(id, tx)};
     }
 
-    TPath path = pathId
-        ? TPath::Init(pathId, context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path = pathId ? TPath::Init(pathId, context.SS) : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
     if (!path.IsResolved()) {
         return {CreateAlterTable(id, tx)};
@@ -746,20 +751,20 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     // Admins can alter indexImplTable unconditionally.
     // Regular users can only alter allowed fields.
-    if (!IsSuperUser(context.UserToken.Get())
-        && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
-            || (alter.HasPartitionConfig()
-                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})
-            )
-        )
-    ) {
+    if (!IsSuperUser(context.UserToken.Get()) &&
+        (!CheckAllowedFields(
+             alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"}
+         ) ||
+         (alter.HasPartitionConfig() && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy"})))) {
         return {CreateAlterTable(id, tx)};
     }
 
     TVector<ISubOperation::TPtr> result;
 
     {
-        auto tableIndexAltering = TransactionTemplate(parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        auto tableIndexAltering = TransactionTemplate(
+            parent.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex
+        );
         tableIndexAltering.SetInternal(tx.GetInternal());
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
         alterIndex->SetName(parent.LeafName());
@@ -770,8 +775,7 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 
     result.push_back(CreateAlterTable(NextPartId(id, result), tx));
 
-
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -214,6 +214,6 @@ Y_UNIT_TEST_SUITE(TBalanceCoverageBuilderTest) {
     }
 }
 
-}
+} // namespace NTxDataShard
 
-}
+} // namespace NKikimr

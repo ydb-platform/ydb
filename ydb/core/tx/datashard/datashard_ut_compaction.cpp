@@ -10,11 +10,10 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
     Y_UNIT_TEST(CompactBorrowed) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -24,7 +23,9 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400);");
+        ExecSQL(
+            server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400);"
+        );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
@@ -78,22 +79,23 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
 
         {
             auto result = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_VALUES_EQUAL(result,
+            UNIT_ASSERT_VALUES_EQUAL(
+                result,
                 "key = 1, value = 100\n"
                 "key = 2, value = 200\n"
                 "key = 3, value = 300\n"
-                "key = 4, value = 400\n");
+                "key = 4, value = 400\n"
+            );
         }
     }
 
     Y_UNIT_TEST(CompactBorrowedTxStatus) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -102,9 +104,12 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Replicated(true)
-            .ReplicationConsistency(EReplicationConsistency::Strong)
+        CreateShardedTable(
+            server,
+            sender,
+            "/Root",
+            "table-1",
+            TShardedTableOptions().Replicated(true).ReplicationConsistency(EReplicationConsistency::Strong)
         );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
@@ -113,12 +118,18 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
         auto tableId = ResolveTableId(server, sender, "/Root/table-1");
 
         // We make some uncommitted changes first
-        ApplyChanges(server, shards1.at(0), tableId, "my-source", {
-            TChange{ .Offset = 0, .WriteTxId = 123, .Key = 1, .Value = 100 },
-            TChange{ .Offset = 1, .WriteTxId = 123, .Key = 2, .Value = 200 },
-            TChange{ .Offset = 2, .WriteTxId = 123, .Key = 3, .Value = 300 },
-            TChange{ .Offset = 3, .WriteTxId = 123, .Key = 4, .Value = 400 },
-        });
+        ApplyChanges(
+            server,
+            shards1.at(0),
+            tableId,
+            "my-source",
+            {
+                TChange{.Offset = 0, .WriteTxId = 123, .Key = 1, .Value = 100},
+                TChange{.Offset = 1, .WriteTxId = 123, .Key = 2, .Value = 200},
+                TChange{.Offset = 2, .WriteTxId = 123, .Key = 3, .Value = 300},
+                TChange{.Offset = 3, .WriteTxId = 123, .Key = 4, .Value = 400},
+            }
+        );
 
         // Split would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
@@ -132,7 +143,7 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(shards2.size(), 2u);
 
         // Now we commit changes and split again, making borrowed sst + tx status
-        CommitWrites(server, { "/Root/table-1" }, 123);
+        CommitWrites(server, {"/Root/table-1"}, 123);
         txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards2.at(0), 3);
         WaitTxNotification(server, senderSplit, txId);
 
@@ -173,11 +184,13 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
 
         {
             auto result = ReadShardedTable(server, "/Root/table-1");
-            UNIT_ASSERT_VALUES_EQUAL(result,
+            UNIT_ASSERT_VALUES_EQUAL(
+                result,
                 "key = 1, value = 100\n"
                 "key = 2, value = 200\n"
                 "key = 3, value = 300\n"
-                "key = 4, value = 400\n");
+                "key = 4, value = 400\n"
+            );
         }
     }
 }

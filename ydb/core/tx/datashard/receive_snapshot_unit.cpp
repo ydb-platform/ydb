@@ -5,45 +5,32 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TReceiveSnapshotUnit : public TExecutionUnit {
+class TReceiveSnapshotUnit: public TExecutionUnit {
 public:
-    TReceiveSnapshotUnit(TDataShard &dataShard,
-                         TPipeline &pipeline);
+    TReceiveSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TReceiveSnapshotUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TReceiveSnapshotUnit::TReceiveSnapshotUnit(TDataShard &dataShard,
-                                           TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::ReceiveSnapshot, false, dataShard, pipeline)
-{
-}
+TReceiveSnapshotUnit::TReceiveSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::ReceiveSnapshot, false, dataShard, pipeline) {}
 
-TReceiveSnapshotUnit::~TReceiveSnapshotUnit()
-{
-}
+TReceiveSnapshotUnit::~TReceiveSnapshotUnit() {}
 
-bool TReceiveSnapshotUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TReceiveSnapshotUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
-                                               TTransactionContext &txc,
-                                               const TActorContext &)
-{
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) {
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
-    auto &schemeTx = tx->GetSchemeTx();
+    auto& schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasReceiveSnapshot())
         return EExecutionStatus::Executed;
 
@@ -51,7 +38,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     Y_ABORT_UNLESS(schemeTx.HasCreateTable());
 
-    const auto &createTableTx = schemeTx.GetCreateTable();
+    const auto& createTableTx = schemeTx.GetCreateTable();
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
@@ -65,7 +52,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     bool hasOpenTxs = false;
     bool loanedTables = false;
 
-    for (auto &pr : op->InReadSets()) {
+    for (auto& pr : op->InReadSets()) {
         for (auto& rsdata : pr.second) {
             NKikimrTxDataShard::TSnapshotTransferReadSet rs;
 
@@ -74,7 +61,8 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
             if (rsdata.Body.StartsWith(SnapshotTransferReadSetMagic)) {
                 const bool ok = rs.ParseFromArray(
                     rsdata.Body.data() + SnapshotTransferReadSetMagic.size(),
-                    rsdata.Body.size() - SnapshotTransferReadSetMagic.size());
+                    rsdata.Body.size() - SnapshotTransferReadSetMagic.size()
+                );
                 Y_ABORT_UNLESS(ok, "Failed to parse snapshot transfer readset");
 
                 TString compressedBody = rs.GetBorrowedSnapshot();
@@ -138,14 +126,9 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::ExecutedNoMoreRestarts;
 }
 
-void TReceiveSnapshotUnit::Complete(TOperation::TPtr,
-                                    const TActorContext &)
-{
-}
+void TReceiveSnapshotUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateReceiveSnapshotUnit(TDataShard &dataShard,
-                                                  TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateReceiveSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return MakeHolder<TReceiveSnapshotUnit>(dataShard, pipeline);
 }
 

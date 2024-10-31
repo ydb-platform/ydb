@@ -37,7 +37,9 @@ public:
         ui32 senderNodeIndex = 0,
         bool viaActorSystem = false
     ) {
-        TTestBasicRuntime::Send(new IEventHandle(recipient, sender, ev, flags, cookie), senderNodeIndex, viaActorSystem);
+        TTestBasicRuntime::Send(
+            new IEventHandle(recipient, sender, ev, flags, cookie), senderNodeIndex, viaActorSystem
+        );
     }
 
     void WaitForEvent(ui32 eventType) {
@@ -94,12 +96,7 @@ public:
         return nullptr;
     }
 
-    void CommitReplica(
-        const TActorId& replica,
-        const TActorId& sender,
-        ui64 owner = 1,
-        ui64 generation = 1
-    ) {
+    void CommitReplica(const TActorId& replica, const TActorId& sender, ui64 owner = 1, ui64 generation = 1) {
         Send(replica, sender, new NInternalEvents::TEvCommitRequest(owner, generation));
     }
 
@@ -110,7 +107,8 @@ public:
         const TPath& path,
         bool grabResponse = true,
         const ui64 domainOwnerId = 0,
-        const NKikimrSchemeBoard::TEvSubscribe::TCapabilities& capabilities = NKikimrSchemeBoard::TEvSubscribe::TCapabilities()
+        const NKikimrSchemeBoard::TEvSubscribe::TCapabilities& capabilities =
+            NKikimrSchemeBoard::TEvSubscribe::TCapabilities()
     ) {
         auto subscribe = MakeHolder<NInternalEvents::TEvSubscribe>(path, domainOwnerId);
         subscribe->Record.MutableCapabilities()->CopyFrom(capabilities);
@@ -137,9 +135,7 @@ public:
         bool grabResponse = true,
         ui32 nodeIndex = 0
     ) {
-        const TActorId subscriber = Register(
-            CreateSchemeBoardSubscriber(owner, path, domainOwnerId), nodeIndex
-        );
+        const TActorId subscriber = Register(CreateSchemeBoardSubscriber(owner, path, domainOwnerId), nodeIndex);
         EnableScheduleForActor(subscriber, true);
 
         if (grabResponse) {
@@ -150,15 +146,8 @@ public:
     }
 
     template <typename TPath>
-    TActorId CreateSubscriber(
-        const TActorId& owner,
-        const TPath& path,
-        ui64 domainOwnerId = 1,
-        ui32 nodeIndex = 0
-    ) {
-        return CreateSubscriber<NInternalEvents::TEvNotify>(
-            owner, path, domainOwnerId, false, nodeIndex
-        );
+    TActorId CreateSubscriber(const TActorId& owner, const TPath& path, ui64 domainOwnerId = 1, ui32 nodeIndex = 0) {
+        return CreateSubscriber<NInternalEvents::TEvNotify>(owner, path, domainOwnerId, false, nodeIndex);
     }
 
 }; // TTestContext
@@ -175,7 +164,9 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
         app.ClearDomainsAndHive();
         ui32 planResolution = 50;
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
-            name, domainUid, schemeshardTabletId,
+            name,
+            domainUid,
+            schemeshardTabletId,
             planResolution,
             TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
             TVector<ui64>{},
@@ -205,7 +196,9 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
     static void BootSchemeShard(TTestActorRuntime& runtime, ui64 tabletId) {
         using namespace NSchemeShard;
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+        CreateTestBootstrapper(
+            runtime, CreateTestTabletInfo(tabletId, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard
+        );
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
@@ -215,7 +208,9 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
 
         UNIT_ASSERT(ev->Get());
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetOrigin(), tabletId);
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ev->Get()->Record.GetStatus(), (ui32)TEvSchemeShard::TEvInitRootShardResult::StatusAlreadyInitialized
+        );
     }
 
     static void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId) {
@@ -257,7 +252,7 @@ public:
         TActorId sender = Context->AllocateEdgeActor();
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::SchemeShard);
-        for (auto x: xrange(TTestTxConfig::FakeHiveTablets,  TTestTxConfig::FakeHiveTablets + 10)) {
+        for (auto x : xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)) {
             tabletIds.push_back(x);
         }
 
@@ -285,12 +280,8 @@ private:
 
 }; // TTestWithSchemeshard
 
-NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
-    const TString& path,
-    TPathId pathId,
-    ui64 version = 1,
-    TDomainId domainId = TDomainId()
-);
+NKikimrScheme::TEvDescribeSchemeResult
+GenerateDescribe(const TString& path, TPathId pathId, ui64 version = 1, TDomainId domainId = TDomainId());
 
 NInternalEvents::TEvUpdate* GenerateUpdate(
     const NKikimrScheme::TEvDescribeSchemeResult& describe,
@@ -324,10 +315,18 @@ struct TCombinationsArgs {
     }
 };
 
-TVector<TCombinationsArgs> GenerateCombinationsDomainRoot(TString path = TString("/Root/Tenant"), ui64 gssOwnerID = 800, TVector<ui64> tenantsOwners = TVector<ui64>{900, 910});
-TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(TString path,
-                                                            ui64 gssID, TVector<ui64> tssIDs,
-                                                            ui64 gssLocalPathId, ui64 tssLocalPathId);
+TVector<TCombinationsArgs> GenerateCombinationsDomainRoot(
+    TString path = TString("/Root/Tenant"),
+    ui64 gssOwnerID = 800,
+    TVector<ui64> tenantsOwners = TVector<ui64>{900, 910}
+);
+TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(
+    TString path,
+    ui64 gssID,
+    TVector<ui64> tssIDs,
+    ui64 gssLocalPathId,
+    ui64 tssLocalPathId
+);
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

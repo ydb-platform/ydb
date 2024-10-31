@@ -5,7 +5,11 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NAbstract {
 
-NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(const NColumnShard::TColumnShard* shard, const std::shared_ptr<TReadMetadataBase>& metadataExt, const TReadDescription& read) const {
+NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(
+    const NColumnShard::TColumnShard* shard,
+    const std::shared_ptr<TReadMetadataBase>& metadataExt,
+    const TReadDescription& read
+) const {
     std::shared_ptr<TReadStatsMetadata> metadata = dynamic_pointer_cast<TReadStatsMetadata>(metadataExt);
     if (!metadata) {
         return TConclusionStatus::Fail("incorrect metadata class for filler");
@@ -34,7 +38,11 @@ NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(const NColumnShard
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(const NColumnShard::TColumnShard* shard, const std::shared_ptr<TReadMetadataBase>& metadataExt, const TReadDescription& read) const {
+NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(
+    const NColumnShard::TColumnShard* shard,
+    const std::shared_ptr<TReadMetadataBase>& metadataExt,
+    const TReadDescription& read
+) const {
     std::shared_ptr<TReadStatsMetadata> metadata = dynamic_pointer_cast<TReadStatsMetadata>(metadataExt);
     if (!metadata) {
         return TConclusionStatus::Fail("incorrect metadata class for filler");
@@ -63,4 +71,4 @@ NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(const NColumnShard
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NOlap::NReader::NSysView::NAbstract

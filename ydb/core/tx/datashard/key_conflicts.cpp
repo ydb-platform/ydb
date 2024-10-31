@@ -9,15 +9,11 @@ using TValidatedKey = NMiniKQL::IEngineFlat::TValidatedKey;
 
 namespace {
 
-bool HasKeyConflict(const TKeyDesc& aKey,
-                    const TKeyDesc& bKey)
-{
+bool HasKeyConflict(const TKeyDesc& aKey, const TKeyDesc& bKey) {
     return CheckRangesOverlap(aKey.Range, bKey.Range, aKey.KeyColumnTypes, bKey.KeyColumnTypes);
 }
 
-bool HasKeyConflict(const TValidatedKey& a,
-                    const TValidatedKey& b)
-{
+bool HasKeyConflict(const TValidatedKey& a, const TValidatedKey& b) {
     Y_ABORT_UNLESS(a.Key && b.Key);
     Y_ABORT_UNLESS(a.IsWrite || b.IsWrite);
 
@@ -34,7 +30,7 @@ bool HasKeyConflict(const TValidatedKey& a,
         ui64 aLockId, bLockId;
         Y_ABORT_UNLESS(aKey.Range.Point && bKey.Range.Point, "Unexpected non-point locks table key accesses");
         bool ok = TLocksTable::ExtractKey(aKey.Range.From, TLocksTable::EColumns::LockId, aLockId) &&
-                TLocksTable::ExtractKey(bKey.Range.From, TLocksTable::EColumns::LockId, bLockId);
+                  TLocksTable::ExtractKey(bKey.Range.From, TLocksTable::EColumns::LockId, bLockId);
         Y_ABORT_UNLESS(ok, "Cannot extract LockId from locks table key accesses");
 
         // Only conflict on the same LockId
@@ -54,12 +50,10 @@ bool HasKeyConflict(const TValidatedKey& a,
     return false;
 }
 
-}
+} // namespace
 
 /// @note O(N^2) in worst case
-bool HasKeyConflict(const TValidationInfo& infoA,
-                    const TValidationInfo& infoB)
-{
+bool HasKeyConflict(const TValidationInfo& infoA, const TValidationInfo& infoB) {
     if (!infoA.HasWrites() && !infoB.HasWrites())
         return false;
 

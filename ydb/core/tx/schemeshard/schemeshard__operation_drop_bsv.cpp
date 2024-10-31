@@ -17,15 +17,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropBlockStoreVolume TPropose"
-                << ", operationId: " << OperationId;
+        return TStringBuilder() << "TDropBlockStoreVolume TPropose"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -65,7 +63,7 @@ public:
 
         auto volumeSpace = volume->GetVolumeSpace();
         auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
-        domainDir->ChangeVolumeSpaceCommit({ }, volumeSpace);
+        domainDir->ChangeVolumeSpaceCommit({}, volumeSpace);
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
             context.SS->PersistRemoveBlockStoreVolume(db, pathId);
@@ -112,23 +110,23 @@ class TDropBlockStoreVolume: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DeleteParts:
-            return TTxState::Propose;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::DeleteParts:
+                return TTxState::Propose;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::DeleteParts:
+                return MakeHolder<TDeleteParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -150,16 +148,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -191,14 +188,17 @@ public:
 
             if (proposedFillGeneration > 0) {
                 if (isFillFinished) {
-                    result->SetError(NKikimrScheme::StatusSuccess,
-                                     TStringBuilder() << "Filling is finished, deletion is no-op");
+                    result->SetError(
+                        NKikimrScheme::StatusSuccess, TStringBuilder() << "Filling is finished, deletion is no-op"
+                    );
                     return result;
                 } else if (proposedFillGeneration < actualFillGeneration) {
-                    result->SetError(NKikimrScheme::StatusSuccess,
-                                     TStringBuilder() << "Proposed fill generation "
-                                        << "is less than fill generation of the volume: "
-                                        << proposedFillGeneration << " < " << actualFillGeneration);
+                    result->SetError(
+                        NKikimrScheme::StatusSuccess,
+                        TStringBuilder() << "Proposed fill generation "
+                                         << "is less than fill generation of the volume: " << proposedFillGeneration
+                                         << " < " << actualFillGeneration
+                    );
                     return result;
                 }
             }
@@ -218,9 +218,8 @@ public:
             double rate = 0;
             double capacity = 0;
             auto& attrs = domainDir->UserAttrs->Attrs;
-            if (TryFromString(attrs[RateLimiterRateAttrName], rate) && 
-                TryFromString(attrs[RateLimiterCapacityAttrName], capacity))
-            {
+            if (TryFromString(attrs[RateLimiterRateAttrName], rate) &&
+                TryFromString(attrs[RateLimiterCapacityAttrName], capacity)) {
                 rateLimiter.SetRate(rate);
                 rateLimiter.SetCapacity(capacity);
             }
@@ -232,9 +231,7 @@ public:
                     rateLimiter.Take(1.0);
                 } else {
                     // TODO: should use separate status?
-                    result->SetError(
-                        NKikimrScheme::StatusNotAvailable,
-                        "Too many requests");
+                    result->SetError(NKikimrScheme::StatusNotAvailable, "Too many requests");
                     return result;
                 }
             }
@@ -295,7 +292,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -308,4 +305,4 @@ ISubOperation::TPtr CreateDropBSV(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropBlockStoreVolume>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

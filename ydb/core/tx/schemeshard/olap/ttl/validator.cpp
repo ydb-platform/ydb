@@ -13,9 +13,16 @@ static inline NScheme::TTypeInfo GetType(const TOlapColumnsDescription::TColumn&
     return col.GetType();
 }
 
-}
+} // namespace
 
-bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes, const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns, const THashMap<TString, ui32>& colName2Id, IErrorCollector& errors) {
+bool TTTLValidator::ValidateColumnTableTtl(
+    const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl,
+    const TOlapIndexesDescription& indexes,
+    const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
+    const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
+    const THashMap<TString, ui32>& colName2Id,
+    IErrorCollector& errors
+) {
     const TString colName = ttl.GetColumnName();
 
     auto it = colName2Id.find(colName);
@@ -88,4 +95,4 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     return true;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -7,8 +7,6 @@ TSplitterCounters::TSplitterCounters(const TCommonCountersOwner& owner)
     , SimpleSplitter(owner, "simple")
     , BySizeSplitter(owner, "by_size")
     , SplittedBlobs(owner, "splitted")
-    , MonoBlobs(owner, "mono")
-{
-}
+    , MonoBlobs(owner, "mono") {}
 
-}
+} // namespace NKikimr::NColumnShard

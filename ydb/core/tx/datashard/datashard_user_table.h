@@ -20,7 +20,7 @@ class TTransactionContext;
 namespace NDataShard {
 
 //
-struct TUserTable : public TThrRefBase {
+struct TUserTable: public TThrRefBase {
     using TPtr = TIntrusivePtr<TUserTable>;
     using TCPtr = TIntrusiveConstPtr<TUserTable>;
     using TTableInfos = THashMap<ui64, TUserTable::TCPtr>;
@@ -38,9 +38,7 @@ struct TUserTable : public TThrRefBase {
             , Codec(ExtractDbCodec(family))
             , Cache(ExtractDbCache(family))
             , Room(new TStorageRoom(family.GetRoom()))
-            , Name(family.GetName())
-        {
-        }
+            , Name(family.GetName()) {}
 
         void Update(const NKikimrSchemeOp::TFamilyDescription& family) {
             if (family.HasColumnCodec()) {
@@ -80,7 +78,6 @@ struct TUserTable : public TThrRefBase {
         ui32 OuterThreshold;
         ui32 ExternalThreshold;
         NKikimrSchemeOp::EColumnStorage Storage;
-
 
         ECodec Codec;
         ECache Cache;
@@ -153,7 +150,7 @@ struct TUserTable : public TThrRefBase {
             switch (Storage) {
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
-                    return 12*1024;
+                    return 12 * 1024;
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k:
                     return 512;
                 default:
@@ -171,7 +168,7 @@ struct TUserTable : public TThrRefBase {
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
-                    return 512*1024;
+                    return 512 * 1024;
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k:
                     return 1024;
                 default:
@@ -245,12 +242,10 @@ struct TUserTable : public TThrRefBase {
             : Type(type)
             , TypeMod(typeMod)
             , Name(name)
-            , IsKey(isKey)
-        {}
+            , IsKey(isKey) {}
 
         TUserColumn()
-            : IsKey(false)
-        {}
+            : IsKey(false) {}
     };
 
     struct TTableIndex {
@@ -266,8 +261,7 @@ struct TUserTable : public TThrRefBase {
 
         TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns)
             : Type(indexDesc.GetType())
-            , State(indexDesc.GetState())
-        {
+            , State(indexDesc.GetState()) {
             if (Type != EType::EIndexTypeGlobalAsync) {
                 return;
             }
@@ -286,7 +280,7 @@ struct TUserTable : public TThrRefBase {
                 }
             };
 
-            fillColumnIds(indexDesc.GetKeyColumnNames(),  KeyColumnIds);
+            fillColumnIds(indexDesc.GetKeyColumnNames(), KeyColumnIds);
             fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds);
         }
 
@@ -316,8 +310,7 @@ struct TUserTable : public TThrRefBase {
             , Format(streamDesc.GetFormat())
             , State(streamDesc.GetState())
             , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
-            , ResolvedTimestampsInterval(TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs()))
-        {
+            , ResolvedTimestampsInterval(TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;
             }
@@ -330,15 +323,11 @@ struct TUserTable : public TThrRefBase {
 
         TReplicationConfig()
             : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
-            , Consistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN)
-        {
-        }
+            , Consistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN) {}
 
         TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
             : Mode(config.GetMode())
-            , Consistency(config.GetConsistency())
-        {
-        }
+            , Consistency(config.GetConsistency()) {}
 
         bool HasWeakConsistency() const {
             return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK;
@@ -360,15 +349,11 @@ struct TUserTable : public TThrRefBase {
 
         TIncrementalBackupConfig()
             : Mode(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_NONE)
-            , Consistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_UNKNOWN)
-        {
-        }
+            , Consistency(NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_UNKNOWN) {}
 
         TIncrementalBackupConfig(const NKikimrSchemeOp::TTableIncrementalBackupConfig& config)
             : Mode(config.GetMode())
-            , Consistency(config.GetConsistency())
-        {
-        }
+            , Consistency(config.GetConsistency()) {}
 
         bool HasWeakConsistency() const {
             return Consistency == NKikimrSchemeOp::TTableIncrementalBackupConfig::CONSISTENCY_WEAK;
@@ -470,23 +455,37 @@ struct TUserTable : public TThrRefBase {
     ui32 SpecialColEpoch = Max<ui32>();
     ui32 SpecialColUpdateNo = Max<ui32>();
 
-    TUserTable() { }
+    TUserTable() {}
 
     TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create
     TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr); // for alter
 
-    void ApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
-                     const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
-    void ApplyCreateShadow(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
-                     const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
-    void ApplyAlter(NTabletFlatExecutor::TTransactionContext& txc, const TUserTable& oldTable,
-                    const NKikimrSchemeOp::TTableDescription& alter, TString& strError);
+    void ApplyCreate(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TString& tableName,
+        const NKikimrSchemeOp::TPartitionConfig& partConfig
+    ) const;
+    void ApplyCreateShadow(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TString& tableName,
+        const NKikimrSchemeOp::TPartitionConfig& partConfig
+    ) const;
+    void ApplyAlter(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TUserTable& oldTable,
+        const NKikimrSchemeOp::TTableDescription& alter,
+        TString& strError
+    );
     void ApplyDefaults(NTabletFlatExecutor::TTransactionContext& txc) const;
 
     void Fix_KIKIMR_17222(NTable::TDatabase& db) const;
 
-    TTableRange GetTableRange() const { return Range.ToTableRange(); }
-    const TString& GetSchema() const { return Schema; }
+    TTableRange GetTableRange() const {
+        return Range.ToTableRange();
+    }
+    const TString& GetSchema() const {
+        return Schema;
+    }
 
     void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
         bool ok = description.ParseFromArray(Schema.data(), Schema.size());
@@ -498,9 +497,11 @@ struct TUserTable : public TThrRefBase {
         Y_PROTOBUF_SUPPRESS_NODISCARD description.SerializeToString(&Schema);
     }
 
-    void SetPath(const TString &path);
+    void SetPath(const TString& path);
 
-    ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
+    ui64 GetTableSchemaVersion() const {
+        return TableSchemaVersion;
+    }
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
 
@@ -519,8 +520,12 @@ struct TUserTable : public TThrRefBase {
     bool IsIncrementalRestore() const;
 
 private:
-    void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,
-            const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
+    void DoApplyCreate(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TString& tableName,
+        bool shadow,
+        const NKikimrSchemeOp::TPartitionConfig& partConfig
+    ) const;
 
     void Fix_KIKIMR_17222(NTable::TDatabase& db, ui32 tid) const;
 
@@ -533,4 +538,5 @@ private:
     void ParseProto(const NKikimrSchemeOp::TTableDescription& descr);
 };
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

@@ -18,9 +18,15 @@ public:
     void Init(const TString& effectiveACL);
     void Update(const TEffectiveACL& parent, const TString& selfACL, bool isContainer);
 
-    operator bool () const { return Inited; }
-    const TString& GetForChildren(bool isContainer) const { return isContainer ? ForContainers : ForObjects; }
-    const TString& GetForSelf() const { return ForSelf; }
+    operator bool() const {
+        return Inited;
+    }
+    const TString& GetForChildren(bool isContainer) const {
+        return isContainer ? ForContainers : ForObjects;
+    }
+    const TString& GetForSelf() const {
+        return ForSelf;
+    }
 
 private:
     void InheritFrom(const TEffectiveACL& parent, bool isContainer);
@@ -28,5 +34,5 @@ private:
     bool Filter(const NACLibProto::TSecurityObject& obj, NACLib::EInheritanceType byType, TString& result);
 };
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

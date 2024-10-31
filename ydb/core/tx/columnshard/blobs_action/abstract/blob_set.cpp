@@ -17,7 +17,9 @@ NKikimrColumnShardBlobOperationsProto::TTabletByBlob TTabletByBlob::SerializeToP
     return result;
 }
 
-NKikimr::TConclusionStatus TTabletByBlob::DeserializeFromProto(const NKikimrColumnShardBlobOperationsProto::TTabletByBlob& proto) {
+NKikimr::TConclusionStatus TTabletByBlob::DeserializeFromProto(
+    const NKikimrColumnShardBlobOperationsProto::TTabletByBlob& proto
+) {
     for (auto&& i : proto.GetBlobs()) {
         auto parse = TUnifiedBlobId::BuildFromString(i.GetBlobId(), nullptr);
         if (!parse) {
@@ -40,7 +42,9 @@ NKikimrColumnShardBlobOperationsProto::TTabletsByBlob TTabletsByBlob::SerializeT
     return result;
 }
 
-NKikimr::TConclusionStatus TTabletsByBlob::DeserializeFromProto(const NKikimrColumnShardBlobOperationsProto::TTabletsByBlob& proto) {
+NKikimr::TConclusionStatus TTabletsByBlob::DeserializeFromProto(
+    const NKikimrColumnShardBlobOperationsProto::TTabletsByBlob& proto
+) {
     for (auto&& i : proto.GetBlobs()) {
         auto parse = TUnifiedBlobId::BuildFromString(i.GetBlobId(), nullptr);
         if (!parse) {
@@ -65,4 +69,4 @@ TString TTabletsByBlob::DebugString() const {
     return sb;
 }
 
-}
+} // namespace NKikimr::NOlap

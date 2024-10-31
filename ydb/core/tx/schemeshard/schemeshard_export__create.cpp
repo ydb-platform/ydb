@@ -27,9 +27,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     explicit TTxCreate(TSelf* self, TEvExport::TEvCreateExportRequest::TPtr& ev)
         : TXxport::TTxBase(self)
         , Request(ev)
-        , Progress(false)
-    {
-    }
+        , Progress(false) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CREATE_EXPORT;
@@ -71,12 +69,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
             TPath::TChecker checks = domainPath.Check();
-            checks
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsLikeDirectory();
+            checks.IsResolved().NotDeleted().NotUnderDeleting().IsCommonSensePath().IsLikeDirectory();
 
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
@@ -94,10 +87,11 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         TExportInfo::TPtr exportInfo = nullptr;
 
         switch (request.GetRequest().GetSettingsCase()) {
-        case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
-            {
+            case NKikimrExport::TCreateExportRequest::kExportToYtSettings: {
                 const auto& settings = request.GetRequest().GetExportToYtSettings();
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::YT, settings, domainPath.Base()->PathId, request.GetPeerName());
+                exportInfo = new TExportInfo(
+                    id, uid, TExportInfo::EKind::YT, settings, domainPath.Base()->PathId, request.GetPeerName()
+                );
 
                 TString explain;
                 if (!FillItems(exportInfo, settings, explain)) {
@@ -107,17 +101,17 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                         TStringBuilder() << "Failed item check: " << explain
                     );
                 }
-            }
-            break;
+            } break;
 
-        case NKikimrExport::TCreateExportRequest::kExportToS3Settings:
-            {
+            case NKikimrExport::TCreateExportRequest::kExportToS3Settings: {
                 auto settings = request.GetRequest().GetExportToS3Settings();
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
                 }
 
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
+                exportInfo = new TExportInfo(
+                    id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName()
+                );
 
                 TString explain;
                 if (!FillItems(exportInfo, settings, explain)) {
@@ -127,11 +121,10 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                         TStringBuilder() << "Failed item check: " << explain
                     );
                 }
-            }
-            break;
+            } break;
 
-        default:
-            Y_DEBUG_ABORT("Unknown export kind");
+            default:
+                Y_DEBUG_ABORT("Unknown export kind");
         }
 
         Y_ABORT_UNLESS(exportInfo != nullptr);
@@ -199,12 +192,7 @@ private:
             const TPath path = TPath::Resolve(item.source_path(), Self);
             {
                 TPath::TChecker checks = path.Check();
-                checks
-                    .IsResolved()
-                    .NotDeleted()
-                    .NotUnderDeleting()
-                    .IsTable()
-                    .FailOnRestrictedCreateInTempZone();
+                checks.IsResolved().NotDeleted().NotUnderDeleting().IsTable().FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
                     explain = checks.GetError();
@@ -234,27 +222,19 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 
     explicit TTxProgress(TSelf* self, ui64 id)
         : TXxport::TTxBase(self)
-        , Id(id)
-    {
-    }
+        , Id(id) {}
 
     explicit TTxProgress(TSelf* self, TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev)
         : TXxport::TTxBase(self)
-        , AllocateResult(ev)
-    {
-    }
+        , AllocateResult(ev) {}
 
     explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
         : TXxport::TTxBase(self)
-        , ModifyResult(ev)
-    {
-    }
+        , ModifyResult(ev) {}
 
     explicit TTxProgress(TSelf* self, TTxId completedTxId)
         : TXxport::TTxBase(self)
-        , CompletedTxId(completedTxId)
-    {
-    }
+        , CompletedTxId(completedTxId) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_EXPORT_PROGRESS;
@@ -537,86 +517,86 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {
-        case EState::CreateExportDir:
-        case EState::CopyTables:
-            if (exportInfo->WaitTxId == InvalidTxId) {
-                AllocateTxId(exportInfo);
-            } else {
-                SubscribeTx(exportInfo);
-            }
-            break;
-
-        case EState::Transferring:
-            for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                const auto& item = exportInfo->Items.at(itemIdx);
-
-                if (item.WaitTxId == InvalidTxId) {
-                    AllocateTxId(exportInfo, itemIdx);
-                } else {
-                    SubscribeTx(exportInfo, itemIdx);
-                }
-            }
-            break;
-
-        case EState::Cancellation:
-            exportInfo->State = EState::Cancelled;
-            // will be switched back to Cancellation if there is any active backup tx
-            for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                auto& item = exportInfo->Items.at(itemIdx);
-
-                if (item.State != EState::Transferring) {
-                    continue;
-                }
-
-                if (!CancelTransferring(exportInfo, itemIdx)) {
-                    const TTxId txId = GetActiveBackupTxId(exportInfo, itemIdx);
-
-                    if (txId == InvalidTxId) {
-                        item.State = EState::Cancelled;
-                    } else {
-                        item.WaitTxId = txId;
-                        CancelTransferring(exportInfo, itemIdx);
-                    }
-
-                    Self->PersistExportItemState(db, exportInfo, itemIdx);
-                }
-            }
-
-            if (exportInfo->State == EState::Cancelled) {
-                exportInfo->EndTime = TAppData::TimeProvider->Now();
-            }
-
-            Self->PersistExportState(db, exportInfo);
-            SendNotificationsIfFinished(exportInfo);
-            break;
-
-        case EState::Dropping:
-            if (!exportInfo->AllItemsAreDropped()) {
-                for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                    const auto& item = exportInfo->Items.at(itemIdx);
-
-                    if (item.State != EState::Dropping) {
-                        continue;
-                    }
-
-                    if (item.WaitTxId == InvalidTxId) {
-                        exportInfo->PendingDropItems.push_back(itemIdx);
-                        AllocateTxId(exportInfo, itemIdx);
-                    } else {
-                        SubscribeTx(exportInfo, itemIdx);
-                    }
-                }
-            } else {
+            case EState::CreateExportDir:
+            case EState::CopyTables:
                 if (exportInfo->WaitTxId == InvalidTxId) {
                     AllocateTxId(exportInfo);
                 } else {
                     SubscribeTx(exportInfo);
                 }
-            }
-            break;
+                break;
 
-        default:
-            break;
+            case EState::Transferring:
+                for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+                    const auto& item = exportInfo->Items.at(itemIdx);
+
+                    if (item.WaitTxId == InvalidTxId) {
+                        AllocateTxId(exportInfo, itemIdx);
+                    } else {
+                        SubscribeTx(exportInfo, itemIdx);
+                    }
+                }
+                break;
+
+            case EState::Cancellation:
+                exportInfo->State = EState::Cancelled;
+            // will be switched back to Cancellation if there is any active backup tx
+                for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+                    auto& item = exportInfo->Items.at(itemIdx);
+
+                    if (item.State != EState::Transferring) {
+                        continue;
+                    }
+
+                    if (!CancelTransferring(exportInfo, itemIdx)) {
+                        const TTxId txId = GetActiveBackupTxId(exportInfo, itemIdx);
+
+                        if (txId == InvalidTxId) {
+                            item.State = EState::Cancelled;
+                        } else {
+                            item.WaitTxId = txId;
+                            CancelTransferring(exportInfo, itemIdx);
+                        }
+
+                        Self->PersistExportItemState(db, exportInfo, itemIdx);
+                    }
+                }
+
+                if (exportInfo->State == EState::Cancelled) {
+                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+                }
+
+                Self->PersistExportState(db, exportInfo);
+                SendNotificationsIfFinished(exportInfo);
+                break;
+
+            case EState::Dropping:
+                if (!exportInfo->AllItemsAreDropped()) {
+                    for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+                        const auto& item = exportInfo->Items.at(itemIdx);
+
+                        if (item.State != EState::Dropping) {
+                            continue;
+                        }
+
+                        if (item.WaitTxId == InvalidTxId) {
+                            exportInfo->PendingDropItems.push_back(itemIdx);
+                            AllocateTxId(exportInfo, itemIdx);
+                        } else {
+                            SubscribeTx(exportInfo, itemIdx);
+                        }
+                    }
+                } else {
+                    if (exportInfo->WaitTxId == InvalidTxId) {
+                        AllocateTxId(exportInfo);
+                    } else {
+                        SubscribeTx(exportInfo);
+                    }
+                }
+                break;
+
+            default:
+                break;
         }
     }
 
@@ -646,34 +626,34 @@ private:
         };
 
         switch (exportInfo->State) {
-        case EState::CreateExportDir:
-            MkDir(exportInfo, txId);
-            break;
+            case EState::CreateExportDir:
+                MkDir(exportInfo, txId);
+                break;
 
-        case EState::CopyTables:
-            CopyTables(exportInfo, txId);
-            break;
+            case EState::CopyTables:
+                CopyTables(exportInfo, txId);
+                break;
 
-        case EState::Transferring:
-            if (exportInfo->PendingItems) {
-                itemIdx = popPendingItemIdx(exportInfo->PendingItems);
-                TransferData(exportInfo, itemIdx, txId);
-            } else {
+            case EState::Transferring:
+                if (exportInfo->PendingItems) {
+                    itemIdx = popPendingItemIdx(exportInfo->PendingItems);
+                    TransferData(exportInfo, itemIdx, txId);
+                } else {
+                    return;
+                }
+                break;
+
+            case EState::Dropping:
+                if (exportInfo->PendingDropItems) {
+                    itemIdx = popPendingItemIdx(exportInfo->PendingDropItems);
+                    DropTable(exportInfo, itemIdx, txId);
+                } else {
+                    DropDir(exportInfo, txId);
+                }
+                break;
+
+            default:
                 return;
-            }
-            break;
-
-        case EState::Dropping:
-            if (exportInfo->PendingDropItems) {
-                itemIdx = popPendingItemIdx(exportInfo->PendingDropItems);
-                DropTable(exportInfo, itemIdx, txId);
-            } else {
-                DropDir(exportInfo, txId);
-            }
-            break;
-
-        default:
-            return;
         }
 
         Y_ABORT_UNLESS(!Self->TxIdToExport.contains(txId));
@@ -718,53 +698,54 @@ private:
             const bool isNotExist = status == NKikimrScheme::StatusPathDoesNotExist;
 
             switch (exportInfo->State) {
-            case EState::CreateExportDir:
-            case EState::CopyTables:
-                if (isMultipleMods || isAlreadyExists) {
-                    if (record.GetPathCreateTxId()) {
-                        txId = TTxId(record.GetPathCreateTxId());
-                    } else {
-                        txId = GetActiveCopyingTxId(exportInfo);
-                    }
-                }
-                break;
-
-            case EState::Transferring:
-                if (isMultipleMods) {
-                    txId = GetActiveBackupTxId(exportInfo, itemIdx);
-                }
-                break;
-
-            case EState::Dropping:
-                if (isMultipleMods || isNotExist) {
-                    if (record.GetPathDropTxId()) {
-                        // We may need to wait for an earlier tx
-                        txId = TTxId(record.GetPathDropTxId());
-                    } else if (isNotExist) {
-                        // Already dropped and fully forgotten
-                        txId = TTxId(record.GetTxId());
-                    } else {
-                        // We need to wait and retry the operation
-                        txId = TTxId(record.GetTxId());
-                        THolder<IEventBase> ev;
-
-                        if (itemIdx < exportInfo->Items.size()) {
-                            ev.Reset(DropPropose(Self, txId, exportInfo, itemIdx).Release());
+                case EState::CreateExportDir:
+                case EState::CopyTables:
+                    if (isMultipleMods || isAlreadyExists) {
+                        if (record.GetPathCreateTxId()) {
+                            txId = TTxId(record.GetPathCreateTxId());
                         } else {
-                            ev.Reset(DropPropose(Self, txId, exportInfo).Release());
+                            txId = GetActiveCopyingTxId(exportInfo);
                         }
-
-                        ctx.TActivationContext::Schedule(TDuration::Seconds(10),
-                            new IEventHandle(Self->SelfId(), Self->SelfId(), ev.Release()));
-                        Self->TxIdToExport[txId] = {exportInfo->Id, itemIdx};
-
-                        return;
                     }
-                }
-                break;
+                    break;
 
-            default:
-                break;
+                case EState::Transferring:
+                    if (isMultipleMods) {
+                        txId = GetActiveBackupTxId(exportInfo, itemIdx);
+                    }
+                    break;
+
+                case EState::Dropping:
+                    if (isMultipleMods || isNotExist) {
+                        if (record.GetPathDropTxId()) {
+                        // We may need to wait for an earlier tx
+                            txId = TTxId(record.GetPathDropTxId());
+                        } else if (isNotExist) {
+                        // Already dropped and fully forgotten
+                            txId = TTxId(record.GetTxId());
+                        } else {
+                        // We need to wait and retry the operation
+                            txId = TTxId(record.GetTxId());
+                            THolder<IEventBase> ev;
+
+                            if (itemIdx < exportInfo->Items.size()) {
+                                ev.Reset(DropPropose(Self, txId, exportInfo, itemIdx).Release());
+                            } else {
+                                ev.Reset(DropPropose(Self, txId, exportInfo).Release());
+                            }
+
+                            ctx.TActivationContext::Schedule(
+                                TDuration::Seconds(10), new IEventHandle(Self->SelfId(), Self->SelfId(), ev.Release())
+                            );
+                            Self->TxIdToExport[txId] = {exportInfo->Id, itemIdx};
+
+                            return;
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
             }
 
             if (txId == InvalidTxId) {
@@ -820,47 +801,47 @@ private:
         }
 
         switch (exportInfo->State) {
-        case EState::CreateExportDir:
-            exportInfo->ExportPathId = Self->MakeLocalId(TLocalPathId(record.GetPathId()));
-            Self->PersistExportPathId(db, exportInfo);
+            case EState::CreateExportDir:
+                exportInfo->ExportPathId = Self->MakeLocalId(TLocalPathId(record.GetPathId()));
+                Self->PersistExportPathId(db, exportInfo);
 
-            exportInfo->WaitTxId = txId;
-            Self->PersistExportState(db, exportInfo);
-            break;
+                exportInfo->WaitTxId = txId;
+                Self->PersistExportState(db, exportInfo);
+                break;
 
-        case EState::CopyTables:
-            exportInfo->WaitTxId = txId;
-            Self->PersistExportState(db, exportInfo);
-            break;
+            case EState::CopyTables:
+                exportInfo->WaitTxId = txId;
+                Self->PersistExportState(db, exportInfo);
+                break;
 
-        case EState::Transferring:
-            Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
-            exportInfo->Items.at(itemIdx).WaitTxId = txId;
-            Self->PersistExportItemState(db, exportInfo, itemIdx);
-            break;
-
-        case EState::Dropping:
-            if (!exportInfo->AllItemsAreDropped()) {
+            case EState::Transferring:
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
                 exportInfo->Items.at(itemIdx).WaitTxId = txId;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
-            } else {
-                exportInfo->WaitTxId = txId;
-                Self->PersistExportState(db, exportInfo);
-            }
-            break;
+                break;
 
-        case EState::Cancellation:
-            if (itemIdx < exportInfo->Items.size()) {
-                exportInfo->Items.at(itemIdx).WaitTxId = txId;
-                Self->PersistExportItemState(db, exportInfo, itemIdx);
+            case EState::Dropping:
+                if (!exportInfo->AllItemsAreDropped()) {
+                    Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+                    exportInfo->Items.at(itemIdx).WaitTxId = txId;
+                    Self->PersistExportItemState(db, exportInfo, itemIdx);
+                } else {
+                    exportInfo->WaitTxId = txId;
+                    Self->PersistExportState(db, exportInfo);
+                }
+                break;
 
-                CancelTransferring(exportInfo, itemIdx);
-            }
-            return;
+            case EState::Cancellation:
+                if (itemIdx < exportInfo->Items.size()) {
+                    exportInfo->Items.at(itemIdx).WaitTxId = txId;
+                    Self->PersistExportItemState(db, exportInfo, itemIdx);
 
-        default:
-            return; // no need to wait notification
+                    CancelTransferring(exportInfo, itemIdx);
+                }
+                return;
+
+            default:
+                return; // no need to wait notification
         }
 
         LOG_I("TExport::TTxProgress: Wait for completion"
@@ -916,78 +897,78 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {
-        case EState::CreateExportDir:
-            exportInfo->State = EState::CopyTables;
-            exportInfo->WaitTxId = InvalidTxId;
-            AllocateTxId(exportInfo);
-            break;
+            case EState::CreateExportDir:
+                exportInfo->State = EState::CopyTables;
+                exportInfo->WaitTxId = InvalidTxId;
+                AllocateTxId(exportInfo);
+                break;
 
-        case EState::CopyTables:
-            if (exportInfo->DependencyTxIds.contains(txId)) {
-                exportInfo->DependencyTxIds.erase(txId);
-                if (exportInfo->DependencyTxIds.empty()) {
-                    AllocateTxId(exportInfo);
+            case EState::CopyTables:
+                if (exportInfo->DependencyTxIds.contains(txId)) {
+                    exportInfo->DependencyTxIds.erase(txId);
+                    if (exportInfo->DependencyTxIds.empty()) {
+                        AllocateTxId(exportInfo);
+                    }
+                    return;
                 }
-                return;
-            }
 
-            exportInfo->State = EState::Transferring;
-            exportInfo->WaitTxId = InvalidTxId;
-            for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                exportInfo->Items.at(itemIdx).State = EState::Transferring;
-                Self->PersistExportItemState(db, exportInfo, itemIdx);
+                exportInfo->State = EState::Transferring;
+                exportInfo->WaitTxId = InvalidTxId;
+                for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+                    exportInfo->Items.at(itemIdx).State = EState::Transferring;
+                    Self->PersistExportItemState(db, exportInfo, itemIdx);
 
-                AllocateTxId(exportInfo, itemIdx);
-            }
-            break;
-
-        case EState::Transferring: {
-            Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
-            auto& item = exportInfo->Items.at(itemIdx);
-
-            item.State = EState::Done;
-            item.WaitTxId = InvalidTxId;
-
-            if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
-                item.Issue = *issue;
-                Cancel(exportInfo, itemIdx, "issues during backing up");
-            } else {
-                if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                    exportInfo->State = EState::Done;
-                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+                    AllocateTxId(exportInfo, itemIdx);
                 }
-            }
+                break;
 
-            Self->PersistExportItemState(db, exportInfo, itemIdx);
-            break;
-        }
-
-        case EState::Dropping:
-            if (!exportInfo->AllItemsAreDropped()) {
+            case EState::Transferring: {
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
                 auto& item = exportInfo->Items.at(itemIdx);
 
-                item.State = EState::Dropped;
+                item.State = EState::Done;
                 item.WaitTxId = InvalidTxId;
+
+                if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
+                    item.Issue = *issue;
+                    Cancel(exportInfo, itemIdx, "issues during backing up");
+                } else {
+                    if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
+                        exportInfo->State = EState::Done;
+                        exportInfo->EndTime = TAppData::TimeProvider->Now();
+                    }
+                }
+
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
-
-                if (exportInfo->AllItemsAreDropped()) {
-                    AllocateTxId(exportInfo);
-                }
-            } else {
-                SendNotificationsIfFinished(exportInfo, true); // for tests
-
-                if (exportInfo->Uid) {
-                    Self->ExportsByUid.erase(exportInfo->Uid);
-                }
-
-                Self->Exports.erase(exportInfo->Id);
-                Self->PersistRemoveExport(db, exportInfo);
+                break;
             }
-            return;
 
-        default:
-            return SendNotificationsIfFinished(exportInfo);
+            case EState::Dropping:
+                if (!exportInfo->AllItemsAreDropped()) {
+                    Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+                    auto& item = exportInfo->Items.at(itemIdx);
+
+                    item.State = EState::Dropped;
+                    item.WaitTxId = InvalidTxId;
+                    Self->PersistExportItemState(db, exportInfo, itemIdx);
+
+                    if (exportInfo->AllItemsAreDropped()) {
+                        AllocateTxId(exportInfo);
+                    }
+                } else {
+                    SendNotificationsIfFinished(exportInfo, true); // for tests
+
+                    if (exportInfo->Uid) {
+                        Self->ExportsByUid.erase(exportInfo->Uid);
+                    }
+
+                    Self->Exports.erase(exportInfo->Id);
+                    Self->PersistRemoveExport(db, exportInfo);
+                }
+                return;
+
+            default:
+                return SendNotificationsIfFinished(exportInfo);
         }
 
         Self->PersistExportState(db, exportInfo);
@@ -1020,5 +1001,5 @@ ITransaction* TSchemeShard::CreateTxProgressExport(TTxId completedTxId) {
     return new TExport::TTxProgress(this, completedTxId);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

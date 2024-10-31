@@ -14,7 +14,7 @@ namespace NKikimr::NOlap::NSplitter {
 
 class TSplitSettings {
 private:
-// DefaultMaxBlobSize - 2 * DefaultMinBlobSize have to been enought to "guarantee" records count > 1 through blobs splitting
+    // DefaultMaxBlobSize - 2 * DefaultMinBlobSize have to been enought to "guarantee" records count > 1 through blobs splitting
     static const inline i64 DefaultMaxBlobSize = 8 * 1024 * 1024;
     static const inline i64 DefaultMinBlobSize = 3 * 1024 * 1024;
 
@@ -44,6 +44,7 @@ private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(TSplitSettings, SplitSettings);
     YDB_READONLY_DEF(std::set<ui32>, EntityIds);
+
 public:
     TGroupFeatures(const TString& name, const TSplitSettings& settings, std::set<ui32>&& entities)
         : Name(name)
@@ -76,6 +77,7 @@ private:
     THashMap<TString, TGroupFeatures> GroupEntities;
     THashSet<ui32> UsedEntityIds;
     TGroupFeatures DefaultGroupFeatures;
+
 public:
     TEntityGroups(const TGroupFeatures& defaultGroup)
         : DefaultGroupFeatures(defaultGroup) {
@@ -83,9 +85,7 @@ public:
     }
 
     TEntityGroups(const TSplitSettings& splitSettings, const TString& name)
-        : DefaultGroupFeatures(name, splitSettings) {
-
-    }
+        : DefaultGroupFeatures(name, splitSettings) {}
 
     const TGroupFeatures& GetDefaultGroupFeatures() const {
         return DefaultGroupFeatures;
@@ -131,4 +131,4 @@ public:
         return GroupEntities.end();
     }
 };
-}
+} // namespace NKikimr::NOlap::NSplitter

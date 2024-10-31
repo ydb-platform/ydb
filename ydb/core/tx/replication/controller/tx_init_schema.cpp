@@ -5,9 +5,7 @@ namespace NKikimr::NReplication::NController {
 class TController::TTxInitSchema: public TTxBase {
 public:
     explicit TTxInitSchema(TController* self)
-        : TTxBase("TxInitSchema", self)
-    {
-    }
+        : TTxBase("TxInitSchema", self) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_INIT_SCHEMA;
@@ -33,4 +31,4 @@ void TController::RunTxInitSchema(const TActorContext& ctx) {
     Execute(new TTxInitSchema(this), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

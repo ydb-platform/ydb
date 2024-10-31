@@ -6,14 +6,17 @@
 
 namespace NKikimr::NColumnShard {
 
-class TEvWriteSimpleCommitTransactionOperator: public TBaseEvWriteTransactionOperator,
-                                               public TMonitoringObjectsCounter<TEvWriteSimpleCommitTransactionOperator> {
+class TEvWriteSimpleCommitTransactionOperator
+    : public TBaseEvWriteTransactionOperator
+    , public TMonitoringObjectsCounter<TEvWriteSimpleCommitTransactionOperator> {
 private:
     using TBase = TBaseEvWriteTransactionOperator;
-    virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& /*commitTxBody*/) override {
+    virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& /*commitTxBody*/)
+        override {
         return true;
     }
-    static inline auto Registrator = TFactory::TRegistrator<TEvWriteSimpleCommitTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
+    static inline auto Registrator =
+        TFactory::TRegistrator<TEvWriteSimpleCommitTransactionOperator>(NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE);
 
 public:
     using TBase::TBase;

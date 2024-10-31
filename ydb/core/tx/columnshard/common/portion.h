@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap::NPortion {
 // NOTE: These values are persisted in LocalDB so they must be stable
-enum EProduced: ui32 {
+enum EProduced : ui32 {
     UNSPECIFIED = 0,
     INSERTED,
     COMPACTED,
@@ -25,4 +25,4 @@ public:
     static const ui32 SPEC_COL_DELETE_FLAG_INDEX = SPEC_COL_PLAN_STEP_INDEX + 3;
 };
 
-}
+} // namespace NKikimr::NOlap::NPortion

@@ -19,15 +19,13 @@ public:
     std::vector<std::string>& Buffer;
 
     TMemoryLogBackend(std::vector<std::string>& buffer)
-        : Buffer(buffer)
-    {}
+        : Buffer(buffer) {}
 
     virtual void WriteData(const TLogRecord& rec) override {
         Buffer.emplace_back(rec.Data, rec.Len);
     }
 
-    virtual void ReopenLog() override {
-    }
+    virtual void ReopenLog() override {}
 };
 
 }  // anonymous namespace
@@ -43,7 +41,9 @@ std::string FindAuditLine(const std::vector<std::string>& auditLines, const std:
     for (auto i : auditLines) {
         Cerr << "    " << i << Endl;
     }
-    auto found = std::find_if(auditLines.begin(), auditLines.end(), [&](auto i) { return i.contains(substr); });
+    auto found = std::find_if(auditLines.begin(), auditLines.end(), [&](auto i) {
+        return i.contains(substr);
+    });
     UNIT_ASSERT_C(found != auditLines.end(), "No audit record with substring: '" + substr + "'");
     auto line = *found;
     Cerr << "AUDIT LOG checked line:" << Endl << "    " << line << Endl;

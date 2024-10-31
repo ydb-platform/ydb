@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return pqConfig;
     }
 
-    static void SetupLogging(TTestActorRuntime& runtime) {
+    static void SetupLogging(TTestActorRuntime & runtime) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return TShardedTableOptions();
     }
 
-    ui64 ResolvePqTablet(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+    ui64 ResolvePqTablet(TTestActorRuntime & runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
         auto streamDesc = Ls(runtime, sender, path);
 
         const auto& streamEntry = streamDesc->ResultSet.at(0);
@@ -72,8 +72,12 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         const auto& children = streamEntry.ListNodeEntry->Children;
         UNIT_ASSERT_VALUES_EQUAL(children.size(), 1);
 
-        auto topicDesc = Navigate(runtime, sender, JoinPath(ChildPath(SplitPath(path), children.at(0).Name)),
-            NSchemeCache::TSchemeCacheNavigate::EOp::OpTopic);
+        auto topicDesc = Navigate(
+            runtime,
+            sender,
+            JoinPath(ChildPath(SplitPath(path), children.at(0).Name)),
+            NSchemeCache::TSchemeCacheNavigate::EOp::OpTopic
+        );
 
         const auto& topicEntry = topicDesc->ResultSet.at(0);
         UNIT_ASSERT(topicEntry.PQGroupInfo);
@@ -89,7 +93,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return 0;
     }
 
-    auto GetRecords(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+    auto GetRecords(TTestActorRuntime & runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
         NKikimrClient::TPersQueueRequest request;
         request.MutablePartitionRequest()->SetTopic(path);
         request.MutablePartitionRequest()->SetPartition(partitionId);
@@ -117,7 +121,12 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return result;
     }
 
-    void WaitForContent(TServer::TPtr server, const TActorId& sender, const TString& path, const TVector<NKikimrChangeExchange::TChangeRecord>& expected) {
+    void WaitForContent(
+        TServer::TPtr server,
+        const TActorId& sender,
+        const TString& path,
+        const TVector<NKikimrChangeExchange::TChangeRecord>& expected
+    ) {
         while (true) {
             const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
             for (ui32 i = 0; i < std::min(records.size(), expected.size()); ++i) {
@@ -130,8 +139,9 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             }
 
             if (records.size() >= expected.size()) {
-                UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expected.size(),
-                    "Unexpected record: " << records.at(expected.size()).second);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    records.size(), expected.size(), "Unexpected record: " << records.at(expected.size()).second
+                );
                 break;
             }
 
@@ -171,10 +181,9 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
     Y_UNIT_TEST(SimpleBackup) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
-            .SetUseRealThreads(false)
-            .SetDomainName("Root")
-            .SetEnableChangefeedInitialScan(true)
-        );
+                                               .SetUseRealThreads(false)
+                                               .SetDomainName("Root")
+                                               .SetEnableChangefeedInitialScan(true));
 
         auto& runtime = *server->GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();
@@ -201,21 +210,29 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, "DELETE FROM `/Root/Table` ON (key) VALUES (2), (6);");
 
-        WaitForContent(server, edgeActor, "/Root/Table/continuousBackupImpl", {
-            MakeUpsert(1, 100),
-            MakeUpsert(5, 200),
-            MakeUpsert(6, 300),
-            MakeErase(2),
-            MakeErase(6),
-        });
+        WaitForContent(
+            server,
+            edgeActor,
+            "/Root/Table/continuousBackupImpl",
+            {
+                MakeUpsert(1, 100),
+                MakeUpsert(5, 200),
+                MakeUpsert(6, 300),
+                MakeErase(2),
+                MakeErase(6),
+            }
+        );
 
-        WaitTxNotification(server, edgeActor, AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl"));
+        WaitTxNotification(
+            server, edgeActor, AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl")
+        );
 
         // Actions below mustn't affect the result
 
         SimulateSleep(server, TDuration::Seconds(1));
 
-        const char* const result = "{ items { uint32_value: 1 } items { uint32_value: 100 } }, "
+        const char* const result =
+            "{ items { uint32_value: 1 } items { uint32_value: 100 } }, "
             "{ items { uint32_value: 2 } items { null_flag_value: NULL_VALUE } }, "
             "{ items { uint32_value: 5 } items { uint32_value: 200 } }, "
             "{ items { uint32_value: 6 } items { null_flag_value: NULL_VALUE } }";
@@ -224,7 +241,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/IncrBackupImpl`
                 )"),
-            result);
+            result
+        );
 
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -243,16 +261,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/IncrBackupImpl`
                 )"),
-            result);
+            result
+        );
     }
 
     Y_UNIT_TEST(SimpleRestore) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
-            .SetUseRealThreads(false)
-            .SetDomainName("Root")
-            .SetEnableChangefeedInitialScan(true)
-        );
+                                               .SetUseRealThreads(false)
+                                               .SetDomainName("Root")
+                                               .SetEnableChangefeedInitialScan(true));
 
         auto& runtime = *server->GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();
@@ -272,12 +290,12 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             edgeActor,
             "/Root",
             "IncrBackupImpl",
-            SimpleTable()
-                .AllowSystemColumnNames(true)
-                .Columns({
-                    {"key", "Uint32", true, false},
-                    {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+            SimpleTable().AllowSystemColumnNames(true).Columns(
+                {{"key", "Uint32", true, false},
+                 {"value", "Uint32", false, false},
+                 {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}
+            )
+        );
 
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_deleted) VALUES
@@ -287,7 +305,9 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             (5, NULL, true);
         )");
 
-        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "IncrBackupImpl", "Table"));
+        WaitTxNotification(
+            server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "IncrBackupImpl", "Table")
+        );
 
         SimulateSleep(server, TDuration::Seconds(1));
 
@@ -296,16 +316,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 SELECT key, value FROM `/Root/Table`
                 )"),
             "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
-            "{ items { uint32_value: 3 } items { uint32_value: 30 } }");
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }"
+        );
     }
 
     Y_UNIT_TEST(BackupRestore) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
-            .SetUseRealThreads(false)
-            .SetDomainName("Root")
-            .SetEnableChangefeedInitialScan(true)
-        );
+                                               .SetUseRealThreads(false)
+                                               .SetDomainName("Root")
+                                               .SetEnableChangefeedInitialScan(true));
 
         auto& runtime = *server->GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();
@@ -342,11 +362,15 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         SimulateSleep(server, TDuration::Seconds(1));
 
-        WaitTxNotification(server, edgeActor, AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl"));
+        WaitTxNotification(
+            server, edgeActor, AsyncAlterTakeIncrementalBackup(server, "/Root", "Table", "IncrBackupImpl")
+        );
 
         SimulateSleep(server, TDuration::Seconds(1));
 
-        WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "IncrBackupImpl", "RestoreTable"));
+        WaitTxNotification(
+            server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "IncrBackupImpl", "RestoreTable")
+        );
 
         SimulateSleep(server, TDuration::Seconds(5)); // wait longer until schema will be applied
 
@@ -356,9 +380,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 )"),
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/RestoreTable`
-                )"));
+                )")
+        );
     }
 
 } // Cdc
 
-} // NKikimr
+} // namespace NKikimr

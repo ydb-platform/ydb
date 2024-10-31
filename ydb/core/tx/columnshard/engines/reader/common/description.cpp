@@ -1,4 +1,3 @@
 #include "description.h"
 
-namespace NKikimr::NOlap {
-}
+namespace NKikimr::NOlap {}

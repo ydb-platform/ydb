@@ -14,15 +14,13 @@ namespace {
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropLock TPropose"
-            << " opId# " << OperationId << " ";
+        return TStringBuilder() << "TDropLock TPropose"
+                                << " opId# " << OperationId << " ";
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -61,36 +59,32 @@ class TDropLock: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-            return NextState();
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+                return NextState();
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
 public:
     explicit TDropLock(TOperationId id, const TTxTransaction& tx)
-        : TSubOperation(id, tx)
-    {
-    }
+        : TSubOperation(id, tx) {}
 
     explicit TDropLock(TOperationId id, TTxState::ETxState state)
-        : TSubOperation(id, state)
-    {
-    }
+        : TSubOperation(id, state) {}
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -100,13 +94,14 @@ public:
             << ": opId# " << OperationId
             << ", path# " << workingDir << "/" << op.GetName());
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         const auto parentPath = TPath::Resolve(workingDir, context.SS);
         {
             const auto checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -126,10 +121,7 @@ public:
         const auto dstPath = parentPath.Child(op.GetName());
         {
             const auto checks = dstPath.Check();
-            checks
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotUnderDeleting();
+            checks.IsAtLocalSchemeShard().IsResolved().NotUnderDeleting();
 
             if (checks) {
                 if (!parentPath.IsTableIndex()) {
@@ -155,9 +147,12 @@ public:
         const auto& lockguard = Transaction.GetLockGuard();
         const auto lockOwner = TTxId(lockguard.GetOwnerTxId());
         if (!lockguard.HasOwnerTxId() || !lockOwner) {
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, TStringBuilder() << "path checks failed"
-                << ", lock owner tx id not set"
-                << ", path: " << dstPath.PathString());
+            result->SetError(
+                TEvSchemeShard::EStatus::StatusInvalidParameter,
+                TStringBuilder() << "path checks failed"
+                                 << ", lock owner tx id not set"
+                                 << ", path: " << dstPath.PathString()
+            );
             return result;
         }
 
@@ -165,9 +160,12 @@ public:
         result->SetPathId(pathId.LocalPathId);
 
         if (!dstPath.LockedBy()) {
-            result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, TStringBuilder() << "path checks failed"
-                << ", path already unlocked"
-                << ", path: " << dstPath.PathString());
+            result->SetError(
+                TEvSchemeShard::EStatus::StatusAlreadyExists,
+                TStringBuilder() << "path checks failed"
+                                 << ", path already unlocked"
+                                 << ", path: " << dstPath.PathString()
+            );
             return result;
         }
 
@@ -238,4 +236,4 @@ ISubOperation::TPtr DropLock(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropLock>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

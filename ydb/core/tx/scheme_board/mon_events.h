@@ -24,23 +24,21 @@ struct TSchemeBoardMonEvents {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SCHEME_BOARD_MON), "expect End < EventSpaceEnd(ES_SCHEME_BOARD_MON)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_SCHEME_BOARD_MON),
+        "expect End < EventSpaceEnd(ES_SCHEME_BOARD_MON)"
+    );
 
     struct TEvRegister: public TEventLocal<TEvRegister, EvRegister> {
         const NKikimrServices::TActivity::EType ActivityType;
         const NJson::TJsonMap Attributes;
 
-        explicit TEvRegister(
-                NKikimrServices::TActivity::EType activityType,
-                const NJson::TJsonMap& attributes)
+        explicit TEvRegister(NKikimrServices::TActivity::EType activityType, const NJson::TJsonMap& attributes)
             : ActivityType(activityType)
-            , Attributes(attributes)
-        {
-        }
+            , Attributes(attributes) {}
     };
 
-    struct TEvUnregister: public TEventLocal<TEvUnregister, EvUnregister> {
-    };
+    struct TEvUnregister: public TEventLocal<TEvUnregister, EvUnregister> {};
 
     struct TEvInfoRequest: public TEventPB<TEvInfoRequest, NKikimrSchemeBoardMon::TEvInfoRequest, EvInfoRequest> {
         TEvInfoRequest() = default;
@@ -59,16 +57,15 @@ struct TSchemeBoardMonEvents {
         }
 
         explicit TEvInfoResponse(const TActorId& self, NKikimrServices::TActivity::EType activityType)
-            : TEvInfoResponse(self, NKikimrServices::TActivity::EType_Name(activityType))
-        {
-        }
+            : TEvInfoResponse(self, NKikimrServices::TActivity::EType_Name(activityType)) {}
 
         void SetTruncated(bool value = true) {
             Record.SetTruncated(value);
         }
     };
 
-    struct TEvDescribeRequest: public TEventPB<TEvDescribeRequest, NKikimrSchemeBoardMon::TEvDescribeRequest, EvDescribeRequest> {
+    struct TEvDescribeRequest
+        : public TEventPB<TEvDescribeRequest, NKikimrSchemeBoardMon::TEvDescribeRequest, EvDescribeRequest> {
         TEvDescribeRequest() = default;
 
         explicit TEvDescribeRequest(const TString& path) {
@@ -81,7 +78,8 @@ struct TSchemeBoardMonEvents {
         }
     };
 
-    struct TEvDescribeResponse: public TEventPB<TEvDescribeResponse, NKikimrSchemeBoardMon::TEvDescribeResponse, EvDescribeResponse> {
+    struct TEvDescribeResponse
+        : public TEventPB<TEvDescribeResponse, NKikimrSchemeBoardMon::TEvDescribeResponse, EvDescribeResponse> {
         TEvDescribeResponse() = default;
 
         explicit TEvDescribeResponse(const TString& json) {
@@ -91,4 +89,4 @@ struct TSchemeBoardMonEvents {
 
 }; // TSchemeBoardMonEvents
 
-} // NKikimr
+} // namespace NKikimr

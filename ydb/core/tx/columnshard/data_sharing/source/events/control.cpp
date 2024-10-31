@@ -7,4 +7,4 @@ TEvStartToSource::TEvStartToSource(const TSourceSession& session) {
     *Record.MutableSession() = session.SerializeDataToProto();
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing::NEvents

@@ -43,8 +43,10 @@ void TTxChainActor::OnSessionProgressSaved() {
     if (SessionLogic->IsFinished()) {
         SaveSessionState();
     } else {
-        NActors::TActivationContext::AsActorContext().Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(1));
+        NActors::TActivationContext::AsActorContext().Send(
+            TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(1)
+        );
     }
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NBackground

@@ -22,11 +22,9 @@ namespace NDataShard {
 class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeExchangeSplitCdcPartitionWorker]"
-                << "[" << SrcTabletId << "]"
-                << "[" << PartitionId << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[ChangeExchangeSplitCdcPartitionWorker]"
+                                         << "[" << SrcTabletId << "]"
+                                         << "[" << PartitionId << "]" << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -50,18 +48,18 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
         const auto& response = ev->Get()->Record;
 
         switch (response.GetStatus()) {
-        case NMsgBusProxy::MSTATUS_OK:
-            if (response.GetErrorCode() == NPersQueue::NErrorCode::OK) {
-                return Ack();
-            }
-            break;
-        case NMsgBusProxy::MSTATUS_ERROR:
-            if (response.GetErrorCode() == NPersQueue::NErrorCode::SOURCEID_DELETED) {
-                return Ack();
-            }
-            break;
-        default:
-            break;
+            case NMsgBusProxy::MSTATUS_OK:
+                if (response.GetErrorCode() == NPersQueue::NErrorCode::OK) {
+                    return Ack();
+                }
+                break;
+            case NMsgBusProxy::MSTATUS_ERROR:
+                if (response.GetErrorCode() == NPersQueue::NErrorCode::SOURCEID_DELETED) {
+                    return Ack();
+                }
+                break;
+            default:
+                break;
         }
 
         Leave();
@@ -94,15 +92,18 @@ public:
         return NKikimrServices::TActivity::CHANGE_EXCHANGE_SPLIT_ACTOR;
     }
 
-    explicit TCdcPartitionWorker(const TActorId& parent, ui32 partitionId, ui64 tabletId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds)
+    explicit TCdcPartitionWorker(
+        const TActorId& parent,
+        ui32 partitionId,
+        ui64 tabletId,
+        ui64 srcTabletId,
+        const TVector<ui64>& dstTabletIds
+    )
         : Parent(parent)
         , PartitionId(partitionId)
         , TabletId(tabletId)
         , SrcTabletId(srcTabletId)
-        , DstTabletIds(dstTabletIds)
-    {
-    }
+        , DstTabletIds(dstTabletIds) {}
 
     void Bootstrap() {
         NTabletPipe::TClientConfig config;
@@ -158,14 +159,11 @@ private:
 
 class TCdcWorker
     : public TActorBootstrapped<TCdcWorker>
-    , private NSchemeCache::TSchemeCacheHelpers
-{
+    , private NSchemeCache::TSchemeCacheHelpers {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeExchangeSplitCdcWorker]"
-                << "[" << SrcTabletId << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[ChangeExchangeSplitCdcWorker]"
+                                         << "[" << SrcTabletId << "]" << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -186,8 +184,7 @@ class TCdcWorker
     }
 
     bool IsResolving() const {
-        return IsResolvingCdcStream()
-            || IsResolvingTopic();
+        return IsResolvingCdcStream() || IsResolvingTopic();
     }
 
     TStringBuf CurrentStateName() const {
@@ -216,7 +213,9 @@ class TCdcWorker
 
     template <typename CheckFunc, typename FailFunc, typename T, typename... Args>
     bool Check(CheckFunc checkFunc, FailFunc failFunc, const T& subject, Args&&... args) {
-        return checkFunc(CurrentStateName(), subject, std::forward<Args>(args)..., std::bind(failFunc, this, std::placeholders::_1));
+        return checkFunc(
+            CurrentStateName(), subject, std::forward<Args>(args)..., std::bind(failFunc, this, std::placeholders::_1)
+        );
     }
 
     bool CheckNotEmpty(const TAutoPtr<TNavigate>& result) {
@@ -262,8 +261,8 @@ class TCdcWorker
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCdcStream);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -321,8 +320,8 @@ class TCdcWorker
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopic);
             sFunc(TEvents::TEvWakeup, ResolveCdcStream);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -368,7 +367,8 @@ class TCdcWorker
                 LOG_T("Register new worker"
                     << ": partitionId# " << partitionId);
 
-                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
+                const auto worker =
+                    Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }
@@ -460,14 +460,16 @@ public:
         return NKikimrServices::TActivity::CHANGE_EXCHANGE_SPLIT_ACTOR;
     }
 
-    explicit TCdcWorker(const TActorId& parent, const TPathId& pathId,
-            ui64 srcTabletId, const TVector<ui64>& dstTabletIds)
+    explicit TCdcWorker(
+        const TActorId& parent,
+        const TPathId& pathId,
+        ui64 srcTabletId,
+        const TVector<ui64>& dstTabletIds
+    )
         : Parent(parent)
         , PathId(pathId)
         , SrcTabletId(srcTabletId)
-        , DstTabletIds(dstTabletIds)
-    {
-    }
+        , DstTabletIds(dstTabletIds) {}
 
     void Bootstrap() {
         ResolveCdcStream();
@@ -501,17 +503,13 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
         TActorId ActorId;
 
         explicit TWorker(EWorkerType type)
-            : Type(type)
-        {
-        }
+            : Type(type) {}
     };
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeExchangeSplit]"
-                << "[" << DataShard.TabletId << "]"
-                << SelfId() /* contains brackets */ << " ";
+            LogPrefix = TStringBuilder() << "[ChangeExchangeSplit]"
+                                         << "[" << DataShard.TabletId << "]" << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -519,10 +517,10 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
 
     TActorId RegisterWorker(const TPathId& pathId, EWorkerType type) const {
         switch (type) {
-        case EWorkerType::CdcStream:
-            return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards));
-        case EWorkerType::AsyncIndex:
-            Y_ABORT("unreachable");
+            case EWorkerType::CdcStream:
+                return Register(new TCdcWorker(SelfId(), pathId, DataShard.TabletId, DstDataShards));
+            case EWorkerType::AsyncIndex:
+                Y_ABORT("unreachable");
         }
     }
 
@@ -577,8 +575,7 @@ public:
     explicit TChangeExchageSplit(const TDataShard* self, const TVector<ui64>& dstDataShards)
         : TActorBootstrapped()
         , DataShard{self->TabletID(), self->Generation(), self->SelfId()}
-        , DstDataShards(dstDataShards)
-    {
+        , DstDataShards(dstDataShards) {
         for (const auto& [_, tableInfo] : self->GetUserTables()) {
             for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
                 Workers.emplace(streamPathId, EWorkerType::CdcStream);
@@ -625,5 +622,5 @@ IActor* CreateChangeExchangeSplit(const TDataShard* self, const TVector<ui64>& d
     return new TChangeExchageSplit(self, dstDataShards);
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

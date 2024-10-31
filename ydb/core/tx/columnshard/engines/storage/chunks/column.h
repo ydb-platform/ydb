@@ -14,8 +14,13 @@ private:
     TSimpleColumnInfo ColumnInfo;
     std::shared_ptr<arrow::Scalar> First;
     std::shared_ptr<arrow::Scalar> Last;
+
 protected:
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(
+        const TColumnSaver& saver,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+        const std::vector<ui64>& splitSizes
+    ) const override;
     virtual const TString& DoGetData() const override {
         return Data;
     }
@@ -37,7 +42,8 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return Last;
     }
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const override {
+    virtual std::shared_ptr<IPortionDataChunk>
+    DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const override {
         TColumnRecord cRecord = Record;
         cRecord.ResetBlobRange();
         return std::make_shared<TChunkPreparation>(std::move(data), cRecord, columnInfo);
@@ -53,10 +59,16 @@ public:
         , Data(data)
         , Record(columnChunk)
         , ColumnInfo(columnInfo) {
-        AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0)("data", Data.size())("record", Record.BlobRange.Size);
+        AFL_VERIFY(Data.size() == Record.BlobRange.Size || Record.BlobRange.Size == 0)
+        ("data", Data.size())("record", Record.BlobRange.Size);
     }
 
-    TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address, const TSimpleColumnInfo& columnInfo)
+    TChunkPreparation(
+        const TString& data,
+        const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column,
+        const TChunkAddress& address,
+        const TSimpleColumnInfo& columnInfo
+    )
         : TBase(address.GetColumnId())
         , Data(data)
         , Record(address, column)
@@ -70,4 +82,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NChunks

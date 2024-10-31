@@ -1,5 +1,3 @@
 #include "gc_actor.h"
 
-namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
-
-}
+namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {}

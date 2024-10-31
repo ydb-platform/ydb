@@ -34,15 +34,19 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
 }
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const std::shared_ptr<IDataSource>& source,
+    const TFetchingScriptCursor& step
+) const {
     return !source->StartFetchingColumns(source, step, Columns);
 }
 
 ui64 TColumnBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
     ui64 result = source->GetColumnRawBytes(Columns.GetColumnIds());
     if (source->GetContext()->GetReadMetadata()->Limit && source->GetExclusiveIntervalOnly()) {
-        result = std::max<ui64>(result * 1.0 * source->GetContext()->GetReadMetadata()->Limit / source->GetRecordsCount(),
-            source->GetColumnBlobBytes(Columns.GetColumnIds()));
+        result = std::max<ui64>(
+            result * 1.0 * source->GetContext()->GetReadMetadata()->Limit / source->GetRecordsCount(),
+            source->GetColumnBlobBytes(Columns.GetColumnIds())
+        );
     }
     if (!result) {
         return Columns.GetColumnIds().size() * source->GetRecordsCount() *
@@ -57,7 +61,9 @@ ui64 TColumnBlobsFetchingStep::GetProcessingDataSize(const std::shared_ptr<IData
 }
 
 TConclusion<bool> TIndexBlobsFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const std::shared_ptr<IDataSource>& source,
+    const TFetchingScriptCursor& step
+) const {
     return !source->StartFetchingIndexes(source, step, Indexes);
 }
 
@@ -65,7 +71,9 @@ ui64 TIndexBlobsFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSourc
     return source->GetIndexRawBytes(Indexes->GetIndexIdsSet());
 }
 
-TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool>
+TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
     source->AssembleColumns(Columns);
     return true;
 }
@@ -74,8 +82,8 @@ ui64 TAssemblerStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& s
     return source->GetColumnRawBytes(Columns->GetColumnIds());
 }
 
-TConclusion<bool> TOptionalAssemblerStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TOptionalAssemblerStep::
+    DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     source->AssembleColumns(Columns);
     return true;
 }
@@ -93,7 +101,9 @@ ui64 TOptionalAssemblerStep::GetProcessingDataSize(const std::shared_ptr<IDataSo
     return source->GetColumnRawBytes(Columns->GetColumnIds());
 }
 
-TConclusion<bool> TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool>
+TFilterProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
     AFL_VERIFY(source);
     AFL_VERIFY(Step);
     std::shared_ptr<arrow::Table> table;
@@ -111,16 +121,23 @@ ui64 TFilterProgramStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& s
     return NArrow::TColumnFilter::GetPredictedMemorySize(source->GetRecordsCount());
 }
 
-TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter =
-        source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(source->GetStageData().GetTable()->BuildTableVerified());
+TConclusion<bool>
+TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
+    auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
+        source->GetStageData().GetTable()->BuildTableVerified()
+    );
     source->MutableStageData().AddFilter(filter);
     return true;
 }
 
-TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool>
+TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
     auto filter = MakeSnapshotFilter(
-        source->GetStageData().GetTable()->BuildTableVerified(), source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
+        source->GetStageData().GetTable()->BuildTableVerified(),
+        source->GetContext()->GetReadMetadata()->GetRequestSnapshot()
+    );
     if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
         if (source->AddTxConflict()) {
             return true;
@@ -130,8 +147,12 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     return true;
 }
 
-TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filterTable = source->GetStageData().GetTable()->BuildTableOptional(std::set<std::string>({ TIndexInfo::SPEC_COL_DELETE_FLAG }));
+TConclusion<bool>
+TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
+    auto filterTable =
+        source->GetStageData().GetTable()->BuildTableOptional(std::set<std::string>({TIndexInfo::SPEC_COL_DELETE_FLAG})
+        );
     if (!filterTable) {
         return true;
     }
@@ -147,7 +168,9 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     return true;
 }
 
-TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool>
+TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
     NYDBTest::TControllers::GetColumnShardController()->OnSelectShardingFilter();
     const auto& shardingInfo = source->GetContext()->GetReadMetadata()->GetRequestShardingInfo()->GetShardingInfo();
     auto filter = shardingInfo->GetFilter(source->GetStageData().GetTable()->BuildTableVerified());
@@ -155,17 +178,24 @@ TConclusion<bool> TShardingFilter::DoExecuteInplace(const std::shared_ptr<IDataS
     return true;
 }
 
-TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool>
+TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
-        columns.emplace_back(NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), Count));
+        columns.emplace_back(
+            NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), Count)
+        );
     }
-    source->MutableStageData().AddBatch(
-        std::make_shared<NArrow::TGeneralContainer>(arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns)));
+    source->MutableStageData().AddBatch(std::make_shared<NArrow::TGeneralContainer>(
+        arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), Count, columns)
+    ));
     return true;
 }
 
-TConclusion<bool> TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool>
+TApplyIndexStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
     source->ApplyIndex(IndexChecker);
     return true;
 }
@@ -181,9 +211,12 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             break;
         }
         auto step = Script->GetStep(CurrentStepIdx);
-        TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
-            IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
+        TMemoryProfileGuard mGuard(
+            "SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
+            IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY)
+        );
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
+        ("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
         AFL_VERIFY(!CurrentStartInstant);
         CurrentStartInstant = TMonotonic::Now();
         AFL_VERIFY(!CurrentStartDataSize);
@@ -201,8 +234,10 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     return true;
 }
 
-bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
-    const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) {
+bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+    const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/
+) {
     auto data = Source.lock();
     if (!data || data->GetContext()->IsAborted()) {
         guard->Release();
@@ -210,25 +245,34 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
     }
     data->RegisterAllocationGuard(std::move(guard));
     Step.Next();
-    auto task = std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId());
+    auto task =
+        std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     return true;
 }
 
 TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
-    const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step)
+    const std::shared_ptr<IDataSource>& source,
+    const ui64 mem,
+    const TFetchingScriptCursor& step
+)
     : TBase(mem)
     , Source(source)
     , Step(step)
-    , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard()) {
-}
+    , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard()) {}
 
 TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-
+    const std::shared_ptr<IDataSource>& source,
+    const TFetchingScriptCursor& step
+) const {
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, GetProcessingDataSize(source), step);
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
-        source->GetContext()->GetCommonContext()->GetScanId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
+    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
+        source->GetContext()->GetProcessMemoryControlId(),
+        source->GetContext()->GetCommonContext()->GetScanId(),
+        source->GetFirstIntervalId(),
+        {allocation},
+        (ui32)StageIndex
+    );
     return false;
 }
 
@@ -236,9 +280,13 @@ ui64 TAllocateMemoryStep::GetProcessingDataSize(const std::shared_ptr<IDataSourc
     ui64 size = source->GetColumnRawBytes(Columns.GetColumnIds());
 
     if (source->GetStageData().GetUseFilter() && source->GetContext()->GetReadMetadata()->Limit) {
-        const ui32 filtered = source->GetStageData().GetFilteredCount(source->GetRecordsCount(), source->GetContext()->GetReadMetadata()->Limit);
+        const ui32 filtered = source->GetStageData().GetFilteredCount(
+            source->GetRecordsCount(), source->GetContext()->GetReadMetadata()->Limit
+        );
         if (filtered < source->GetRecordsCount()) {
-            size = std::max<ui64>(size * 1.0 * filtered / source->GetRecordsCount(), source->GetColumnBlobBytes(Columns.GetColumnIds()));
+            size = std::max<ui64>(
+                size * 1.0 * filtered / source->GetRecordsCount(), source->GetColumnBlobBytes(Columns.GetColumnIds())
+            );
         }
     }
     return size;
@@ -265,11 +313,11 @@ TString TFetchingScript::DebugString() const {
 }
 
 TFetchingScript::TFetchingScript(const TSpecialReadContext& context)
-    : Limit(context.GetReadMetadata()->Limit) {
-}
+    : Limit(context.GetReadMetadata()->Limit) {}
 
-NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+NKikimr::TConclusion<bool>
+TFilterCutLimit::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/)
+    const {
     source->MutableStageData().CutFilter(source->GetRecordsCount(), Limit, Reverse);
     return true;
 }

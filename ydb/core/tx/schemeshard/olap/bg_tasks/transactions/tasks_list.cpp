@@ -52,8 +52,7 @@ TTxTasksList::TTxTasksList(TSelf* self, TEvListRequest::TPtr& ev)
     : TBase(self)
     , SenderId(ev->Sender)
     , RequestCookie(ev->Cookie)
-    , DatabaseName(ev->Get()->Record.GetDatabaseName())
-{
+    , DatabaseName(ev->Get()->Record.GetDatabaseName()) {
     if (ev->Get()->Record.HasPageSize() && ev->Get()->Record.GetPageSize()) {
         PageSize = ev->Get()->Record.GetPageSize();
     }
@@ -64,4 +63,4 @@ TTxTasksList::TTxTasksList(TSelf* self, TEvListRequest::TPtr& ev)
     }
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NBackground

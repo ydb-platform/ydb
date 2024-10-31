@@ -20,12 +20,10 @@ private:
 
     TIdentifier() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TIdentifier& proto);
+
 public:
     TIdentifier(const ui64 pathId)
-        : PathId(pathId)
-    {
-
-    }
+        : PathId(pathId) {}
 
     static TConclusion<TIdentifier> BuildFromProto(const NKikimrTxColumnShard::TBackupTxBody& proto);
     static TConclusion<TIdentifier> BuildFromProto(const NKikimrColumnShardExportProto::TIdentifier& proto);
@@ -45,4 +43,4 @@ public:
     TString DebugString() const;
 };
 
-}
+} // namespace NKikimr::NOlap::NExport

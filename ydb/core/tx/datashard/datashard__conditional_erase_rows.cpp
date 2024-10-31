@@ -33,7 +33,10 @@ protected:
     virtual void CloseEraser() = 0;
 };
 
-class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
+class TCondEraseScan
+    : public IActorCallback
+    , public IScan
+    , public IEraserOps {
     struct TDataShardId {
         TActorId ActorId;
         ui64 TabletId;
@@ -41,16 +44,11 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
 
     class TSerializedKeys {
     public:
-        explicit TSerializedKeys(
-                ui32 bytesLimit = 500 * 1024,
-                ui32 minCount = 1000,
-                ui32 maxCount = 50000)
+        explicit TSerializedKeys(ui32 bytesLimit = 500 * 1024, ui32 minCount = 1000, ui32 maxCount = 50000)
             : BytesLimit(bytesLimit)
             , MinCount(minCount)
             , MaxCount(maxCount)
-            , Size(0)
-        {
-        }
+            , Size(0) {}
 
         void Add(TString key) {
             Size += key.size();
@@ -104,8 +102,7 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
     struct TStats {
         TStats()
             : RowsProcessed(0)
-            , RowsErased(0)
-        {
+            , RowsErased(0) {
             auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "erase_rows");
 
             MonProcessed = counters->GetCounter("Processed", true);
@@ -146,9 +143,12 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         return keyCells;
     }
 
-    static THolder<TEvDataShard::TEvEraseRowsRequest> MakeEraseRowsRequest(const TTableId& tableId,
-            IEraseRowsCondition* condition, const TVector<TKey>& keyOrder, TVector<TString>& keys)
-    {
+    static THolder<TEvDataShard::TEvEraseRowsRequest> MakeEraseRowsRequest(
+        const TTableId& tableId,
+        IEraseRowsCondition* condition,
+        const TVector<TKey>& keyOrder,
+        TVector<TString>& keys
+    ) {
         auto request = MakeHolder<TEvDataShard::TEvEraseRowsRequest>();
 
         request->Record.SetTableId(tableId.PathId.LocalPathId);
@@ -215,8 +215,18 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
     }
 
 public:
-    explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, THolder<IEraseRowsCondition> condition, const TLimits& limits)
-        : IActorCallback(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
+    explicit TCondEraseScan(
+        TDataShard* ds,
+        const TActorId& replyTo,
+        const TTableId& tableId,
+        ui64 txId,
+        THolder<IEraseRowsCondition> condition,
+        const TLimits& limits
+    )
+        : IActorCallback(
+              static_cast<TReceiveFunc>(&TCondEraseScan::StateWork),
+              NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR
+          )
         , TableId(tableId)
         , DataShard{ds->SelfId(), ds->TabletID()}
         , ReplyTo(replyTo)
@@ -225,15 +235,11 @@ public:
         , Driver(nullptr)
         , SerializedKeys(limits.GetBatchMaxBytes(), limits.GetBatchMinKeys(), limits.GetBatchMaxKeys())
         , NoMoreData(false)
-        , Success(true)
-    {
-    }
+        , Success(true) {}
 
     void Describe(IOutputStream& o) const noexcept override {
         o << "CondEraseScan {"
-          << " TableId: " << TableId
-          << " TxId: " << TxId
-        << " }";
+          << " TableId: " << TableId << " TxId: " << TxId << " }";
     }
 
     IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
@@ -375,12 +381,16 @@ private:
 class TIndexedCondEraseScan: public TCondEraseScan {
 public:
     explicit TIndexedCondEraseScan(
-            TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
-            THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
+        TDataShard* ds,
+        const TActorId& replyTo,
+        const TTableId& tableId,
+        ui64 txId,
+        THolder<IEraseRowsCondition> condition,
+        const TLimits& limits,
+        TIndexes indexes
+    )
         : TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits)
-        , Indexes(std::move(indexes))
-    {
-    }
+        , Indexes(std::move(indexes)) {}
 
 protected:
     // Enrich key with indexed columns
@@ -434,9 +444,14 @@ private:
 }; // TIndexedCondEraseScan
 
 IScan* CreateCondEraseScan(
-        TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
-        THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
-{
+    TDataShard* ds,
+    const TActorId& replyTo,
+    const TTableId& tableId,
+    ui64 txId,
+    THolder<IEraseRowsCondition> condition,
+    const TLimits& limits,
+    TIndexes indexes
+) {
     Y_ABORT_UNLESS(ds);
     Y_ABORT_UNLESS(condition.Get());
 
@@ -467,61 +482,61 @@ static TIndexes GetIndexes(const NKikimrTxDataShard::TEvConditionalEraseRowsRequ
 
 static bool CheckUnit(bool isDateType, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) {
     switch (unit) {
-    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
-        if (isDateType) {
-            error = "Unit cannot be specified for date type column";
+        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+            if (isDateType) {
+                error = "Unit cannot be specified for date type column";
+                return false;
+            } else {
+                return true;
+            }
+        case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
+            if (isDateType) {
+                return true;
+            } else {
+                error = "Unit should be specified for integral type column";
+                return false;
+            }
+        default:
+            error = TStringBuilder() << "Unknown unit: " << static_cast<ui32>(unit);
             return false;
-        } else {
-            return true;
-        }
-    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
-        if (isDateType) {
-            return true;
-        } else {
-            error = "Unit should be specified for integral type column";
-            return false;
-        }
-    default:
-        error = TStringBuilder() << "Unknown unit: " << static_cast<ui32>(unit);
-        return false;
     }
 }
 
 static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& error) {
     switch (type.GetTypeId()) {
-    case NScheme::NTypeIds::Date:
-    case NScheme::NTypeIds::Datetime:
-    case NScheme::NTypeIds::Timestamp:
-    case NScheme::NTypeIds::Date32:
-    case NScheme::NTypeIds::Datetime64:
-    case NScheme::NTypeIds::Timestamp64:
-        return CheckUnit(true, unit, error);
+        case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::Datetime:
+        case NScheme::NTypeIds::Timestamp:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+            return CheckUnit(true, unit, error);
 
-    case NScheme::NTypeIds::Uint32:
-    case NScheme::NTypeIds::Uint64:
-    case NScheme::NTypeIds::DyNumber:
-        return CheckUnit(false, unit, error);
-    
-    case NScheme::NTypeIds::Pg:
-        switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
-            case DATEOID:
-            case TIMESTAMPOID:
-                return CheckUnit(true, unit, error);
-            case INT4OID:
-            case INT8OID:
-                return CheckUnit(false, unit, error);
-            default:
-                error = "Unsupported PG type";
-                return false;
-        }
-        break;
+        case NScheme::NTypeIds::Uint32:
+        case NScheme::NTypeIds::Uint64:
+        case NScheme::NTypeIds::DyNumber:
+            return CheckUnit(false, unit, error);
 
-    default:
-        error = TStringBuilder() << "Unsupported type: " << static_cast<ui32>(type.GetTypeId());
-        return false;
+        case NScheme::NTypeIds::Pg:
+            switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
+                case DATEOID:
+                case TIMESTAMPOID:
+                    return CheckUnit(true, unit, error);
+                case INT4OID:
+                case INT8OID:
+                    return CheckUnit(false, unit, error);
+                default:
+                    error = "Unsupported PG type";
+                    return false;
+            }
+            break;
+
+        default:
+            error = TStringBuilder() << "Unsupported type: " << static_cast<ui32>(type.GetTypeId());
+            return false;
     }
 }
 
@@ -558,13 +573,14 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
         }
 
         TUserTable::TCPtr userTable = GetUserTables().at(localPathId);
-        if (record.GetSchemaVersion() && userTable->GetTableSchemaVersion()
-            && record.GetSchemaVersion() != userTable->GetTableSchemaVersion()) {
-
+        if (record.GetSchemaVersion() && userTable->GetTableSchemaVersion() &&
+            record.GetSchemaVersion() != userTable->GetTableSchemaVersion()) {
             response->Record.SetStatus(TEvResponse::ProtoRecordType::SCHEME_ERROR);
-            response->Record.SetErrorDescription(TStringBuilder() << "Schema version mismatch"
-                << ": got " << record.GetSchemaVersion()
-                << ", expected " << userTable->GetTableSchemaVersion());
+            response->Record.SetErrorDescription(
+                TStringBuilder() << "Schema version mismatch"
+                                 << ": got " << record.GetSchemaVersion() << ", expected "
+                                 << userTable->GetTableSchemaVersion()
+            );
             ctx.Send(ev->Sender, std::move(response));
             return;
         }
@@ -582,8 +598,15 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
                     if (CheckUnit(column->second.Type, record.GetExpiration().GetColumnUnit(), error)) {
                         localTxId = NextTieBreakerIndex++;
                         const auto tableId = TTableId(PathOwnerId, localPathId, record.GetSchemaVersion());
-                        scan.Reset(CreateCondEraseScan(this, ev->Sender, tableId, localTxId,
-                            THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record)));
+                        scan.Reset(CreateCondEraseScan(
+                            this,
+                            ev->Sender,
+                            tableId,
+                            localTxId,
+                            THolder(CreateEraseRowsCondition(record)),
+                            record.GetLimits(),
+                            GetIndexes(record)
+                        ));
                     } else {
                         badRequest(error);
                     }
@@ -616,7 +639,10 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
                 readAheadHi = readAheadHiOverride;
             }
 
-            const ui64 scanId = QueueScan(localTableId, scan.Release(), localTxId,
+            const ui64 scanId = QueueScan(
+                localTableId,
+                scan.Release(),
+                localTxId,
                 TScanOptions()
                     .SetResourceBroker(taskName, taskPrio)
                     .SetReadAhead(readAheadLo, readAheadHi)
@@ -641,8 +667,8 @@ void TDataShard::Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev,
     InFlightCondErase.ActorId = ev->Get()->ActorId;
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr
 
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvEraseRowsResponse::EStatus, stream, value) {
     stream << NKikimrTxDataShard::TEvEraseRowsResponse_EStatus_Name(value);

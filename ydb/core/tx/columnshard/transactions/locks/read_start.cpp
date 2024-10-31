@@ -9,17 +9,20 @@ std::shared_ptr<NKikimr::NOlap::NTxInteractions::ITxEvent> TEvReadStartWriter::D
 
 bool TEvReadStart::DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) {
     if (!proto.HasRead()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot_parse_TEvReadStart")("reason", "have not 'read' in proto");
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "cannot_parse_TEvReadStart")("reason", "have not 'read' in proto");
         return false;
     }
     Schema = NArrow::DeserializeSchema(proto.GetRead().GetSchema());
     if (!Schema) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot_parse_TEvReadStart")("reason", "cannot_parse_schema");
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "cannot_parse_TEvReadStart")("reason", "cannot_parse_schema");
         return false;
     }
     Filter = TPKRangesFilter::BuildFromString(proto.GetRead().GetFilter(), Schema, false);
     if (!Filter) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot_parse_TEvReadStart")("reason", "cannot_parse_filter");
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "cannot_parse_TEvReadStart")("reason", "cannot_parse_filter");
         return false;
     }
     return true;
@@ -34,14 +37,24 @@ void TEvReadStart::DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) 
 
 void TEvReadStart::DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
-        context.AddInterval(txId, PathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
+        context.AddInterval(
+            txId,
+            PathId,
+            TIntervalPoint::From(i.GetPredicateFrom(), Schema),
+            TIntervalPoint::To(i.GetPredicateTo(), Schema)
+        );
     }
 }
 
 void TEvReadStart::DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
-        context.RemoveInterval(txId, PathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
+        context.RemoveInterval(
+            txId,
+            PathId,
+            TIntervalPoint::From(i.GetPredicateFrom(), Schema),
+            TIntervalPoint::To(i.GetPredicateTo(), Schema)
+        );
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NTxInteractions

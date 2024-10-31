@@ -121,8 +121,7 @@ struct TSettings {
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
-        , CacheDataAfterCompaction(1, 0, 1) {
-    }
+        , CacheDataAfterCompaction(1, 0, 1) {}
 
     void RegisterControls(TControlBoard& icb) {
         icb.RegisterSharedControl(BlobWriteGrouppingEnabled, "ColumnShardControls.BlobWriteGrouppingEnabled");
@@ -136,7 +135,9 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
 
-class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
+class TColumnShard
+    : public TActor<TColumnShard>
+    , public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInsertTableCleanup;
@@ -332,8 +333,14 @@ public:
     }
 
 private:
-    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
-        std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
+    void OverloadWriteFail(
+        const EOverloadStatus overloadReason,
+        const NEvWrite::TWriteMeta& writeMeta,
+        const ui64 writeSize,
+        const ui64 cookie,
+        std::unique_ptr<NActors::IEventBase>&& event,
+        const TActorContext& ctx
+    );
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
 protected:
@@ -349,14 +356,18 @@ protected:
             default:
                 LOG_S_WARN("TColumnShard.StateBroken at " << TabletID() << " unhandled event type: " << ev->GetTypeRewrite()
                                                           << " event: " << ev->ToString());
-                Send(IEventHandle::ForwardOnNondelivery(std::move(ev), NActors::TEvents::TEvUndelivered::ReasonActorUnknown));
+                Send(IEventHandle::ForwardOnNondelivery(
+                    std::move(ev), NActors::TEvents::TEvUndelivered::ReasonActorUnknown
+                ));
                 break;
         }
     }
 
     STFUNC(StateWork) {
         const TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
+                "self_id", SelfId()
+            );
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -513,29 +524,59 @@ private:
 
     TInsertWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const;
     TInsertWriteId GetLongTxWrite(
-        NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId, const std::optional<ui32> granuleShardingVersionId);
+        NIceDb::TNiceDb& db,
+        const NLongTxService::TLongTxId& longTxId,
+        const ui32 partId,
+        const std::optional<ui32> granuleShardingVersionId
+    );
     void AddLongTxWrite(const TInsertWriteId writeId, ui64 txId);
-    void LoadLongTxWrite(const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId,
-        const std::optional<ui32> granuleShardingVersion);
+    void LoadLongTxWrite(
+        const TInsertWriteId writeId,
+        const ui32 writePartId,
+        const NLongTxService::TLongTxId& longTxId,
+        const std::optional<ui32> granuleShardingVersion
+    );
     bool RemoveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui64 txId);
 
     void EnqueueBackgroundActivities(const bool periodic = false);
     virtual void Enqueue(STFUNC_SIG) override;
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
-    void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);
+    void ProtectSchemaSeqNo(
+        const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto,
+        NTabletFlatExecutor::TTransactionContext& txc
+    );
 
     void RunSchemaTx(
-        const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
-    void RunInit(const NKikimrTxColumnShard::TInitShard& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+        const NKikimrTxColumnShard::TSchemaTxBody& body,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    );
+    void RunInit(
+        const NKikimrTxColumnShard::TInitShard& body,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    );
     void RunEnsureTable(
-        const NKikimrTxColumnShard::TCreateTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+        const NKikimrTxColumnShard::TCreateTable& body,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    );
     void RunAlterTable(
-        const NKikimrTxColumnShard::TAlterTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+        const NKikimrTxColumnShard::TAlterTable& body,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    );
     void RunDropTable(
-        const NKikimrTxColumnShard::TDropTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+        const NKikimrTxColumnShard::TDropTable& body,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    );
     void RunAlterStore(
-        const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+        const NKikimrTxColumnShard::TAlterStore& body,
+        const NOlap::TSnapshot& version,
+        NTabletFlatExecutor::TTransactionContext& txc
+    );
 
     void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();

@@ -9,8 +9,7 @@ class TIndexColumnResolver: public IColumnResolver {
 
 public:
     explicit TIndexColumnResolver(const NOlap::TIndexInfo& indexInfo)
-        : IndexInfo(indexInfo) {
-    }
+        : IndexInfo(indexInfo) {}
 
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override {
         return IndexInfo.GetColumnIdOptional(name);
@@ -21,8 +20,10 @@ public:
     }
 
     NSsa::TColumnInfo GetDefaultColumn() const override {
-        return NSsa::TColumnInfo::Original((ui32)NOlap::TIndexInfo::ESpecialColumn::PLAN_STEP, NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
+        return NSsa::TColumnInfo::Original(
+            (ui32)NOlap::TIndexInfo::ESpecialColumn::PLAN_STEP, NOlap::TIndexInfo::SPEC_COL_PLAN_STEP
+        );
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

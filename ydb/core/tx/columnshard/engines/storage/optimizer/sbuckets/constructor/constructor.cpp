@@ -6,7 +6,8 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 std::shared_ptr<IOptimizationLogic> TOptimizerPlannerConstructor::BuildLogic() const {
-    const TDuration freshnessCheckDuration = NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration();
+    const TDuration freshnessCheckDuration =
+        NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration();
     std::shared_ptr<IOptimizationLogic> logic;
     if (LogicName == "one_head") {
         logic = std::make_shared<TOneHeadLogic>(freshnessCheckDuration);
@@ -18,8 +19,12 @@ std::shared_ptr<IOptimizationLogic> TOptimizerPlannerConstructor::BuildLogic() c
     return logic;
 }
 
-TConclusion<std::shared_ptr<NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
-    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), BuildLogic());
+TConclusion<std::shared_ptr<NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(
+    const TBuildContext& context
+) const {
+    return std::make_shared<TOptimizerPlanner>(
+        context.GetPathId(), context.GetStorages(), context.GetPKSchema(), BuildLogic()
+    );
 }
 
 bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructor& item) const {
@@ -35,7 +40,8 @@ void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
 
 bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     if (!proto.HasSBuckets()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse s-buckets optimizer from proto")("proto", proto.DebugString());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "cannot parse s-buckets optimizer from proto")("proto", proto.DebugString());
         return false;
     }
     LogicName = proto.GetSBuckets().GetLogicName();
@@ -45,7 +51,8 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     if (LogicName == "") {
         LogicName = "one_head";
     } else if (LogicName != "one_head" && LogicName != "slices") {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect s-buckets optimizer logic name")("proto", proto.DebugString());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+        ("error", "incorrect s-buckets optimizer logic name")("proto", proto.DebugString());
         return false;
     }
     return true;
@@ -57,7 +64,9 @@ NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(c
         return TConclusionStatus::Fail("no logic_name info in json description");
     }
     if (logicNameFromJson != "one_head" && logicNameFromJson != "slices") {
-        return TConclusionStatus::Fail("incorrect logic_type: " + logicNameFromJson + "; have to be one of [one_head, slices]");
+        return TConclusionStatus::Fail(
+            "incorrect logic_type: " + logicNameFromJson + "; have to be one of [one_head, slices]"
+        );
     }
     LogicName = logicNameFromJson;
     return TConclusionStatus::Success();

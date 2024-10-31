@@ -10,21 +10,20 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSchemeShard> {
+struct TSchemeShard::TTxServerlessStorageBilling: public TTransactionBase<TSchemeShard> {
     TSideEffects SideEffects;
     const TTimeGrid TimeGrid = TTimeGrid(TDuration::Minutes(1));
 
     TInstant TimeToNextBill;
 
     TTxServerlessStorageBilling(TSelf* self)
-        : TTransactionBase<TSchemeShard>(self)
-    {}
+        : TTransactionBase<TSchemeShard>(self) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_SERVERLESS_STORAGE_BILLING;
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling.Execute");
 
         const TPathElement::TPtr dbRootEl = Self->PathsById.at(Self->RootPathId());
@@ -139,12 +138,9 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         Self->ServerlessStorageLastBillTime = toBill.Start;
         Self->PersistStorageBillingTime(db);
 
-        TString id = TStringBuilder()
-            << Self->ParentDomainId.OwnerId
-            << "-" << Self->ParentDomainId.LocalPathId
-            << "-" << toBill.Start.Seconds()
-            << "-" << toBill.End.Seconds()
-            << "-" << spaceUsage.Tables.TotalSize;
+        TString id = TStringBuilder() << Self->ParentDomainId.OwnerId << "-" << Self->ParentDomainId.LocalPathId << "-"
+                                      << toBill.Start.Seconds() << "-" << toBill.End.Seconds() << "-"
+                                      << spaceUsage.Tables.TotalSize;
 
         auto json = NJson::TJsonMap{
             {"version", "1.0.0"},
@@ -155,10 +151,9 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             {"resource_id", database_id},
             {"source_id", "sless-docapi-ydb-storage"},
             {"source_wt", ctx.Now().Seconds()},
-            {"tags", NJson::TJsonMap {
-                 {"ydb_size", spaceUsage.Tables.TotalSize}
-            }},
-            {"usage", NJson::TJsonMap {
+            {"tags", NJson::TJsonMap{{"ydb_size", spaceUsage.Tables.TotalSize}}},
+            {"usage",
+             NJson::TJsonMap{
                  {"quantity", toBill.End.Seconds() - toBill.Start.Seconds()},
                  {"unit", "byte*second"},
                  {"type", "delta"},
@@ -189,13 +184,11 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling.Complete");
 
         if (TimeToNextBill) {
-            ctx.Schedule(
-                TimeToNextBill,
-                new TEvPrivate::TEvServerlessStorageBilling());
+            ctx.Schedule(TimeToNextBill, new TEvPrivate::TEvServerlessStorageBilling());
         }
 
         SideEffects.ApplyOnComplete(Self, ctx);
@@ -206,5 +199,5 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxServerlessStorageBillin
     return new TTxServerlessStorageBilling(this);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

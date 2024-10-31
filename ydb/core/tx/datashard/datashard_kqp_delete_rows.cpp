@@ -19,16 +19,15 @@ using namespace NUdf;
 
 namespace {
 
-class TKqpDeleteRowsWrapper : public TMutableComputationNode<TKqpDeleteRowsWrapper> {
+class TKqpDeleteRowsWrapper: public TMutableComputationNode<TKqpDeleteRowsWrapper> {
     using TBase = TMutableComputationNode<TKqpDeleteRowsWrapper>;
 
 public:
-    class TRowResult : public TComputationValue<TRowResult> {
+    class TRowResult: public TComputationValue<TRowResult> {
         using TBase = TComputationValue<TRowResult>;
 
     public:
-        TRowResult(TMemoryUsageInfo* memInfo, const TKqpDeleteRowsWrapper& owner,
-            NUdf::TUnboxedValue&& row)
+        TRowResult(TMemoryUsageInfo* memInfo, const TKqpDeleteRowsWrapper& owner, NUdf::TUnboxedValue&& row)
             : TBase(memInfo)
             , Owner(owner)
             , Row(std::move(row)) {}
@@ -64,12 +63,11 @@ public:
         NUdf::TUnboxedValue Row;
     };
 
-    class TRowsResult : public TComputationValue<TRowsResult> {
+    class TRowsResult: public TComputationValue<TRowsResult> {
         using TBase = TComputationValue<TRowsResult>;
 
     public:
-        TRowsResult(TMemoryUsageInfo* memInfo, const TKqpDeleteRowsWrapper& owner,
-            NUdf::TUnboxedValue&& rows)
+        TRowsResult(TMemoryUsageInfo* memInfo, const TKqpDeleteRowsWrapper& owner, NUdf::TUnboxedValue&& rows)
             : TBase(memInfo)
             , Owner(owner)
             , Rows(std::move(rows)) {}
@@ -95,14 +93,18 @@ public:
     }
 
 public:
-    TKqpDeleteRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
-            TVector<NScheme::TTypeInfo> rowTypes, TVector<ui32> keyIndices)
+    TKqpDeleteRowsWrapper(
+        TComputationMutables& mutables,
+        const TTableId& tableId,
+        IComputationNode* rowsNode,
+        TVector<NScheme::TTypeInfo> rowTypes,
+        TVector<ui32> keyIndices
+    )
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
         , RowTypes(std::move(rowTypes))
-        , KeyIndices(std::move(keyIndices))
-    {}
+        , KeyIndices(std::move(keyIndices)) {}
 
 private:
     void RegisterDependencies() const final {
@@ -118,9 +120,11 @@ private:
 
 } // namespace
 
-IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
-{
+IComputationNode* WrapKqpDeleteRows(
+    TCallable& callable,
+    const TComputationNodeFactoryContext& ctx,
+    TKqpDatashardComputeContext& computeCtx
+) {
     MKQL_ENSURE_S(callable.GetInputsCount() == 2);
 
     auto tableNode = callable.GetInput(0);
@@ -131,9 +135,11 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
     MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString());
 
     auto rowType = AS_TYPE(TStructType, AS_TYPE(TStreamType, rowsNode.GetStaticType())->GetItemType());
-    MKQL_ENSURE_S(tableInfo->KeyColumnIds.size() == rowType->GetMembersCount(), "Table key column count mismatch"
-        << ", expected: " << tableInfo->KeyColumnIds.size()
-        << ", actual: " << rowType->GetMembersCount());
+    MKQL_ENSURE_S(
+        tableInfo->KeyColumnIds.size() == rowType->GetMembersCount(),
+        "Table key column count mismatch" << ", expected: " << tableInfo->KeyColumnIds.size()
+                                          << ", actual: " << rowType->GetMembersCount()
+    );
 
     THashMap<TString, ui32> inputIndex;
     TVector<NScheme::TTypeInfo> rowTypes(rowType->GetMembersCount());
@@ -160,16 +166,23 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
 
         auto it = inputIndex.find(columnInfo.Name);
 
-        MKQL_ENSURE_S(rowTypes[it->second] == columnInfo.Type, "Key type mismatch"
-            << ", column: " << columnInfo.Name
-            << ", expected: " << NScheme::TypeName(columnInfo.Type)
-            << ", actual: " << NScheme::TypeName(rowTypes[it->second]));
+        MKQL_ENSURE_S(
+            rowTypes[it->second] == columnInfo.Type,
+            "Key type mismatch" << ", column: " << columnInfo.Name
+                                << ", expected: " << NScheme::TypeName(columnInfo.Type)
+                                << ", actual: " << NScheme::TypeName(rowTypes[it->second])
+        );
 
         keyIndices[i] = it->second;
     }
 
-    return new TKqpDeleteRowsWrapper(ctx.Mutables, tableId,
-        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()), std::move(rowTypes), std::move(keyIndices));
+    return new TKqpDeleteRowsWrapper(
+        ctx.Mutables,
+        tableId,
+        LocateNode(ctx.NodeLocator, *rowsNode.GetNode()),
+        std::move(rowTypes),
+        std::move(keyIndices)
+    );
 }
 
 } // namespace NMiniKQL

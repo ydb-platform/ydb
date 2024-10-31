@@ -15,7 +15,6 @@ namespace NKikimr {
 
 struct TSysTables {
     struct TTableColumnInfo {
-
         enum EDefaultKind {
             DEFAULT_UNDEFINED = 0,
             DEFAULT_SEQUENCE = 1,
@@ -51,11 +50,18 @@ struct TSysTables {
             return DefaultKind == DEFAULT_LITERAL;
         }
 
-        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type,
-            const TString& typeMod = {}, i32 keyOrder = -1,
+        TTableColumnInfo(
+            TString name,
+            ui32 colId,
+            NScheme::TTypeInfo type,
+            const TString& typeMod = {},
+            i32 keyOrder = -1,
             const TString& defaultFromSequence = {},
             EDefaultKind defaultKind = EDefaultKind::DEFAULT_UNDEFINED,
-            const Ydb::TypedValue& defaultFromLiteral = {}, bool isBuildInProgress = false, bool isNotNullColumn = false)
+            const Ydb::TypedValue& defaultFromLiteral = {},
+            bool isBuildInProgress = false,
+            bool isNotNullColumn = false
+        )
             : Name(name)
             , Id(colId)
             , PType(type)
@@ -65,8 +71,7 @@ struct TSysTables {
             , DefaultKind(defaultKind)
             , DefaultFromLiteral(defaultFromLiteral)
             , IsBuildInProgress(isBuildInProgress)
-            , IsNotNullColumn(isNotNullColumn)
-        {}
+            , IsNotNullColumn(isNotNullColumn) {}
     };
 
     // fake TabletIds
@@ -77,9 +82,12 @@ struct TSysTables {
         SysTableMAX = 999
     };
 
-    static bool IsSystemTable(const TTableId& table) { return table.PathId.OwnerId == SysSchemeShard; }
+    static bool IsSystemTable(const TTableId& table) {
+        return table.PathId.OwnerId == SysSchemeShard;
+    }
     static bool IsLocksTable(const TTableId& table) {
-        return IsSystemTable(table) && (table.PathId.LocalPathId == SysTableLocks || table.PathId.LocalPathId == SysTableLocks2);
+        return IsSystemTable(table) &&
+               (table.PathId.LocalPathId == SysTableLocks || table.PathId.LocalPathId == SysTableLocks2);
     }
 
     struct TLocksTable {
@@ -106,7 +114,7 @@ struct TSysTables {
 
         static_assert(sizeof(TPersistentLock) == 48, "Unexpected change in TPersistentLock size");
 
-        struct TLock : public TPersistentLock {
+        struct TLock: public TPersistentLock {
             enum ESetErrors : ui64 {
                 ErrorMin = Max<ui64>() - 255,
                 ErrorAlreadyBroken = Max<ui64>() - 3,
@@ -117,13 +125,25 @@ struct TSysTables {
 
             bool HasWrites = false; // Not exposed as a column
 
-            bool IsEmpty() const { return (LockId == 0); }
-            bool IsError() const { return IsError(Counter); }
+            bool IsEmpty() const {
+                return (LockId == 0);
+            }
+            bool IsError() const {
+                return IsError(Counter);
+            }
 
-            static bool IsError(ui64 counter) { return (counter >= ErrorMin); }
-            static bool IsNotSet(ui64 counter) { return (counter == ErrorNotSet); }
-            static bool IsTooMuch(ui64 counter) { return (counter == ErrorTooMuch); }
-            static bool IsBroken(ui64 counter) { return (counter == ErrorBroken); }
+            static bool IsError(ui64 counter) {
+                return (counter >= ErrorMin);
+            }
+            static bool IsNotSet(ui64 counter) {
+                return (counter == ErrorNotSet);
+            }
+            static bool IsTooMuch(ui64 counter) {
+                return (counter == ErrorTooMuch);
+            }
+            static bool IsBroken(ui64 counter) {
+                return (counter == ErrorBroken);
+            }
 
             TVector<TCell> MakeRow(bool v2) const {
                 TVector<TCell> row;
@@ -158,20 +178,20 @@ struct TSysTables {
             }
         };
 
-        static const char * GetColName(EColumns colId) {
+        static const char* GetColName(EColumns colId) {
             switch (colId) {
-            case EColumns::LockId:
-                return "LockId";
-            case EColumns::DataShard:
-                return "DataShard";
-            case EColumns::Generation:
-                return "Generation";
-            case EColumns::Counter:
-                return "Counter";
-            case EColumns::SchemeShard:
-                return "SchemeShard";
-            case EColumns::PathId:
-                return "PathId";
+                case EColumns::LockId:
+                    return "LockId";
+                case EColumns::DataShard:
+                    return "DataShard";
+                case EColumns::Generation:
+                    return "Generation";
+                case EColumns::Counter:
+                    return "Counter";
+                case EColumns::SchemeShard:
+                    return "SchemeShard";
+                case EColumns::PathId:
+                    return "PathId";
             };
             Y_ASSERT("Unknown column");
             return "";
@@ -191,7 +211,8 @@ struct TSysTables {
             keyTypes.push_back(type);
 
             if (v2) {
-                columns[4] = TTableColumnInfo(GetColName(EColumns::SchemeShard), (ui32)EColumns::SchemeShard, type, "", 2);
+                columns[4] =
+                    TTableColumnInfo(GetColName(EColumns::SchemeShard), (ui32)EColumns::SchemeShard, type, "", 2);
                 columns[5] = TTableColumnInfo(GetColName(EColumns::PathId), (ui32)EColumns::PathId, type, "", 3);
                 keyTypes.push_back(type);
                 keyTypes.push_back(type);
@@ -219,11 +240,10 @@ struct TSysTables {
     };
 };
 
-
-inline IOutputStream& operator << (IOutputStream& out, const TSysTables::TLocksTable::TLock& lock) {
+inline IOutputStream& operator<<(IOutputStream& out, const TSysTables::TLocksTable::TLock& lock) {
     out << lock.LockId << ':' << lock.DataShard << ':' << lock.Generation << ':' << lock.Counter << ':'
         << lock.SchemeShard << ':' << lock.PathId;
     return out;
 }
 
-}
+} // namespace NKikimr

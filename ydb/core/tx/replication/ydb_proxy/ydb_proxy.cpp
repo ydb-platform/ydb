@@ -26,25 +26,21 @@ using namespace NYdb::NTopic;
 
 void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
     out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " Codec: " << Codec
-    << " }";
+        << " Offset: " << Offset << " Data: " << Data.size() << "b"
+        << " Codec: " << Codec << " }";
 }
 
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
-        << " PartitionId: " << PartitionId
-        << " Messages [" << JoinSeq(",", Messages) << "]"
-    << " }";
+        << " PartitionId: " << PartitionId << " Messages [" << JoinSeq(",", Messages) << "]"
+        << " }";
 }
 
 void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
     out << "{"
-        << " PartitionId: " << PartitionId
-        << " AdjacentPartitionsIds [" << JoinSeq(",", AdjacentPartitionsIds) << "]"
+        << " PartitionId: " << PartitionId << " AdjacentPartitionsIds [" << JoinSeq(",", AdjacentPartitionsIds) << "]"
         << " ChildPartitionsIds [" << JoinSeq(",", ChildPartitionsIds) << "]"
-    << " }";
+        << " }";
 }
 
 template <typename TDerived>
@@ -61,15 +57,16 @@ protected:
             EvEnd,
         };
 
-        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+        static_assert(
+            EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
+            "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"
+        );
 
         struct TEvComplete: public TEventLocal<TEvComplete, EvComplete> {
             const TRequestPtr Request;
 
             explicit TEvComplete(const TRequestPtr& request)
-                : Request(request)
-            {
-            }
+                : Request(request) {}
         };
 
         struct TEvTopicEventReady: public TEventLocal<TEvTopicEventReady, EvTopicEventReady> {
@@ -78,9 +75,7 @@ protected:
 
             explicit TEvTopicEventReady(const TActorId& sender, ui64 cookie)
                 : Sender(sender)
-                , Cookie(cookie)
-            {
-            }
+                , Cookie(cookie) {}
         };
 
     }; // TEvPrivate
@@ -94,9 +89,7 @@ private:
             : ActorSystem(sys)
             , Self(self)
             , Sender(sender)
-            , Cookie(cookie)
-        {
-        }
+            , Cookie(cookie) {}
 
         void Complete(IEventBase* ev) {
             Send(Sender, ev, Cookie);
@@ -254,17 +247,15 @@ public:
         : TBaseProxyActor(&TThis::StateWork)
         , Session(session)
         , AutoCommit(autoCommit)
-        , PartitionEndWatcher(this)
-    {
-    }
+        , PartitionEndWatcher(this) {}
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
 
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -278,7 +269,7 @@ private:
 
 class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
     template <typename TEvResponse, typename TClient, typename... Args>
-    using TFunc = typename TEvResponse::TAsyncResult(TClient::*)(Args...);
+    using TFunc = typename TEvResponse::TAsyncResult (TClient::*)(Args...);
 
     template <typename TSettings>
     static TSettings ClientSettings(const TCommonClientSettings& base) {
@@ -441,12 +432,13 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
             .SslCredentials(ssl);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
-        return MakeSettings(endpoint, database, ssl)
-            .AuthToken(token);
+    static TCommonClientSettings
+    MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TString& token) {
+        return MakeSettings(endpoint, database, ssl).AuthToken(token);
     }
 
-    static TCommonClientSettings MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
+    static TCommonClientSettings
+    MakeSettings(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
         return MakeSettings(endpoint, database, ssl)
             .CredentialsProviderFactory(CreateLoginCredentialsProviderFactory({
                 .User = credentials.GetUser(),
@@ -458,9 +450,7 @@ public:
     template <typename... Args>
     explicit TYdbProxy(Args&&... args)
         : TBaseProxyActor(&TThis::StateWork)
-        , CommonSettings(MakeSettings(std::forward<Args>(args)...))
-    {
-    }
+        , CommonSettings(MakeSettings(std::forward<Args>(args)...)) {}
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -487,8 +477,8 @@ public:
             hFunc(TEvYdbProxy::TEvCreateTopicReaderRequest, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
 
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -508,11 +498,12 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
     return new TYdbProxy(endpoint, database, ssl, token);
 }
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
+IActor*
+CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TStaticCredentials& credentials) {
     return new TYdbProxy(endpoint, database, ssl, credentials);
 }
 
-}
+} // namespace NKikimr::NReplication
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult::TMessage, o, x) {
     return x.Out(o);

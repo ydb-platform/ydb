@@ -23,8 +23,7 @@ TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context) {
 }
 
 TChunkMeta::TChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column)
-    : TBase(column) {
-}
+    : TBase(column) {}
 
 NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
@@ -37,14 +36,15 @@ TColumnRecord::TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const T
     : Meta(loadContext)
     , ColumnId(loadContext.GetAddress().GetColumnId())
     , Chunk(loadContext.GetAddress().GetChunk())
-    , BlobRange(loadContext.GetBlobRange().BuildLink(blobLinkId)) {
-}
+    , BlobRange(loadContext.GetBlobRange().BuildLink(blobLinkId)) {}
 
-TColumnRecord::TColumnRecord(const TChunkAddress& address, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column)
+TColumnRecord::TColumnRecord(
+    const TChunkAddress& address,
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column
+)
     : Meta(column)
     , ColumnId(address.GetColumnId())
-    , Chunk(address.GetChunk()) {
-}
+    , Chunk(address.GetChunk()) {}
 
 NKikimrColumnShardDataSharingProto::TColumnRecord TColumnRecord::SerializeToProto() const {
     NKikimrColumnShardDataSharingProto::TColumnRecord result;
@@ -55,7 +55,9 @@ NKikimrColumnShardDataSharingProto::TColumnRecord TColumnRecord::SerializeToProt
     return result;
 }
 
-NKikimr::TConclusionStatus TColumnRecord::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto) {
+NKikimr::TConclusionStatus TColumnRecord::DeserializeFromProto(
+    const NKikimrColumnShardDataSharingProto::TColumnRecord& proto
+) {
     ColumnId = proto.GetColumnId();
     Chunk = proto.GetChunkIdx();
     {

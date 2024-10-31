@@ -14,6 +14,7 @@ private:
     YDB_READONLY_DEF(TString, StorageId);
     YDB_READONLY(TString, ActionGuid, TGUID::CreateTimebased().AsGuidString());
     const i64 ActionId = 0;
+
 public:
     i64 GetActionId() const {
         return ActionId;
@@ -23,4 +24,4 @@ public:
     virtual ~ICommonBlobsAction() = default;
 };
 
-}
+} // namespace NKikimr::NOlap

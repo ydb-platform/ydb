@@ -13,6 +13,7 @@ private:
     YDB_READONLY(TAtomicCounter, StatisticsUsageCount, 0);
     YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
     YDB_ACCESSOR_DEF(std::optional<ui64>, SmallSizeDetector);
+
 protected:
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override;
     virtual void OnExportFinished() override {
@@ -33,6 +34,7 @@ protected:
     virtual TDuration DoGetCompactionActualizationLag(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
+
 public:
     TWaitCompactionController() {
         SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
@@ -48,7 +50,11 @@ public:
     virtual void OnMaxValueUsage() override {
         MaxValueUsageCount.Inc();
     }
-    void SetTiersSnapshot(TTestBasicRuntime& runtime, const TActorId& tabletActorId, const NMetadata::NFetcher::ISnapshot::TPtr& snapshot);
+    void SetTiersSnapshot(
+        TTestBasicRuntime& runtime,
+        const TActorId& tabletActorId,
+        const NMetadata::NFetcher::ISnapshot::TPtr& snapshot
+    );
 
     virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const override {
         if (CurrentConfig) {
@@ -59,4 +65,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

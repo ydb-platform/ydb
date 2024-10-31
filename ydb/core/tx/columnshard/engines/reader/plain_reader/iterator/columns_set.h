@@ -27,9 +27,8 @@ public:
     }
 
     TIndexesSet(const ui32& indexId)
-        : IndexIds({ indexId })
-        , IndexIdsSet({ indexId }) {
-    }
+        : IndexIds({indexId})
+        , IndexIdsSet({indexId}) {}
 
     ui32 GetIndexesCount() const {
         return IndexIds.size();
@@ -54,16 +53,13 @@ public:
     }
 
     TColumnsSetIds(const std::set<ui32>& ids)
-        : ColumnIds(ids) {
-    }
+        : ColumnIds(ids) {}
     TColumnsSetIds() = default;
     TColumnsSetIds(std::set<ui32>&& ids)
-        : ColumnIds(std::move(ids)) {
-    }
+        : ColumnIds(std::move(ids)) {}
 
     TColumnsSetIds(const std::vector<ui32>& ids)
-        : ColumnIds(ids.begin(), ids.end()) {
-    }
+        : ColumnIds(ids.begin(), ids.end()) {}
 
     TColumnsSetIds operator+(const TColumnsSetIds& external) const {
         TColumnsSetIds result = *this;

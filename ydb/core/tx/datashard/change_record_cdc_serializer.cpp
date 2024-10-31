@@ -50,20 +50,19 @@ protected:
 
 public:
     explicit TBaseSerializer(const TChangeRecordSerializerOpts& opts)
-        : Opts(opts)
-    {}
+        : Opts(opts) {}
 
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
         cmd.SetSeqNo(record.GetSeqNo());
         cmd.SetCreateTimeMS(record.GetApproximateCreationDateTime().MilliSeconds());
         switch (record.GetKind()) {
-        case TChangeRecord::EKind::CdcDataChange:
-            return SerializeDataChange(cmd, record);
-        case TChangeRecord::EKind::CdcHeartbeat:
-            return SerializeHeartbeat(cmd, record);
-        case TChangeRecord::EKind::AsyncIndex:
-        case TChangeRecord::EKind::IncrementalRestore:
-            Y_ABORT("Unexpected");
+            case TChangeRecord::EKind::CdcDataChange:
+                return SerializeDataChange(cmd, record);
+            case TChangeRecord::EKind::CdcHeartbeat:
+                return SerializeHeartbeat(cmd, record);
+            case TChangeRecord::EKind::AsyncIndex:
+            case TChangeRecord::EKind::IncrementalRestore:
+                Y_ABORT("Unexpected");
         }
     }
 
@@ -96,7 +95,7 @@ class TJsonSerializer: public TBaseSerializer {
         constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
         constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
         constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
-        return NJson::TJsonWriterConfig {
+        return NJson::TJsonWriterConfig{
             .DoubleNDigits = doubleNDigits,
             .FloatNDigits = floatNDigits,
             .FloatToStringMode = floatMode,
@@ -130,70 +129,72 @@ protected:
         }
 
         switch (type.GetTypeId()) {
-        case NScheme::NTypeIds::Bool:
-            return NJson::TJsonValue(cell.AsValue<bool>());
-        case NScheme::NTypeIds::Int8:
-            return NJson::TJsonValue(cell.AsValue<i8>());
-        case NScheme::NTypeIds::Uint8:
-            return NJson::TJsonValue(cell.AsValue<ui8>());
-        case NScheme::NTypeIds::Int16:
-            return NJson::TJsonValue(cell.AsValue<i16>());
-        case NScheme::NTypeIds::Uint16:
-            return NJson::TJsonValue(cell.AsValue<ui16>());
-        case NScheme::NTypeIds::Int32:
-            return NJson::TJsonValue(cell.AsValue<i32>());
-        case NScheme::NTypeIds::Uint32:
-            return NJson::TJsonValue(cell.AsValue<ui32>());
-        case NScheme::NTypeIds::Int64:
-            return NJson::TJsonValue(cell.AsValue<i64>());
-        case NScheme::NTypeIds::Uint64:
-            return NJson::TJsonValue(cell.AsValue<ui64>());
-        case NScheme::NTypeIds::Float:
-            return NJson::TJsonValue(cell.AsValue<float>());
-        case NScheme::NTypeIds::Double:
-            return NJson::TJsonValue(cell.AsValue<double>());
-        case NScheme::NTypeIds::Date:
-            return NJson::TJsonValue(TInstant::Days(cell.AsValue<ui16>()).ToString());
-        case NScheme::NTypeIds::Datetime:
-            return NJson::TJsonValue(TInstant::Seconds(cell.AsValue<ui32>()).ToString());
-        case NScheme::NTypeIds::Timestamp:
-            return NJson::TJsonValue(TInstant::MicroSeconds(cell.AsValue<ui64>()).ToString());
-        case NScheme::NTypeIds::Interval:
-            return NJson::TJsonValue(cell.AsValue<i64>());
-        case NScheme::NTypeIds::Date32:
-            return NJson::TJsonValue(cell.AsValue<i32>());
-        case NScheme::NTypeIds::Datetime64:
-        case NScheme::NTypeIds::Interval64:
-        case NScheme::NTypeIds::Timestamp64:
-            return NJson::TJsonValue(cell.AsValue<i64>());            
-        case NScheme::NTypeIds::Decimal:
-            return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>(), type));
-        case NScheme::NTypeIds::DyNumber:
-            return NJson::TJsonValue(DyNumberToString(cell.AsBuf()));
-        case NScheme::NTypeIds::String:
-        case NScheme::NTypeIds::String4k:
-        case NScheme::NTypeIds::String2m:
-            return NJson::TJsonValue(Base64Encode(cell.AsBuf()));
-        case NScheme::NTypeIds::Utf8:
-            return NJson::TJsonValue(cell.AsBuf());
-        case NScheme::NTypeIds::Json:
-            return StringToJson(cell.AsBuf());
-        case NScheme::NTypeIds::JsonDocument:
-            return StringToJson(NBinaryJson::SerializeToJson(cell.AsBuf()));
-        case NScheme::NTypeIds::Yson:
-            return YsonToJson(cell.AsBuf());
-        case NScheme::NTypeIds::Pg:
-            return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
-        case NScheme::NTypeIds::Uuid:
-            return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
-        default:
-            Y_ABORT("Unexpected type");
+            case NScheme::NTypeIds::Bool:
+                return NJson::TJsonValue(cell.AsValue<bool>());
+            case NScheme::NTypeIds::Int8:
+                return NJson::TJsonValue(cell.AsValue<i8>());
+            case NScheme::NTypeIds::Uint8:
+                return NJson::TJsonValue(cell.AsValue<ui8>());
+            case NScheme::NTypeIds::Int16:
+                return NJson::TJsonValue(cell.AsValue<i16>());
+            case NScheme::NTypeIds::Uint16:
+                return NJson::TJsonValue(cell.AsValue<ui16>());
+            case NScheme::NTypeIds::Int32:
+                return NJson::TJsonValue(cell.AsValue<i32>());
+            case NScheme::NTypeIds::Uint32:
+                return NJson::TJsonValue(cell.AsValue<ui32>());
+            case NScheme::NTypeIds::Int64:
+                return NJson::TJsonValue(cell.AsValue<i64>());
+            case NScheme::NTypeIds::Uint64:
+                return NJson::TJsonValue(cell.AsValue<ui64>());
+            case NScheme::NTypeIds::Float:
+                return NJson::TJsonValue(cell.AsValue<float>());
+            case NScheme::NTypeIds::Double:
+                return NJson::TJsonValue(cell.AsValue<double>());
+            case NScheme::NTypeIds::Date:
+                return NJson::TJsonValue(TInstant::Days(cell.AsValue<ui16>()).ToString());
+            case NScheme::NTypeIds::Datetime:
+                return NJson::TJsonValue(TInstant::Seconds(cell.AsValue<ui32>()).ToString());
+            case NScheme::NTypeIds::Timestamp:
+                return NJson::TJsonValue(TInstant::MicroSeconds(cell.AsValue<ui64>()).ToString());
+            case NScheme::NTypeIds::Interval:
+                return NJson::TJsonValue(cell.AsValue<i64>());
+            case NScheme::NTypeIds::Date32:
+                return NJson::TJsonValue(cell.AsValue<i32>());
+            case NScheme::NTypeIds::Datetime64:
+            case NScheme::NTypeIds::Interval64:
+            case NScheme::NTypeIds::Timestamp64:
+                return NJson::TJsonValue(cell.AsValue<i64>());
+            case NScheme::NTypeIds::Decimal:
+                return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>(), type));
+            case NScheme::NTypeIds::DyNumber:
+                return NJson::TJsonValue(DyNumberToString(cell.AsBuf()));
+            case NScheme::NTypeIds::String:
+            case NScheme::NTypeIds::String4k:
+            case NScheme::NTypeIds::String2m:
+                return NJson::TJsonValue(Base64Encode(cell.AsBuf()));
+            case NScheme::NTypeIds::Utf8:
+                return NJson::TJsonValue(cell.AsBuf());
+            case NScheme::NTypeIds::Json:
+                return StringToJson(cell.AsBuf());
+            case NScheme::NTypeIds::JsonDocument:
+                return StringToJson(NBinaryJson::SerializeToJson(cell.AsBuf()));
+            case NScheme::NTypeIds::Yson:
+                return YsonToJson(cell.AsBuf());
+            case NScheme::NTypeIds::Pg:
+                return NJson::TJsonValue(PgToString(cell.AsBuf(), type));
+            case NScheme::NTypeIds::Uuid:
+                return NJson::TJsonValue(NUuid::UuidBytesToString(cell.Data()));
+            default:
+                Y_ABORT("Unexpected type");
         }
     }
 
-    static void SerializeJsonKey(TUserTable::TCPtr schema, NJson::TJsonValue& key,
-        const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
-    {
+    static void SerializeJsonKey(
+        TUserTable::TCPtr schema,
+        NJson::TJsonValue& key,
+        const NKikimrChangeExchange::TDataChange::TSerializedCells& in
+    ) {
         Y_ABORT_UNLESS(in.TagsSize() == schema->KeyColumnIds.size());
         for (size_t i = 0; i < schema->KeyColumnIds.size(); ++i) {
             Y_ABORT_UNLESS(in.GetTags(i) == schema->KeyColumnIds.at(i));
@@ -210,9 +211,11 @@ protected:
         }
     }
 
-    static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& value,
-        const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
-    {
+    static void SerializeJsonValue(
+        TUserTable::TCPtr schema,
+        NJson::TJsonValue& value,
+        const NKikimrChangeExchange::TDataChange::TSerializedCells& in
+    ) {
         TSerializedCellVec cells;
         Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
         Y_ABORT_UNLESS(in.TagsSize() == cells.GetCells().size());
@@ -259,8 +262,7 @@ protected:
 public:
     explicit TJsonSerializer(const TChangeRecordSerializerOpts& opts)
         : TBaseSerializer(opts)
-        , JsonConfig(DefaultJsonConfig())
-    {}
+        , JsonConfig(DefaultJsonConfig()) {}
 
     void Serialize(TCmdWrite& cmd, const TChangeRecord& record) override {
         TBaseSerializer::Serialize(cmd, record);
@@ -299,15 +301,15 @@ protected:
         const auto body = ParseBody(record.GetBody());
 
         switch (record.GetKind()) {
-        case TChangeRecord::EKind::AsyncIndex:
-            Y_ABORT_UNLESS(Opts.Debug);
-            SerializeJsonValue(record.GetSchema(), json["key"], body.GetKey());
-            break;
-        case TChangeRecord::EKind::CdcDataChange:
-            SerializeJsonKey(record.GetSchema(), json["key"], body.GetKey());
-            break;
-        default:
-            Y_ABORT("Unexpected record");
+            case TChangeRecord::EKind::AsyncIndex:
+                Y_ABORT_UNLESS(Opts.Debug);
+                SerializeJsonValue(record.GetSchema(), json["key"], body.GetKey());
+                break;
+            case TChangeRecord::EKind::CdcDataChange:
+                SerializeJsonKey(record.GetSchema(), json["key"], body.GetKey());
+                break;
+            default:
+                Y_ABORT("Unexpected record");
         }
 
         if (body.HasOldImage()) {
@@ -320,23 +322,23 @@ protected:
 
         const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
         switch (body.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert:
-            json["update"].SetType(NJson::JSON_MAP);
-            if (!hasAnyImage) {
-                SerializeJsonValue(record.GetSchema(), json["update"], body.GetUpsert());
-            }
-            break;
-        case NKikimrChangeExchange::TDataChange::kReset:
-            json["reset"].SetType(NJson::JSON_MAP);
-            if (!hasAnyImage) {
-                SerializeJsonValue(record.GetSchema(), json["reset"], body.GetReset());
-            }
-            break;
-        case NKikimrChangeExchange::TDataChange::kErase:
-            json["erase"].SetType(NJson::JSON_MAP);
-            break;
-        default:
-            Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+            case NKikimrChangeExchange::TDataChange::kUpsert:
+                json["update"].SetType(NJson::JSON_MAP);
+                if (!hasAnyImage) {
+                    SerializeJsonValue(record.GetSchema(), json["update"], body.GetUpsert());
+                }
+                break;
+            case NKikimrChangeExchange::TDataChange::kReset:
+                json["reset"].SetType(NJson::JSON_MAP);
+                if (!hasAnyImage) {
+                    SerializeJsonValue(record.GetSchema(), json["reset"], body.GetReset());
+                }
+                break;
+            case NKikimrChangeExchange::TDataChange::kErase:
+                json["erase"].SetType(NJson::JSON_MAP);
+                break;
+            default:
+                Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
 
         if (Opts.VirtualTimestamps) {
@@ -350,9 +352,11 @@ public:
 }; // TYdbJsonSerializer
 
 class TDynamoDBStreamsJsonSerializer: public TJsonSerializer {
-    static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value,
-        const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
-    {
+    static void ToAttributeValues(
+        TUserTable::TCPtr schema,
+        NJson::TJsonValue& value,
+        const NKikimrChangeExchange::TDataChange::TSerializedCells& in
+    ) {
         TSerializedCellVec cells;
         Y_ABORT_UNLESS(TSerializedCellVec::TryParse(in.GetData(), cells));
         Y_ABORT_UNLESS(in.TagsSize() == cells.GetCells().size());
@@ -421,10 +425,11 @@ protected:
 
         json = NJson::TJsonMap({
             {"awsRegion", Opts.AwsRegion},
-            {"dynamodb", NJson::TJsonMap({
-                {"ApproximateCreationDateTime", record.GetApproximateCreationDateTime().MilliSeconds()},
-                {"SequenceNumber", Sprintf("%0*" PRIi64, 21 /* min length */, record.GetSeqNo())},
-            })},
+            {"dynamodb",
+             NJson::TJsonMap({
+                 {"ApproximateCreationDateTime", record.GetApproximateCreationDateTime().MilliSeconds()},
+                 {"SequenceNumber", Sprintf("%0*" PRIi64, 21 /* min length */, record.GetSeqNo())},
+             })},
             {"eventID", Sprintf("%" PRIu64 "-%" PRIi64, Opts.ShardId, record.GetSeqNo())},
             {"eventSource", "ydb:document-table"},
             {"eventVersion", "1.0"},
@@ -436,20 +441,20 @@ protected:
         bool keysOnly = false;
         bool newAndOldImages = false;
         switch (Opts.StreamMode) {
-        case TUserTable::TCdcStream::EMode::ECdcStreamModeNewImage:
-            dynamodb["StreamViewType"] = "NEW_IMAGE";
-            break;
-        case TUserTable::TCdcStream::EMode::ECdcStreamModeOldImage:
-            dynamodb["StreamViewType"] = "OLD_IMAGE";
-            break;
-        case TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages:
-            dynamodb["StreamViewType"] = "NEW_AND_OLD_IMAGES";
-            newAndOldImages = true;
-            break;
-        default:
-            dynamodb["StreamViewType"] = "KEYS_ONLY";
-            keysOnly = true;
-            break;
+            case TUserTable::TCdcStream::EMode::ECdcStreamModeNewImage:
+                dynamodb["StreamViewType"] = "NEW_IMAGE";
+                break;
+            case TUserTable::TCdcStream::EMode::ECdcStreamModeOldImage:
+                dynamodb["StreamViewType"] = "OLD_IMAGE";
+                break;
+            case TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages:
+                dynamodb["StreamViewType"] = "NEW_AND_OLD_IMAGES";
+                newAndOldImages = true;
+                break;
+            default:
+                dynamodb["StreamViewType"] = "KEYS_ONLY";
+                keysOnly = true;
+                break;
         }
 
         NJson::TJsonMap keys;
@@ -467,19 +472,19 @@ protected:
         }
 
         switch (body.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert:
-        case NKikimrChangeExchange::TDataChange::kReset:
-            if (newAndOldImages) {
-                json["eventName"] = body.HasOldImage() ? "MODIFY" : "INSERT";
-            } else {
-                json["eventName"] = "MODIFY";
-            }
-            break;
-        case NKikimrChangeExchange::TDataChange::kErase:
-            json["eventName"] = "REMOVE";
-            break;
-        default:
-            Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+            case NKikimrChangeExchange::TDataChange::kUpsert:
+            case NKikimrChangeExchange::TDataChange::kReset:
+                if (newAndOldImages) {
+                    json["eventName"] = body.HasOldImage() ? "MODIFY" : "INSERT";
+                } else {
+                    json["eventName"] = "MODIFY";
+                }
+                break;
+            case NKikimrChangeExchange::TDataChange::kErase:
+                json["eventName"] = "REMOVE";
+                break;
+            default:
+                Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
     }
 
@@ -517,19 +522,19 @@ protected:
             valueJson["payload"]["op"] = "r"; // r = read
         } else {
             switch (body.GetRowOperationCase()) {
-            case NKikimrChangeExchange::TDataChange::kUpsert:
-            case NKikimrChangeExchange::TDataChange::kReset:
-                if (Opts.StreamMode == TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages) {
-                    valueJson["payload"]["op"] = body.HasOldImage() ? "u" : "c"; // c = create
-                } else {
-                    valueJson["payload"]["op"] = "u"; // u = update
-                }
-                break;
-            case NKikimrChangeExchange::TDataChange::kErase:
-                valueJson["payload"]["op"] = "d"; // d = delete
-                break;
-            default:
-                Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+                case NKikimrChangeExchange::TDataChange::kUpsert:
+                case NKikimrChangeExchange::TDataChange::kReset:
+                    if (Opts.StreamMode == TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages) {
+                        valueJson["payload"]["op"] = body.HasOldImage() ? "u" : "c"; // c = create
+                    } else {
+                        valueJson["payload"]["op"] = "u"; // u = update
+                    }
+                    break;
+                case NKikimrChangeExchange::TDataChange::kErase:
+                    valueJson["payload"]["op"] = "d"; // d = delete
+                    break;
+                default:
+                    Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
             }
         }
 
@@ -574,16 +579,16 @@ TChangeRecordSerializerOpts TChangeRecordSerializerOpts::DebugOpts() {
 
 IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSerializerOpts& opts) {
     switch (opts.StreamFormat) {
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatProto:
-        return new TProtoSerializer(opts);
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
-        return new TYdbJsonSerializer(opts);
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDynamoDBStreamsJson:
-        return new TDynamoDBStreamsJsonSerializer(opts);
-    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
-        return new TDebeziumJsonSerializer(opts);
-    default:
-        Y_ABORT("Unsupported format");
+        case TUserTable::TCdcStream::EFormat::ECdcStreamFormatProto:
+            return new TProtoSerializer(opts);
+        case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
+            return new TYdbJsonSerializer(opts);
+        case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDynamoDBStreamsJson:
+            return new TDynamoDBStreamsJsonSerializer(opts);
+        case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
+            return new TDebeziumJsonSerializer(opts);
+        default:
+            Y_ABORT("Unsupported format");
     }
 }
 
@@ -608,4 +613,4 @@ TString TChangeRecord::GetPartitionKey() const {
     return *PartitionKey;
 }
 
-}
+} // namespace NKikimr::NDataShard

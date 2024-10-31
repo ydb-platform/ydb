@@ -14,12 +14,17 @@ private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     using TBaseActor = TActor<TSnapshotConstructor>;
     using ISnapshot = NMetadata::NFetcher::ISnapshot;
+
 protected:
     virtual std::vector<NMetadata::IClassBehaviour::TPtr> DoGetManagers() const override;
+
 public:
-    virtual void EnrichSnapshotData(ISnapshot::TPtr original, NMetadata::NFetcher::ISnapshotAcceptorController::TPtr controller) const override;
+    virtual void EnrichSnapshotData(
+        ISnapshot::TPtr original,
+        NMetadata::NFetcher::ISnapshotAcceptorController::TPtr controller
+    ) const override;
 
     TSnapshotConstructor();
 };
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

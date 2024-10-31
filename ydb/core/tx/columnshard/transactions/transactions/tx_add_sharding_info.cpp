@@ -9,8 +9,10 @@ bool TTxAddShardingInfo::Execute(TTransactionContext& txc, const TActorContext& 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ShardingInfo>()
         .Key(PathId, ShardingVersion)
-        .Update(NIceDb::TUpdate<Schema::ShardingInfo::Snapshot>(SnapshotVersion->SerializeToString()), 
-            NIceDb::TUpdate<Schema::ShardingInfo::Logic>(GranuleShardingLogic.SerializeToString()));
+        .Update(
+            NIceDb::TUpdate<Schema::ShardingInfo::Snapshot>(SnapshotVersion->SerializeToString()),
+            NIceDb::TUpdate<Schema::ShardingInfo::Logic>(GranuleShardingLogic.SerializeToString())
+        );
     return true;
 }
 
@@ -20,4 +22,4 @@ void TTxAddShardingInfo::Complete(const TActorContext& /*ctx*/) {
     Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().AddShardingInfo(info);
 }
 
-}
+} // namespace NKikimr::NColumnShard

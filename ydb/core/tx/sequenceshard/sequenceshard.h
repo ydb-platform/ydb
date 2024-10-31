@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NSequenceShard {
 
-    IActor* CreateSequenceShard(const TActorId& tablet, TTabletStorageInfo* info);
+IActor* CreateSequenceShard(const TActorId& tablet, TTabletStorageInfo* info);
 
 } // namespace NSequenceShard
 } // namespace NKikimr

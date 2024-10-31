@@ -29,4 +29,4 @@ TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
     return result;
 }
 
-}
+} // namespace NKikimr::NDataShard

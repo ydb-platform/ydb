@@ -53,19 +53,30 @@ private:
     }
 
     void SendToTablet(const THashSet<TUnifiedBlobId>& blobIds, const TTabletId tabletId) const {
-        auto ev = std::make_unique<NEvents::TEvDeleteSharedBlobs>(TBase::SelfId(), (ui64)SelfTabletId, OperatorId, blobIds);
-        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(ev.release(), (ui64)tabletId, true), IEventHandle::FlagTrackDelivery, (ui64)tabletId);
+        auto ev =
+            std::make_unique<NEvents::TEvDeleteSharedBlobs>(TBase::SelfId(), (ui64)SelfTabletId, OperatorId, blobIds);
+        NActors::TActivationContext::AsActorContext().Send(
+            MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(ev.release(), (ui64)tabletId, true),
+            IEventHandle::FlagTrackDelivery,
+            (ui64)tabletId
+        );
     }
+
 protected:
     bool SharedRemovingFinished = false;
+
 public:
-    TSharedBlobsCollectionActor(const TString& operatorId, const TTabletId selfTabletId, const TBlobsByTablet& blobIds, const std::shared_ptr<IBlobsGCAction>& gcAction)
+    TSharedBlobsCollectionActor(
+        const TString& operatorId,
+        const TTabletId selfTabletId,
+        const TBlobsByTablet& blobIds,
+        const std::shared_ptr<IBlobsGCAction>& gcAction
+    )
         : OperatorId(operatorId)
         , BlobIdsByTablets(blobIds)
         , SelfTabletId(selfTabletId)
-        , GCAction(gcAction)
-    {
+        , GCAction(gcAction) {
         AFL_VERIFY(GCAction);
     }
 
@@ -87,7 +98,6 @@ public:
             }
         }
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations

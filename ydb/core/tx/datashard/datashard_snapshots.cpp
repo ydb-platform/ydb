@@ -104,12 +104,9 @@ bool TSnapshotManager::ReloadSys(NIceDb::TNiceDb& db) {
                 // Next time we restart mvcc will be enabled
                 Self->PersistSys(db, Schema::SysMvcc_State, (ui32)EMvccState::MvccEnabled);
                 // Choose the maximum version this shard could have written at
-                TRowVersion nextVersion = Max(
-                    Self->LastCompleteTxVersion(),
-                    MinWriteVersion,
-                    CompleteEdge,
-                    IncompleteEdge,
-                    ImmediateWriteEdge);
+                TRowVersion nextVersion =
+                    Max(Self->LastCompleteTxVersion(), MinWriteVersion, CompleteEdge, IncompleteEdge, ImmediateWriteEdge
+                    );
                 if (nextVersion) {
                     nextVersion.TxId = Max<ui64>();
                 }
@@ -156,7 +153,8 @@ bool TSnapshotManager::ReloadSnapshots(NIceDb::TNiceDb& db) {
         auto res = snapshots.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(key),
-            std::forward_as_tuple(key, std::move(name), flags, TDuration::MilliSeconds(timeout_ms)));
+            std::forward_as_tuple(key, std::move(name), flags, TDuration::MilliSeconds(timeout_ms))
+        );
         Y_VERIFY_S(res.second, "Unexpected duplicate snapshot: " << key);
 
         if (!rowset.Next()) {
@@ -177,10 +175,8 @@ void TSnapshotManager::InitExpireQueue(TInstant now) {
     }
 
     for (auto& kv : Snapshots) {
-        if (kv.second.HasFlags(TSnapshot::FlagTimeout) &&
-            !kv.second.HasFlags(TSnapshot::FlagRemoved) &&
-            !References.contains(kv.first))
-        {
+        if (kv.second.HasFlags(TSnapshot::FlagTimeout) && !kv.second.HasFlags(TSnapshot::FlagRemoved) &&
+            !References.contains(kv.first)) {
             kv.second.ExpireTime = now + kv.second.Timeout;
             ExpireQueue.Add(&kv.second);
         }
@@ -231,9 +227,8 @@ bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransact
 bool TSnapshotManager::PromoteCompleteEdge(TOperation* op, TTransactionContext& txc) {
     Y_ASSERT(op && (op->IsMvccSnapshotRead() || op->GetStep()));
 
-    const TRowVersion version = op->IsMvccSnapshotRead()
-        ? op->GetMvccSnapshot()
-        : TRowVersion(op->GetStep(), op->GetTxId());
+    const TRowVersion version =
+        op->IsMvccSnapshotRead() ? op->GetMvccSnapshot() : TRowVersion(op->GetStep(), op->GetTxId());
 
     return PromoteCompleteEdge(version, txc);
 }
@@ -317,7 +312,7 @@ bool TSnapshotManager::PromoteUnprotectedReadEdge(const TRowVersion& version) {
 }
 
 std::pair<TRowVersion, bool> TSnapshotManager::GetFollowerReadEdge() const {
-    return { FollowerReadEdge, FollowerReadEdgeRepeatable };
+    return {FollowerReadEdge, FollowerReadEdgeRepeatable};
 }
 
 bool TSnapshotManager::PromoteFollowerReadEdge(const TRowVersion& version, bool repeatable, TTransactionContext& txc) {
@@ -458,9 +453,7 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
 
     if (!it->second.HasFlags(TSnapshot::FlagRemoved)) {
         // Snapshot still valid, add back to expire queue if needed
-        if (it->second.HasFlags(TSnapshot::FlagTimeout) &&
-            !ExpireQueue.Has(&it->second))
-        {
+        if (it->second.HasFlags(TSnapshot::FlagTimeout) && !ExpireQueue.Has(&it->second)) {
             it->second.ExpireTime = now + it->second.Timeout;
             ExpireQueue.Add(&it->second);
         }
@@ -471,7 +464,13 @@ bool TSnapshotManager::ReleaseReference(const TSnapshotKey& key, NTable::TDataba
     return true;
 }
 
-bool TSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout) {
+bool TSnapshotManager::AddSnapshot(
+    NTable::TDatabase& db,
+    const TSnapshotKey& key,
+    const TString& name,
+    ui64 flags,
+    TDuration timeout
+) {
     if (auto it = Snapshots.find(key); it != Snapshots.end()) {
         Y_VERIFY_DEBUG_S(
             it->second.Name == name &&
@@ -566,11 +565,8 @@ bool TSnapshotManager::CleanupRemovedSnapshots(NTable::TDatabase& db) {
 
 void TSnapshotManager::InitSnapshotExpireTime(const TSnapshotKey& key, TInstant now) {
     auto it = Snapshots.find(key);
-    if (it != Snapshots.end() &&
-        it->second.HasFlags(TSnapshot::FlagTimeout) &&
-        !it->second.HasFlags(TSnapshot::FlagRemoved) &&
-        !ExpireQueue.Has(&it->second))
-    {
+    if (it != Snapshots.end() && it->second.HasFlags(TSnapshot::FlagTimeout) &&
+        !it->second.HasFlags(TSnapshot::FlagRemoved) && !ExpireQueue.Has(&it->second)) {
         it->second.ExpireTime = now + it->second.Timeout;
         ExpireQueue.Add(&it->second);
     }
@@ -578,9 +574,7 @@ void TSnapshotManager::InitSnapshotExpireTime(const TSnapshotKey& key, TInstant 
 
 bool TSnapshotManager::RefreshSnapshotExpireTime(const TSnapshotKey& key, TInstant now) {
     auto it = Snapshots.find(key);
-    if (it != Snapshots.end() &&
-        ExpireQueue.Has(&it->second))
-    {
+    if (it != Snapshots.end() && ExpireQueue.Has(&it->second)) {
         it->second.ExpireTime = now + it->second.Timeout;
         return ExpireQueue.Update(&it->second);
     }
@@ -640,7 +634,7 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
 
     // holds current snapshot operations
     TRowVersion leastAcquired = TRowVersion::Max();
-    for (auto &it : Self->Pipeline.GetImmediateOps()) {
+    for (auto& it : Self->Pipeline.GetImmediateOps()) {
         if (it.second->IsMvccSnapshotRead())
             leastAcquired = Min(leastAcquired, it.second->GetMvccSnapshot());
     }
@@ -672,19 +666,25 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
     return removed;
 }
 
-void TSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout) {
+void TSnapshotManager::PersistAddSnapshot(
+    NIceDb::TNiceDb& db,
+    const TSnapshotKey& key,
+    const TString& name,
+    ui64 flags,
+    TDuration timeout
+) {
     using Schema = TDataShard::Schema;
 
     auto res = Snapshots.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(key),
-        std::forward_as_tuple(key, name, flags, timeout));
+        std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple(key, name, flags, timeout)
+    );
     Y_VERIFY_S(res.second, "Unexpected duplicate snapshot: " << key);
 
     db.Table<Schema::Snapshots>()
         .Key(key.OwnerId, key.PathId, key.Step, key.TxId)
         .Update<Schema::Snapshots::Name, Schema::Snapshots::Flags, Schema::Snapshots::TimeoutMs>(
-            name, flags, timeout.MilliSeconds());
+            name, flags, timeout.MilliSeconds()
+        );
 }
 
 void TSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key) {
@@ -699,9 +699,7 @@ void TSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapsho
 
     Snapshots.erase(it);
 
-    db.Table<Schema::Snapshots>()
-        .Key(key.OwnerId, key.PathId, key.Step, key.TxId)
-        .Delete();
+    db.Table<Schema::Snapshots>().Key(key.OwnerId, key.PathId, key.Step, key.TxId).Delete();
 }
 
 void TSnapshotManager::PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key) {
@@ -731,9 +729,7 @@ void TSnapshotManager::PersistRemoveAllSnapshots(NIceDb::TNiceDb& db) {
             ExpireQueue.Remove(&kv.second);
         }
 
-        db.Table<Schema::Snapshots>()
-            .Key(key.OwnerId, key.PathId, key.Step, key.TxId)
-            .Delete();
+        db.Table<Schema::Snapshots>().Key(key.OwnerId, key.PathId, key.Step, key.TxId).Delete();
     }
 
     Snapshots.clear();
@@ -743,7 +739,11 @@ void TSnapshotManager::Fix_KIKIMR_14259(NTable::TDatabase& db) {
     EnsureRemovedRowVersions(db, TRowVersion::Min(), LowWatermark);
 }
 
-void TSnapshotManager::EnsureRemovedRowVersions(NTable::TDatabase& db, const TRowVersion& fromArg, const TRowVersion& toArg) {
+void TSnapshotManager::EnsureRemovedRowVersions(
+    NTable::TDatabase& db,
+    const TRowVersion& fromArg,
+    const TRowVersion& toArg
+) {
     for (auto& it : Self->GetUserTables()) {
         auto tid = it.second->LocalTid;
         auto ranges = db.GetRemovedRowVersions(tid);
@@ -800,5 +800,6 @@ Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSnapshotTableKey, stream, value) {
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSnapshotKey, stream, value) {
-    stream << "{ table " << value.OwnerId << ":" << value.PathId << " version " << value.Step << "/" << value.TxId << " }";
+    stream << "{ table " << value.OwnerId << ":" << value.PathId << " version " << value.Step << "/" << value.TxId
+           << " }";
 }

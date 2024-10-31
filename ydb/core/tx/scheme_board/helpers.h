@@ -11,13 +11,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
 
-#if defined SB_LOG_T || \
-    defined SB_LOG_D || \
-    defined SB_LOG_I || \
-    defined SB_LOG_N || \
-    defined SB_LOG_W || \
-    defined SB_LOG_E || \
-    defined SB_LOG_CRIT
+#if defined SB_LOG_T || defined SB_LOG_D || defined SB_LOG_I || defined SB_LOG_N || defined SB_LOG_W || \
+    defined SB_LOG_E || defined SB_LOG_CRIT
 #error log macro redefinition
 #endif
 
@@ -50,19 +45,35 @@ ui64 GetPathVersion(const NKikimrSchemeBoard::TEvNotify& record);
 NSchemeBoard::TDomainId GetDomainId(const NKikimrSchemeBoard::TEvNotify& record);
 TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvNotify& record);
 
-void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags = 0, ui64 cookie = 0);
+void MultiSend(
+    const TVector<const TActorId*>& recipients,
+    const TActorId& sender,
+    TAutoPtr<IEventBase> ev,
+    ui32 flags = 0,
+    ui64 cookie = 0
+);
 
 template <typename TEvent>
-void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0) {
+void MultiSend(
+    const TVector<const TActorId*>& recipients,
+    const TActorId& sender,
+    THolder<TEvent> ev,
+    ui32 flags = 0,
+    ui64 cookie = 0
+) {
     MultiSend(recipients, sender, static_cast<IEventBase*>(ev.Release()), flags, cookie);
 }
 
 // Work with TEvDescribeSchemeResult and its parts
 TString SerializeDescribeSchemeResult(const NKikimrScheme::TEvDescribeSchemeResult& proto);
-TString SerializeDescribeSchemeResult(const TString& preSerializedPart, const NKikimrScheme::TEvDescribeSchemeResult& protoPart);
+TString SerializeDescribeSchemeResult(
+    const TString& preSerializedPart,
+    const NKikimrScheme::TEvDescribeSchemeResult& protoPart
+);
 NKikimrScheme::TEvDescribeSchemeResult DeserializeDescribeSchemeResult(const TString& serialized);
-NKikimrScheme::TEvDescribeSchemeResult* DeserializeDescribeSchemeResult(const TString& serialized, google::protobuf::Arena* arena);
+NKikimrScheme::TEvDescribeSchemeResult*
+DeserializeDescribeSchemeResult(const TString& serialized, google::protobuf::Arena* arena);
 TString JsonFromDescribeSchemeResult(const TString& serialized);
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

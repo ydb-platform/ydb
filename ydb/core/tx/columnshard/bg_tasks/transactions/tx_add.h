@@ -11,8 +11,13 @@ private:
     std::shared_ptr<TSessionsStorage> Sessions;
     std::shared_ptr<ITabletAdapter> Adapter;
     std::shared_ptr<TSession> Session;
+
 public:
-    TTxAddSession(const std::shared_ptr<ITabletAdapter>& adapter, const std::shared_ptr<TSessionsStorage>& sessions, const std::shared_ptr<TSession>& session)
+    TTxAddSession(
+        const std::shared_ptr<ITabletAdapter>& adapter,
+        const std::shared_ptr<TSessionsStorage>& sessions,
+        const std::shared_ptr<TSession>& session
+    )
         : Sessions(sessions)
         , Adapter(adapter)
         , Session(session) {
@@ -26,4 +31,4 @@ public:
     };
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

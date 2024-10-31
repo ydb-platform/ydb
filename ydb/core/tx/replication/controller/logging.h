@@ -46,4 +46,4 @@ private:
     const ui64 TargetId = 0;
 };
 
-}
+} // namespace NKikimr::NReplication::NController

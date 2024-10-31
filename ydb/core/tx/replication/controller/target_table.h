@@ -6,8 +6,13 @@ namespace NKikimr::NReplication::NController {
 
 class TTargetTableBase: public TTargetWithStream {
 public:
-    explicit TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const TString& srcPath, const TString& dstPath);
+    explicit TTargetTableBase(
+        TReplication* replication,
+        ETargetKind finalKind,
+        ui64 id,
+        const TString& srcPath,
+        const TString& dstPath
+    );
 
     TString GetStreamPath() const override;
 
@@ -18,8 +23,7 @@ protected:
 
 class TTargetTable: public TTargetTableBase {
 public:
-    explicit TTargetTable(TReplication* replication,
-        ui64 id, const TString& srcPath, const TString& dstPath);
+    explicit TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath);
 
 protected:
     TString BuildStreamPath() const override;
@@ -27,11 +31,10 @@ protected:
 
 class TTargetIndexTable: public TTargetTableBase {
 public:
-    explicit TTargetIndexTable(TReplication* replication,
-        ui64 id, const TString& srcPath, const TString& dstPath);
+    explicit TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath);
 
 protected:
     TString BuildStreamPath() const override;
 };
 
-}
+} // namespace NKikimr::NReplication::NController

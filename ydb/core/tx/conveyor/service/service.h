@@ -15,6 +15,7 @@ namespace NKikimr::NConveyor {
 class TCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+
 public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSizeLimit;
@@ -45,14 +46,14 @@ public:
         , WaitWorkerRate(TBase::GetDeriviative("WaitWorker"))
         , UseWorkerRate(TBase::GetDeriviative("UseWorker"))
         , WaitingHistogram(TBase::GetHistogram("Waiting", NMonitoring::ExponentialHistogram(20, 2)))
-        , ExecuteHistogram(TBase::GetHistogram("Execute", NMonitoring::ExponentialHistogram(20, 2))) {
-    }
+        , ExecuteHistogram(TBase::GetHistogram("Execute", NMonitoring::ExponentialHistogram(20, 2))) {}
 };
 
 class TDequePriorityFIFO {
 private:
     std::map<ui32, std::deque<TWorkerTask>> Tasks;
     ui32 Size = 0;
+
 public:
     void push(const TWorkerTask& task) {
         Tasks[(ui32)task.GetTask()->GetPriority()].emplace_back(task);
@@ -87,22 +88,26 @@ private:
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
 
 public:
-
     STATEFN(StateMain) {
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("name", ConveyorName)
-            ("workers", Workers.size())("waiting", Waiting.size())("actor_id", SelfId());
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::
+            Build()("name", ConveyorName)("workers", Workers.size())("waiting", Waiting.size())("actor_id", SelfId());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExecution::TEvNewTask, HandleMain);
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
             default:
-                AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
+                AFL_ERROR(NKikimrServices::TX_CONVEYOR)
+                ("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
                 break;
         }
     }
 
-    TDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
+    TDistributor(
+        const TConfig& config,
+        const TString& conveyorName,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals
+    );
 
     void Bootstrap();
 };
 
-}
+} // namespace NKikimr::NConveyor

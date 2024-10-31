@@ -44,7 +44,7 @@ class TTableConflictsCache {
         using is_transparent = void;
 
         size_t operator()(TConstArrayRef<TCell> key) const {
-            return absl::Hash<THashableKey>()(THashableKey{ key });
+            return absl::Hash<THashableKey>()(THashableKey{key});
         }
     };
 
@@ -139,10 +139,8 @@ private:
         std::unique_ptr<TUncommittedWrite> Data;
     };
 
-    using TRollbackOp = std::variant<
-        TRollbackOpAddUncommittedWrite,
-        TRollbackOpRemoveUncommittedWrite,
-        TRollbackOpRestoreUncommittedWrite>;
+    using TRollbackOp = std::
+        variant<TRollbackOpAddUncommittedWrite, TRollbackOpRemoveUncommittedWrite, TRollbackOpRestoreUncommittedWrite>;
 
     void AddRollbackOp(TRollbackOp&& op, NTable::TDatabase& db);
     void OnRollbackChanges();
@@ -166,8 +164,7 @@ public:
 
         TPendingWrite(ui32 localTid, TOwnedCellVec writeKey)
             : LocalTid(localTid)
-            , WriteKey(std::move(writeKey))
-        { }
+            , WriteKey(std::move(writeKey)) {}
     };
 
     using TPendingWrites = std::vector<TPendingWrite>;
@@ -176,18 +173,15 @@ public:
 
 public:
     TConflictsCache(TDataShard* self)
-        : Self(self)
-    { }
+        : Self(self) {}
 
     TTableConflictsCache& GetTableCache(ui32 localTid) {
         auto it = Tables.find(localTid);
         if (it != Tables.end()) {
             return it->second;
         }
-        auto res = Tables.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(localTid),
-            std::forward_as_tuple(localTid));
+        auto res =
+            Tables.emplace(std::piecewise_construct, std::forward_as_tuple(localTid), std::forward_as_tuple(localTid));
         Y_ABORT_UNLESS(res.second);
         return res.first->second;
     }

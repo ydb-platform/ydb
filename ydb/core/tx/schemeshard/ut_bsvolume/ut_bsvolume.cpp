@@ -26,30 +26,30 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/BSVolume"),
+            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)}
+        );
 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), {NLs::PathNotExist});
 
-        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1});
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot"), {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)}
+        );
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), {NLs::PathNotExist});
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(ShardsNotLeftInShardsToDelete) {
@@ -70,19 +70,24 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/BSVolume"),
+            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)}
+        );
 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
 
-        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+        env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1});
 
         {
             // Read user table schema from new shard;
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(
+                runtime,
+                TTestTxConfig::SchemeShard,
+                R"(
                                     (
                                         (let range '('('ShardIdx (Uint64 '0) (Void))))
                                         (let select '('ShardIdx))
@@ -91,7 +96,10 @@ Y_UNIT_TEST_SUITE(TBSV) {
                                             (SetResult 'ShardsToDelete result)
                                         ))
                                     )
-                )", result, err);
+                )",
+                result,
+                err
+            );
             UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
             UNIT_ASSERT_VALUES_EQUAL(err, "");
             Cerr << result << Endl;
@@ -105,28 +113,23 @@ Y_UNIT_TEST_SUITE(TBSV) {
     }
 
     Y_UNIT_TEST(ShouldLimitBlockStoreVolumeDropRate) {
-        struct TMockTimeProvider : public ITimeProvider
-        {
+        struct TMockTimeProvider: public ITimeProvider {
             TInstant Time;
 
-            TInstant Now() override
-            {
+            TInstant Now() override {
                 return Time;
             }
         };
 
-        struct TTimeProviderMocker
-        {
+        struct TTimeProviderMocker {
             TIntrusivePtr<ITimeProvider> OriginalTimeProvider;
 
-            TTimeProviderMocker(TIntrusivePtr<ITimeProvider> timeProvider)
-            {
+            TTimeProviderMocker(TIntrusivePtr<ITimeProvider> timeProvider) {
                 OriginalTimeProvider = NKikimr::TAppData::TimeProvider;
                 NKikimr::TAppData::TimeProvider = timeProvider;
             }
 
-            ~TTimeProviderMocker()
-            {
+            ~TTimeProviderMocker() {
                 NKikimr::TAppData::TimeProvider = OriginalTimeProvider;
             }
         };
@@ -138,22 +141,17 @@ Y_UNIT_TEST_SUITE(TBSV) {
         auto name = "BSVolume";
         auto throttled = NKikimrScheme::StatusNotAvailable;
 
-        TestUserAttrs(runtime, ++txId, "", "MyRoot",
-            AlterUserAttrs(
-                {{"drop_blockstore_volume_rate_limiter_rate", "1.0"}}
-            )
+        TestUserAttrs(
+            runtime, ++txId, "", "MyRoot", AlterUserAttrs({{"drop_blockstore_volume_rate_limiter_rate", "1.0"}})
         );
         env.TestWaitNotification(runtime, txId);
 
-        TestUserAttrs(runtime, ++txId, "", "MyRoot",
-            AlterUserAttrs(
-                {{"drop_blockstore_volume_rate_limiter_capacity", "10.0"}}
-            )
+        TestUserAttrs(
+            runtime, ++txId, "", "MyRoot", AlterUserAttrs({{"drop_blockstore_volume_rate_limiter_capacity", "10.0"}})
         );
         env.TestWaitNotification(runtime, txId);
 
-        TIntrusivePtr<TMockTimeProvider> mockTimeProvider =
-            new TMockTimeProvider();
+        TIntrusivePtr<TMockTimeProvider> mockTimeProvider = new TMockTimeProvider();
         TTimeProviderMocker mocker(mockTimeProvider);
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription descr;
@@ -192,10 +190,8 @@ Y_UNIT_TEST_SUITE(TBSV) {
         env.TestWaitNotification(runtime, txId);
 
         // turn off rate limiter
-        TestUserAttrs(runtime, ++txId, "", "MyRoot",
-            AlterUserAttrs(
-                {{"drop_blockstore_volume_rate_limiter_rate", "0.0"}}
-            )
+        TestUserAttrs(
+            runtime, ++txId, "", "MyRoot", AlterUserAttrs({{"drop_blockstore_volume_rate_limiter_rate", "0.0"}})
         );
         env.TestWaitNotification(runtime, txId);
 

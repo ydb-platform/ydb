@@ -13,7 +13,10 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 NKikimr::TConclusionStatus TDestinationSession::DataReceived(
-    THashMap<ui64, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
+    THashMap<ui64, NEvents::TPathIdData>&& data,
+    TColumnEngineForLogs& index,
+    const std::shared_ptr<IStoragesManager>& /*manager*/
+) {
     auto guard = index.GranulesStorage->GetStats()->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
@@ -38,7 +41,10 @@ ui32 TDestinationSession::GetSourcesInProgressCount() const {
     return result;
 }
 
-void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId) {
+void TDestinationSession::SendCurrentCursorAck(
+    const NColumnShard::TColumnShard& shard,
+    const std::optional<TTabletId> tabletId
+) {
     AFL_VERIFY(IsInProgress() || IsPrepared());
     bool found = false;
     for (auto&& [_, cursor] : Cursors) {
@@ -48,38 +54,60 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
         found = true;
         if (cursor.GetDataFinished()) {
             auto ev = std::make_unique<NEvents::TEvAckFinishToSource>(GetSessionId());
-            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+            NActors::TActivationContext::AsActorContext().Send(
+                MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true),
+                IEventHandle::FlagTrackDelivery,
+                GetRuntimeId()
+            );
         } else if (cursor.GetPackIdx()) {
             auto ev = std::make_unique<NEvents::TEvAckDataToSource>(GetSessionId(), cursor.GetPackIdx());
-            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+            NActors::TActivationContext::AsActorContext().Send(
+                MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true),
+                IEventHandle::FlagTrackDelivery,
+                GetRuntimeId()
+            );
         } else {
             std::set<ui64> pathIdsBase;
             for (auto&& i : PathIds) {
                 pathIdsBase.emplace(i.first);
             }
-            TSourceSession source(GetSessionId(), TransferContext, cursor.GetTabletId(), pathIdsBase, (TTabletId)shard.TabletID());
+            TSourceSession source(
+                GetSessionId(), TransferContext, cursor.GetTabletId(), pathIdsBase, (TTabletId)shard.TabletID()
+            );
             auto ev = std::make_unique<NEvents::TEvStartToSource>(source);
-            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+            NActors::TActivationContext::AsActorContext().Send(
+                MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true),
+                IEventHandle::FlagTrackDelivery,
+                GetRuntimeId()
+            );
         }
     }
     AFL_VERIFY(found);
 }
 
-NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
-    const THashMap<ui64, NEvents::TPathIdData>& data, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
-    const std::shared_ptr<TDestinationSession>& selfPtr) {
+NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(
+    NColumnShard::TColumnShard* self,
+    const THashMap<ui64, NEvents::TPathIdData>& data,
+    const ui32 receivedPackIdx,
+    const TTabletId sourceTabletId,
+    const std::shared_ptr<TDestinationSession>& selfPtr
+) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
         return result;
     }
-    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, data, sourceTabletId));
+    return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataFromSource(self, selfPtr, data, sourceTabletId)
+    );
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveFinished(
-    NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr) {
+    NColumnShard::TColumnShard* self,
+    const TTabletId sourceTabletId,
+    const std::shared_ptr<TDestinationSession>& selfPtr
+) {
     if (GetCursorVerified(sourceTabletId).GetDataFinished()) {
         return TConclusionStatus::Fail("session finished already");
     }
@@ -87,14 +115,20 @@ NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestin
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::AckInitiatorFinished(
-    NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& selfPtr) {
+    NColumnShard::TColumnShard* self,
+    const std::shared_ptr<TDestinationSession>& selfPtr
+) {
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishAckFromInitiator(self, selfPtr));
 }
 
 NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
-    const NKikimrColumnShardDataSharingProto::TDestinationSession& proto, const TColumnEngineForLogs& index) {
+    const NKikimrColumnShardDataSharingProto::TDestinationSession& proto,
+    const TColumnEngineForLogs& index
+) {
     if (!InitiatorController.DeserializeFromProto(proto.GetInitiatorController())) {
-        return TConclusionStatus::Fail("cannot parse initiator controller: " + proto.GetInitiatorController().DebugString());
+        return TConclusionStatus::Fail(
+            "cannot parse initiator controller: " + proto.GetInitiatorController().DebugString()
+        );
     }
     auto parseBase = TBase::DeserializeFromProto(proto);
     if (!parseBase) {
@@ -108,7 +142,9 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
     for (auto&& i : proto.GetPathIds()) {
         auto g = index.GetGranuleOptional(i.GetDestPathId());
         if (!g) {
-            return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
+            return TConclusionStatus::Fail(
+                "Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId())
+            );
         }
         if (!i.GetSourcePathId() || !i.GetDestPathId()) {
             return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
@@ -135,7 +171,8 @@ NKikimrColumnShardDataSharingProto::TDestinationSession TDestinationSession::Ser
     return result;
 }
 
-NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor TDestinationSession::SerializeCursorToProto() const {
+NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor TDestinationSession::SerializeCursorToProto(
+) const {
     NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor result;
     result.SetConfirmedFlag(ConfirmedFlag);
     for (auto&& i : Cursors) {
@@ -145,7 +182,8 @@ NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor TDestinatio
 }
 
 NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
-    const NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor& proto) {
+    const NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor& proto
+) {
     ConfirmedFlag = proto.GetConfirmedFlag();
     for (auto&& i : proto.GetSourceCursors()) {
         TSourceCursorForDestination cursor;
@@ -161,7 +199,9 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
 }
 
 bool TDestinationSession::DoStart(
-    const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) {
+    const NColumnShard::TColumnShard& shard,
+    const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions
+) {
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;

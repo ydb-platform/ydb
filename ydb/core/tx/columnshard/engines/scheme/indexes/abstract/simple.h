@@ -6,6 +6,7 @@ namespace NKikimr::NOlap::NIndexes {
 class TSimpleIndexChecker: public IIndexChecker {
 private:
     YDB_READONLY(ui32, IndexId, 0);
+
 protected:
     virtual bool DoCheckImpl(const std::vector<TString>& blobs) const = 0;
 
@@ -30,13 +31,11 @@ protected:
     virtual std::set<ui32> DoGetIndexIds() const override final {
         return {IndexId};
     }
+
 public:
     TSimpleIndexChecker() = default;
     TSimpleIndexChecker(const ui32 indexId)
-        : IndexId(indexId)
-    {
-
-    }
+        : IndexId(indexId) {}
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

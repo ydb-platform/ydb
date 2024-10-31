@@ -6,11 +6,12 @@
 
 namespace NKikimr::NDataShard {
 
-class TBufferData: public IStatHolder, public TNonCopyable {
+class TBufferData
+    : public IStatHolder
+    , public TNonCopyable {
 public:
     TBufferData()
-        : Rows{std::make_shared<NTxProxy::TUploadRows>()} {
-    }
+        : Rows{std::make_shared<NTxProxy::TUploadRows>()} {}
 
     ui64 GetRows() const override final {
         return Rows->size();
@@ -71,4 +72,4 @@ private:
     TSerializedCellVec LastKey;
 };
 
-}
+} // namespace NKikimr::NDataShard

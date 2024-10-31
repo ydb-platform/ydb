@@ -46,12 +46,10 @@ private:
         std::optional<ui64> OwnerTabletId;
         THashSet<ui64> SharedTabletIdsFromShared;
         THashSet<ui64> SharedTabletIdsFromOwner;
+
     public:
         TBlobInfo(const NOlap::TUnifiedBlobId& blobId)
-            : BlobId(blobId)
-        {
-
-        }
+            : BlobId(blobId) {}
         void AddOwner(const ui64 tabletId) {
             if (!OwnerTabletId) {
                 OwnerTabletId = tabletId;
@@ -68,7 +66,10 @@ private:
         }
         void Check() const {
             AFL_VERIFY(OwnerTabletId);
-            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner)("blob_id", BlobId.ToStringNew())("shared", JoinSeq(",", SharedTabletIdsFromShared))("owned", JoinSeq(",", SharedTabletIdsFromOwner));
+            AFL_VERIFY(SharedTabletIdsFromShared == SharedTabletIdsFromOwner)
+            ("blob_id", BlobId.ToStringNew())("shared", JoinSeq(",", SharedTabletIdsFromShared))(
+                "owned", JoinSeq(",", SharedTabletIdsFromOwner)
+            );
         }
 
         void DebugString(const TString& delta, TStringBuilder& sb) const {
@@ -84,6 +85,7 @@ private:
     class TCheckContext {
     private:
         THashMap<TString, THashMap<NOlap::TUnifiedBlobId, TBlobInfo>> Infos;
+
     public:
         void Check() const {
             for (auto&& i : Infos) {
@@ -108,17 +110,27 @@ private:
         void AddCategories(const ui64 tabletId, THashMap<TString, NOlap::TBlobsCategories>&& categories) {
             for (auto&& s : categories) {
                 for (auto it = s.second.GetDirect().GetIterator(); it.IsValid(); ++it) {
-                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddOwner((ui64)it.GetTabletId());
+                    Infos[s.first]
+                        .emplace(it.GetBlobId(), it.GetBlobId())
+                        .first->second.AddOwner((ui64)it.GetTabletId());
                 }
                 for (auto it = s.second.GetBorrowed().GetIterator(); it.IsValid(); ++it) {
-                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddOwner((ui64)it.GetTabletId());
-                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddSharingFromShared((ui64)tabletId);
+                    Infos[s.first]
+                        .emplace(it.GetBlobId(), it.GetBlobId())
+                        .first->second.AddOwner((ui64)it.GetTabletId());
+                    Infos[s.first]
+                        .emplace(it.GetBlobId(), it.GetBlobId())
+                        .first->second.AddSharingFromShared((ui64)tabletId);
                 }
                 for (auto it = s.second.GetSharing().GetIterator(); it.IsValid(); ++it) {
                     Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddOwner(tabletId);
-                    Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddSharingFromOwner((ui64)it.GetTabletId());
+                    Infos[s.first]
+                        .emplace(it.GetBlobId(), it.GetBlobId())
+                        .first->second.AddSharingFromOwner((ui64)it.GetTabletId());
                     if (it.GetTabletId() == (NOlap::TTabletId)tabletId) {
-                        Infos[s.first].emplace(it.GetBlobId(), it.GetBlobId()).first->second.AddSharingFromShared((ui64)tabletId);
+                        Infos[s.first]
+                            .emplace(it.GetBlobId(), it.GetBlobId())
+                            .first->second.AddSharingFromShared((ui64)tabletId);
                     }
                 }
             }
@@ -128,8 +140,12 @@ private:
     void CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& shard, TCheckContext& context) const;
 
     THashSet<TString> SharingIds;
+
 protected:
-    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
+    virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(
+        const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original,
+        const NOlap::TWriteActionsCollection& actions
+    ) const override;
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration def) const override {
         return OverrideLagForCompactionBeforeTierings.value_or(def);
     }
@@ -142,7 +158,6 @@ protected:
         return OverrideCompactionActualizationLag.value_or(def);
     }
 
-
     virtual bool IsBackgroundEnabled(const EBackground id) const override {
         TGuard<TMutex> g(Mutex);
         return !DisabledBackgrounds.contains(id);
@@ -154,9 +169,13 @@ protected:
 
     virtual void DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) override;
-    virtual void DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;
+    virtual void
+    DoOnAfterGCAction(const ::NKikimr::NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) override;
 
-    virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
+    virtual bool DoOnWriteIndexComplete(
+        const NOlap::TColumnEngineChanges& changes,
+        const ::NKikimr::NColumnShard::TColumnShard& shard
+    ) override;
     virtual TDuration DoGetGuaranteeIndexationInterval(const TDuration defaultValue) const override {
         return OverrideGuaranteeIndexationInterval.value_or(defaultValue);
     }
@@ -258,4 +277,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NYDBTest::NColumnShard

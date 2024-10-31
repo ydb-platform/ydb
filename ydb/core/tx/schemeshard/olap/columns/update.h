@@ -19,6 +19,7 @@ private:
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
+
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors) {
         Name = columnSchema.GetName();
@@ -64,11 +65,10 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
+
 public:
     TOlapColumnAdd(const std::optional<ui32>& keyOrder)
-        : KeyOrder(keyOrder) {
-
-    }
+        : KeyOrder(keyOrder) {}
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
@@ -86,9 +86,11 @@ private:
     YDB_READONLY_DEF(TVector<TOlapColumnAdd>, AddColumns);
     YDB_READONLY_DEF(TSet<TString>, DropColumns);
     YDB_READONLY_DEF(TVector<TOlapColumnDiff>, AlterColumns);
+
 public:
-    bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
+    bool
+    Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
 };
 
-}
+} // namespace NKikimr::NSchemeShard

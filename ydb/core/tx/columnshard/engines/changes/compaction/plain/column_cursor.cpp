@@ -7,7 +7,8 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
     Y_ABORT_UNLESS(RecordIndexStart);
     if (!BlobChunks) {
         if (!DefaultArray || DefaultArray->length() < RecordIndexFinish - *RecordIndexStart) {
-            DefaultArray = NArrow::TThreadSimpleArraysCache::Get(DataType, DefaultValue, RecordIndexFinish - *RecordIndexStart);
+            DefaultArray =
+                NArrow::TThreadSimpleArraysCache::Get(DataType, DefaultValue, RecordIndexFinish - *RecordIndexStart);
         }
         column.AppendSlice(DefaultArray, 0, RecordIndexFinish - *RecordIndexStart);
     } else {
@@ -18,8 +19,11 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
 
         ui32 currentStart = *RecordIndexStart;
         while (CurrentChunk->GetAddress().GetGlobalFinishPosition() <= RecordIndexFinish) {
-            column.AppendSlice(CurrentChunk->GetArray(), CurrentChunk->GetAddress().GetLocalIndex(currentStart),
-                CurrentChunk->GetAddress().GetGlobalFinishPosition() - currentStart);
+            column.AppendSlice(
+                CurrentChunk->GetArray(),
+                CurrentChunk->GetAddress().GetLocalIndex(currentStart),
+                CurrentChunk->GetAddress().GetGlobalFinishPosition() - currentStart
+            );
             currentStart = CurrentChunk->GetAddress().GetGlobalFinishPosition();
             if (currentStart < BlobChunks->GetRecordsCount()) {
                 CurrentChunk = BlobChunks->GetChunk(CurrentChunk, currentStart);
@@ -33,7 +37,10 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
             AFL_VERIFY(CurrentChunk);
             Y_ABORT_UNLESS(RecordIndexFinish < CurrentChunk->GetAddress().GetGlobalFinishPosition());
             column.AppendSlice(
-                CurrentChunk->GetArray(), CurrentChunk->GetAddress().GetLocalIndex(currentStart), RecordIndexFinish - currentStart);
+                CurrentChunk->GetArray(),
+                CurrentChunk->GetAddress().GetLocalIndex(currentStart),
+                RecordIndexFinish - currentStart
+            );
         }
     }
     RecordIndexStart.reset();
@@ -56,4 +63,4 @@ bool TPortionColumnCursor::Next(const ui32 portionRecordIdx, TMergedColumn& colu
     return true;
 }
 
-}
+} // namespace NKikimr::NOlap::NCompaction

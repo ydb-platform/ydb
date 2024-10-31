@@ -12,15 +12,13 @@ using namespace NSchemeShard;
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropExternalTable TPropose"
-            << " opId# " << OperationId << " ";
+        return TStringBuilder() << "TDropExternalTable TPropose"
+                                << " opId# " << OperationId << " ";
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(id)
-    { }
+        : OperationId(id) {}
 
     bool ProgressState(TOperationContext& context) override {
         LOG_I(DebugHint() << "ProgressState");
@@ -56,9 +54,15 @@ public:
         domainInfo->DecPathsInside();
         parentDir->DecAliveChildren();
 
-        TExternalDataSourceInfo::TPtr externalDataSourceInfo = context.SS->ExternalDataSources.Value(dataSourcePathId, nullptr);
+        TExternalDataSourceInfo::TPtr externalDataSourceInfo =
+            context.SS->ExternalDataSources.Value(dataSourcePathId, nullptr);
         Y_ABORT_UNLESS(externalDataSourceInfo);
-        EraseIf(*externalDataSourceInfo->ExternalTableReferences.MutableReferences(), [pathId](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) { return PathIdFromPathId(reference.GetPathId()) == pathId; });
+        EraseIf(
+            *externalDataSourceInfo->ExternalTableReferences.MutableReferences(),
+            [pathId](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
+                return PathIdFromPathId(reference.GetPathId()) == pathId;
+            }
+        );
 
         context.SS->TabletCounters->Simple()[COUNTER_EXTERNAL_TABLE_COUNT].Sub(1);
         context.SS->PersistExternalDataSource(db, dataSourcePathId, externalDataSourceInfo);
@@ -92,21 +96,21 @@ class TDropExternalTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -126,13 +130,11 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ssId);
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(workingDir, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(workingDir, context.SS).Dive(name);
         {
             auto checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -144,7 +146,8 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                if (path.IsResolved() && path.Base()->IsExternalTable() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
+                if (path.IsResolved() && path.Base()->IsExternalTable() &&
+                    (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
@@ -169,8 +172,7 @@ public:
         TPath dataSourcePath = TPath::Resolve(externalTableInfo->DataSourcePath, context.SS);
         {
             auto checks = dataSourcePath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -198,7 +200,9 @@ public:
         context.DbChanges.PersistPath(dataSourcePath->PathId);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropExternalTable, path.Base()->PathId, dataSourcePath->PathId);
+        TTxState& txState = context.SS->CreateTx(
+            OperationId, TTxState::TxDropExternalTable, path.Base()->PathId, dataSourcePath->PathId
+        );
         txState.State = TTxState::Propose;
         txState.MinStep = TStepId(1);
 
@@ -227,7 +231,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -240,4 +244,4 @@ ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState 
     return MakeSubOperation<TDropExternalTable>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

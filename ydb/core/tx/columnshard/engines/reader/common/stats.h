@@ -23,8 +23,7 @@ struct TReadStats {
     ui32 SelectedRows = 0;
 
     TReadStats()
-        : BeginTimestamp(TInstant::Now()) {
-    }
+        : BeginTimestamp(TInstant::Now()) {}
 
     void PrintToLog();
 
@@ -37,5 +36,4 @@ struct TReadStats {
     }
 };
 
-
-}
+} // namespace NKikimr::NOlap::NReader

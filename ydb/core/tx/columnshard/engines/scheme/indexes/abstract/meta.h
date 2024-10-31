@@ -17,7 +17,7 @@ namespace NKikimr::NOlap {
 struct TIndexInfo;
 class TProgramContainer;
 class TIndexChunk;
-}
+} // namespace NKikimr::NOlap
 
 namespace NKikimr::NSchemeShard {
 class TOlapSchema;
@@ -30,9 +30,16 @@ private:
     YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
+
 protected:
-    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const = 0;
-    virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const = 0;
+    virtual std::shared_ptr<IPortionDataChunk> DoBuildIndex(
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
+        const TIndexInfo& indexInfo
+    ) const = 0;
+    virtual void DoFillIndexCheckers(
+        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info,
+        const NSchemeShard::TOlapSchema& schema
+    ) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const = 0;
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const = 0;
@@ -48,10 +55,7 @@ public:
     IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId)
         : IndexName(indexName)
         , IndexId(indexId)
-        , StorageId(storageId)
-    {
-
-    }
+        , StorageId(storageId) {}
 
     NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
 
@@ -60,18 +64,27 @@ public:
             return TConclusionStatus::Fail("new meta cannot be absent");
         }
         if (newMeta->GetClassName() != GetClassName()) {
-            return TConclusionStatus::Fail("new meta have to be same index class (" + GetClassName() + "), but new class name: " + newMeta->GetClassName());
+            return TConclusionStatus::Fail(
+                "new meta have to be same index class (" + GetClassName() +
+                "), but new class name: " + newMeta->GetClassName()
+            );
         }
         return DoCheckModificationCompatibility(*newMeta);
     }
 
     virtual ~IIndexMeta() = default;
 
-    std::shared_ptr<IPortionDataChunk> BuildIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
+    std::shared_ptr<IPortionDataChunk> BuildIndex(
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data,
+        const TIndexInfo& indexInfo
+    ) const {
         return DoBuildIndex(data, indexInfo);
     }
 
-    void FillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
+    void FillIndexCheckers(
+        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info,
+        const NSchemeShard::TOlapSchema& schema
+    ) const {
         return DoFillIndexCheckers(info, schema);
     }
 
@@ -84,11 +97,11 @@ public:
 class TIndexMetaContainer: public NBackgroundTasks::TInterfaceProtoContainer<IIndexMeta> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IIndexMeta>;
+
 public:
     TIndexMetaContainer() = default;
     TIndexMetaContainer(const std::shared_ptr<IIndexMeta>& object)
-        : TBase(object)
-    {
+        : TBase(object) {
         AFL_VERIFY(Object);
     }
 };

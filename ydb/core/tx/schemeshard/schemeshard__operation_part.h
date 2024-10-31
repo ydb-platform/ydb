@@ -79,7 +79,6 @@
 \
     action(TEvPersQueue::TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
 
-
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -104,24 +103,30 @@ private:
 
 public:
     TOperationContext(
-            TSchemeShard* ss,
-            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
-            TMaybe<NACLib::TUserToken>&& userToken)
+        TSchemeShard* ss,
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TActorContext& ctx,
+        TSideEffects& onComplete,
+        TMemoryChanges& memChanges,
+        TStorageChanges& dbChange,
+        TMaybe<NACLib::TUserToken>&& userToken
+    )
         : SS(ss)
         , Ctx(ctx)
         , OnComplete(onComplete)
         , MemChanges(memChanges)
         , DbChanges(dbChange)
         , UserToken(userToken)
-        , Txc(txc)
-    {}
+        , Txc(txc) {}
     TOperationContext(
-            TSchemeShard* ss,
-            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
-        : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
-    {}
+        TSchemeShard* ss,
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TActorContext& ctx,
+        TSideEffects& onComplete,
+        TMemoryChanges& memChanges,
+        TStorageChanges& dbChange
+    )
+        : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing()) {}
 
     NTable::TDatabase& GetDB() {
         Y_VERIFY_S(ProtectDB == false,
@@ -143,11 +148,11 @@ public:
     class TDbGuard {
         bool PrevVal;
         bool& Protect;
+
     public:
         TDbGuard(TOperationContext& ctx)
             : PrevVal(ctx.ProtectDB)
-            , Protect(ctx.ProtectDB)
-        {
+            , Protect(ctx.ProtectDB) {
             Protect = true;
         }
 
@@ -199,7 +204,9 @@ public:
     void IgnoreMessages(TString debugHint, TSet<ui32> mgsIds);
 };
 
-class ISubOperation: public TSimpleRefCount<ISubOperation>, public ISubOperationState {
+class ISubOperation
+    : public TSimpleRefCount<ISubOperation>
+    , public ISubOperationState {
 public:
     using TPtr = TIntrusivePtr<ISubOperation>;
 
@@ -223,15 +230,11 @@ protected:
 
 public:
     explicit TSubOperationBase(const TOperationId& id)
-        : OperationId(id)
-    {
-    }
+        : OperationId(id) {}
 
     explicit TSubOperationBase(const TOperationId& id, const TTxTransaction& tx)
         : OperationId(id)
-        , Transaction(tx)
-    {
-    }
+        , Transaction(tx) {}
 
     const TOperationId& GetOperationId() const override final {
         return OperationId;
@@ -268,9 +271,7 @@ public:
 
     explicit TSubOperation(const TOperationId& id, TTxState::ETxState state)
         : TSubOperationBase(id)
-        , State(state)
-    {
-    }
+        , State(state) {}
 
     TTxState::ETxState GetState() const {
         return State;
@@ -290,15 +291,15 @@ public:
         return Progress(context, &ISubOperationState::ProgressState);
     }
 
-    #define DefaultHandleReply(TEvType, ...) \
+#define DefaultHandleReply(TEvType, ...) \
         bool HandleReply(TEvType::TPtr& ev, TOperationContext& context) override;
 
-        SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
-    #undef DefaultHandleReply
+    SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
+#undef DefaultHandleReply
 
 private:
     template <typename... Args>
-    using TFunc = bool(ISubOperationState::*)(Args...);
+    using TFunc = bool (ISubOperationState::*)(Args...);
 
     template <typename... Args>
     bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
@@ -323,7 +324,8 @@ ISubOperation::TPtr MakeSubOperation(const TOperationId& id, const TTxTransactio
 }
 
 template <typename T, typename... Args>
-ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context, Args&&... args) {
+ISubOperation::TPtr
+MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context, Args&&... args) {
     auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
     result->SetState(state, context);
     return result.Release();
@@ -354,17 +356,19 @@ ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateForceDropUnsafe(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
+ISubOperation::TPtr
+CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
-    const THashSet<TString>& localSequences = { });
+ISubOperation::TPtr
+CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTable(TOperationId id, TTxState::ETxState state);
-TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateSplitMerge(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateSplitMerge(TOperationId id, TTxState::ETxState state);
@@ -387,7 +391,8 @@ ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::
 
 // External Table
 // Create
-TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewExternalTable(TOperationId id, TTxState::ETxState state);
 // Alter
 ISubOperation::TPtr CreateAlterExternalTable(TOperationId id, const TTxTransaction& tx);
@@ -398,7 +403,8 @@ ISubOperation::TPtr CreateDropExternalTable(TOperationId id, TTxState::ETxState 
 
 // External Data Source
 // Create
-TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateNewExternalDataSource(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateNewExternalDataSource(TOperationId id, TTxState::ETxState state);
 // Alter
 ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, const TTxTransaction& tx);
@@ -423,7 +429,8 @@ ISubOperation::TPtr CreateNewCdcStreamImpl(TOperationId id, TTxState::ETxState s
 ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool initialScan);
 ISubOperation::TPtr CreateNewCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool initialScan);
 // Alter
-TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateAlterCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateAlterCdcStreamImpl(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterCdcStreamImpl(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot);
@@ -437,9 +444,12 @@ ISubOperation::TPtr CreateDropCdcStreamAtTable(TOperationId id, TTxState::ETxSta
 
 /// Continuous Backup
 // Create
-TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateNewContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateBackup(TOperationId id, TTxState::ETxState state);
@@ -449,8 +459,10 @@ ISubOperation::TPtr CreateRestore(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateTxCancelTx(TEvSchemeShard::TEvCancelTx::TPtr ev);
 
-TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState state);
@@ -459,7 +471,8 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
-TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, TTxState::ETxState state);
@@ -509,7 +522,8 @@ ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, const TTxTransaction& 
 ISubOperation::TPtr CreateAlterSubDomain(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx);
-TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateUpgradeSubDomain(TOperationId id, TTxState::ETxState state);
@@ -522,14 +536,14 @@ ISubOperation::TPtr CreateDropSubdomain(TOperationId id, TTxState::ETxState stat
 ISubOperation::TPtr CreateForceDropSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateForceDropSubDomain(TOperationId id, TTxState::ETxState state);
 
-
 /// ExtSubDomain
 // Create
 ISubOperation::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state);
 
 // Alter
-TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateCompatibleAlterExtSubDomain(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState::ETxState state);
 //NOTE: no variants to construct individual suboperations directly from TTxTransaction --
@@ -538,7 +552,6 @@ ISubOperation::TPtr CreateAlterExtSubDomainCreateHive(TOperationId id, TTxState:
 // Drop
 ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateForceDropExtSubDomain(TOperationId id, TTxState::ETxState state);
-
 
 ISubOperation::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewKesus(TOperationId id, TTxState::ETxState state);
@@ -591,8 +604,10 @@ ISubOperation::TPtr CreateDropFileStore(TOperationId id, TTxState::ETxState stat
 ISubOperation::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
 
-TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateConsistentMoveIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state);
@@ -641,9 +656,11 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, const
 ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxState::ETxState state);
 
 // returns Reject in case of error, nullptr otherwise
-ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
+ISubOperation::TPtr
+CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
-TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr>
+CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 // BackupCollection
 // Create
@@ -653,6 +670,5 @@ ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxStat
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
 
-
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

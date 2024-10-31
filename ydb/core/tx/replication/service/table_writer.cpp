@@ -33,9 +33,7 @@ class TSerializer: public IChangeRecordSerializer {
     public:
         explicit TVisitor(TMemoryPool& pool, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& record)
             : MemoryPool(pool)
-            , Record(record)
-        {
-        }
+            , Record(record) {}
 
         void Visit(const TChangeRecord& record) override {
             record.Serialize(Record, MemoryPool);
@@ -46,9 +44,7 @@ class TSerializer: public IChangeRecordSerializer {
 
 public:
     TSerializer()
-        : MemoryPool(256)
-    {
-    }
+        : MemoryPool(256) {}
 
     THolder<IChangeRecordSerializer> Clone() const override {
         return MakeHolder<TSerializer>();
@@ -63,9 +59,7 @@ public:
 class TPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
     TPartitionResolver(const NKikimr::TKeyDesc& keyDesc)
-        : KeyDesc(keyDesc)
-    {
-    }
+        : KeyDesc(keyDesc) {}
 
     void Visit(const TChangeRecord& record) override {
         SetPartitionId(NChangeExchange::ResolveSchemaBoundaryPartitionId(KeyDesc, record.GetKey()));

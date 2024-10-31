@@ -7,14 +7,14 @@ namespace NKikimr::NOlap {
 class TKernelsRegistry {
 public:
     using TKernels = std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>>;
-    
+
 private:
     TKernels Kernels;
     std::vector<NSsa::TFunctionPtr> Functions;
 
-public: 
+public:
     bool Parse(const TString& serialized);
     NSsa::TFunctionPtr GetFunction(const size_t index) const;
 };
 
-}
+} // namespace NKikimr::NOlap

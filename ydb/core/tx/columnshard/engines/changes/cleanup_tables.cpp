@@ -14,7 +14,10 @@ void TCleanupTablesColumnEngineChanges::DoDebugString(TStringOutput& out) const 
     }
 }
 
-void TCleanupTablesColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+void TCleanupTablesColumnEngineChanges::DoWriteIndexOnExecute(
+    NColumnShard::TColumnShard* self,
+    TWriteIndexContext& context
+) {
     if (self && context.DB) {
         for (auto&& t : TablesToDrop) {
             AFL_VERIFY(!self->InsertTable->HasDataInPathId(t));
@@ -23,7 +26,8 @@ void TCleanupTablesColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TCol
     }
 }
 
-void TCleanupTablesColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& /*context*/) {
+void TCleanupTablesColumnEngineChanges::
+    DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& /*context*/) {
     for (auto&& t : TablesToDrop) {
         self->InsertTable->ErasePath(t);
         self->TablesManager.TryFinalizeDropPathOnComplete(t);
@@ -35,7 +39,8 @@ void TCleanupTablesColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self
     self.BackgroundController.StartCleanupTables();
 }
 
-void TCleanupTablesColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
+void TCleanupTablesColumnEngineChanges::
+    DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
     self.BackgroundController.FinishCleanupTables();
 }
 
@@ -43,4 +48,4 @@ NColumnShard::ECumulativeCounters TCleanupTablesColumnEngineChanges::GetCounterI
     return isSuccess ? NColumnShard::COUNTER_CLEANUP_SUCCESS : NColumnShard::COUNTER_CLEANUP_FAIL;
 }
 
-}
+} // namespace NKikimr::NOlap

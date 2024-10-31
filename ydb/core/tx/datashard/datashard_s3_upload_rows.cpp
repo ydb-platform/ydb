@@ -4,17 +4,20 @@ namespace NKikimr::NDataShard {
 
 TDataShard::TTxS3UploadRows::TTxS3UploadRows(TDataShard* ds, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev)
     : TBase(ds)
-    , TCommonUploadOps(ev, false, false)
-{
-}
+    , TCommonUploadOps(ev, false, false) {}
 
 bool TDataShard::TTxS3UploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
     auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
-    
+
     // NOTE: will not throw TNeedGlobalTxId since we set breakLocks to false
-    if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion,
-            /* globalTxId */ 0, /* volatile read dependencies */ nullptr))
-    {
+    if (!TCommonUploadOps::Execute(
+            Self,
+            txc,
+            readVersion,
+            writeVersion,
+            /* globalTxId */ 0,
+            /* volatile read dependencies */ nullptr
+        )) {
         return false;
     }
 
@@ -40,4 +43,4 @@ void TDataShard::TTxS3UploadRows::Complete(const TActorContext&) {
     Self->SendImmediateWriteResult(MvccVersion, target, event.Release(), cookie);
 }
 
-}
+} // namespace NKikimr::NDataShard

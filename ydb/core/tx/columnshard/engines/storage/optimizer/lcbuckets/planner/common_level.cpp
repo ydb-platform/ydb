@@ -2,7 +2,10 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-void TLevelPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
+void TLevelPortions::DoModifyPortions(
+    const std::vector<TPortionInfo::TPtr>& add,
+    const std::vector<TPortionInfo::TPtr>& remove
+) {
     for (auto&& i : remove) {
         auto it = Portions.find(i);
         AFL_VERIFY(it != Portions.end());
@@ -57,21 +60,26 @@ TCompactionTaskData TLevelPortions::DoGetOptimizationTask() const {
     }
     while (GetLevelBlobBytesLimit() * 0.5 + compactedData < (ui64)PortionsInfo.GetBlobBytes() &&
            (itBkwd != Portions.begin() || itFwd != Portions.end()) && result.CanTakeMore()) {
-        if (itFwd != Portions.end() &&
-            (itBkwd == Portions.begin() || itBkwd->GetPortion()->GetTotalBlobBytes() <= itFwd->GetPortion()->GetTotalBlobBytes())) {
+        if (itFwd != Portions.end() && (itBkwd == Portions.begin() || itBkwd->GetPortion()->GetTotalBlobBytes() <=
+                                                                          itFwd->GetPortion()->GetTotalBlobBytes())) {
             auto portion = itFwd->GetPortion();
             compactedData += portion->GetTotalBlobBytes();
-            result.AddCurrentLevelPortion(portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false);
+            result.AddCurrentLevelPortion(
+                portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false
+            );
             ++itFwd;
         } else if (itBkwd != Portions.begin() &&
-                   (itFwd == Portions.end() || itFwd->GetPortion()->GetTotalBlobBytes() < itBkwd->GetPortion()->GetTotalBlobBytes())) {
+                   (itFwd == Portions.end() ||
+                    itFwd->GetPortion()->GetTotalBlobBytes() < itBkwd->GetPortion()->GetTotalBlobBytes())) {
             auto portion = itBkwd->GetPortion();
             compactedData += portion->GetTotalBlobBytes();
-            result.AddCurrentLevelPortion(portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false);
+            result.AddCurrentLevelPortion(
+                portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false
+            );
             --itBkwd;
         }
     }
     return result;
 }
 
-}
+} // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

@@ -98,4 +98,4 @@ NKikimr::NTxUT::TShardReader& TShardReader::SetReplyColumnIds(const std::vector<
     return *this;
 }
 
-}
+} // namespace NKikimr::NTxUT

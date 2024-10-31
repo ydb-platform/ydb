@@ -15,13 +15,11 @@ struct TTwoPartDescription {
 
     explicit TTwoPartDescription(TString preSerialized, NKikimrScheme::TEvDescribeSchemeResult record)
         : PreSerialized(std::move(preSerialized))
-        , Record(std::move(record))
-    {
-    }
+        , Record(std::move(record)) {}
 
     bool Empty() const;
     operator bool() const;
 };
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

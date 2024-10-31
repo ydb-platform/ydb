@@ -34,7 +34,8 @@ public:
     explicit TTxAllocatorClient(
         NKikimrServices::EServiceKikimr service,
         NTabletPipe::IClientCache* pipeClientCache,
-        TVector<TTabletId> txAllocators);
+        TVector<TTabletId> txAllocators
+    );
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -54,9 +55,7 @@ private:
         explicit TAllocationRange(const TTabletId& source, ui64 begin, ui64 end)
             : Source(source)
             , Begin(begin)
-            , End(end)
-        {
-        }
+            , End(end) {}
 
         TTabletId AllocatedFrom() const {
             return Source;
@@ -91,4 +90,4 @@ private:
 
 }; // TTxAllocatorClient
 
-} // NKikimr
+} // namespace NKikimr

@@ -10,7 +10,7 @@
 #include <util/generic/maybe.h>
 
 namespace NKikimrChangeExchange {
-    class TChangeRecord;
+class TChangeRecord;
 }
 
 namespace NKikimr::NDataShard {
@@ -21,17 +21,37 @@ class TChangeRecord: public NChangeExchange::TChangeRecordBase {
     friend class TChangeRecordBuilder;
 
 public:
-    ui64 GetGroup() const override { return Group; }
-    ui64 GetStep() const override { return Step; }
-    ui64 GetTxId() const override { return TxId; }
-    EKind GetKind() const override { return Kind; }
-    ui64 GetLockId() const { return LockId; }
-    ui64 GetLockOffset() const { return LockOffset; }
-    const TPathId& GetPathId() const { return PathId; }
+    ui64 GetGroup() const override {
+        return Group;
+    }
+    ui64 GetStep() const override {
+        return Step;
+    }
+    ui64 GetTxId() const override {
+        return TxId;
+    }
+    EKind GetKind() const override {
+        return Kind;
+    }
+    ui64 GetLockId() const {
+        return LockId;
+    }
+    ui64 GetLockOffset() const {
+        return LockOffset;
+    }
+    const TPathId& GetPathId() const {
+        return PathId;
+    }
 
-    const TPathId& GetTableId() const { return TableId; }
-    ui64 GetSchemaVersion() const { return SchemaVersion; }
-    TUserTable::TCPtr GetSchema() const { return Schema; }
+    const TPathId& GetTableId() const {
+        return TableId;
+    }
+    ui64 GetSchemaVersion() const {
+        return SchemaVersion;
+    }
+    TUserTable::TCPtr GetSchema() const {
+        return Schema;
+    }
 
     void Serialize(NKikimrChangeExchange::TChangeRecord& record) const;
 
@@ -68,8 +88,7 @@ public:
     using TBase::TBase;
 
     explicit TChangeRecordBuilder(EKind kind)
-        : TBase()
-    {
+        : TBase() {
         GetRecord()->Kind = kind;
     }
 
@@ -122,7 +141,7 @@ public:
 
 NChangeExchange::IPartitionResolverVisitor* CreateDefaultPartitionResolver(const NKikimr::TKeyDesc& keyDesc);
 
-}
+} // namespace NKikimr::NDataShard
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord, out, value) {
     return value.Out(out);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "registry.h" 
+#include "registry.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/core/formats/arrow/program.h>
@@ -26,6 +26,7 @@ public:
 class TSchemaResolverColumnsOnly: public IColumnResolver {
 private:
     std::shared_ptr<NSchemeShard::TOlapSchema> Schema;
+
 public:
     TSchemaResolverColumnsOnly(const std::shared_ptr<NSchemeShard::TOlapSchema>& schema)
         : Schema(schema) {
@@ -35,7 +36,10 @@ public:
     virtual TString GetColumnName(ui32 id, bool required = true) const override;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override;
     virtual NSsa::TColumnInfo GetDefaultColumn() const override {
-        return NSsa::TColumnInfo::Original((ui32)NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX, NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP);
+        return NSsa::TColumnInfo::Original(
+            (ui32)NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
+            NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP
+        );
     }
 };
 
@@ -48,6 +52,7 @@ private:
     std::optional<std::set<std::string>> OverrideProcessingColumnsSet;
     std::optional<std::vector<TString>> OverrideProcessingColumnsVector;
     YDB_READONLY_DEF(NIndexes::TIndexCheckerContainer, IndexChecker);
+
 public:
     TString ProtoDebugString() const {
         return ProgramProto.DebugString();
@@ -73,7 +78,12 @@ public:
         OverrideProcessingColumnsSet = std::set<std::string>(data.begin(), data.end());
     }
 
-    bool Init(const IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram, TString& error);
+    bool Init(
+        const IColumnResolver& columnResolver,
+        NKikimrSchemeOp::EOlapProgramType programType,
+        TString serializedProgram,
+        TString& error
+    );
     bool Init(const IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto, TString& error);
     bool Init(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto, TString& error);
 
@@ -100,8 +110,9 @@ public:
 
     std::set<std::string> GetEarlyFilterColumns() const;
     std::set<std::string> GetProcessingColumns() const;
+
 private:
     bool ParseProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program, TString& error);
 };
 
-}
+} // namespace NKikimr::NOlap

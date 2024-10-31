@@ -16,4 +16,4 @@ IActor* CreateSchemeBoardPopulator(
     const ui64 maxPathId
 );
 
-} // NKikimr
+} // namespace NKikimr

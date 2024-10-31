@@ -10,22 +10,27 @@ TColumnTableInfo::TColumnTableInfo(
     ui64 alterVersion,
     const NKikimrSchemeOp::TColumnTableDescription& description,
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
-    TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody)
+    TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody
+)
     : AlterVersion(alterVersion)
     , Description(description)
     , StandaloneSharding(std::move(standaloneSharding))
-    , AlterBody(std::move(alterBody))
-{
-}
+    , AlterBody(std::move(alterBody)) {}
 
-TColumnTableInfo::TPtr TColumnTableInfo::BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody) {
+TColumnTableInfo::TPtr TColumnTableInfo::BuildTableWithAlter(
+    const TColumnTableInfo& initialTable,
+    const NKikimrSchemeOp::TAlterColumnTable& alterBody
+) {
     TColumnTableInfo::TPtr alterData = std::make_shared<TColumnTableInfo>(initialTable);
     alterData->AlterBody.ConstructInPlace(alterBody);
     ++alterData->AlterVersion;
     return alterData;
 }
 
-TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> TColumnTableInfo::BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const {
+TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> TColumnTableInfo::BuildEntity(
+    const TPathId& pathId,
+    const NOlap::NAlter::TEntityInitializationContext& iContext
+) const {
     std::shared_ptr<NOlap::NAlter::ISSEntity> result;
     if (IsStandalone()) {
         result = std::make_shared<NOlap::NAlter::TStandaloneTable>(pathId);
@@ -39,4 +44,4 @@ TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> TColumnTableInfo::BuildEn
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

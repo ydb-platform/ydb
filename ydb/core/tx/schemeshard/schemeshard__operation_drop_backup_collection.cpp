@@ -9,11 +9,10 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-class TPropose : public TSubOperationState {
+class TPropose: public TSubOperationState {
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(std::move(id))
-    {}
+        : OperationId(std::move(id)) {}
 
     bool ProgressState(TOperationContext& context) override {
         LOG_I(DebugHint() << "ProgressState");
@@ -73,28 +72,28 @@ private:
     const TOperationId OperationId;
 };
 
-class TDropBackupCollection : public TSubOperation {
+class TDropBackupCollection: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -128,9 +127,11 @@ public:
         const TString& name = dropDescription.GetName();
         LOG_N("TDropBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                   static_cast<ui64>(OperationId.GetTxId()),
-                                                   static_cast<ui64>(context.SS->SelfTabletId()));
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted,
+            static_cast<ui64>(OperationId.GetTxId()),
+            static_cast<ui64>(context.SS->SelfTabletId())
+        );
 
         auto bcPaths = ResolveBackupCollectionPaths(rootPathStr, name, false, context, result);
         if (!bcPaths) {
@@ -141,8 +142,7 @@ public:
 
         {
             auto checks = dstPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -153,7 +153,8 @@ public:
                 .IsCommonSensePath();
 
             if (checks) {
-                const TBackupCollectionInfo::TPtr backupCollection = context.SS->BackupCollections.Value(dstPath->PathId, nullptr);
+                const TBackupCollectionInfo::TPtr backupCollection =
+                    context.SS->BackupCollections.Value(dstPath->PathId, nullptr);
                 if (!backupCollection) {
                     result->SetError(NKikimrScheme::StatusSchemeError, "Backup collection doesn't exist");
 
@@ -163,7 +164,8 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
-                if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() && (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
+                if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() &&
+                    (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
@@ -182,10 +184,7 @@ public:
 
         auto guard = context.DbGuard();
         PersistDropBackupCollection(context, dstPath);
-        context.SS->CreateTx(
-                OperationId,
-                TTxState::TxDropBackupCollection,
-                dstPath.Base()->PathId);
+        context.SS->CreateTx(OperationId, TTxState::TxDropBackupCollection, dstPath.Base()->PathId);
 
         DropBackupCollectionPathElement(dstPath);
 

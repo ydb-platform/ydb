@@ -6,4 +6,4 @@ const TReadStats& TScanIteratorBase::GetStats() const {
     return Default<TReadStats>();
 }
 
-}
+} // namespace NKikimr::NOlap::NReader

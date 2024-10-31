@@ -11,5 +11,5 @@ TTwoPartDescription::operator bool() const {
     return !Empty();
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

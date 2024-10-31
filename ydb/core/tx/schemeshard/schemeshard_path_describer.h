@@ -11,8 +11,11 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 class TPathDescriber {
-    void FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl,
-        TPathElement::EPathSubType subType = TPathElement::EPathSubType::EPathSubTypeEmpty);
+    void FillPathDescr(
+        NKikimrSchemeOp::TDirEntry* descr,
+        TPathElement::TPtr pathEl,
+        TPathElement::EPathSubType subType = TPathElement::EPathSubType::EPathSubTypeEmpty
+    );
     void FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, const TPath& path);
     void FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl);
     TPathElement::EPathSubType CalcPathSubType(const TPath& path);
@@ -52,9 +55,7 @@ class TPathDescriber {
 public:
     explicit TPathDescriber(TSchemeShard* self, NKikimrSchemeOp::TDescribePath&& params)
         : Self(self)
-        , Params(std::move(params))
-    {
-    }
+        , Params(std::move(params)) {}
 
     const NKikimrSchemeOp::TDescribePath& GetParams() const {
         return Params;
@@ -77,11 +78,8 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     const NKikimrSchemeOp::TDescribeOptions& opts
 );
 
-THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
-    TSchemeShard* self,
-    const TActorContext& ctx,
-    TPathId pathId
-);
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder>
+DescribePath(TSchemeShard* self, const TActorContext& ctx, TPathId pathId);
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

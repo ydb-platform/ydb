@@ -26,11 +26,11 @@ class TDataShard::TTxCdcStreamEmitHeartbeats: public NTabletFlatExecutor::TTrans
 public:
     explicit TTxCdcStreamEmitHeartbeats(TDataShard* self, const TRowVersion& edge)
         : TBase(self)
-        , Edge(edge)
-    {
-    }
+        , Edge(edge) {}
 
-    TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Self->State != TShardState::Ready) {
@@ -46,14 +46,14 @@ public:
 
         for (const auto& [streamPathId, info] : heartbeats) {
             auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcHeartbeat)
-                .WithOrder(Self->AllocateChangeRecordOrder(db))
-                .WithGroup(0)
-                .WithStep(info.Last.Step)
-                .WithTxId(info.Last.TxId)
-                .WithPathId(streamPathId)
-                .WithTableId(info.TablePathId)
-                .WithSchemaVersion(0) // not used
-                .Build();
+                                 .WithOrder(Self->AllocateChangeRecordOrder(db))
+                                 .WithGroup(0)
+                                 .WithStep(info.Last.Step)
+                                 .WithTxId(info.Last.TxId)
+                                 .WithPathId(streamPathId)
+                                 .WithTableId(info.TablePathId)
+                                 .WithSchemaVersion(0) // not used
+                                 .Build();
 
             const auto& record = *recordPtr;
             Self->PersistChangeRecord(db, record);
@@ -140,20 +140,21 @@ bool TCdcStreamHeartbeatManager::Load(NIceDb::TNiceDb& db) {
             rowset.GetValue<Schema::CdcStreamHeartbeats::StreamOwnerId>(),
             rowset.GetValue<Schema::CdcStreamHeartbeats::StreamPathId>()
         );
-        const auto interval = TDuration::MilliSeconds(
-            rowset.GetValue<Schema::CdcStreamHeartbeats::IntervalMs>()
-        );
+        const auto interval = TDuration::MilliSeconds(rowset.GetValue<Schema::CdcStreamHeartbeats::IntervalMs>());
         const auto last = TRowVersion(
             rowset.GetValue<Schema::CdcStreamHeartbeats::LastStep>(),
             rowset.GetValue<Schema::CdcStreamHeartbeats::LastTxId>()
         );
 
         Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
-        CdcStreams.emplace(streamPathId, THeartbeatInfo{
-            .TablePathId = tablePathId,
-            .Interval = interval,
-            .Last = last,
-        });
+        CdcStreams.emplace(
+            streamPathId,
+            THeartbeatInfo{
+                .TablePathId = tablePathId,
+                .Interval = interval,
+                .Last = last,
+            }
+        );
 
         Schedule.emplace(streamPathId, NextVersion(last, interval));
 
@@ -165,17 +166,23 @@ bool TCdcStreamHeartbeatManager::Load(NIceDb::TNiceDb& db) {
     return true;
 }
 
-void TCdcStreamHeartbeatManager::AddCdcStream(NTable::TDatabase& db,
-        const TPathId& tablePathId, const TPathId& streamPathId, TDuration heartbeatInterval)
-{
+void TCdcStreamHeartbeatManager::AddCdcStream(
+    NTable::TDatabase& db,
+    const TPathId& tablePathId,
+    const TPathId& streamPathId,
+    TDuration heartbeatInterval
+) {
     const auto last = TRowVersion::Min();
 
     Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
-    auto res = CdcStreams.emplace(streamPathId, THeartbeatInfo{
-        .TablePathId = tablePathId,
-        .Interval = heartbeatInterval,
-        .Last = last,
-    });
+    auto res = CdcStreams.emplace(
+        streamPathId,
+        THeartbeatInfo{
+            .TablePathId = tablePathId,
+            .Interval = heartbeatInterval,
+            .Last = last,
+        }
+    );
 
     Schedule.emplace(streamPathId, NextVersion(last, heartbeatInterval));
 
@@ -183,9 +190,11 @@ void TCdcStreamHeartbeatManager::AddCdcStream(NTable::TDatabase& db,
     PersistUpdate(nicedb, tablePathId, streamPathId, res.first->second);
 }
 
-void TCdcStreamHeartbeatManager::DropCdcStream(NTable::TDatabase& db,
-        const TPathId& tablePathId, const TPathId& streamPathId)
-{
+void TCdcStreamHeartbeatManager::DropCdcStream(
+    NTable::TDatabase& db,
+    const TPathId& tablePathId,
+    const TPathId& streamPathId
+) {
     auto it = CdcStreams.find(streamPathId);
     if (it == CdcStreams.end()) {
         return;
@@ -222,9 +231,8 @@ bool TCdcStreamHeartbeatManager::ShouldEmitHeartbeat(const TRowVersion& edge) co
     return true;
 }
 
-THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbeatManager::EmitHeartbeats(
-        NTable::TDatabase& db, const TRowVersion& edge)
-{
+THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo>
+TCdcStreamHeartbeatManager::EmitHeartbeats(NTable::TDatabase& db, const TRowVersion& edge) {
     if (!ShouldEmitHeartbeat(edge)) {
         return {};
     }
@@ -256,9 +264,12 @@ THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbea
     return heartbeats;
 }
 
-void TCdcStreamHeartbeatManager::PersistUpdate(NIceDb::TNiceDb& db,
-        const TPathId& tablePathId, const TPathId& streamPathId, const THeartbeatInfo& info)
-{
+void TCdcStreamHeartbeatManager::PersistUpdate(
+    NIceDb::TNiceDb& db,
+    const TPathId& tablePathId,
+    const TPathId& streamPathId,
+    const THeartbeatInfo& info
+) {
     using Schema = TDataShard::Schema;
     db.Table<Schema::CdcStreamHeartbeats>()
         .Key(tablePathId.OwnerId, tablePathId.LocalPathId, streamPathId.OwnerId, streamPathId.LocalPathId)
@@ -269,13 +280,15 @@ void TCdcStreamHeartbeatManager::PersistUpdate(NIceDb::TNiceDb& db,
         );
 }
 
-void TCdcStreamHeartbeatManager::PersistRemove(NIceDb::TNiceDb& db,
-        const TPathId& tablePathId, const TPathId& streamPathId)
-{
+void TCdcStreamHeartbeatManager::PersistRemove(
+    NIceDb::TNiceDb& db,
+    const TPathId& tablePathId,
+    const TPathId& streamPathId
+) {
     using Schema = TDataShard::Schema;
     db.Table<Schema::CdcStreamHeartbeats>()
         .Key(tablePathId.OwnerId, tablePathId.LocalPathId, streamPathId.OwnerId, streamPathId.LocalPathId)
         .Delete();
 }
 
-}
+} // namespace NKikimr::NDataShard

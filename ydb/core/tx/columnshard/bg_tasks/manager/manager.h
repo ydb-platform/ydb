@@ -10,7 +10,7 @@
 namespace NKikimrTxBackgroundProto {
 class TTaskContainer;
 class TSessionControlContainer;
-}
+} // namespace NKikimrTxBackgroundProto
 
 namespace NKikimr::NOlap::NBackground {
 
@@ -20,10 +20,10 @@ private:
     bool Finished = false;
     std::shared_ptr<TSessionsStorage> Storage;
     std::shared_ptr<ITabletAdapter> Adapter;
+
 public:
     TSessionsManager(const std::shared_ptr<ITabletAdapter>& adapter)
-        : Adapter(adapter)
-    {
+        : Adapter(adapter) {
         Storage = std::make_shared<TSessionsStorage>();
     }
 
@@ -34,10 +34,17 @@ public:
     bool LoadIdempotency(NTabletFlatExecutor::TTransactionContext& txc);
 
     [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask(const TTask& task);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTaskFromProto(const NKikimrTxBackgroundProto::TTaskContainer& taskProto);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxRemove(const TString& className, const TString& identifier);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControlFromProto(const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto);
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControl(const TSessionControlContainer& control);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTaskFromProto(
+        const NKikimrTxBackgroundProto::TTaskContainer& taskProto
+    );
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction>
+    TxRemove(const TString& className, const TString& identifier);
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControlFromProto(
+        const NKikimrTxBackgroundProto::TSessionControlContainer& controlProto
+    );
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> TxApplyControl(
+        const TSessionControlContainer& control
+    );
 
     bool HasTask(const TTask& task) const;
 
@@ -58,4 +65,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

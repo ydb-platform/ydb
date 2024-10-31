@@ -4,8 +4,7 @@
 namespace NKikimr::NOlap::NBlobOperations {
 
 TReadCounters::TReadCounters(const TConsumerCounters& owner)
-    : TBase(owner, "Reader")
-{
+    : TBase(owner, "Reader") {
     RequestsCount = TBase::GetDeriviative("Requests/Count");
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");
 
@@ -20,4 +19,4 @@ TReadCounters::TReadCounters(const TConsumerCounters& owner)
     FailDurationByCount = TBase::GetHistogram("Fails/Duration/Count", NMonitoring::ExponentialHistogram(15, 2, 2));
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations

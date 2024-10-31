@@ -9,18 +9,17 @@ namespace NDataShard {
 
 using namespace NMiniKQL;
 
-class TPrepareWriteTxInRSUnit : public TExecutionUnit {
+class TPrepareWriteTxInRSUnit: public TExecutionUnit {
 public:
-    TPrepareWriteTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
+    TPrepareWriteTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TPrepareWriteTxInRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op, const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 };
 
-TPrepareWriteTxInRSUnit::TPrepareWriteTxInRSUnit(TDataShard &dataShard,
-    TPipeline &pipeline)
+TPrepareWriteTxInRSUnit::TPrepareWriteTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline)
     : TExecutionUnit(EExecutionUnitKind::PrepareWriteTxInRS, true, dataShard, pipeline) {}
 
 TPrepareWriteTxInRSUnit::~TPrepareWriteTxInRSUnit() {}
@@ -29,9 +28,8 @@ bool TPrepareWriteTxInRSUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransactionContext &txc,
-    const TActorContext &ctx)
-{
+EExecutionStatus
+TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
 
     const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
@@ -55,7 +53,12 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
     }
 
     try {
-        KqpPrepareInReadsets(op->InReadSets(), writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{}, nullptr, DataShard.TabletID());
+        KqpPrepareInReadsets(
+            op->InReadSets(),
+            writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{},
+            nullptr,
+            DataShard.TabletID()
+        );
     } catch (const yexception& e) {
         LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Exception while preparing in-readsets for KQP transaction "
             << *op << " at " << DataShard.TabletID() << ": " << CurrentExceptionMessage());
@@ -65,9 +68,9 @@ EExecutionStatus TPrepareWriteTxInRSUnit::Execute(TOperation::TPtr op, TTransact
     return EExecutionStatus::Executed;
 }
 
-void TPrepareWriteTxInRSUnit::Complete(TOperation::TPtr, const TActorContext &) {}
+void TPrepareWriteTxInRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline) {
+THolder<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TPrepareWriteTxInRSUnit(dataShard, pipeline));
 }
 

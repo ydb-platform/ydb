@@ -34,16 +34,15 @@ static TLockLoggerContext LockLoggerContext;
 
 // TLockInfo
 
-TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId)
+TLockInfo::TLockInfo(TLockLocker* locker, ui64 lockId, ui32 lockNodeId)
     : Locker(locker)
     , LockId(lockId)
     , LockNodeId(lockNodeId)
     , Generation(locker->Generation())
     , Counter(locker->IncCounter())
-    , CreationTime(TAppData::TimeProvider->Now())
-{}
+    , CreationTime(TAppData::TimeProvider->Now()) {}
 
-TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
+TLockInfo::TLockInfo(TLockLocker* locker, const ILocksDb::TLockRow& row)
     : Locker(locker)
     , LockId(row.LockId)
     , LockNodeId(row.LockNodeId)
@@ -51,8 +50,7 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , Counter(row.Counter)
     , CreationTime(TInstant::MicroSeconds(row.CreateTs))
     , Flags(ELockFlags(row.Flags))
-    , Persistent(true)
-{
+    , Persistent(true) {
     if (Counter == Max<ui64>()) {
         BreakVersion.emplace(TRowVersion::Min());
     }
@@ -351,11 +349,7 @@ void TTableLocks::AddShardLock(TLockInfo* lock) {
 void TTableLocks::AddPointLock(const TPointKey& point, TLockInfo* lock) {
     Y_ABORT_UNLESS(lock->MayHavePointsAndRanges());
     Y_ABORT_UNLESS(point.Table == this);
-    TRangeTreeBase::TOwnedRange added(
-            point.Key,
-            true,
-            point.Key,
-            true);
+    TRangeTreeBase::TOwnedRange added(point.Key, true, point.Key, true);
     Ranges.AddRange(std::move(added), lock);
 }
 
@@ -369,10 +363,8 @@ void TTableLocks::AddRangeLock(const TRangeKey& range, TLockInfo* lock) {
     // empty key would not include anything. Thankfully when there's at least
     // one column present engines tend to use inclusive for partial keys.
     TRangeTreeBase::TOwnedRange added(
-            range.From,
-            range.InclusiveFrom || !range.From,
-            range.To,
-            range.InclusiveTo || !range.To);
+        range.From, range.InclusiveFrom || !range.From, range.To, range.InclusiveTo || !range.To
+    );
     Ranges.AddRange(std::move(added), lock);
 }
 
@@ -418,7 +410,10 @@ void TLockLocker::AddRangeLock(const TLockInfo::TPtr& lock, const TRangeKey& key
     }
 }
 
-void TLockLocker::AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) {
+void TLockLocker::AddShardLock(
+    const TLockInfo::TPtr& lock,
+    TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables
+) {
     if (!lock->IsShardLock()) {
         for (const TPathId& tableId : lock->GetReadTables()) {
             Tables.at(tableId)->RemoveRangeLock(lock.Get());
@@ -437,7 +432,10 @@ void TLockLocker::AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTabl
     }
 }
 
-void TLockLocker::AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksWriteListTag>& writeTables) {
+void TLockLocker::AddWriteLock(
+    const TLockInfo::TPtr& lock,
+    TIntrusiveList<TTableLocks, TTableLocksWriteListTag>& writeTables
+) {
     for (auto& table : writeTables) {
         const TPathId& tableId = table.GetTableId();
         Y_ABORT_UNLESS(Tables.at(tableId).Get() == &table);
@@ -835,8 +833,13 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
     // We have to tell client that there were some locks (even if we don't set them)
     TVector<TLock> out;
     for (auto& table : Update->AffectedTables) {
-        out.emplace_back(MakeLock(Update->LockTxId, lock ? lock->GetGeneration() : Self->Generation(), counter,
-            table.GetTableId(), Update->Lock && Update->Lock->IsWriteLock()));
+        out.emplace_back(MakeLock(
+            Update->LockTxId,
+            lock ? lock->GetGeneration() : Self->Generation(),
+            counter,
+            table.GetTableId(),
+            Update->Lock && Update->Lock->IsWriteLock()
+        ));
     }
     return out;
 }
@@ -884,13 +887,19 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
 
     Y_ABORT_UNLESS(Update);
 
-    auto &checkVersion = Update->CheckVersion;
+    auto& checkVersion = Update->CheckVersion;
     TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, checkVersion);
     if (txLock) {
         if (key.size() == 2) { // locks v1
             const auto& tableIds = txLock->GetReadTables();
             Y_ABORT_UNLESS(tableIds.size() == 1);
-            return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), *tableIds.begin(), txLock->IsWriteLock());
+            return MakeAndLogLock(
+                lockTxId,
+                txLock->GetGeneration(),
+                txLock->GetCounter(checkVersion),
+                *tableIds.begin(),
+                txLock->IsWriteLock()
+            );
         } else { // locks v2
             Y_ABORT_UNLESS(key.size() == 4);
             TPathId tableId;
@@ -898,7 +907,13 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
             ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
             if (ok && tableId) {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
-                    return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock());
+                    return MakeAndLogLock(
+                        lockTxId,
+                        txLock->GetGeneration(),
+                        txLock->GetCounter(checkVersion),
+                        tableId,
+                        txLock->IsWriteLock()
+                    );
                 } else {
                     LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
                             "TSysLocks::GetLock: lock " << lockTxId << " exists, but not set for table " << tableId);
@@ -1150,7 +1165,8 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock() {
     return EEnsureCurrentLock::Success;
 }
 
-TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const {
+TSysLocks::TLock
+TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const {
     TLock lock;
     lock.LockId = lockTxId;
     lock.DataShard = Self->TabletID();
@@ -1162,7 +1178,8 @@ TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui32 generation, ui64 counte
     return lock;
 }
 
-TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const {
+TSysLocks::TLock
+TSysLocks::MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const {
     TLock lock = MakeLock(lockTxId, generation, counter, pathId, hasWrites);
     if (AccessLog)
         AccessLog->Locks[lockTxId] = lock;
@@ -1200,5 +1217,5 @@ bool TSysLocks::Load(ILocksDb& db) {
     return true;
 }
 
-
-}}
+} // namespace NDataShard
+} // namespace NKikimr

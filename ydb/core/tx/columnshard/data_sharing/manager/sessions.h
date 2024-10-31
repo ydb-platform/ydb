@@ -13,6 +13,7 @@ private:
     THashMap<TString, std::shared_ptr<TSourceSession>> SourceSessions;
     THashMap<TString, std::shared_ptr<TDestinationSession>> DestSessions;
     TAtomicCounter SharingSessions;
+
 public:
     TSessionsManager() = default;
 
@@ -56,12 +57,15 @@ public:
 
     [[nodiscard]] bool Load(NTable::TDatabase& database, const TColumnEngineForLogs* index);
 
-    void InitializeEventsExchange(const NColumnShard::TColumnShard& shard, const std::optional<ui64> sessionCookie = {});
+    void
+    InitializeEventsExchange(const NColumnShard::TColumnShard& shard, const std::optional<ui64> sessionCookie = {});
 
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session);
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> ProposeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
-    std::unique_ptr<NTabletFlatExecutor::ITransaction> ConfirmDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
-
+    std::unique_ptr<NTabletFlatExecutor::ITransaction>
+    InitializeSourceSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session);
+    std::unique_ptr<NTabletFlatExecutor::ITransaction>
+    ProposeDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
+    std::unique_ptr<NTabletFlatExecutor::ITransaction>
+    ConfirmDestSession(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session);
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

@@ -21,15 +21,13 @@ struct TReadSetKey {
         : TxId(txId)
         , Origin(origin)
         , From(from)
-        , To(to)
-    {}
+        , To(to) {}
 
     TReadSetKey(const NKikimrTx::TEvReadSet& rs)
         : TxId(rs.GetTxId())
         , Origin(rs.GetTabletProducer())
         , From(rs.GetTabletSource())
-        , To(rs.GetTabletDest())
-    {}
+        , To(rs.GetTabletDest()) {}
 
     size_t Hash() const {
         return TxId + (Origin << 16) + (From << 8) + To;
@@ -42,7 +40,7 @@ struct TReadSetKey {
     friend bool operator==(const TReadSetKey& a, const TReadSetKey& b) = default;
 };
 
-struct TReadSetInfo : TReadSetKey {
+struct TReadSetInfo: TReadSetKey {
     ui64 Step = 0;
     bool OnHold = false;
     std::optional<TString> Body;
@@ -50,8 +48,7 @@ struct TReadSetInfo : TReadSetKey {
     TReadSetInfo() = default;
 
     explicit TReadSetInfo(const TReadSetKey& rsKey)
-        : TReadSetKey(rsKey)
-    {}
+        : TReadSetKey(rsKey) {}
 };
 
 ///
@@ -59,26 +56,35 @@ class TOutReadSets {
 public:
     friend class TDataShard;
 
-    TOutReadSets(TDataShard * self)
-        : Self(self)
-    {}
+    TOutReadSets(TDataShard* self)
+        : Self(self) {}
 
     bool LoadReadSets(NIceDb::TNiceDb& db);
     void SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, const TString& body);
     void RemoveReadSet(NIceDb::TNiceDb& db, ui64 seqNo);
     TReadSetInfo ReplaceReadSet(NIceDb::TNiceDb& db, ui64 seqNo, const TString& body);
     void SaveAck(const TActorContext& ctx, TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev);
-    void AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext &ctx);
+    void AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext& ctx);
     bool ResendRS(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, ui64 seqNo);
     void ResendAll(const TActorContext& ctx);
     void Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx);
 
-    bool Empty() const { return CurrentReadSets.empty() && Expectations.empty(); }
-    bool HasAcks() const { return ! ReadSetAcks.empty(); }
-    bool Has(const TReadSetKey& rsKey) const { return CurrentReadSetKeys.contains(rsKey); }
+    bool Empty() const {
+        return CurrentReadSets.empty() && Expectations.empty();
+    }
+    bool HasAcks() const {
+        return !ReadSetAcks.empty();
+    }
+    bool Has(const TReadSetKey& rsKey) const {
+        return CurrentReadSetKeys.contains(rsKey);
+    }
 
-    ui64 CountReadSets() const { return CurrentReadSets.size(); }
-    ui64 CountAcks() const { return ReadSetAcks.size(); }
+    ui64 CountReadSets() const {
+        return CurrentReadSets.size();
+    }
+    ui64 CountAcks() const {
+        return ReadSetAcks.size();
+    }
 
     bool AddExpectation(ui64 target, ui64 step, ui64 txId);
     bool RemoveExpectation(ui64 target, ui64 txId);
@@ -108,7 +114,7 @@ private:
     void UpdateMonCounter() const;
 
 private:
-    TDataShard * Self;
+    TDataShard* Self;
     THashMap<ui64, TReadSetInfo> CurrentReadSets;     // SeqNo -> Info
     THashMap<TReadSetKey, ui64> CurrentReadSetKeys;   // Key -> SeqNo
     TVector<TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>> ReadSetAcks;
@@ -116,4 +122,5 @@ private:
     THashMap<ui64, THashMap<ui64, ui64>> Expectations;
 };
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

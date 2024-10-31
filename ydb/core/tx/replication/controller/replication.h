@@ -14,7 +14,7 @@
 #include <optional>
 
 namespace NKikimrReplication {
-    class TReplicationConfig;
+class TReplicationConfig;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -23,19 +23,19 @@ class TReplication: public TSimpleRefCount<TReplication> {
 public:
     using TPtr = TIntrusivePtr<TReplication>;
 
-    enum class EState: ui8 {
+    enum class EState : ui8 {
         Ready,
         Done,
         Removing,
         Error = 255
     };
 
-    enum class ETargetKind: ui8 {
+    enum class ETargetKind : ui8 {
         Table,
         IndexTable,
     };
 
-    enum class EDstState: ui8 {
+    enum class EDstState : ui8 {
         Creating,
         Ready,
         Alter,
@@ -44,7 +44,7 @@ public:
         Error = 255
     };
 
-    enum class EStreamState: ui8 {
+    enum class EStreamState : ui8 {
         Creating,
         Ready,
         Removing,
@@ -145,4 +145,4 @@ private:
 
 }; // TReplication
 
-}
+} // namespace NKikimr::NReplication::NController

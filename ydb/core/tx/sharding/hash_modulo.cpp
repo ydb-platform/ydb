@@ -2,7 +2,8 @@
 
 namespace NKikimr::NSharding::NModulo {
 
-THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch
+) const {
     const std::vector<ui64> hashes = MakeHashes(batch);
     if (!SpecialShardingInfo) {
         THashMap<ui64, std::vector<ui32>> resultHash;
@@ -26,7 +27,9 @@ THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::
     }
 }
 
-NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingModuloN::DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingModuloN::DoBuildSplitShardsModifiers(
+    const std::vector<ui64>& newTabletIds
+) const {
     if (newTabletIds.size() != GetOrderedShardIds().size()) {
         return TConclusionStatus::Fail("can multiple 2 only for add shards count");
     }
@@ -41,7 +44,9 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
         for (auto&& i : GetOrderedShardIds()) {
             auto specSharding = info.GetShardingTabletVerified(i);
             AFL_VERIFY(specSharding.MutableAppropriateMods().size() == 1);
-            AFL_VERIFY(specSharding.MutableAppropriateMods().emplace(*specSharding.MutableAppropriateMods().begin() + GetOrderedShardIds().size()).second);
+            AFL_VERIFY(specSharding.MutableAppropriateMods()
+                           .emplace(*specSharding.MutableAppropriateMods().begin() + GetOrderedShardIds().size())
+                           .second);
             *alter.MutableModification()->MutableModulo()->AddShards() = specSharding.SerializeToProto();
         }
 
@@ -64,7 +69,10 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 auto& transfer = *alter.MutableTransfer()->AddTransfers();
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(i);
-                transfer.SetSessionId("SPLIT_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
+                transfer.SetSessionId(
+                    "SPLIT_TO::" + ::ToString(::ToString(newTabletIds[idx])) +
+                    "::" + TGUID::CreateTimebased().AsGuidString()
+                );
                 result.emplace_back(alter);
             }
             {
@@ -84,7 +92,8 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
     return result;
 }
 
-NKikimr::TConclusionStatus THashShardingModuloN::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto) {
+NKikimr::TConclusionStatus THashShardingModuloN::DoApplyModification(const NKikimrSchemeOp::TShardingModification& proto
+) {
     AFL_VERIFY(!!SpecialShardingInfo);
     for (auto&& i : proto.GetDeleteShardIds()) {
         if (!DeleteShardInfo(i)) {
@@ -132,7 +141,9 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoOnAfterModification() {
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus THashShardingModuloN::DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) {
+NKikimr::TConclusionStatus THashShardingModuloN::DoDeserializeFromProto(
+    const NKikimrSchemeOp::TColumnTableSharding& proto
+) {
     auto conclusion = TBase::DoDeserializeFromProto(proto);
     if (conclusion.IsFail()) {
         return conclusion;
@@ -140,7 +151,10 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoDeserializeFromProto(const NK
     if (!proto.HasHashSharding()) {
         return TConclusionStatus::Fail("no data for modulo n sharding");
     }
-    AFL_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+    AFL_VERIFY(
+        proto.GetHashSharding().GetFunction() ==
+        NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N
+    );
     {
         TSpecificShardingInfo specialInfo;
         auto result = specialInfo.DeserializeFromProto(proto, GetClosedWritingShardIds(), GetClosedReadingShardIds());
@@ -154,23 +168,34 @@ NKikimr::TConclusionStatus THashShardingModuloN::DoDeserializeFromProto(const NK
     return TConclusionStatus::Success();
 }
 
-std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> THashShardingModuloN::DoGetTabletShardingInfoOptional(const ui64 tabletId) const {
+std::shared_ptr<NKikimr::NSharding::IGranuleShardingLogic> THashShardingModuloN::DoGetTabletShardingInfoOptional(
+    const ui64 tabletId
+) const {
     if (SpecialShardingInfo) {
-        return std::make_shared<TGranuleSharding>(GetShardingColumns(), SpecialShardingInfo->GetShardingTabletVerified(tabletId), SpecialShardingInfo->GetPartsCount());
+        return std::make_shared<TGranuleSharding>(
+            GetShardingColumns(),
+            SpecialShardingInfo->GetShardingTabletVerified(tabletId),
+            SpecialShardingInfo->GetPartsCount()
+        );
     } else {
         TSpecificShardingInfo info(GetOrderedShardIds());
-        return std::make_shared<TGranuleSharding>(GetShardingColumns(), info.GetShardingTabletVerified(tabletId), info.GetPartsCount());
+        return std::make_shared<TGranuleSharding>(
+            GetShardingColumns(), info.GetShardingTabletVerified(tabletId), info.GetPartsCount()
+        );
     }
 }
 
-NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingModuloN::DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const {
+NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingModuloN::DoBuildMergeShardsModifiers(
+    const std::vector<ui64>& newTabletIds
+) const {
     if (newTabletIds.size() * 2 != GetOrderedShardIds().size()) {
         return TConclusionStatus::Fail("can div 2 only for reduce shards count");
     }
     if (!!SpecialShardingInfo) {
         return TConclusionStatus::Fail("not unified shards distribution for modulo");
     }
-    const TSpecificShardingInfo shardingInfo = SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
+    const TSpecificShardingInfo shardingInfo =
+        SpecialShardingInfo ? *SpecialShardingInfo : TSpecificShardingInfo(GetOrderedShardIds());
     std::vector<NKikimrSchemeOp::TAlterShards> result;
     {
         ui32 idx = 0;
@@ -181,10 +206,14 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
             auto source2 = shardingInfo.GetShardingTabletVerified(from2);
             AFL_VERIFY(source1.GetAppropriateMods().size() == 1);
             AFL_VERIFY(source2.GetAppropriateMods().size() == 1);
-            AFL_VERIFY(*source1.GetAppropriateMods().begin() + newTabletIds.size() == *source2.GetAppropriateMods().begin());
+            AFL_VERIFY(
+                *source1.GetAppropriateMods().begin() + newTabletIds.size() == *source2.GetAppropriateMods().begin()
+            );
             {
                 NKikimrSchemeOp::TAlterShards alter;
-                TSpecificShardingInfo::TModuloShardingTablet newInterval(i, { *source1.GetAppropriateMods().begin() ,*source2.GetAppropriateMods().begin() });
+                TSpecificShardingInfo::TModuloShardingTablet newInterval(
+                    i, {*source1.GetAppropriateMods().begin(), *source2.GetAppropriateMods().begin()}
+                );
                 alter.MutableModification()->AddOpenWriteIds(i);
                 *alter.MutableModification()->MutableModulo()->AddShards() = newInterval.SerializeToProto();
                 result.emplace_back(alter);
@@ -195,7 +224,10 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
                 transfer.SetDestinationTabletId(newTabletIds[idx]);
                 transfer.AddSourceTabletIds(from1);
                 transfer.AddSourceTabletIds(from2);
-                transfer.SetSessionId("MERGE_TO::" + ::ToString(::ToString(newTabletIds[idx])) + "::" + TGUID::CreateTimebased().AsGuidString());
+                transfer.SetSessionId(
+                    "MERGE_TO::" + ::ToString(::ToString(newTabletIds[idx])) +
+                    "::" + TGUID::CreateTimebased().AsGuidString()
+                );
                 transfer.SetMoving(true);
                 result.emplace_back(alter);
             }
@@ -214,4 +246,4 @@ NKikimr::TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> THashShardingMo
     return result;
 }
 
-}
+} // namespace NKikimr::NSharding::NModulo

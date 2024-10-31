@@ -11,16 +11,14 @@ private:
     YDB_READONLY(ui32, Id, Max<ui32>());
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>, IndexMeta);
+
 public:
     TOlapIndexSchema() = default;
 
     TOlapIndexSchema(const ui32 id, const TString& name, const std::shared_ptr<NOlap::NIndexes::IIndexMeta>& meta)
         : Id(id)
         , Name(name)
-        , IndexMeta(meta)
-    {
-
-    }
+        , IndexMeta(meta) {}
 
     bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexUpsert& upsert, IErrorCollector& errors);
 
@@ -37,6 +35,7 @@ public:
 private:
     YDB_READONLY_DEF(TIndexes, Indexes);
     YDB_READONLY_DEF(TIndexesByName, IndexesByName);
+
 public:
     const TOlapIndexSchema* GetByName(const TString& name) const noexcept {
         auto it = IndexesByName.find(name);
@@ -73,10 +72,15 @@ public:
     const TOlapIndexSchema* GetByIdVerified(const ui32 id) const noexcept;
     TOlapIndexSchema* MutableByIdVerified(const ui32 id) noexcept;
 
-    bool ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId);
+    bool ApplyUpdate(
+        const TOlapSchema& currentSchema,
+        const TOlapIndexesUpdate& schemaUpdate,
+        IErrorCollector& errors,
+        ui32& nextEntityId
+    );
 
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
     bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
 };
-}
+} // namespace NKikimr::NSchemeShard

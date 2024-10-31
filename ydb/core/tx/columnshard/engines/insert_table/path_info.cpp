@@ -57,19 +57,20 @@ bool TPathInfo::AddCommitted(TCommittedData&& data, const bool load) {
 TPathInfo::TPathInfo(TInsertionSummary& summary, const ui64 pathId)
     : PathId(pathId)
     , Summary(&summary)
-    , PathIdCounters(Summary->GetCounters().GetPathIdCounters())
-{
-
-}
+    , PathIdCounters(Summary->GetCounters().GetPathIdCounters()) {}
 
 NKikimr::NOlap::TPathInfoIndexPriority TPathInfo::GetIndexationPriority() const {
     if (CommittedSize > (i64)TCompactionLimits::WARNING_INSERT_TABLE_SIZE_BY_PATH_ID) {
         return TPathInfoIndexPriority(TPathInfoIndexPriority::EIndexationPriority::PreventOverload, CommittedSize);
     } else if (Committed.size() > TCompactionLimits::WARNING_INSERT_TABLE_COUNT_BY_PATH_ID) {
-        return TPathInfoIndexPriority(TPathInfoIndexPriority::EIndexationPriority::PreventManyPortions, Committed.size());
+        return TPathInfoIndexPriority(
+            TPathInfoIndexPriority::EIndexationPriority::PreventManyPortions, Committed.size()
+        );
     } else {
-        return TPathInfoIndexPriority(TPathInfoIndexPriority::EIndexationPriority::NoPriority, CommittedSize * Committed.size() * Committed.size());
+        return TPathInfoIndexPriority(
+            TPathInfoIndexPriority::EIndexationPriority::NoPriority, CommittedSize * Committed.size() * Committed.size()
+        );
     }
 }
 
-}
+} // namespace NKikimr::NOlap

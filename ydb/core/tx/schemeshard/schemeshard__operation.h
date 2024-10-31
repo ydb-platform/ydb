@@ -27,11 +27,11 @@ struct TOperation: TSimpleRefCount<TOperation> {
         TPreSerializedMessage(ui32 type, TIntrusivePtr<TEventSerializedData> data, TOperationId opId)
             : Type(type)
             , Data(std::move(data))
-            , OpId(opId)
-        { }
+            , OpId(opId) {}
     };
 
-    THashMap<TTabletId, TMap<TPipeMessageId, TPreSerializedMessage>> PipeBindedMessages; // std::pair<ui64, ui64> it's a cookie
+    THashMap<TTabletId, TMap<TPipeMessageId, TPreSerializedMessage>>
+        PipeBindedMessages; // std::pair<ui64, ui64> it's a cookie
 
     THashMap<TTabletId, TSubTxId> RelationsByTabletId;
     THashMap<TShardIdx, TSubTxId> RelationsByShardIdx;
@@ -70,16 +70,18 @@ struct TOperation: TSimpleRefCount<TOperation> {
     };
 
     TOperation(TTxId txId)
-        : TxId(txId)
-    {}
+        : TxId(txId) {}
     ~TOperation() = default;
 
-    TTxId GetTxId() const { return TxId; }
+    TTxId GetTxId() const {
+        return TxId;
+    }
 
     static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, TOperationContext& context);
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 
-    ISubOperation::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState, TOperationContext& context) const;
+    ISubOperation::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState, TOperationContext& context)
+        const;
     TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
     void AddPart(ISubOperation::TPtr part);
 
@@ -152,4 +154,4 @@ inline TOperationId NextPartId(const TOperationId& opId, const TVector<ISubOpera
     return TOperationId(opId.GetTxId(), opId.GetSubTxId() + parts.size());
 }
 
-}
+} // namespace NKikimr::NSchemeShard

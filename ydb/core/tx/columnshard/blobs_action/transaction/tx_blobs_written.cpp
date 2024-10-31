@@ -12,7 +12,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     txc.DB.NoMoreReadsForTx();
     CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
     NActors::TLogContextGuard logGuard =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
+            "tx_state", "execute"
+        );
     ACFL_DEBUG("event", "start_execute");
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     for (auto&& pack : Packs) {
@@ -51,7 +53,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             continue;
         }
         Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
-        operation->OnWriteFinish(txc, pack.GetInsertWriteIds(), operation->GetBehaviour() == EOperationBehaviour::NoTxWrite);
+        operation->OnWriteFinish(
+            txc, pack.GetInsertWriteIds(), operation->GetBehaviour() == EOperationBehaviour::NoTxWrite
+        );
         Self->OperationsManager->LinkInsertWriteIdToOperationWriteId(pack.GetInsertWriteIds(), operation->GetWriteId());
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
@@ -64,7 +68,8 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
             lock.SetPathId(writeMeta.GetTableId());
-            auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
+            auto ev =
+                NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
     }
@@ -74,7 +79,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
 void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Complete");
     NActors::TLogContextGuard logGuard =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "complete");
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())(
+            "tx_state", "complete"
+        );
     const auto now = TMonotonic::Now();
     if (WritingActions) {
         WritingActions->OnCompleteTxAfterWrite(*Self, true);
@@ -92,10 +99,15 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         pathIds.emplace(op->GetPathId());
         auto& granule = index.MutableGranuleVerified(op->GetPathId());
         for (auto&& portion : pack.GetPortions()) {
-            if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-                if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetTableId())) {
+            if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock ||
+                op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+                if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite ||
+                    Self->GetOperationsManager().HasReadLocks(writeMeta.GetTableId())) {
                     auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
-                        writeMeta.GetTableId(), portion.GetPKBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+                        writeMeta.GetTableId(),
+                        portion.GetPKBatch(),
+                        Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey()
+                    );
                     Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 }
             }
@@ -113,9 +125,13 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
 }
 
-TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
-    const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
-    const std::vector<TFailedWrite>& fails)
+TTxBlobsWritingFinished::TTxBlobsWritingFinished(
+    TColumnShard* self,
+    const NKikimrProto::EReplyStatus writeStatus,
+    const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions,
+    std::vector<TInsertedPortions>&& packs,
+    const std::vector<TFailedWrite>& fails
+)
     : TBase(self, "TTxBlobsWritingFinished")
     , PutBlobResult(writeStatus)
     , Packs(std::move(packs))

@@ -10,6 +10,7 @@ private:
     YDB_READONLY(bool, SchemeNeedActualization, false);
     YDB_READONLY(bool, ExternalGuaranteeExclusivePK, false);
     YDB_READONLY_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
+
 public:
     bool ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& errors);
 
@@ -17,4 +18,4 @@ public:
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
     bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
 };
-}
+} // namespace NKikimr::NSchemeShard

@@ -6,11 +6,11 @@
 namespace NKikimr {
 namespace NSequenceProxy {
 
-    struct TSequenceProxySettings {
+struct TSequenceProxySettings {
         // TODO: add settings for sequence proxy
-    };
+};
 
-    IActor* CreateSequenceProxy(const TSequenceProxySettings& settings = {});
+IActor* CreateSequenceProxy(const TSequenceProxySettings& settings = {});
 
 } // namespace NSequenceProxy
 } // namespace NKikimr

@@ -13,15 +13,20 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
             TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, 1, 1));
         } else {
             SwitchStage(EStage::WaitData, EStage::Finished);
-            TBase::Send(*ScanActorId, NKqp::TEvKqp::TEvAbortExecution::Aborted("task finished: " + status.GetErrorMessage()).Release());
+            TBase::Send(
+                *ScanActorId,
+                NKqp::TEvKqp::TEvAbortExecution::Aborted("task finished: " + status.GetErrorMessage()).Release()
+            );
         }
     } else {
         SwitchStage(EStage::WaitData, EStage::Finished);
         auto status = RestoreTask->OnFinished();
         if (status.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "restore_task_finished_error")("reason", status.GetErrorMessage());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "restore_task_finished_error")("reason", status.GetErrorMessage());
         } else {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "restore_task_finished")("reason", status.GetErrorMessage());
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "restore_task_finished")("reason", status.GetErrorMessage());
         }
     }
 }
@@ -36,8 +41,8 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& ev) {
     SwitchStage(EStage::WaitData, EStage::Finished);
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "problem_on_restore_data")(
-        "reason", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+    ("event", "problem_on_restore_data")("reason", NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
     RestoreTask->OnError(NYql::IssuesFromMessageAsString(ev->Get()->Record.GetIssues()));
 }
 
@@ -47,4 +52,4 @@ void TActor::Bootstrap(const TActorContext& /*ctx*/) {
     Become(&TActor::StateFunc);
 }
 
-}
+} // namespace NKikimr::NOlap::NDataReader

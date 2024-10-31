@@ -11,7 +11,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateConsistentMoveTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
 
     TVector<ISubOperation::TPtr> result;
@@ -30,11 +31,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
     TPath srcPath = TPath::Resolve(srcStr, context.SS);
     {
         TPath::TChecker checks = srcPath.Check();
-        checks.IsResolved()
-              .NotDeleted()
-              .IsTable()
-              .NotAsyncReplicaTable()
-              .IsCommonSensePath();
+        checks.IsResolved().NotDeleted().IsTable().NotAsyncReplicaTable().IsCommonSensePath();
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
@@ -53,7 +50,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcPath, dstPath)));
 
-    for (auto& child: srcPath.Base()->GetChildren()) {
+    for (auto& child : srcPath.Base()->GetChildren()) {
         auto name = child.first;
 
         TPath srcChildPath = srcPath.Child(name);
@@ -62,7 +59,8 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         }
 
         if (srcChildPath.IsCdcStream()) {
-            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move table with cdc streams")};
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move table with cdc streams")
+            };
         }
 
         if (srcChildPath.IsSequence()) {
@@ -75,7 +73,9 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         Y_VERIFY_S(srcChildPath.Base()->GetChildren().size() == 1,
                    srcChildPath.PathString() << " has children " << srcChildPath.Base()->GetChildren().size());
 
-        result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+        result.push_back(
+            CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath))
+        );
 
         TString srcImplTableName = srcChildPath.Base()->GetChildren().begin()->first;
         TPath srcImplTable = srcChildPath.Child(srcImplTableName);
@@ -92,5 +92,5 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
     return result;
 }
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

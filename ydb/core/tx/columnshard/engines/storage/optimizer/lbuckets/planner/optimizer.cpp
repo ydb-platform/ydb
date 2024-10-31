@@ -6,4 +6,4 @@ TDuration GetCommonFreshnessCheckDuration() {
     return NYDBTest::TControllers::GetColumnShardController()->GetOptimizerFreshnessCheckDuration();
 }
 
-}
+} // namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets

@@ -14,12 +14,12 @@ enum class TInsertWriteId : ui64 {
 };
 
 inline TOperationWriteId operator++(TOperationWriteId& w) noexcept {
-    w = TOperationWriteId{ ui64(w) + 1 };
+    w = TOperationWriteId{ui64(w) + 1};
     return w;
 }
 
 inline TInsertWriteId operator++(TInsertWriteId& w) noexcept {
-    w = TInsertWriteId{ ui64(w) + 1 };
+    w = TInsertWriteId{ui64(w) + 1};
     return w;
 }
 

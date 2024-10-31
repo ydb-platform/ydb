@@ -18,15 +18,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropIndexAtMainTable TConfigureParts"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropIndexAtMainTable TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -46,7 +44,6 @@ public:
 
         return true;
     }
-
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
@@ -126,15 +123,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropIndexAtMainTable TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropIndexAtMainTable TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
@@ -212,31 +207,31 @@ class TDropIndexAtMainTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -263,8 +258,8 @@ public:
                         << ", message: " << Transaction.ShortDebugString()
                         << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
-
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!dropOperation.HasIndexName() && !indexName) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "No index name present");
@@ -274,8 +269,7 @@ public:
         TPath tablePath = TPath::Resolve(workingDir, context.SS).Dive(mainTableName);
         {
             TPath::TChecker checks = tablePath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -307,8 +301,7 @@ public:
         TPath indexPath = tablePath.Child(indexName);
         {
             TPath::TChecker checks = indexPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -344,14 +337,15 @@ public:
         context.DbChanges.PersistPath(tablePath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropTableIndexAtMainTable, tablePath.Base()->PathId);
+        TTxState& txState =
+            context.SS->CreateTx(OperationId, TTxState::TxDropTableIndexAtMainTable, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
         // do not fill txShards until all splits are done
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();
 
-        for (auto splitTx: table->GetSplitOpsInFlight()) {
+        for (auto splitTx : table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
@@ -379,7 +373,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -391,7 +385,8 @@ ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTr
     return MakeSubOperation<TDropIndexAtMainTable>(id, tx);
 }
 
-TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateDropIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -410,8 +405,7 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     TPath mainTablePath = workingDirPath.Child(mainTableName);
     {
         TPath::TChecker checks = mainTablePath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -430,8 +424,7 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     TPath indexPath = mainTablePath.Child(indexName);
     {
         TPath::TChecker checks = indexPath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -457,7 +450,9 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     TVector<ISubOperation::TPtr> result;
 
     {
-        auto mainTableIndexDropping = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable);
+        auto mainTableIndexDropping = TransactionTemplate(
+            workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable
+        );
         auto operation = mainTableIndexDropping.MutableDropIndex();
         operation->SetTableName(mainTablePath.LeafName());
         operation->SetIndexName(indexPath.LeafName());
@@ -466,7 +461,8 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     }
 
     {
-        auto indexDropping = TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
+        auto indexDropping =
+            TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
         auto operation = indexDropping.MutableDrop();
         operation->SetName(ToString(indexPath.Base()->Name));
 
@@ -481,7 +477,8 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
 
         Y_ABORT_UNLESS(child.Base()->IsTable());
 
-        auto implTableDropping = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+        auto implTableDropping =
+            TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         auto operation = implTableDropping.MutableDrop();
         operation->SetName(child.LeafName());
 
@@ -494,4 +491,4 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

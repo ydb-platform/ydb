@@ -11,8 +11,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
-    Y_UNIT_TEST(Fake) {
-    }
+    Y_UNIT_TEST(Fake) {}
     Y_UNIT_TEST(CreateDirWithIntermediateDirs) {
         const TString validScheme = "Valid/x/y/z";
         const TString invalidScheme = "Invalid/wr0ng n@me";
@@ -39,7 +38,9 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateTable(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateTable(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -58,7 +59,9 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto invalidStatus = NKikimrScheme::StatusInvalidParameter;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateSolomon(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateSolomon(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -77,7 +80,9 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateTable(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateTable(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -92,7 +97,9 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateKesus(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateKesus(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -108,7 +115,9 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateSolomon(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateSolomon(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -160,7 +169,9 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateSubDomain(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateSubDomain(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -176,7 +187,9 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
         CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
-            TestCreateRtmrVolume(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+            TestCreateRtmrVolume(
+                runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus}
+            );
         });
     }
 
@@ -191,8 +204,7 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
 }
 
 Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
-    Y_UNIT_TEST(Fake) {
-    }
+    Y_UNIT_TEST(Fake) {}
 
     Y_UNIT_TEST(CopyWithData) {
         TTestWithReboots t;
@@ -201,28 +213,34 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB",
-                                "Name: \"src1\""
-                                "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                                "Columns { Name: \"key2\"       Type: \"Utf8\"}"
-                                "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                                "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-                                "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
-                                "UniformPartitionsCount: 1"
-                                );
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB",
-                                "Name: \"src2\""
-                                "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                                "Columns { Name: \"key2\"       Type: \"Utf8\"}"
-                                "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                                "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-                                "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
-                                "UniformPartitionsCount: 1"
-                                );
-                t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
+                TestCreateTable(
+                    runtime,
+                    ++t.TxId,
+                    "/MyRoot/DirB",
+                    "Name: \"src1\""
+                    "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                    "Columns { Name: \"key2\"       Type: \"Utf8\"}"
+                    "Columns { Name: \"key3\"       Type: \"Uint64\"}"
+                    "Columns { Name: \"Value\"      Type: \"Utf8\"}"
+                    "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
+                    "UniformPartitionsCount: 1"
+                );
+                TestCreateTable(
+                    runtime,
+                    ++t.TxId,
+                    "/MyRoot/DirB",
+                    "Name: \"src2\""
+                    "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                    "Columns { Name: \"key2\"       Type: \"Utf8\"}"
+                    "Columns { Name: \"key3\"       Type: \"Uint64\"}"
+                    "Columns { Name: \"Value\"      Type: \"Utf8\"}"
+                    "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
+                    "UniformPartitionsCount: 1"
+                );
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId - 2, t.TxId - 1, t.TxId});
 
                 // Write some data to the user table
-                auto fnWriteRow = [&] (ui64 tabletId) {
+                auto fnWriteRow = [&](ui64 tabletId) {
                     TString writeQuery = R"(
                         (
                             (let key '( '('key1 (Uint32 '0)) '('key2 (Utf8 'aaaa)) '('key3 (Uint64 '0)) ) )
@@ -234,15 +252,20 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                     TString err;
                     NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+                    ;
                 };
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
-                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                                 {NLs::PathVersionEqual(7)});
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"), {NLs::PathVersionEqual(7)});
             }
 
-            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/", R"(
+            t.TestEnv->ReliablePropose(
+                runtime,
+                ConsistentCopyTablesRequest(
+                    ++t.TxId,
+                    "/",
+                    R"(
                            CopyTableDescriptions {
                              SrcPath: "/MyRoot/DirB/src1"
                              DstPath: "/MyRoot/DirB/dst1"
@@ -251,27 +274,32 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                             SrcPath: "/MyRoot/DirB/src2"
                             DstPath: "/MyRoot/DirB/dst2"
                           }
-                    )", {pathVersion}),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+                    )",
+                    {pathVersion}
+                ),
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusMultipleModifications,
+                 NKikimrScheme::StatusPreconditionFailed}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                   {NLs::PathVersionEqual(11),
-                                    NLs::ChildrenCount(4)});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/src1"),
-                                   {NLs::PathVersionEqual(3),
-                                    NLs::IsTable});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/src2"),
-                                   {NLs::PathVersionEqual(3),
-                                    NLs::IsTable});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/dst1"),
-                                   {NLs::PathVersionEqual(3),
-                                    NLs::IsTable});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/dst2"),
-                                   {NLs::PathVersionEqual(3),
-                                    NLs::IsTable});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB"), {NLs::PathVersionEqual(11), NLs::ChildrenCount(4)}
+                );
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/src1"), {NLs::PathVersionEqual(3), NLs::IsTable}
+                );
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/src2"), {NLs::PathVersionEqual(3), NLs::IsTable}
+                );
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/dst1"), {NLs::PathVersionEqual(3), NLs::IsTable}
+                );
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/dst2"), {NLs::PathVersionEqual(3), NLs::IsTable}
+                );
             }
         });
     }
@@ -282,28 +310,34 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB",
-                                "Name: \"src1\""
-                                "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                                "Columns { Name: \"key2\"       Type: \"Utf8\"}"
-                                "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                                "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-                                "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
-                                "UniformPartitionsCount: 1"
-                                );
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB",
-                                "Name: \"src2\""
-                                "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                                "Columns { Name: \"key2\"       Type: \"Utf8\"}"
-                                "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                                "Columns { Name: \"Value\"      Type: \"Utf8\"}"
-                                "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
-                                "UniformPartitionsCount: 1"
-                                );
-                t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId});
+                TestCreateTable(
+                    runtime,
+                    ++t.TxId,
+                    "/MyRoot/DirB",
+                    "Name: \"src1\""
+                    "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                    "Columns { Name: \"key2\"       Type: \"Utf8\"}"
+                    "Columns { Name: \"key3\"       Type: \"Uint64\"}"
+                    "Columns { Name: \"Value\"      Type: \"Utf8\"}"
+                    "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
+                    "UniformPartitionsCount: 1"
+                );
+                TestCreateTable(
+                    runtime,
+                    ++t.TxId,
+                    "/MyRoot/DirB",
+                    "Name: \"src2\""
+                    "Columns { Name: \"key1\"       Type: \"Uint32\"}"
+                    "Columns { Name: \"key2\"       Type: \"Utf8\"}"
+                    "Columns { Name: \"key3\"       Type: \"Uint64\"}"
+                    "Columns { Name: \"Value\"      Type: \"Utf8\"}"
+                    "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
+                    "UniformPartitionsCount: 1"
+                );
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId - 2, t.TxId - 1, t.TxId});
 
                 // Write some data to the user table
-                auto fnWriteRow = [&] (ui64 tabletId) {
+                auto fnWriteRow = [&](ui64 tabletId) {
                     TString writeQuery = R"(
                         (
                             (let key '( '('key1 (Uint32 '0)) '('key2 (Utf8 'aaaa)) '('key3 (Uint64 '0)) ) )
@@ -315,7 +349,8 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                     TString err;
                     NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+                    ;
                 };
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
@@ -335,24 +370,24 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             AsyncDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "src1");
             AsyncDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "dst1");
 
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 2});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 2}
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                   {NLs::PathVersionEqual(15),
-                                    NLs::ChildrenCount(2)});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/src1"),
-                                   {NLs::PathNotExist});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/src2"),
-                                   {NLs::PathVersionEqual(3),
-                                    NLs::IsTable});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/dst1"),
-                                   {NLs::PathNotExist});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/dst2"),
-                                   {NLs::PathVersionEqual(3),
-                                    NLs::IsTable});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB"), {NLs::PathVersionEqual(15), NLs::ChildrenCount(2)}
+                );
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/src1"), {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/src2"), {NLs::PathVersionEqual(3), NLs::IsTable}
+                );
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/dst1"), {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/dst2"), {NLs::PathVersionEqual(3), NLs::IsTable}
+                );
             }
         });
     }
@@ -384,43 +419,55 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                   DataColumnNames: ["value1"]
                 }
             )");
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                   { NLs::Finished,
-                                    NLs::PathVersionEqual(5),
-                                    NLs::ChildrenCount(1)});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
-                                   { NLs::Finished,
-                                    NLs::PathVersionEqual(3),
-                                    NLs::IndexesCount(3)});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0"),
-                                   {NLs::Finished,
-                                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
-                                    NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                                    NLs::IndexKeys({"value0"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0/indexImplTable"),
-                                   {NLs::Finished});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues"),
-                                   {NLs::Finished,
-                                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
-                                    NLs::IndexState(NKikimrSchemeOp::EIndexStateNotReady),
-                                    NLs::IndexKeys({"value0", "value1"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues/indexImplTable"),
-                                   {NLs::Finished});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1"),
-                                   {NLs::Finished,
-                                    NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
-                                    NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-                                    NLs::IndexKeys({"value0"}),
-                                    NLs::IndexDataColumns({"value1"})});
-                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1/indexImplTable"),
-                                   {NLs::Finished});
-
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB"),
+                    {NLs::Finished, NLs::PathVersionEqual(5), NLs::ChildrenCount(1)}
+                );
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/Table1"),
+                    {NLs::Finished, NLs::PathVersionEqual(3), NLs::IndexesCount(3)}
+                );
+                TestDescribeResult(
+                    DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0"),
+                    {NLs::Finished,
+                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                     NLs::IndexKeys({"value0"})}
+                );
+                TestDescribeResult(
+                    DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0/indexImplTable"),
+                    {NLs::Finished}
+                );
+                TestDescribeResult(
+                    DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues"),
+                    {NLs::Finished,
+                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                     NLs::IndexState(NKikimrSchemeOp::EIndexStateNotReady),
+                     NLs::IndexKeys({"value0", "value1"})}
+                );
+                TestDescribeResult(
+                    DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValues/indexImplTable"),
+                    {NLs::Finished}
+                );
+                TestDescribeResult(
+                    DescribePrivatePath(runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1"),
+                    {NLs::Finished,
+                     NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                     NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                     NLs::IndexKeys({"value0"}),
+                     NLs::IndexDataColumns({"value1"})}
+                );
+                TestDescribeResult(
+                    DescribePrivatePath(
+                        runtime, "/MyRoot/DirB/Table1/UserDefinedIndexByValue0CoveringValue1/indexImplTable"
+                    ),
+                    {NLs::Finished}
+                );
             }
-
         });
     }
 
@@ -453,22 +500,22 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                       DataColumnNames: ["value1"]
                     }
                 )");
-                t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
             }
-
 
             TestDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "Table1");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                   {NLs::Finished,
-                                    NLs::PathVersionEqual(7),
-                                    NLs::ChildrenCount(0)});
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
-                                   {NLs::PathNotExist});
-                t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3));
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB"),
+                    {NLs::Finished, NLs::PathVersionEqual(7), NLs::ChildrenCount(0)}
+                );
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"), {NLs::PathNotExist});
+                t.TestEnv->TestWaitTabletDeletion(
+                    runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 3)
+                );
             }
         });
     }
@@ -502,25 +549,23 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId - 2, t.TxId - 1, t.TxId});
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::Finished,
-                                    NLs::ChildrenCount(2)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::Finished, NLs::ChildrenCount(2)});
 
-                dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                                 {NLs::Finished,
-                                                  NLs::PathVersionEqual(5),
-                                                  NLs::ChildrenCount(1)});
+                dirAVersion = TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB"),
+                    {NLs::Finished, NLs::PathVersionEqual(5), NLs::ChildrenCount(1)}
+                );
             }
 
             TestForceDropUnsafe(runtime, ++t.TxId, dirAVersion.PathId.LocalPathId);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::Finished,
-                                    NLs::ChildrenCount(1)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::Finished, NLs::ChildrenCount(1)});
             }
         });
     }
@@ -531,10 +576,10 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             TPathVersion dirAVersion;
             {
                 TInactiveZone inactive(activeZone);
-                dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                                                 {NLs::Finished,
-                                                  NLs::PathVersionEqual(3),
-                                                  NLs::ChildrenCount(0)});
+                dirAVersion = TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirA"),
+                    {NLs::Finished, NLs::PathVersionEqual(3), NLs::ChildrenCount(0)}
+                );
             }
 
             AsyncCreateIndexedTable(runtime, ++t.TxId, "/MyRoot/DirA", R"(
@@ -555,13 +600,13 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                                     })");
             AsyncForceDropUnsafe(runtime, ++t.TxId, dirAVersion.PathId.LocalPathId);
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::Finished,
-                                    NLs::ChildrenCount(0)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::Finished, NLs::ChildrenCount(0)});
             }
         });
     }
@@ -599,10 +644,10 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId - 2, t.TxId - 1, t.TxId});
 
-                dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                                 {NLs::Finished,
-                                                  NLs::PathVersionEqual(5),
-                                                  NLs::ChildrenCount(1)});
+                dirAVersion = TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB"),
+                    {NLs::Finished, NLs::PathVersionEqual(5), NLs::ChildrenCount(1)}
+                );
             }
 
             TestDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "Table1");
@@ -611,14 +656,16 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10)
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::Finished,
-                                    NLs::PathVersionOneOf({8, 9}),
-                                    NLs::ChildrenCount(1)});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot"),
+                    {NLs::Finished, NLs::PathVersionOneOf({8, 9}), NLs::ChildrenCount(1)}
+                );
             }
         });
     }
@@ -635,16 +682,14 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 KeyColumnNames: ["key"]
             )");
 
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                   { NLs::Finished,
-                                     NLs::ChildrenCount(1) });
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"),
-                                   { NLs::Finished,
-                                     NLs::PathExist });
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"), {NLs::Finished, NLs::ChildrenCount(1)});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"), {NLs::Finished, NLs::PathExist}
+                );
             }
         });
     }
@@ -662,20 +707,19 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                     Columns { Name: "value" Type: "Utf8" NotNull: true}
                     KeyColumnNames: ["key"]
                 )");
-                t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
             }
 
             TestDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "TestNotNullTable");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10});
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10}
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
-                                   { NLs::Finished,
-                                     NLs::ChildrenCount(0) });
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"),
-                                   { NLs::PathNotExist });
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"), {NLs::Finished, NLs::ChildrenCount(0)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"), {NLs::PathNotExist});
             }
         });
     }
@@ -692,20 +736,19 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"),
-                                   {NLs::Finished,
-                                    NLs::PathExist});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"), {NLs::Finished, NLs::PathExist});
             }
 
             ++t.TxId;
             TestDropSolomon(runtime, ++t.TxId, "/MyRoot", "Solomon");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1});
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1}
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"), {NLs::PathNotExist});
             }
         });
     }
@@ -722,8 +765,7 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 auto descr = DescribePath(runtime, "/MyRoot/JunkSolomon");
-                TestDescribeResult(descr,
-                                   {NLs::PathExist});
+                TestDescribeResult(descr, {NLs::PathExist});
                 volumeDescr = TakeTabletsFromAnotherSolomonVol("Solomon", descr.DebugString());
             }
 
@@ -732,19 +774,18 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"),
-                                   {NLs::Finished,
-                                    NLs::PathExist});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"), {NLs::Finished, NLs::PathExist});
             }
 
             TestDropSolomon(runtime, ++t.TxId, "/MyRoot", "Solomon");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1});
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1}
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"), {NLs::PathNotExist});
             }
         });
     }
@@ -769,21 +810,21 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"),
-                                   {NLs::Finished,
-                                    NLs::PathExist,
-                                    NLs::ShardsInsideDomain(4)});
+                TestDescribeResult(
+                    DescribePath(runtime, "MyRoot/Solomon"), {NLs::Finished, NLs::PathExist, NLs::ShardsInsideDomain(4)}
+                );
             }
 
             ++t.TxId;
             TestDropSolomon(runtime, ++t.TxId, "/MyRoot", "Solomon");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 4));
+            t.TestEnv->TestWaitTabletDeletion(
+                runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 4)
+            );
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "MyRoot/Solomon"), {NLs::PathNotExist});
             }
         });
     }

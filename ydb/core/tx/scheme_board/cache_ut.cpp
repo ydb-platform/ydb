@@ -31,12 +31,16 @@ public:
         SchemeCache = Context->Register(CreateSchemeBoardSchemeCache(config.Get()));
         Context->EnableScheduleForActor(SchemeCache, true);
 
-        TestAlterSubDomain(*Context, 1, "/",
-                             "StoragePools { "
-                             "  Name: \"pool-1\" "
-                             "  Kind: \"pool-kind-1\" "
-                             "} "
-                             " Name: \"Root\" ");
+        TestAlterSubDomain(
+            *Context,
+            1,
+            "/",
+            "StoragePools { "
+            "  Name: \"pool-1\" "
+            "  Kind: \"pool-kind-1\" "
+            "} "
+            " Name: \"Root\" "
+        );
 
         // Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
         // Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
@@ -85,19 +89,39 @@ public:
     void PathBelongsToDomain();
 
 protected:
-    TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
-        const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired);
+    TNavigate::TEntry TestNavigateImpl(
+        THolder<TNavigate> request,
+        TNavigate::EStatus expectedStatus,
+        const TString& sid,
+        TNavigate::EOp op,
+        bool showPrivatePath,
+        bool redirectRequired
+    );
 
-    TNavigate::TEntry TestNavigate(const TString& path, TNavigate::EStatus expectedStatus = TNavigate::EStatus::Ok,
-        const TString& sid = TString(), TNavigate::EOp op = TNavigate::EOp::OpPath,
-        bool showPrivatePath = false, bool redirectRequired = true, bool syncVersion = false);
+    TNavigate::TEntry TestNavigate(
+        const TString& path,
+        TNavigate::EStatus expectedStatus = TNavigate::EStatus::Ok,
+        const TString& sid = TString(),
+        TNavigate::EOp op = TNavigate::EOp::OpPath,
+        bool showPrivatePath = false,
+        bool redirectRequired = true,
+        bool syncVersion = false
+    );
 
-    TNavigate::TEntry TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus,
-        const TString& expectedPath, const TString& sid = TString(),
-        TNavigate::EOp op = TNavigate::EOp::OpPath, bool showPrivatePath = false);
+    TNavigate::TEntry TestNavigateByTableId(
+        const TTableId& tableId,
+        TNavigate::EStatus expectedStatus,
+        const TString& expectedPath,
+        const TString& sid = TString(),
+        TNavigate::EOp op = TNavigate::EOp::OpPath,
+        bool showPrivatePath = false
+    );
 
-    TResolve::TEntry TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus = TResolve::EStatus::OkData,
-        const TString& sid = TString());
+    TResolve::TEntry TestResolve(
+        const TTableId& tableId,
+        TResolve::EStatus expectedStatus = TResolve::EStatus::OkData,
+        const TString& sid = TString()
+    );
 
     TActorId TestWatch(const TPathId& pathId, const TActorId& watcher = {}, ui64 key = 0);
     void TestWatchRemove(const TActorId& watcher, ui64 key = 0);
@@ -149,7 +173,9 @@ void TCacheTest::List() {
     TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestMkDir(*Context, ++txId, "/Root/DirA", "DirB");
     TestMkDir(*Context, ++txId, "/Root/DirA", "DirC");
-    TestWaitNotification(*Context, {txId - 2, txId - 1, txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
+    TestWaitNotification(
+        *Context, {txId - 2, txId - 1, txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard)
+    );
 
     {
         auto entry = TestNavigate("/Root/DirA", TNavigate::EStatus::Ok);
@@ -187,11 +213,11 @@ void TCacheTest::RacyCreateAndSync() {
     THolder<IEventHandle> delayedSyncRequest;
     auto prevObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-        case TSchemeBoardEvents::EvSyncRequest:
-            delayedSyncRequest.Reset(ev.Release());
-            return TTestActorRuntime::EEventAction::DROP;
-        default:
-            return TTestActorRuntime::EEventAction::PROCESS;
+            case TSchemeBoardEvents::EvSyncRequest:
+                delayedSyncRequest.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
         }
     });
 
@@ -241,11 +267,11 @@ void TCacheTest::RacyRecreateAndSync() {
     THolder<IEventHandle> delayedSyncRequest;
     auto prevObserver = Context->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-        case TSchemeBoardEvents::EvSyncRequest:
-            delayedSyncRequest.Reset(ev.Release());
-            return TTestActorRuntime::EEventAction::DROP;
-        default:
-            return TTestActorRuntime::EEventAction::PROCESS;
+            case TSchemeBoardEvents::EvSyncRequest:
+                delayedSyncRequest.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
         }
     });
 
@@ -306,17 +332,20 @@ void TCacheTest::CheckSystemViewAccess() {
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     TestModifyACL(*Context, ++txId, "/Root", "SubDomainA", TString(), "user0@builtin");
 
-    auto entry = TestNavigate("/Root/SubDomainA/.sys/partition_stats",
-        TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
+    auto entry =
+        TestNavigate("/Root/SubDomainA/.sys/partition_stats", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
 
     auto tableId = entry.TableId;
     UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
 
-    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
-        TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable);
+    TestNavigate("/Root/SubDomainA/.sys/partition_stats", TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable);
 
-    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
-        TNavigate::EStatus::PathErrorUnknown, "user1@builtin", TNavigate::OpTable);
+    TestNavigate(
+        "/Root/SubDomainA/.sys/partition_stats",
+        TNavigate::EStatus::PathErrorUnknown,
+        "user1@builtin",
+        TNavigate::OpTable
+    );
 
     TestResolve(tableId, TResolve::EStatus::OkData);
     TestResolve(tableId, TResolve::EStatus::OkData, "user0@builtin");
@@ -339,13 +368,19 @@ void TCacheTest::SysLocks() {
     }
     {
         auto entry = TestNavigate("/sys/locks2", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable, true);
-        TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/sys/locks2", TString(), TNavigate::OpTable, true);
+        TestNavigateByTableId(
+            entry.TableId, TNavigate::EStatus::Ok, "/sys/locks2", TString(), TNavigate::OpTable, true
+        );
     }
 }
 
 void TCacheTest::TableSchemaVersion() {
     ui64 txId = 100;
-    TestCreateTable(*Context, ++txId, "/Root", R"(
+    TestCreateTable(
+        *Context,
+        ++txId,
+        "/Root",
+        R"(
         Name: "Table1"
         Columns { Name: "key" Type: "Uint32" }
         KeyColumnNames: [ "key" ]
@@ -353,7 +388,9 @@ void TCacheTest::TableSchemaVersion() {
             CompactionPolicy {
             }
         }
-    )", {NKikimrScheme::StatusAccepted});
+    )",
+        {NKikimrScheme::StatusAccepted}
+    );
 
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
     {
@@ -373,9 +410,14 @@ void TCacheTest::TableSchemaVersion() {
     }
 }
 
-TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
-    const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired)
-{
+TNavigate::TEntry TCacheTest::TestNavigateImpl(
+    THolder<TNavigate> request,
+    TNavigate::EStatus expectedStatus,
+    const TString& sid,
+    TNavigate::EOp op,
+    bool showPrivatePath,
+    bool redirectRequired
+) {
     auto& entry = request->ResultSet.back();
     entry.Operation = op;
     entry.ShowPrivatePath = showPrivatePath;
@@ -397,9 +439,15 @@ TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavi
     return result;
 }
 
-TNavigate::TEntry TCacheTest::TestNavigate(const TString& path, TNavigate::EStatus expectedStatus,
-    const TString& sid, TNavigate::EOp op, bool showPrivatePath,  bool redirectRequired, bool syncVersion)
-{
+TNavigate::TEntry TCacheTest::TestNavigate(
+    const TString& path,
+    TNavigate::EStatus expectedStatus,
+    const TString& sid,
+    TNavigate::EOp op,
+    bool showPrivatePath,
+    bool redirectRequired,
+    bool syncVersion
+) {
     auto request = MakeHolder<TNavigate>();
     request->ResultSet.push_back({});
     auto& entry = request->ResultSet.back();
@@ -411,9 +459,14 @@ TNavigate::TEntry TCacheTest::TestNavigate(const TString& path, TNavigate::EStat
     return result;
 }
 
-TNavigate::TEntry TCacheTest::TestNavigateByTableId(const TTableId& tableId, TNavigate::EStatus expectedStatus,
-    const TString& expectedPath, const TString& sid, TNavigate::EOp op, bool showPrivatePath)
-{
+TNavigate::TEntry TCacheTest::TestNavigateByTableId(
+    const TTableId& tableId,
+    TNavigate::EStatus expectedStatus,
+    const TString& expectedPath,
+    const TString& sid,
+    TNavigate::EOp op,
+    bool showPrivatePath
+) {
     auto request = MakeHolder<TNavigate>();
     request->ResultSet.push_back({});
     auto& entry = request->ResultSet.back();
@@ -426,14 +479,16 @@ TNavigate::TEntry TCacheTest::TestNavigateByTableId(const TTableId& tableId, TNa
     return result;
 }
 
-TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid) {
+TResolve::TEntry
+TCacheTest::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid) {
     auto request = MakeHolder<TResolve>();
 
     auto keyDesc = MakeHolder<TKeyDesc>(
         tableId,
         TTableRange({}),
         TKeyDesc::ERowOperation::Unknown,
-        TVector<NScheme::TTypeInfo>(), TVector<TKeyDesc::TColumnOp>()
+        TVector<NScheme::TTypeInfo>(),
+        TVector<TKeyDesc::TColumnOp>()
     );
     request->ResultSet.emplace_back(std::move(keyDesc));
 
@@ -463,7 +518,8 @@ void TCacheTest::TestWatchRemove(const TActorId& watcher, ui64 key) {
     Context->Send(SchemeCache, watcher, new TEvTxProxySchemeCache::TEvWatchRemove(key), 0, 0, 0, true);
 }
 
-NSchemeCache::TDescribeResult::TCPtr TCacheTest::ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath) {
+NSchemeCache::TDescribeResult::TCPtr
+TCacheTest::ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath) {
     auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(watcher);
     if (expectedPath) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Path, expectedPath);
@@ -479,14 +535,17 @@ TPathId TCacheTest::ExpectWatchDeleted(const TActorId& watcher) {
 void TCacheTest::CreateAndMigrateWithoutDecision(ui64& txId) {
     auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
 
-    TestCreateSubDomain(*Context, ++txId,  "/Root",
-                        "Name: \"USER_0\"");
-    TestAlterSubDomain(*Context, ++txId,  "/Root",
-                       "Name: \"USER_0\" "
-                       "PlanResolution: 50 "
-                       "Coordinators: 1 "
-                       "Mediators: 1 "
-                       "TimeCastBucketsPerMediator: 2 ");
+    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"USER_0\"");
+    TestAlterSubDomain(
+        *Context,
+        ++txId,
+        "/Root",
+        "Name: \"USER_0\" "
+        "PlanResolution: 50 "
+        "Coordinators: 1 "
+        "Mediators: 1 "
+        "TimeCastBucketsPerMediator: 2 "
+    );
     TestWaitNotification(*Context, {txId, txId - 1}, domainSSNotifier);
 
     TestMkDir(*Context, ++txId, "/Root/USER_0", "DirA");
@@ -522,7 +581,7 @@ void TCacheTest::CreateAndMigrateWithoutDecision(ui64& txId) {
         UNIT_ASSERT(!entry.DomainInfo->Params.HasSchemeShard());
     }
 
-    TestUpgradeSubDomain(*Context, ++txId,  "/Root", "USER_0");
+    TestUpgradeSubDomain(*Context, ++txId, "/Root", "USER_0");
 
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
 }
@@ -538,7 +597,7 @@ void TCacheTest::MigrationCommon() {
 
     CreateAndMigrateWithoutDecision(txId);
 
-    auto checkMigratedPathes = [&] () {
+    auto checkMigratedPathes = [&]() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
@@ -576,7 +635,7 @@ void TCacheTest::MigrationCommit() {
 
     CreateAndMigrateWithoutDecision(txId);
 
-    auto checkMigratedPathes = [&] () {
+    auto checkMigratedPathes = [&]() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
@@ -601,7 +660,7 @@ void TCacheTest::MigrationCommit() {
 
     checkMigratedPathes();
 
-    TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+    TestUpgradeSubDomainDecision(*Context, ++txId, "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
 
     auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
@@ -620,7 +679,7 @@ void TCacheTest::MigrationLostMessage() {
 
     CreateAndMigrateWithoutDecision(txId);
 
-    auto checkMigratedPathes = [&] () {
+    auto checkMigratedPathes = [&]() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
@@ -645,7 +704,7 @@ void TCacheTest::MigrationLostMessage() {
 
     checkMigratedPathes();
 
-    TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+    TestUpgradeSubDomainDecision(*Context, ++txId, "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
 
     auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
@@ -669,15 +728,12 @@ void TCacheTest::MigrationLostMessage() {
     bool deleteMsgHasBeenDropped = false;
     auto skipDeleteNotification = [&deleteMsgHasBeenDropped](TAutoPtr<IEventHandle>& ev) -> auto {
         if (ev->Type == TSchemeBoardEvents::EvNotifyDelete) {
-            auto *msg = ev->Get<TSchemeBoardEvents::TEvNotifyDelete>();
+            auto* msg = ev->Get<TSchemeBoardEvents::TEvNotifyDelete>();
             Cerr << Endl << Endl << Endl << "skipDeleteNotification"
-                 << " path: " << msg->Path
-                 << " pathId: " << msg->PathId
-                 << " Strong: " << msg->Strong
-                 << Endl << Endl << Endl;
+                 << " path: " << msg->Path << " pathId: " << msg->PathId << " Strong: " << msg->Strong << Endl << Endl
+                 << Endl;
             deleteMsgHasBeenDropped = true;
             return TTestActorRuntime::EEventAction::DROP;
-
         }
         return TTestActorRuntime::EEventAction::PROCESS;
     };
@@ -761,14 +817,13 @@ void TCacheTest::MigrationUndo() {
     Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_TRACE);
     Context->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_TRACE);
 
-
     TurnOnTabletsScheduling();
 
     ui64 txId = 100;
 
     CreateAndMigrateWithoutDecision(txId);
 
-    auto checkMigratedPathes = [&] () {
+    auto checkMigratedPathes = [&]() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             UNIT_ASSERT_EQUAL(JoinPath(entry.Path), "Root/USER_0");
@@ -793,12 +848,12 @@ void TCacheTest::MigrationUndo() {
 
     checkMigratedPathes();
 
-    TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Undo);
+    TestUpgradeSubDomainDecision(*Context, ++txId, "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Undo);
 
     auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
 
-    auto checkRevertedPathes = [&] () {
+    auto checkRevertedPathes = [&]() {
         {
             auto entry = TestNavigate("/Root/USER_0", TNavigate::EStatus::Ok);
             Cerr << entry.ToString() << Endl;
@@ -821,7 +876,6 @@ void TCacheTest::MigrationUndo() {
         }
     };
 
-
     checkRevertedPathes();
 
     RebootTablet(*Context, (ui64)TTestTxConfig::SchemeShard, Context->AllocateEdgeActor());
@@ -842,7 +896,7 @@ void TCacheTest::MigrationDeletedPathNavigate() {
 
     CreateAndMigrateWithoutDecision(txId);
 
-    TestUpgradeSubDomainDecision(*Context, ++txId,  "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+    TestUpgradeSubDomainDecision(*Context, ++txId, "/Root", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
 
     auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
     TestWaitNotification(*Context, {txId}, domainSSNotifier);
@@ -893,9 +947,7 @@ void TCacheTest::MigrationDeletedPathNavigate() {
         UNIT_ASSERT_UNEQUAL(entry.TableId.PathId, TPathId(TTestTxConfig::SchemeShard, 4));
     }
 
-    {
-        TestResolve(TTableId(oldPathId.OwnerId, oldPathId.LocalPathId), TResolve::EStatus::PathErrorNotExist);
-    }
+    { TestResolve(TTableId(oldPathId.OwnerId, oldPathId.LocalPathId), TResolve::EStatus::PathErrorNotExist); }
 }
 
 void TCacheTest::WatchRoot() {
@@ -970,8 +1022,8 @@ void TCacheTest::PathBelongsToDomain() {
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath("/Root/SubDomain/DirA");
         entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
-        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
-            "", TNavigate::EOp::OpPath, false, true);
+        auto result =
+            TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok, "", TNavigate::EOp::OpPath, false, true);
 
         testId = result.TableId;
     }
@@ -982,8 +1034,9 @@ void TCacheTest::PathBelongsToDomain() {
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath("/Root/SubDomain/DirA");
         entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
-        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
-            "", TNavigate::EOp::OpPath, false, true);
+        auto result = TestNavigateImpl(
+            std::move(request), TNavigate::EStatus::PathErrorUnknown, "", TNavigate::EOp::OpPath, false, true
+        );
     }
     // error, by path id
     {
@@ -992,8 +1045,9 @@ void TCacheTest::PathBelongsToDomain() {
         auto& entry = request->ResultSet.emplace_back();
         entry.TableId = testId;
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
-            "", TNavigate::EOp::OpPath, false, true);
+        auto result = TestNavigateImpl(
+            std::move(request), TNavigate::EStatus::PathErrorUnknown, "", TNavigate::EOp::OpPath, false, true
+        );
     }
 }
 
@@ -1002,10 +1056,10 @@ public:
     TTestContext::TEventObserver ObserverFunc() override {
         return [](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-            case TSchemeBoardEvents::EvNotifyUpdate:
-            case TSchemeBoardEvents::EvNotifyDelete:
-            case TSchemeBoardEvents::EvSyncResponse:
-                return TTestContext::EEventAction::DROP;
+                case TSchemeBoardEvents::EvNotifyUpdate:
+                case TSchemeBoardEvents::EvNotifyDelete:
+                case TSchemeBoardEvents::EvSyncResponse:
+                    return TTestContext::EEventAction::DROP;
             }
 
             return TTestContext::EEventAction::PROCESS;
@@ -1027,5 +1081,5 @@ void TCacheTestWithDrops::LookupErrorUponEviction() {
     TestNavigate("/Root/without_sync", TNavigate::EStatus::LookupError, "", TNavigate::EOp::OpPath, false, true, false);
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

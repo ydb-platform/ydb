@@ -7,19 +7,20 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-
-
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
 
-TKeyValidator::TKeyValidator(const TDataShard& self) 
-    : Self(self)
-{
+TKeyValidator::TKeyValidator(const TDataShard& self)
+    : Self(self) {}
 
-}
-
-void TKeyValidator::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, ui64 itemsLimit, bool reverse)
-{
+void TKeyValidator::AddReadRange(
+    const TTableId& tableId,
+    const TVector<NTable::TColumn>& columns,
+    const TTableRange& range,
+    const TVector<NScheme::TTypeInfo>& keyTypes,
+    ui64 itemsLimit,
+    bool reverse
+) {
     TVector<TKeyDesc::TColumnOp> columnOps;
     columnOps.reserve(columns.size());
     for (auto& column : columns) {
@@ -32,15 +33,22 @@ void TKeyValidator::AddReadRange(const TTableId& tableId, const TVector<NTable::
 
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD, "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
 
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse);
+    auto desc = MakeHolder<TKeyDesc>(
+        tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse
+    );
 
     Info.Keys.emplace_back(NMiniKQL::IEngineFlat::TValidatedKey(std::move(desc), /* isWrite */ false));
     ++Info.ReadsCount;
     Info.SetLoaded();
 }
 
-void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp)
-{
+void TKeyValidator::AddWriteRange(
+    const TTableId& tableId,
+    const TTableRange& range,
+    const TVector<NScheme::TTypeInfo>& keyTypes,
+    const TVector<TColumnWriteMeta>& columns,
+    bool isPureEraseOp
+) {
     TVector<TKeyDesc::TColumnOp> columnOps;
     for (const auto& writeColumn : columns) {
         TKeyDesc::TColumnOp op;
@@ -65,20 +73,19 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
 }
 
 TKeyValidator::TValidateOptions::TValidateOptions(
-        ui64 LockTxId,
-        ui32 LockNodeId,
-        bool usesMvccSnapshot,
-        bool isImmediateTx,
-        bool isWriteTx,
-        const NTable::TScheme& scheme)
+    ui64 LockTxId,
+    ui32 LockNodeId,
+    bool usesMvccSnapshot,
+    bool isImmediateTx,
+    bool isWriteTx,
+    const NTable::TScheme& scheme
+)
     : IsLockTxId(static_cast<bool>(LockTxId))
     , IsLockNodeId(static_cast<bool>(LockNodeId))
     , UsesMvccSnapshot(usesMvccSnapshot)
     , IsImmediateTx(isImmediateTx)
     , IsWriteTx(isWriteTx)
-    , Scheme(scheme)
-{
-}
+    , Scheme(scheme) {}
 
 bool TKeyValidator::IsValidKey(TKeyDesc& key, const TValidateOptions& opt) const {
     if (TSysTables::IsSystemTable(key.TableId))
@@ -128,10 +135,9 @@ std::tuple<NMiniKQL::IEngineFlat::EResult, TString> TKeyValidator::ValidateKeys(
         if (valid) {
             auto curSchemaVersion = GetTableSchemaVersion(key->TableId);
             if (key->TableId.SchemaVersion && curSchemaVersion && curSchemaVersion != key->TableId.SchemaVersion) {
-                auto error = TStringBuilder()
-                             << "Schema version mismatch for table id: " << key->TableId
-                             << " key table version: " << key->TableId.SchemaVersion
-                             << " current table version: " << curSchemaVersion;
+                auto error = TStringBuilder() << "Schema version mismatch for table id: " << key->TableId
+                                              << " key table version: " << key->TableId.SchemaVersion
+                                              << " current table version: " << curSchemaVersion;
                 return {EResult::SchemeChanged, std::move(error)};
             }
         } else {

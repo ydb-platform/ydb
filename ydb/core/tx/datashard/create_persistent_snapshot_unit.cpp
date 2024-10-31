@@ -5,11 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCreatePersistentSnapshotUnit : public TExecutionUnit {
+class TCreatePersistentSnapshotUnit: public TExecutionUnit {
 public:
     TCreatePersistentSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CreatePersistentSnapshot, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::CreatePersistentSnapshot, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -38,8 +37,8 @@ public:
 
         ui64 flags = TSnapshot::FlagScheme;
 
-        bool added = DataShard.GetSnapshotManager().AddSnapshot(
-                txc.DB, key, params.GetName(), flags, TDuration::Zero());
+        bool added =
+            DataShard.GetSnapshotManager().AddSnapshot(txc.DB, key, params.GetName(), flags, TDuration::Zero());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
@@ -56,10 +55,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateCreatePersistentSnapshotUnit(
-        TDataShard& dataShard,
-        TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateCreatePersistentSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TCreatePersistentSnapshotUnit(dataShard, pipeline));
 }
 

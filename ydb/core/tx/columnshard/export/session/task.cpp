@@ -3,7 +3,8 @@
 
 namespace NKikimr::NOlap::NExport {
 
-NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) {
+NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto
+) {
     auto id = TIdentifier::BuildFromProto(proto.GetIdentifier());
     if (!id) {
         return id;
@@ -43,19 +44,27 @@ NKikimrColumnShardExportProto::TExportTask TExportTask::DoSerializeToProto() con
 }
 
 NBackground::TSessionControlContainer TExportTask::BuildConfirmControl() const {
-    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(), std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+    return NBackground::TSessionControlContainer(
+        std::make_shared<NBackground::TFakeStatusChannel>(),
+        std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId()))
+    );
 }
 
 NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
-    return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(), std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+    return NBackground::TSessionControlContainer(
+        std::make_shared<NBackground::TFakeStatusChannel>(),
+        std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId()))
+    );
 }
 
 std::shared_ptr<NBackground::ISessionLogic> TExportTask::DoBuildSession() const {
-    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Selector, StorageInitializer, Serializer, TxId));
+    auto result = std::make_shared<TSession>(
+        std::make_shared<TExportTask>(Identifier, Selector, StorageInitializer, Serializer, TxId)
+    );
     if (!!TxId) {
         result->Confirm();
     }
     return result;
 }
 
-}
+} // namespace NKikimr::NOlap::NExport

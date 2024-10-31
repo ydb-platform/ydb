@@ -14,15 +14,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropKesus TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropKesus TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -41,7 +39,6 @@ public:
         TPathId pathId = txState->TargetPathId;
         auto path = context.SS->PathsById.at(pathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -104,23 +101,23 @@ class TDropKesus: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DeleteParts:
-            return TTxState::Propose;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::DeleteParts:
+                return TTxState::Propose;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::DeleteParts:
-            return MakeHolder<TDeleteParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::DeleteParts:
+                return MakeHolder<TDeleteParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -142,16 +139,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -228,7 +224,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -241,4 +237,4 @@ ISubOperation::TPtr CreateDropKesus(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropKesus>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

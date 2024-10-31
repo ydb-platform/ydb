@@ -5,7 +5,6 @@
 namespace NKikimr::NReplication {
 
 Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
-
     struct MockActorOps: public IActorOps {
         using CType = std::vector<std::pair<TActorId, IEventBase*>>;
 
@@ -13,7 +12,13 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
             Y_ABORT("Unexpected");
         };
 
-        bool Send(const TActorId& recipient, IEventBase* event, IEventHandle::TEventFlags = 0, ui64 = 0, NWilson::TTraceId = {}) const noexcept {
+        bool Send(
+            const TActorId& recipient,
+            IEventBase* event,
+            IEventHandle::TEventFlags = 0,
+            ui64 = 0,
+            NWilson::TTraceId = {}
+        ) const noexcept {
             ((CType*)&Events)->push_back({recipient, event});
             return true;
         };
@@ -48,10 +53,9 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         CType Events;
     };
 
-    struct MockPartitionSession : public TPartitionSession {
+    struct MockPartitionSession: public TPartitionSession {
         MockPartitionSession()
-            : TPartitionSession()
-        {
+            : TPartitionSession() {
             PartitionSessionId = 11;
             PartitionId = 13;
         }
@@ -60,7 +64,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
     };
 
     TActorId MakeActorId() {
-        return TActorId(1,2,RandomNumber<ui64>(), 0);
+        return TActorId(1, 2, RandomNumber<ui64>(), 0);
     }
 
     TReadSessionEvent::TEndPartitionSessionEvent MakeTEndPartitionSessionEvent() {
@@ -70,11 +74,15 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
 
     TReadSessionEvent::TDataReceivedEvent MakeTDataReceivedEvent() {
         TPartitionSession::TPtr partitionSession = MakeIntrusive<MockPartitionSession>();
-        TReadSessionEvent::TDataReceivedEvent::TMessage msg("data", nullptr,
-            TReadSessionEvent::TDataReceivedEvent::TMessageInformation(31, "producer-id", 29, TInstant::Now(),
-                TInstant::Now(), nullptr, nullptr, 99, "message-group-id" ),
-            partitionSession);
-        return TReadSessionEvent::TDataReceivedEvent({ msg }, {}, partitionSession);
+        TReadSessionEvent::TDataReceivedEvent::TMessage msg(
+            "data",
+            nullptr,
+            TReadSessionEvent::TDataReceivedEvent::TMessageInformation(
+                31, "producer-id", 29, TInstant::Now(), TInstant::Now(), nullptr, nullptr, 99, "message-group-id"
+            ),
+            partitionSession
+        );
+        return TReadSessionEvent::TDataReceivedEvent({msg}, {}, partitionSession);
     }
 
     Y_UNIT_TEST(EmptyPartition) {
@@ -117,4 +125,4 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
     }
 }
 
-}
+} // namespace NKikimr::NReplication

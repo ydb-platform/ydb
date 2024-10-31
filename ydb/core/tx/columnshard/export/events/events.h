@@ -6,10 +6,10 @@
 
 namespace NKikimr::NOlap::NExport::NEvents {
 
-struct TEvExportWritingFinished: public TEventLocal<TEvExportWritingFinished, NColumnShard::TEvPrivate::EvExportWritingFinished> {
-};
+struct TEvExportWritingFinished
+    : public TEventLocal<TEvExportWritingFinished, NColumnShard::TEvPrivate::EvExportWritingFinished> {};
 
-struct TEvExportWritingFailed: public TEventLocal<TEvExportWritingFailed, NColumnShard::TEvPrivate::EvExportWritingFailed> {
-};
+struct TEvExportWritingFailed
+    : public TEventLocal<TEvExportWritingFailed, NColumnShard::TEvPrivate::EvExportWritingFailed> {};
 
-}
+} // namespace NKikimr::NOlap::NExport::NEvents

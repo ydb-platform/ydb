@@ -45,23 +45,27 @@ public:
 
     virtual void WritePortion(const NOlap::TPortionInfo& portion) = 0;
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) = 0;
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) = 0;
+    virtual bool LoadPortions(
+        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>&
+            callback
+    ) = 0;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
-    virtual bool LoadIndexes(const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback) = 0;
+    virtual bool LoadIndexes(
+        const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback
+    ) = 0;
 
     virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
     virtual bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) = 0;
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() = 0;
 };
 
-class TDbWrapper : public IDbWrapper {
+class TDbWrapper: public IDbWrapper {
 public:
     TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector)
         : Database(db)
-        , DsGroupSelector(dsGroupSelector)
-    {}
+        , DsGroupSelector(dsGroupSelector) {}
 
     void Insert(const TInsertedData& data) override;
     void Commit(const TCommittedData& data) override;
@@ -74,7 +78,10 @@ public:
 
     void WritePortion(const NOlap::TPortionInfo& portion) override;
     void ErasePortion(const NOlap::TPortionInfo& portion) override;
-    bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
+    bool LoadPortions(
+        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>&
+            callback
+    ) override;
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
@@ -82,7 +89,9 @@ public:
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
-    virtual bool LoadIndexes(const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback) override;
+    virtual bool LoadIndexes(
+        const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback
+    ) override;
 
     void WriteCounter(ui32 counterId, ui64 value) override;
     bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override;
@@ -94,4 +103,4 @@ private:
     const IBlobGroupSelector* DsGroupSelector;
 };
 
-}
+} // namespace NKikimr::NOlap

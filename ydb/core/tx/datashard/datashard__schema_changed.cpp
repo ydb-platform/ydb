@@ -5,15 +5,16 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxSchemaChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSchemaChanged: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxSchemaChanged(TDataShard* ds, TEvDataShard::TEvSchemaChangedResult::TPtr ev)
         : TBase(ds)
         , Ev(ev)
-        , TxId(0)
-    {}
+        , TxId(0) {}
 
-    TTxType GetTxType() const override { return TXTYPE_SCHEMA_CHANGED; }
+    TTxType GetTxType() const override {
+        return TXTYPE_SCHEMA_CHANGED;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TxId = Ev->Get()->Record.GetTxId();
@@ -40,4 +41,5 @@ ITransaction* TDataShard::CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedRe
     return new TTxSchemaChanged(this, ev);
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

@@ -7,16 +7,13 @@ class TOlapColumnSchema: public TOlapColumnAdd {
 private:
     using TBase = TOlapColumnAdd;
     YDB_READONLY(ui32, Id, Max<ui32>());
+
 public:
     TOlapColumnSchema(const TOlapColumnAdd& base, const ui32 id)
         : TBase(base)
-        , Id(id) {
-
-    }
+        , Id(id) {}
     TOlapColumnSchema(const std::optional<ui32>& keyOrder)
-        : TBase(keyOrder) {
-
-    }
+        : TBase(keyOrder) {}
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
 };
@@ -57,4 +54,4 @@ public:
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
     bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
 };
-}
+} // namespace NKikimr::NSchemeShard

@@ -3,12 +3,11 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxMonitoring : public TTransactionBase<TColumnShard> {
+class TTxMonitoring: public TTransactionBase<TColumnShard> {
 public:
     TTxMonitoring(TColumnShard* self, const NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(self)
-        , HttpInfoEvent(ev)
-    {}
+        , HttpInfoEvent(ev) {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
@@ -18,7 +17,6 @@ private:
     NMon::TEvRemoteHttpInfo::TPtr HttpInfoEvent;
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
 };
-
 
 bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
@@ -30,7 +28,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
 
 bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive) {
-         return false;
+        return false;
     }
 
     if (!ev) {
@@ -41,4 +39,4 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     return true;
 }
 
-}
+} // namespace NKikimr::NColumnShard

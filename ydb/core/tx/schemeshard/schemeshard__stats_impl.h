@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-template<typename TEvent>
+template <typename TEvent>
 EStatsQueueStatus TStatsQueue<TEvent>::Add(TStatsId statsId, TEventPtr ev) {
     typename TStatsMap::insert_ctx insertCtx;
     auto it = Map.find(statsId, insertCtx);
@@ -22,7 +22,7 @@ EStatsQueueStatus TStatsQueue<TEvent>::Add(TStatsId statsId, TEventPtr ev) {
     return Status();
 }
 
-template<typename TEvent>
+template <typename TEvent>
 TDuration TStatsQueue<TEvent>::Age() const {
     if (Empty()) {
         return TDuration::Zero();
@@ -31,47 +31,47 @@ TDuration TStatsQueue<TEvent>::Age() const {
     return AppData()->MonotonicTimeProvider->Now() - oldestItem.Ts;
 }
 
-template<typename TEvent>
+template <typename TEvent>
 bool TStatsQueue<TEvent>::BatchingEnabled() const {
     return SS->StatsMaxBatchSize > 0;
 }
 
-template<typename TEvent>
+template <typename TEvent>
 TDuration TStatsQueue<TEvent>::BatchTimeout() const {
-     return SS->StatsBatchTimeout; 
+    return SS->StatsBatchTimeout;
 }
 
-template<typename TEvent>
+template <typename TEvent>
 TDuration TStatsQueue<TEvent>::Delay() const {
     return BatchTimeout() - Age();
 }
 
-template<typename TEvent>
+template <typename TEvent>
 bool TStatsQueue<TEvent>::Empty() const {
-     return Queue.empty(); 
+    return Queue.empty();
 }
 
-template<typename TEvent>
+template <typename TEvent>
 ui32 TStatsQueue<TEvent>::MaxBatchSize() const {
-     return std::max<ui32>(SS->StatsMaxBatchSize, 1); 
+    return std::max<ui32>(SS->StatsMaxBatchSize, 1);
 }
 
-template<typename TEvent>
-TDuration TStatsQueue<TEvent>::MaxExecuteTime() const { 
-    return SS->StatsMaxExecuteTime; 
+template <typename TEvent>
+TDuration TStatsQueue<TEvent>::MaxExecuteTime() const {
+    return SS->StatsMaxExecuteTime;
 }
 
-template<typename TEvent>
+template <typename TEvent>
 TStatsQueueItem<TEvent> TStatsQueue<TEvent>::Next() {
-        auto item = Queue.front();
-        Queue.pop_front();
+    auto item = Queue.front();
+    Queue.pop_front();
 
-        Map.erase(item.Id);
+    Map.erase(item.Id);
 
-        return item;
+    return item;
 }
 
-template<typename TEvent>
+template <typename TEvent>
 EStatsQueueStatus TStatsQueue<TEvent>::Status() const {
     if (Empty()) {
         return NOT_READY;
@@ -92,24 +92,23 @@ EStatsQueueStatus TStatsQueue<TEvent>::Status() const {
     return NOT_READY;
 }
 
-template<typename TEvent>
-size_t TStatsQueue<TEvent>::Size() const { 
-    return Queue.size(); 
+template <typename TEvent>
+size_t TStatsQueue<TEvent>::Size() const {
+    return Queue.size();
 }
 
-template<typename TEvent>
+template <typename TEvent>
 void TStatsQueue<TEvent>::WriteLatencyMetric(const TItem& item) {
     auto timeInQueue = AppData()->MonotonicTimeProvider->Now() - item.Ts;
     SS->TabletCounters->Percentile()[LatencyCounter].IncrementFor(timeInQueue.MicroSeconds());
 }
 
-template<typename TEvent>
+template <typename TEvent>
 void TStatsQueue<TEvent>::WriteQueueSizeMetric() {
     SS->TabletCounters->Simple()[QueueSizeCounter].Set(Size());
 }
 
-
-template<typename TEvent>
+template <typename TEvent>
 bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     PersistStatsPending = false;
 
@@ -142,5 +141,5 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
     return true;
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

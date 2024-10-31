@@ -10,6 +10,7 @@ private:
     YDB_READONLY(TDuration, Period, TDuration::Seconds(1));
     YDB_READONLY(ui64, Limit, 0);
     YDB_READONLY_FLAG(Enabled, true);
+
 public:
     template <class TPolicy>
     bool DeserializeFromProto(const NKikimrConfig::TLimiterConfig& config) {
@@ -34,4 +35,4 @@ public:
     TString DebugString() const;
 };
 
-}
+} // namespace NKikimr::NLimiter

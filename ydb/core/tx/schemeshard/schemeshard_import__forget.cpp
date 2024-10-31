@@ -16,11 +16,9 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
     TEvImport::TEvForgetImportRequest::TPtr Request;
 
-    explicit TTxForget(TSelf *self, TEvImport::TEvForgetImportRequest::TPtr& ev)
+    explicit TTxForget(TSelf* self, TEvImport::TEvForgetImportRequest::TPtr& ev)
         : TXxport::TTxBase(self)
-        , Request(ev)
-    {
-    }
+        , Request(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_FORGET_IMPORT;
@@ -51,24 +49,23 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         NIceDb::TNiceDb db(txc.DB);
 
         switch (importInfo->State) {
-        case TImportInfo::EState::Done:
-        case TImportInfo::EState::Cancelled:
-            Self->ImportsByUid.erase(importInfo->Uid);
-            Self->Imports.erase(importInfo->Id);
-            Self->PersistRemoveImport(db, importInfo);
-            return respond(Ydb::StatusIds::SUCCESS);
+            case TImportInfo::EState::Done:
+            case TImportInfo::EState::Cancelled:
+                Self->ImportsByUid.erase(importInfo->Uid);
+                Self->Imports.erase(importInfo->Id);
+                Self->PersistRemoveImport(db, importInfo);
+                return respond(Ydb::StatusIds::SUCCESS);
 
-        case TImportInfo::EState::Waiting:
-        case TImportInfo::EState::Cancellation:
-            return respond(Ydb::StatusIds::PRECONDITION_FAILED, "Import operation is in progress");
+            case TImportInfo::EState::Waiting:
+            case TImportInfo::EState::Cancellation:
+                return respond(Ydb::StatusIds::PRECONDITION_FAILED, "Import operation is in progress");
 
-        default:
-            return respond(Ydb::StatusIds::UNDETERMINED);
+            default:
+                return respond(Ydb::StatusIds::UNDETERMINED);
         }
     }
 
-    void DoComplete(const TActorContext&) override {
-    }
+    void DoComplete(const TActorContext&) override {}
 
 }; // TTxForget
 
@@ -76,5 +73,5 @@ ITransaction* TSchemeShard::CreateTxForgetImport(TEvImport::TEvForgetImportReque
     return new TImport::TTxForget(this, ev);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

@@ -9,13 +9,8 @@
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
 
-#if defined EXPORT_LOG_T || \
-    defined EXPORT_LOG_D || \
-    defined EXPORT_LOG_I || \
-    defined EXPORT_LOG_N || \
-    defined EXPORT_LOG_W || \
-    defined EXPORT_LOG_E || \
-    defined EXPORT_LOG_C
+#if defined EXPORT_LOG_T || defined EXPORT_LOG_D || defined EXPORT_LOG_I || defined EXPORT_LOG_N || \
+    defined EXPORT_LOG_W || defined EXPORT_LOG_E || defined EXPORT_LOG_C
 #error log macro redefinition
 #endif
 
@@ -29,11 +24,9 @@
 
 namespace NKikimr::NDataShard {
 
-TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
-    const TMap<ui32, TUserTable::TUserColumn>& columns,
-    const NKikimrSchemeOp::TPathDescription& pathDesc);
+TMaybe<Ydb::Table::CreateTableRequest>
+GenYdbScheme(const TMap<ui32, TUserTable::TUserColumn>& columns, const NKikimrSchemeOp::TPathDescription& pathDesc);
 
-TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(
-    const NKikimrSchemeOp::TPathDescription& pathDesc);
+TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSchemeOp::TPathDescription& pathDesc);
 
-} // NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

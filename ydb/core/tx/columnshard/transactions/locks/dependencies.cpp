@@ -45,4 +45,4 @@ bool TTxConflicts::RemoveOnExecute(NTabletFlatExecutor::TTransactionContext& txc
     return true;
 }
 
-}
+} // namespace NKikimr::NOlap::NTxInteractions

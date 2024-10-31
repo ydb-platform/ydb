@@ -13,9 +13,7 @@ class TSchemeShard::TXxport::TTxBase: public NTabletFlatExecutor::TTransactionBa
 
 protected:
     explicit TTxBase(TSelf* self)
-        : TBase(self)
-    {
-    }
+        : TBase(self) {}
 
     virtual ~TTxBase() = default;
 
@@ -64,7 +62,7 @@ protected:
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);
-        for (auto& actorId: toAnswer) {
+        for (auto& actorId : toAnswer) {
             Send(actorId, new TEvSchemeShard::TEvNotifyTxCompletionResult(info->Id));
         }
     }
@@ -87,5 +85,5 @@ public:
 
 }; // TTxBase
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

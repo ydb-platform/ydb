@@ -28,7 +28,8 @@ NLs::TCheckFunc OlapTtlChecker(const char* ttlColumnName = "modified_at") {
 
 void CheckTtlSettings(TTestActorRuntime& runtime, NLs::TCheckFunc func, const char* tableName = "TTLEnabledTable") {
     TestDescribeResult(
-        DescribePath(runtime, Sprintf("/MyRoot/%s", tableName)), {
+        DescribePath(runtime, Sprintf("/MyRoot/%s", tableName)),
+        {
             NLs::PathExist,
             NLs::Finished,
             func,
@@ -36,15 +37,22 @@ void CheckTtlSettings(TTestActorRuntime& runtime, NLs::TCheckFunc func, const ch
     );
 }
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
-    void CreateTableShouldSucceed(const char* name, const char* ttlColumnType, bool enableTablePgTypes, const char* unit = "UNIT_AUTO") {
+    void CreateTableShouldSucceed(
+        const char* name, const char* ttlColumnType, bool enableTablePgTypes, const char* unit = "UNIT_AUTO"
+    ) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             Name: "%s"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "%s" }
@@ -56,7 +64,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnUnit: %s
               }
             }
-        )", name, ttlColumnType, unit));
+        )",
+                name,
+                ttlColumnType,
+                unit
+            )
+        );
         env.TestWaitNotification(runtime, txId);
         CheckTtlSettings(runtime, OltpTtlChecker, name);
     }
@@ -70,11 +83,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
 
         const auto& intTypes = EnableTablePgTypes
-            ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
-            : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
+                                   ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
+                                   : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
         for (const auto& ct : intTypes) {
             for (auto unit : {"UNIT_SECONDS", "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"}) {
-                CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn_%s", ct, unit).data(), ct, EnableTablePgTypes, unit);
+                CreateTableShouldSucceed(
+                    Sprintf("TTLTableWith%sColumn_%s", ct, unit).data(), ct, EnableTablePgTypes, unit
+                );
             }
         }
     }
@@ -84,7 +99,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "Timestamp" }
@@ -94,7 +113,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "created_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 
     Y_UNIT_TEST(CreateTableShouldFailOnWrongColumnType) {
@@ -102,7 +123,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "String" }
@@ -112,7 +137,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 
     void CreateTableShouldFailOnWrongUnit(const char* ttlColumnType, bool enableTablePgTypes, const char* unit) {
@@ -120,7 +147,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             Name: "TTLEnabledTable"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "%s" }
@@ -131,7 +163,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnUnit: %s
               }
             }
-        )", ttlColumnType, unit), {NKikimrScheme::StatusSchemeError});
+        )",
+                ttlColumnType,
+                unit
+            ),
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 
     Y_UNIT_TEST_FLAG(CreateTableShouldFailOnWrongUnit, EnableTablePgTypes) {
@@ -145,8 +182,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
 
         const auto& intTypes = EnableTablePgTypes
-            ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
-            : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
+                                   ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
+                                   : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
         for (auto ct : intTypes) {
             CreateTableShouldFailOnWrongUnit(ct, EnableTablePgTypes, "UNIT_AUTO");
         }
@@ -157,14 +194,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "Timestamp" }
             KeyColumnNames: ["key"]
             TTLSettings {
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 
     Y_UNIT_TEST(CreateTableShouldFailOnBeforeEpochTTL) {
@@ -176,7 +219,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         // The TTL behaviour is undefined before 1970,
         // so it's forbidden.
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "Timestamp" }
@@ -187,15 +234,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ExpireAfterSeconds: 3153600000
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
-    }    
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
+    }
 
     void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateIndexedTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             TableDescription {
               Name: "TTLEnabledTable"
               Columns { Name: "key" Type: "Uint64" }
@@ -213,7 +267,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               KeyColumnNames: ["modified_at"]
               Type: %s
             }
-        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
+        )",
+                NKikimrSchemeOp::EIndexType_Name(indexType).c_str()
+            )
+        );
 
         env.TestWaitNotification(runtime, txId);
         CheckTtlSettings(runtime, OltpTtlChecker);
@@ -252,10 +309,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
         CheckTtlSettings(runtime, OltpTtlChecker);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             DropColumns { Name: "modified_at" }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )",
+            {NKikimrScheme::StatusInvalidParameter}
+        );
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
@@ -266,14 +329,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
-                NLs::PathExist,
-                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    const auto& table = record.GetPathDescription().GetTable();
-                    UNIT_ASSERT(table.HasTTLSettings());
-                    UNIT_ASSERT(table.GetTTLSettings().HasDisabled());
-                }
-            }
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"),
+            {NLs::PathExist,
+             NLs::Finished,
+             [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                 const auto& table = record.GetPathDescription().GetTable();
+                 UNIT_ASSERT(table.HasTTLSettings());
+                 UNIT_ASSERT(table.GetTTLSettings().HasDisabled());
+             }}
         );
     }
 
@@ -316,7 +379,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             DropColumns { Name: "modified_at" }
             TTLSettings {
@@ -324,7 +391,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )",
+            {NKikimrScheme::StatusInvalidParameter}
+        );
     }
 
     void AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
@@ -332,7 +401,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateIndexedTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             TableDescription {
               Name: "TTLEnabledTable"
               Columns { Name: "key" Type: "Uint64" }
@@ -344,7 +418,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               KeyColumnNames: ["modified_at"]
               Type: %s
             }
-        )", NKikimrSchemeOp::EIndexType_Name(indexType).c_str()));
+        )",
+                NKikimrSchemeOp::EIndexType_Name(indexType).c_str()
+            )
+        );
         env.TestWaitNotification(runtime, txId);
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -390,15 +467,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
         CheckTtlSettings(runtime, OltpTtlChecker);
 
-        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TTLEnabledTable",
-            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}});
+        TestBuildIndex(
+            runtime,
+            ++txId,
+            TTestTxConfig::SchemeShard,
+            "/MyRoot",
+            "/MyRoot/TTLEnabledTable",
+            TBuildIndexConfig{"UserDefinedIndexByValue", indexType, {"value"}, {}}
+        );
 
         env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
-            NLs::PathExist,
-            NLs::Finished,
-            NLs::IndexesCount(1),
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"),
+            {
+                NLs::PathExist,
+                NLs::Finished,
+                NLs::IndexesCount(1),
+            }
+        );
     }
 
     Y_UNIT_TEST(BuildIndexShouldSucceed) {
@@ -412,7 +498,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
     using TEvCondEraseReq = TEvDataShard::TEvConditionalEraseRowsRequest;
     using TEvCondEraseResp = TEvDataShard::TEvConditionalEraseRowsResponse;
 
-    void WaitForCondErase(TTestActorRuntimeBase& runtime, TEvCondEraseResp::ProtoRecordType::EStatus status = TEvCondEraseResp::ProtoRecordType::OK) {
+    void WaitForCondErase(
+        TTestActorRuntimeBase & runtime,
+        TEvCondEraseResp::ProtoRecordType::EStatus status = TEvCondEraseResp::ProtoRecordType::OK
+    ) {
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back([status](IEventHandle& ev) -> bool {
             if (ev.GetTypeRewrite() != TEvCondEraseResp::EventType) {
@@ -438,13 +527,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         auto writeRow = [&](ui64 tabletId, ui64 key, TInstant ts, const char* table, const char* ct = "Timestamp") {
             NKikimrMiniKQL::TResult result;
             TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(
+                runtime,
+                tabletId,
+                Sprintf(
+                    R"(
                 (
                     (let key   '( '('key (Uint64 '%lu ) ) ) )
                     (let row   '( '('ts (%s '%lu) ) ) )
                     (return (AsList (UpdateRow '__user__%s key row) ))
                 )
-            )", key, ct, ts.GetValue(), table), result, error);
+            )",
+                    key,
+                    ct,
+                    ts.GetValue(),
+                    table
+                ),
+                result,
+                error
+            );
 
             UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
             UNIT_ASSERT_VALUES_EQUAL(error, "");
@@ -453,14 +554,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         auto readTable = [&](ui64 tabletId, const char* table) {
             NKikimrMiniKQL::TResult result;
             TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(
+                runtime,
+                tabletId,
+                Sprintf(
+                    R"(
                 (
                     (let range '( '('key (Uint64 '0) (Void) )))
                     (let columns '('key) )
                     (let result (SelectRange '__user__%s range columns '()))
                     (return (AsList (SetResult 'Result result) ))
                 )
-            )", table), result, error);
+            )",
+                    table
+                ),
+                result,
+                error
+            );
 
             UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
             UNIT_ASSERT_VALUES_EQUAL(error, "");
@@ -694,12 +804,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/TTLEnabledTableCopy"), {
-                NLs::PathExist,
-                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    UNIT_ASSERT(!record.GetPathDescription().GetTable().HasTTLSettings());
-                }
-            }
+            DescribePath(runtime, "/MyRoot/TTLEnabledTableCopy"),
+            {NLs::PathExist,
+             NLs::Finished,
+             [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                 UNIT_ASSERT(!record.GetPathDescription().GetTable().HasTTLSettings());
+             }}
         );
     }
 
@@ -713,11 +823,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
             auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
                 switch (ev->GetTypeRewrite()) {
-                case TEvCondEraseReq::EventType:
-                    delayed.Reset(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                default:
-                    return TTestActorRuntime::EEventAction::PROCESS;
+                    case TEvCondEraseReq::EventType:
+                        delayed.Reset(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    default:
+                        return TTestActorRuntime::EEventAction::PROCESS;
                 }
             });
 
@@ -809,7 +919,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
 
         // error (RunInterval < limit)
-        TestCreateTable(runtime, ++txId, "/MyRoot/SubDomain", R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot/SubDomain",
+            R"(
             Name: "Table4"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "Timestamp" }
@@ -823,7 +937,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 }
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 
     Y_UNIT_TEST(ShouldSkipDroppedColumn) {
@@ -867,7 +983,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         WaitForCondErase(runtime);
     }
 
-    NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime& runtime) {
+    NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime & runtime) {
         const auto sender = runtime.AllocateEdgeActor();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvTablet::TEvGetCounters);
         auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
@@ -876,7 +992,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         return ev->Get()->Record;
     }
 
-    ui64 GetSimpleCounter(TTestBasicRuntime& runtime, const TString& name) {
+    ui64 GetSimpleCounter(TTestBasicRuntime & runtime, const TString& name) {
         const auto counters = GetCounters(runtime);
         for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
             if (name != counter.GetName()) {
@@ -890,11 +1006,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         return 0; // unreachable
     }
 
-    void CheckSimpleCounter(TTestBasicRuntime& runtime, const TString& name, ui64 value) {
+    void CheckSimpleCounter(TTestBasicRuntime & runtime, const TString& name, ui64 value) {
         UNIT_ASSERT_VALUES_EQUAL(value, GetSimpleCounter(runtime, name));
     }
 
-    ui64 GetPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const TString& range) {
+    ui64 GetPercentileCounter(TTestBasicRuntime & runtime, const TString& name, const TString& range) {
         const auto counters = GetCounters(runtime);
         for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetPercentileCounters()) {
             if (name != counter.GetName()) {
@@ -917,17 +1033,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         return 0; // unreachable
     }
 
-    void CheckPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const THashMap<TString, ui64>& rangeValues) {
+    void CheckPercentileCounter(
+        TTestBasicRuntime & runtime, const TString& name, const THashMap<TString, ui64>& rangeValues
+    ) {
         for (const auto& [range, value] : rangeValues) {
             const auto v = GetPercentileCounter(runtime, name, range);
-            UNIT_ASSERT_VALUES_EQUAL_C(v, value, "Unexpected value in range"
-                << ": range# " << range
-                << ", expected# " << value
-                << ", got# " << v);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                v,
+                value,
+                "Unexpected value in range" << ": range# " << range << ", expected# " << value << ", got# " << v
+            );
         }
     }
 
-    void WaitForStats(TTestActorRuntimeBase& runtime, ui32 count) {
+    void WaitForStats(TTestActorRuntimeBase & runtime, ui32 count) {
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back(TEvDataShard::EvPeriodicTableStats, count);
         runtime.DispatchEvents(opts);
@@ -935,9 +1054,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
     Y_UNIT_TEST(CheckCounters) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions()
-            .EnablePersistentQueryStats(false)
-            .DisableStatsBatching(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnablePersistentQueryStats(false).DisableStatsBatching(true));
         ui64 txId = 100;
 
         runtime.UpdateCurrentTime(TInstant::Now());
@@ -1029,14 +1146,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 1}, {"inf", 0}});
 
         // split
-        TestSplitTable(runtime, ++txId, "/MyRoot/TTLEnabledTable", Sprintf(R"(
+        TestSplitTable(
+            runtime,
+            ++txId,
+            "/MyRoot/TTLEnabledTable",
+            Sprintf(
+                R"(
             SourceTabletId: %lu
             SplitBoundary {
               KeyPrefix {
                 Tuple { Optional { Uint64: 100 } }
               }
             }
-        )", TTestTxConfig::FakeHiveTablets));
+        )",
+                TTestTxConfig::FakeHiveTablets
+            )
+        );
         env.TestWaitNotification(runtime, txId);
 
         // after erase
@@ -1062,7 +1187,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         runtime.AdvanceCurrentTime(TDuration::Minutes(40));
         WaitForCondErase(runtime);
         WaitForStats(runtime, 2);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}});
+        CheckPercentileCounter(
+            runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"1800", 0}, {"inf", 0}}
+        );
 
         // after a while
         runtime.AdvanceCurrentTime(TDuration::Minutes(10));
@@ -1072,12 +1199,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
-    static void CreateColumnTableShouldSucceed(const char* name, const char* ttlColumnType, const char* unit = "UNIT_AUTO") {
+    static void CreateColumnTableShouldSucceed(
+        const char* name, const char* ttlColumnType, const char* unit = "UNIT_AUTO"
+    ) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             Name: "%s"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
@@ -1091,7 +1225,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                     ColumnUnit: %s
                 }
             }
-        )", name, ttlColumnType, unit));
+        )",
+                name,
+                ttlColumnType,
+                unit
+            )
+        );
         env.TestWaitNotification(runtime, txId);
         CheckTtlSettings(runtime, OlapTtlChecker(), name);
     }
@@ -1101,8 +1240,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             CreateColumnTableShouldSucceed("TTLEnabledTable", ct);
         }
 
-        for (auto ct : {"Uint32", "Uint64"/*, "DyNumber"*/}) {
-            for (auto unit : {"UNIT_SECONDS"/*, "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"*/}) {
+        for (auto ct : {"Uint32", "Uint64" /*, "DyNumber"*/}) {
+            for (auto unit : {"UNIT_SECONDS" /*, "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"*/}) {
                 CreateColumnTableShouldSucceed("TTLEnabledTable", ct, unit);
             }
         }
@@ -1114,7 +1253,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         ui64 txId = 100;
 
         for (auto ct : {"String", "DyNumber"}) {
-            TestCreateColumnTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TestCreateColumnTable(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                Sprintf(
+                    R"(
                 Name: "TTLEnabledTable"
                 Schema {
                     Columns { Name: "key" Type: "Uint64" NotNull: true }
@@ -1127,7 +1271,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                         ExpireAfterSeconds: 3600
                     }
                 }
-            )", ct), {NKikimrScheme::StatusSchemeError});
+            )",
+                    ct
+                ),
+                {NKikimrScheme::StatusSchemeError}
+            );
         }
     }
 
@@ -1136,7 +1284,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
@@ -1148,7 +1300,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 ColumnName: "created_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 
     Y_UNIT_TEST(AlterColumnTable) {
@@ -1168,13 +1322,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         )");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
-                NLs::PathExist,
-                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    const auto& table = record.GetPathDescription().GetColumnTableDescription();
-                    UNIT_ASSERT(!table.HasTtlSettings());
-                }
-            }
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"),
+            {NLs::PathExist,
+             NLs::Finished,
+             [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                 const auto& table = record.GetPathDescription().GetColumnTableDescription();
+                 UNIT_ASSERT(!table.HasTtlSettings());
+             }}
         );
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
@@ -1198,21 +1352,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         )");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
-                NLs::PathExist,
-                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    const auto& table = record.GetPathDescription().GetColumnTableDescription();
-                    UNIT_ASSERT(table.HasTtlSettings());
-                    UNIT_ASSERT(table.GetTtlSettings().HasDisabled());
-                }
-            }
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"),
+            {NLs::PathExist,
+             NLs::Finished,
+             [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                 const auto& table = record.GetPathDescription().GetColumnTableDescription();
+                 UNIT_ASSERT(table.HasTtlSettings());
+                 UNIT_ASSERT(table.GetTtlSettings().HasDisabled());
+             }}
         );
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             AlterSchema {
                 AlterColumns {Name: "data" DefaultValue: "10"}
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -1232,16 +1392,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         )");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(
-            DescribePath(runtime, "/MyRoot/TTLEnabledTable"), {
-                NLs::PathExist,
-                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    const auto& table = record.GetPathDescription().GetColumnTableDescription();
-                    UNIT_ASSERT(!table.HasTtlSettings());
-                }
-            }
+            DescribePath(runtime, "/MyRoot/TTLEnabledTable"),
+            {NLs::PathExist,
+             NLs::Finished,
+             [=](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                 const auto& table = record.GetPathDescription().GetColumnTableDescription();
+                 UNIT_ASSERT(!table.HasTtlSettings());
+             }}
         );
 
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "TTLEnabledTable"
             AlterTtlSettings {
               Enabled {
@@ -1249,7 +1413,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 ExpireAfterSeconds: 3600
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 }
 

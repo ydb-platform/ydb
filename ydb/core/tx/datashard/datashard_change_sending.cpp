@@ -31,8 +31,12 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                 bodiesSize += record.BodySize;
 
                 if (itQueue->second.LockId) {
-                    ok = ok && db.Table<Schema::LockChangeRecords>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Precharge();
-                    ok = ok && db.Table<Schema::LockChangeRecordDetails>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Precharge();
+                    ok = ok && db.Table<Schema::LockChangeRecords>()
+                                   .Key(itQueue->second.LockId, itQueue->second.LockOffset)
+                                   .Precharge();
+                    ok = ok && db.Table<Schema::LockChangeRecordDetails>()
+                                   .Key(itQueue->second.LockId, itQueue->second.LockOffset)
+                                   .Precharge();
                 } else {
                     ok = ok && db.Table<Schema::ChangeRecords>().Key(record.Order).Precharge();
                     ok = ok && db.Table<Schema::ChangeRecordDetails>().Key(record.Order).Precharge();
@@ -44,10 +48,12 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
     }
 
     template <typename TTable>
-    using TEqualKeyIterator = typename TTable::Operations::template EqualKeyIterator<TTable, typename TTable::TKey::KeyValuesType>;
+    using TEqualKeyIterator =
+        typename TTable::Operations::template EqualKeyIterator<TTable, typename TTable::TKey::KeyValuesType>;
 
     template <typename TTable>
-    using TFullRowset = typename TTable::Operations::template Rowset<TTable, TEqualKeyIterator<TTable>, typename TTable::TColumns>;
+    using TFullRowset =
+        typename TTable::Operations::template Rowset<TTable, TEqualKeyIterator<TTable>, typename TTable::TColumns>;
 
     struct TLoadResult {
         NTable::EReady Ready;
@@ -55,21 +61,20 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
         TLoadResult() = default;
         TLoadResult(NTable::EReady ready)
-            : Ready(ready)
-        {
-        }
+            : Ready(ready) {}
 
         explicit TLoadResult(NTable::EReady ready, TIntrusivePtr<NKikimr::NDataShard::TChangeRecord> record)
             : Ready(ready)
-            , Record(record)
-        {
-        }
+            , Record(record) {}
     };
 
     template <typename TBasicTable, typename TDetailsTable, bool HaveLock>
-    TLoadResult LoadRecord(ui64 order, const std::optional<TCommittedLockChangeRecords>& commited,
-            const TFullRowset<TBasicTable>& basic, const TFullRowset<TDetailsTable>& details) const
-    {
+    TLoadResult LoadRecord(
+        ui64 order,
+        const std::optional<TCommittedLockChangeRecords>& commited,
+        const TFullRowset<TBasicTable>& basic,
+        const TFullRowset<TDetailsTable>& details
+    ) const {
         if (!basic.IsReady() || !details.IsReady()) {
             return NTable::EReady::Page;
         }
@@ -103,27 +108,23 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
         }
 
         auto builder = TChangeRecordBuilder(details.template GetValue<typename TDetailsTable::Kind>())
-            .WithOrder(order)
-            .WithPathId(TPathId(
-                basic.template GetValue<typename TBasicTable::PathOwnerId>(),
-                basic.template GetValue<typename TBasicTable::LocalPathId>()
-            ))
-            .WithTableId(tableId)
-            .WithSchemaVersion(schemaVersion)
-            .WithSchema(schema)
-            .WithBody(details.template GetValue<typename TDetailsTable::Body>())
-            .WithSource(source);
+                           .WithOrder(order)
+                           .WithPathId(TPathId(
+                               basic.template GetValue<typename TBasicTable::PathOwnerId>(),
+                               basic.template GetValue<typename TBasicTable::LocalPathId>()
+                           ))
+                           .WithTableId(tableId)
+                           .WithSchemaVersion(schemaVersion)
+                           .WithSchema(schema)
+                           .WithBody(details.template GetValue<typename TDetailsTable::Body>())
+                           .WithSource(source);
 
         if constexpr (HaveLock) {
             Y_ABORT_UNLESS(commited);
-            builder
-                .WithGroup(commited->Group)
-                .WithStep(commited->Step)
-                .WithTxId(commited->TxId);
+            builder.WithGroup(commited->Group).WithStep(commited->Step).WithTxId(commited->TxId);
         } else {
             Y_ABORT_UNLESS(!commited);
-            builder
-                .WithGroup(basic.template GetValue<typename TBasicTable::Group>())
+            builder.WithGroup(basic.template GetValue<typename TBasicTable::Group>())
                 .WithStep(basic.template GetValue<typename TBasicTable::PlanStep>())
                 .WithTxId(basic.template GetValue<typename TBasicTable::TxId>());
         }
@@ -161,33 +162,41 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         continue;
                     }
 
-                    result = LoadRecord<Schema::LockChangeRecords, Schema::LockChangeRecordDetails, true>(it->Order, itCommit->second,
-                        db.Table<Schema::LockChangeRecords>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Select(),
-                        db.Table<Schema::LockChangeRecordDetails>().Key(itQueue->second.LockId, itQueue->second.LockOffset).Select());
+                    result = LoadRecord<Schema::LockChangeRecords, Schema::LockChangeRecordDetails, true>(
+                        it->Order,
+                        itCommit->second,
+                        db.Table<Schema::LockChangeRecords>()
+                            .Key(itQueue->second.LockId, itQueue->second.LockOffset)
+                            .Select(),
+                        db.Table<Schema::LockChangeRecordDetails>()
+                            .Key(itQueue->second.LockId, itQueue->second.LockOffset)
+                            .Select()
+                    );
                 } else {
-                    result = LoadRecord<Schema::ChangeRecords, Schema::ChangeRecordDetails, false>(it->Order, std::nullopt,
+                    result = LoadRecord<Schema::ChangeRecords, Schema::ChangeRecordDetails, false>(
+                        it->Order,
+                        std::nullopt,
                         db.Table<Schema::ChangeRecords>().Key(it->Order).Select(),
-                        db.Table<Schema::ChangeRecordDetails>().Key(it->Order).Select());
+                        db.Table<Schema::ChangeRecordDetails>().Key(it->Order).Select()
+                    );
                 }
 
                 switch (result.Ready) {
-                case NTable::EReady::Page:
-                    return false;
-                case NTable::EReady::Gone:
-                    RecordsToForget[recipient].emplace_back(it->Order);
-                    it = records.erase(it);
-                    continue;
-                case NTable::EReady::Data:
-                    break;
+                    case NTable::EReady::Page:
+                        return false;
+                    case NTable::EReady::Gone:
+                        RecordsToForget[recipient].emplace_back(it->Order);
+                        it = records.erase(it);
+                        continue;
+                    case NTable::EReady::Data:
+                        break;
                 }
 
                 if (itQueue->second.LockId) {
-                    RecordsToSend[recipient].push_back(
-                        TChangeRecordBuilder(result.Record)
-                            .WithLockId(itQueue->second.LockId)
-                            .WithLockOffset(itQueue->second.LockOffset)
-                            .Build()
-                    );
+                    RecordsToSend[recipient].push_back(TChangeRecordBuilder(result.Record)
+                                                           .WithLockId(itQueue->second.LockId)
+                                                           .WithLockOffset(itQueue->second.LockOffset)
+                                                           .Build());
                 } else {
                     RecordsToSend[recipient].push_back(std::move(result.Record));
                 }
@@ -202,9 +211,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
 public:
     explicit TTxRequestChangeRecords(TDataShard* self)
-        : TTransactionBase(self)
-    {
-    }
+        : TTransactionBase(self) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_REQUEST_CHANGE_RECORDS;
@@ -286,7 +293,8 @@ class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> {
                 ChangeExchangeSplit = true;
             } else {
                 for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
+                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) &&
+                        !Self->ChangeSenderActivator.Acked(dstTabletId)) {
                         ActivationList.insert(dstTabletId);
                     }
                 }
@@ -296,9 +304,7 @@ class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> {
 
 public:
     explicit TTxRemoveChangeRecords(TDataShard* self)
-        : TTransactionBase(self)
-    {
-    }
+        : TTransactionBase(self) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_REMOVE_CHANGE_RECORDS;
@@ -363,9 +369,7 @@ private:
 class TDataShard::TTxChangeExchangeSplitAck: public TTransactionBase<TDataShard> {
 public:
     explicit TTxChangeExchangeSplitAck(TDataShard* self)
-        : TTransactionBase(self)
-    {
-    }
+        : TTransactionBase(self) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CHANGE_EXCHANGE_SPLIT_ACK;
@@ -407,8 +411,8 @@ private:
 void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsRequested[ev->Sender].insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
-        return sum + kv.second.size();
-    }));
+                   return sum + kv.second.size();
+               }));
     ScheduleRequestChangeRecords(ctx);
 }
 
@@ -445,4 +449,4 @@ void TDataShard::Handle(TEvChangeExchange::TEvSplitAck::TPtr&, const TActorConte
     Execute(new TTxChangeExchangeSplitAck(this), ctx);
 }
 
-}
+} // namespace NKikimr::NDataShard

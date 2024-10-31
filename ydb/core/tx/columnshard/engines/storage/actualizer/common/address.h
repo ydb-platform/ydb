@@ -9,6 +9,7 @@ private:
     std::set<TString> ReadStorages;
     std::set<TString> WriteStorages;
     ui64 Hash = 0;
+
 public:
     bool WriteIs(const TString& storageId) const {
         return WriteStorages.size() == 1 && WriteStorages.contains(storageId);
@@ -26,9 +27,9 @@ public:
         return ReadStorages == item.ReadStorages && WriteStorages == item.WriteStorages;
     }
 
-    operator size_t() const { 
+    operator size_t() const {
         return Hash;
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

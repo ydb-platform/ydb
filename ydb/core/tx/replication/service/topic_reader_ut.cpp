@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     using namespace NTestHelpers;
 
     template <typename Env>
-    TActorId CreateReader(Env& env, const TEvYdbProxy::TTopicReaderSettings& settings) {
+    TActorId CreateReader(Env & env, const TEvYdbProxy::TTopicReaderSettings& settings) {
         do {
             auto reader = env.GetRuntime().Register(CreateRemoteTopicReader(env.GetYdbProxy(), settings));
             env.SendAsync(reader, new TEvWorker::TEvHandshake());
@@ -25,16 +25,16 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             } while (ev->Sender != reader);
 
             switch (ev->GetTypeRewrite()) {
-            case TEvWorker::EvHandshake:
-                return reader;
-            case TEvWorker::EvGone:
-                continue;
+                case TEvWorker::EvHandshake:
+                    return reader;
+                case TEvWorker::EvGone:
+                    continue;
             }
         } while (true);
     }
 
     template <typename Env>
-    auto ReadData(Env& env, TActorId& reader, const TEvYdbProxy::TTopicReaderSettings& settings) {
+    auto ReadData(Env & env, TActorId & reader, const TEvYdbProxy::TTopicReaderSettings& settings) {
         do {
             reader = CreateReader(env, settings);
             env.SendAsync(reader, new TEvWorker::TEvPoll());
@@ -45,10 +45,10 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             } while (ev->Sender != reader);
 
             switch (ev->GetTypeRewrite()) {
-            case TEvWorker::EvData:
-                return ev->Get<TEvWorker::TEvData>()->Records;
-            case TEvWorker::EvGone:
-                continue;
+                case TEvWorker::EvData:
+                    return ev->Get<TEvWorker::TEvData>()->Records;
+                case TEvWorker::EvGone:
+                    continue;
             }
         } while (true);
     }
@@ -59,23 +59,19 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         // create topic
         {
-            auto settings = NYdb::NTopic::TCreateTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName("consumer")
-                .EndAddConsumer();
+            auto settings =
+                NYdb::NTopic::TCreateTopicSettings().BeginAddConsumer().ConsumerName("consumer").EndAddConsumer();
 
-            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
+                env.GetYdbProxy(), new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
 
         auto settings = TEvYdbProxy::TTopicReaderSettings()
-            .ConsumerName("consumer")
-            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
-                .Path("/Root/topic")
-                .AppendPartitionIds(0)
-            );
+                            .ConsumerName("consumer")
+                            .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path("/Root/topic").AppendPartitionIds(0));
 
         TActorId reader;
 
@@ -109,4 +105,4 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     }
 }
 
-}
+} // namespace NKikimr::NReplication::NService

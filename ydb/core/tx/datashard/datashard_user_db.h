@@ -10,7 +10,7 @@
 #include <util/generic/maybe.h>
 
 namespace NKikimr::NMiniKQL {
-    struct TEngineHostCounters;
+struct TEngineHostCounters;
 }
 
 namespace NKikimr::NDataShard {
@@ -23,53 +23,55 @@ protected:
 
 public:
     virtual NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            NTable::TSelectStats& stats,
-            const TMaybe<TRowVersion>& readVersion = {}) = 0;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        NTable::TSelectStats& stats,
+        const TMaybe<TRowVersion>& readVersion = {}
+    ) = 0;
 
     virtual NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            const TMaybe<TRowVersion>& readVersion = {}) = 0;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        const TMaybe<TRowVersion>& readVersion = {}
+    ) = 0;
 
     virtual void UpsertRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) = 0;
 
     virtual void ReplaceRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
-    
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) = 0;
+
     virtual void InsertRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) = 0;
 
     virtual void UpdateRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) = 0;
 
-    virtual void EraseRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) = 0;
+    virtual void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) = 0;
 
-    virtual void CommitChanges(
-            const TTableId& tableId,
-            ui64 lockId,
-            const TRowVersion& writeVersion) = 0;
+    virtual void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) = 0;
 };
 
 class IDataShardConflictChecker {
 protected:
     ~IDataShardConflictChecker() = default;
+
 public:
     virtual void AddReadConflict(ui64 txId) const = 0;
     virtual void CheckReadConflict(const TRowVersion& rowVersion) const = 0;
@@ -86,68 +88,69 @@ class TDataShardUserDb final
     , public IDataShardConflictChecker {
 public:
     TDataShardUserDb(
-            TDataShard& self,
-            NTable::TDatabase& db,
-            ui64 globalTxId,
-            const TRowVersion& readVersion,
-            const TRowVersion& writeVersion,
-            NMiniKQL::TEngineHostCounters& counters, 
-            TInstant now
+        TDataShard& self,
+        NTable::TDatabase& db,
+        ui64 globalTxId,
+        const TRowVersion& readVersion,
+        const TRowVersion& writeVersion,
+        NMiniKQL::TEngineHostCounters& counters,
+        TInstant now
     );
 
 //IDataShardUserDb
-public:  
+public:
     NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            NTable::TSelectStats& stats,
-            const TMaybe<TRowVersion>& readVersion = {}) override;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        NTable::TSelectStats& stats,
+        const TMaybe<TRowVersion>& readVersion = {}
+    ) override;
 
     NTable::EReady SelectRow(
-            const TTableId& tableId,
-            TArrayRef<const TRawTypeValue> key,
-            TArrayRef<const NTable::TTag> tags,
-            NTable::TRowState& row,
-            const TMaybe<TRowVersion>& readVersion = {}) override;
+        const TTableId& tableId,
+        TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TTag> tags,
+        NTable::TRowState& row,
+        const TMaybe<TRowVersion>& readVersion = {}
+    ) override;
 
     void UpsertRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
-    
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override;
+
     void ReplaceRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
-            
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override;
+
     void InsertRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
-            
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override;
+
     void UpdateRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    ) override;
 
-    void EraseRow(
-            const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) override;
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) override;
 
-    void CommitChanges(
-            const TTableId& tableId, 
-            ui64 lockId, 
-            const TRowVersion& writeVersion) override;
+    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) override;
 
 //IDataShardChangeGroupProvider
-public:  
+public:
     std::optional<ui64> GetCurrentChangeGroup() const override;
     ui64 GetChangeGroup() override;
 
 //IDataShardConflictChecker
-public:  
+public:
     void AddReadConflict(ui64 txId) const override;
     void CheckReadConflict(const TRowVersion& rowVersion) const override;
     void CheckReadDependency(ui64 txId) override;
@@ -179,10 +182,17 @@ public:
 private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
-    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void UpsertRowInt(
+        NTable::ERowOp rowOp,
+        const TTableId& tableId,
+        ui64 localTableId,
+        const TArrayRef<const TRawTypeValue> key,
+        const TArrayRef<const NIceDb::TUpdateOp> ops
+    );
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;

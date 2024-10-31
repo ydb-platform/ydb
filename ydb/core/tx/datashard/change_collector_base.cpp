@@ -14,9 +14,7 @@ using namespace NTable;
 TBaseChangeCollector::TBaseChangeCollector(TDataShard* self, IDataShardUserDb& userDb, IBaseChangeCollectorSink& sink)
     : Self(self)
     , UserDb(userDb)
-    , Sink(sink)
-{
-}
+    , Sink(sink) {}
 
 void TBaseChangeCollector::OnRestart() {
     // nothing
@@ -26,5 +24,5 @@ bool TBaseChangeCollector::NeedToReadKeys() const {
     return false;
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

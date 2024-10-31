@@ -10,7 +10,7 @@
 
 namespace NKikimr {
 
-class TMediatorTimecastSharedEntry : public TThrRefBase {
+class TMediatorTimecastSharedEntry: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TMediatorTimecastSharedEntry>;
     using TCPtr = TIntrusiveConstPtr<TMediatorTimecastSharedEntry>;
@@ -22,17 +22,18 @@ public:
     void Set(ui64 step) noexcept;
 
 private:
-    std::atomic<ui64> Step{ 0 };
+    std::atomic<ui64> Step{0};
 };
 
-class TMediatorTimecastEntry : public TThrRefBase {
+class TMediatorTimecastEntry: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TMediatorTimecastEntry>;
     using TCPtr = TIntrusiveConstPtr<TMediatorTimecastEntry>;
 
     TMediatorTimecastEntry(
         const TMediatorTimecastSharedEntry::TPtr& safeStep,
-        const TMediatorTimecastSharedEntry::TPtr& latestStep) noexcept;
+        const TMediatorTimecastSharedEntry::TPtr& latestStep
+    ) noexcept;
     ~TMediatorTimecastEntry() noexcept;
 
     /**
@@ -46,17 +47,16 @@ public:
 private:
     const TMediatorTimecastSharedEntry::TCPtr SafeStep;
     const TMediatorTimecastSharedEntry::TCPtr LatestStep;
-    std::atomic<ui64> FrozenStep{ 0 };
+    std::atomic<ui64> FrozenStep{0};
 };
 
-class TMediatorTimecastReadStep : public TThrRefBase {
+class TMediatorTimecastReadStep: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TMediatorTimecastReadStep>;
     using TCPtr = TIntrusiveConstPtr<TMediatorTimecastReadStep>;
 
     TMediatorTimecastReadStep(ui64 nextReadStep = 0)
-        : NextReadStep{ nextReadStep }
-    { }
+        : NextReadStep{nextReadStep} {}
 
     ui64 Get() const {
         return NextReadStep.load();
@@ -98,36 +98,33 @@ struct TEvMediatorTimecast {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_MEDIATORTIMECAST), "expected EvEnd < EventSpaceEnd()");
 
-    struct TEvRegisterTablet : public TEventLocal<TEvRegisterTablet, EvRegisterTablet> {
+    struct TEvRegisterTablet: public TEventLocal<TEvRegisterTablet, EvRegisterTablet> {
         const ui64 TabletId;
         NKikimrSubDomains::TProcessingParams ProcessingParams;
 
-
         TEvRegisterTablet(ui64 tabletId, const NKikimrSubDomains::TProcessingParams& processing)
             : TabletId(tabletId)
-            , ProcessingParams(processing)
-        {}
+            , ProcessingParams(processing) {}
 
         TString ToString() const {
             TStringStream str;
             str << "{TEvRegisterTablet";
             str << " TabletId# " << TabletId;
             if (ProcessingParams.HasVersion()) {
-                str << " ProcessingParams { " <<  ProcessingParams.ShortDebugString() << " }";
+                str << " ProcessingParams { " << ProcessingParams.ShortDebugString() << " }";
             }
             str << "}";
             return str.Str();
         }
     };
 
-    struct TEvRegisterTabletResult : public TEventLocal<TEvRegisterTabletResult, EvRegisterTabletResult> {
+    struct TEvRegisterTabletResult: public TEventLocal<TEvRegisterTabletResult, EvRegisterTabletResult> {
         const ui64 TabletId;
         const TMediatorTimecastEntry::TCPtr Entry;
 
         TEvRegisterTabletResult(ui64 tabletId, TMediatorTimecastEntry::TCPtr entry)
             : TabletId(tabletId)
-            , Entry(std::move(entry))
-        {}
+            , Entry(std::move(entry)) {}
 
         TString ToString() const {
             TStringStream str;
@@ -143,12 +140,11 @@ struct TEvMediatorTimecast {
         }
     };
 
-    struct TEvUnregisterTablet : public TEventLocal<TEvUnregisterTablet, EvUnregisterTablet> {
+    struct TEvUnregisterTablet: public TEventLocal<TEvUnregisterTablet, EvUnregisterTablet> {
         const ui64 TabletId;
 
         TEvUnregisterTablet(ui64 tabletId)
-            : TabletId(tabletId)
-        {}
+            : TabletId(tabletId) {}
 
         TString ToString() const {
             TStringStream str;
@@ -159,146 +155,118 @@ struct TEvMediatorTimecast {
         }
     };
 
-    struct TEvWaitPlanStep : public TEventLocal<TEvWaitPlanStep, EvWaitPlanStep> {
+    struct TEvWaitPlanStep: public TEventLocal<TEvWaitPlanStep, EvWaitPlanStep> {
         const ui64 TabletId;
         const ui64 PlanStep;
 
         TEvWaitPlanStep(ui64 tabletId, ui64 planStep)
             : TabletId(tabletId)
-            , PlanStep(planStep)
-        { }
+            , PlanStep(planStep) {}
 
         TString ToString() const {
-            return TStringBuilder()
-                << "{TEvWaitPlanStep"
-                << " TabletId# " << TabletId
-                << " PlanStep# " << PlanStep
-                << "}";
+            return TStringBuilder() << "{TEvWaitPlanStep"
+                                    << " TabletId# " << TabletId << " PlanStep# " << PlanStep << "}";
         }
     };
 
-    struct TEvNotifyPlanStep : public TEventLocal<TEvNotifyPlanStep, EvNotifyPlanStep> {
+    struct TEvNotifyPlanStep: public TEventLocal<TEvNotifyPlanStep, EvNotifyPlanStep> {
         const ui64 TabletId;
         const ui64 PlanStep;
 
         TEvNotifyPlanStep(ui64 tabletId, ui64 planStep)
             : TabletId(tabletId)
-            , PlanStep(planStep)
-        { }
+            , PlanStep(planStep) {}
 
         TString ToString() const {
-            return TStringBuilder()
-                << "{TEvNotifyPlanStep"
-                << " TabletId# " << TabletId
-                << " PlanStep# " << PlanStep
-                << "}";
+            return TStringBuilder() << "{TEvNotifyPlanStep"
+                                    << " TabletId# " << TabletId << " PlanStep# " << PlanStep << "}";
         }
     };
 
-    struct TEvSubscribeReadStep : public TEventLocal<TEvSubscribeReadStep, EvSubscribeReadStep> {
+    struct TEvSubscribeReadStep: public TEventLocal<TEvSubscribeReadStep, EvSubscribeReadStep> {
         const ui64 CoordinatorId;
 
         explicit TEvSubscribeReadStep(ui64 coordinatorId)
-            : CoordinatorId(coordinatorId)
-        {
+            : CoordinatorId(coordinatorId) {
             Y_ABORT_UNLESS(coordinatorId != 0);
         }
 
         TString ToString() const {
-            return TStringBuilder()
-                << ToStringHeader() << "{"
-                << " CoordinatorId# " << CoordinatorId
-                << " }";
+            return TStringBuilder() << ToStringHeader() << "{"
+                                    << " CoordinatorId# " << CoordinatorId << " }";
         }
     };
 
-    struct TEvUnsubscribeReadStep : public TEventLocal<TEvUnsubscribeReadStep, EvUnsubscribeReadStep> {
+    struct TEvUnsubscribeReadStep: public TEventLocal<TEvUnsubscribeReadStep, EvUnsubscribeReadStep> {
         const ui64 CoordinatorId;
 
         explicit TEvUnsubscribeReadStep(ui64 coordinatorId = 0)
-            : CoordinatorId(coordinatorId)
-        { }
+            : CoordinatorId(coordinatorId) {}
 
         TString ToString() const {
-            return TStringBuilder()
-                << ToStringHeader() << "{"
-                << " CoordinatorId# " << CoordinatorId
-                << " }";
+            return TStringBuilder() << ToStringHeader() << "{"
+                                    << " CoordinatorId# " << CoordinatorId << " }";
         }
     };
 
-    struct TEvSubscribeReadStepResult : public TEventLocal<TEvSubscribeReadStepResult, EvSubscribeReadStepResult> {
+    struct TEvSubscribeReadStepResult: public TEventLocal<TEvSubscribeReadStepResult, EvSubscribeReadStepResult> {
         const ui64 CoordinatorId;
         const ui64 LastReadStep;
         const ui64 NextReadStep;
         const TMediatorTimecastReadStep::TCPtr ReadStep;
 
         TEvSubscribeReadStepResult(
-                ui64 coordinatorId,
-                ui64 lastReadStep,
-                ui64 nextReadStep,
-                TMediatorTimecastReadStep::TCPtr readStep)
+            ui64 coordinatorId,
+            ui64 lastReadStep,
+            ui64 nextReadStep,
+            TMediatorTimecastReadStep::TCPtr readStep
+        )
             : CoordinatorId(coordinatorId)
             , LastReadStep(lastReadStep)
             , NextReadStep(nextReadStep)
-            , ReadStep(std::move(readStep))
-        {
+            , ReadStep(std::move(readStep)) {
             Y_ABORT_UNLESS(ReadStep);
         }
 
         TString ToString() const {
-            return TStringBuilder()
-                << ToStringHeader() << "{"
-                << " CoordinatorId# " << CoordinatorId
-                << " LastReadStep# " << LastReadStep
-                << " NextReadStep# " << NextReadStep
-                << " ReadStep# " << ReadStep->Get()
-                << " }";
+            return TStringBuilder() << ToStringHeader() << "{"
+                                    << " CoordinatorId# " << CoordinatorId << " LastReadStep# " << LastReadStep
+                                    << " NextReadStep# " << NextReadStep << " ReadStep# " << ReadStep->Get() << " }";
         }
     };
 
-    struct TEvWaitReadStep : public TEventLocal<TEvWaitReadStep, EvWaitReadStep> {
+    struct TEvWaitReadStep: public TEventLocal<TEvWaitReadStep, EvWaitReadStep> {
         const ui64 CoordinatorId;
         const ui64 ReadStep;
 
         TEvWaitReadStep(ui64 coordinatorId, ui64 readStep)
             : CoordinatorId(coordinatorId)
-            , ReadStep(readStep)
-        { }
+            , ReadStep(readStep) {}
 
         TString ToString() const {
-            return TStringBuilder()
-                << ToStringHeader() << "{"
-                << " CoordinatorId# " << CoordinatorId
-                << " ReadStep# " << ReadStep
-                << " }";
+            return TStringBuilder() << ToStringHeader() << "{"
+                                    << " CoordinatorId# " << CoordinatorId << " ReadStep# " << ReadStep << " }";
         }
     };
 
-    struct TEvNotifyReadStep : public TEventLocal<TEvNotifyReadStep, EvNotifyReadStep> {
+    struct TEvNotifyReadStep: public TEventLocal<TEvNotifyReadStep, EvNotifyReadStep> {
         const ui64 CoordinatorId;
         const ui64 ReadStep;
 
         TEvNotifyReadStep(ui64 coordinatorId, ui64 readStep)
             : CoordinatorId(coordinatorId)
-            , ReadStep(readStep)
-        { }
+            , ReadStep(readStep) {}
 
         TString ToString() const {
-            return TStringBuilder()
-                << ToStringHeader() << "{"
-                << " CoordinatorId# " << CoordinatorId
-                << " ReadStep# " << ReadStep
-                << " }";
+            return TStringBuilder() << ToStringHeader() << "{"
+                                    << " CoordinatorId# " << CoordinatorId << " ReadStep# " << ReadStep << " }";
         }
     };
 
-    struct TEvWatch : public TEventPB<TEvWatch, NKikimrTxMediatorTimecast::TEvWatch, EvWatch> {
-        TEvWatch()
-        {}
+    struct TEvWatch: public TEventPB<TEvWatch, NKikimrTxMediatorTimecast::TEvWatch, EvWatch> {
+        TEvWatch() {}
 
-        TEvWatch(ui32 bucket)
-        {
+        TEvWatch(ui32 bucket) {
             Record.AddBucket(bucket);
         }
 
@@ -313,7 +281,7 @@ struct TEvMediatorTimecast {
         }
     };
 
-    struct TEvUpdate : public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> {
+    struct TEvUpdate: public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> {
         TEvUpdate() = default;
 
         TEvUpdate(ui64 mediator, ui32 bucket, ui64 timeBarrier) {
@@ -340,11 +308,7 @@ struct TEvMediatorTimecast {
     };
 
     struct TEvGranularWatch
-        : public TEventPB<
-            TEvGranularWatch,
-            NKikimrTxMediatorTimecast::TEvGranularWatch,
-            EvGranularWatch>
-    {
+        : public TEventPB<TEvGranularWatch, NKikimrTxMediatorTimecast::TEvGranularWatch, EvGranularWatch> {
         TEvGranularWatch() = default;
 
         TEvGranularWatch(ui32 bucket, ui64 subscriptionId) {
@@ -355,10 +319,9 @@ struct TEvMediatorTimecast {
 
     struct TEvGranularWatchModify
         : public TEventPB<
-            TEvGranularWatchModify,
-            NKikimrTxMediatorTimecast::TEvGranularWatchModify,
-            EvGranularWatchModify>
-    {
+              TEvGranularWatchModify,
+              NKikimrTxMediatorTimecast::TEvGranularWatchModify,
+              EvGranularWatchModify> {
         TEvGranularWatchModify() = default;
 
         TEvGranularWatchModify(ui32 bucket, ui64 subscriptionId) {
@@ -368,11 +331,7 @@ struct TEvMediatorTimecast {
     };
 
     struct TEvGranularUpdate
-        : public TEventPB<
-            TEvGranularUpdate,
-            NKikimrTxMediatorTimecast::TEvGranularUpdate,
-            EvGranularUpdate>
-    {
+        : public TEventPB<TEvGranularUpdate, NKikimrTxMediatorTimecast::TEvGranularUpdate, EvGranularUpdate> {
         TEvGranularUpdate() = default;
 
         TEvGranularUpdate(ui64 mediator, ui32 bucket, ui64 subscriptionId) {
@@ -389,4 +348,4 @@ inline TActorId MakeMediatorTimecastProxyID() {
     return TActorId(0, TStringBuf("txmdtimecast"));
 }
 
-}
+} // namespace NKikimr

@@ -7,31 +7,30 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NBackground {
 
-class TStatusChannel: public NBackgroundTasks::TInterfaceProtoAdapter<NKikimrSchemeShardTxBackgroundProto::TStatusChannel, NKikimr::NOlap::NBackground::IStatusChannel> {
+class TStatusChannel
+    : public NBackgroundTasks::TInterfaceProtoAdapter<
+          NKikimrSchemeShardTxBackgroundProto::TStatusChannel,
+          NKikimr::NOlap::NBackground::IStatusChannel> {
 private:
-    using TBase = NBackgroundTasks::TInterfaceProtoAdapter<NKikimrSchemeShardTxBackgroundProto::TStatusChannel, NKikimr::NOlap::NBackground::IStatusChannel>;
+    using TBase = NBackgroundTasks::TInterfaceProtoAdapter<
+        NKikimrSchemeShardTxBackgroundProto::TStatusChannel,
+        NKikimr::NOlap::NBackground::IStatusChannel>;
     TString TaskClassName;
     TString TaskIdentifier;
     ui64 SSTabletId;
+
 public:
     TStatusChannel(const TString taskClassName, const TString& taskId, const ui64 ssTabletId)
         : TaskClassName(taskClassName)
         , TaskIdentifier(taskId)
-        , SSTabletId(ssTabletId)
-    {
+        , SSTabletId(ssTabletId) {
         AFL_VERIFY(!!TaskClassName);
         AFL_VERIFY(!!TaskIdentifier);
         AFL_VERIFY(SSTabletId);
     }
-    virtual void DoOnFail(const TString& /*errorMessage*/) const override {
-
-    }
-    virtual void DoOnAdded() const override {
-
-    }
-    virtual void DoOnFinished() const override {
-
-    }
+    virtual void DoOnFail(const TString& /*errorMessage*/) const override {}
+    virtual void DoOnAdded() const override {}
+    virtual void DoOnFinished() const override {}
     virtual TProtoStorage DoSerializeToProto() const override {
         TProtoStorage result;
         result.SetTaskClassName(TaskClassName);
@@ -47,4 +46,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NBackground

@@ -29,7 +29,9 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
                 continue;
             }
 
-            auto ev = MakeTEvRunWorker(ReplicationId, TargetId, partition.GetPartitionId(), ConnectionParams, SrcStreamPath, DstPathId);
+            auto ev = MakeTEvRunWorker(
+                ReplicationId, TargetId, partition.GetPartitionId(), ConnectionParams, SrcStreamPath, DstPathId
+            );
             Send(Parent, std::move(ev));
         }
 
@@ -47,13 +49,14 @@ public:
     }
 
     explicit TTableWorkerRegistar(
-            const TActorId& parent,
-            const TActorId& proxy,
-            const NKikimrReplication::TConnectionParams& connectionParams,
-            ui64 rid,
-            ui64 tid,
-            const TString& srcStreamPath,
-            const TPathId& dstPathId)
+        const TActorId& parent,
+        const TActorId& proxy,
+        const NKikimrReplication::TConnectionParams& connectionParams,
+        ui64 rid,
+        ui64 tid,
+        const TString& srcStreamPath,
+        const TPathId& dstPathId
+    )
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -61,9 +64,7 @@ public:
         , TargetId(tid)
         , SrcStreamPath(srcStreamPath)
         , DstPathId(dstPathId)
-        , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
-    {
-    }
+        , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId) {}
 
     void Bootstrap() {
         Become(&TThis::StateWork);
@@ -90,23 +91,30 @@ private:
 
 }; // TTableWorkerRegistar
 
-TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalKind,
-        ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetWithStream(replication, finalKind, id, srcPath, dstPath)
-{
-}
+TTargetTableBase::TTargetTableBase(
+    TReplication* replication,
+    ETargetKind finalKind,
+    ui64 id,
+    const TString& srcPath,
+    const TString& dstPath
+)
+    : TTargetWithStream(replication, finalKind, id, srcPath, dstPath) {}
 
 IActor* TTargetTableBase::CreateWorkerRegistar(const TActorContext& ctx) const {
     auto replication = GetReplication();
-    return new TTableWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetConfig().GetSrcConnectionParams(), replication->GetId(), GetId(),
-        BuildStreamPath(), GetDstPathId());
+    return new TTableWorkerRegistar(
+        ctx.SelfID,
+        replication->GetYdbProxy(),
+        replication->GetConfig().GetSrcConnectionParams(),
+        replication->GetId(),
+        GetId(),
+        BuildStreamPath(),
+        GetDstPathId()
+    );
 }
 
 TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetTableBase(replication, ETargetKind::Table, id, srcPath, dstPath)
-{
-}
+    : TTargetTableBase(replication, ETargetKind::Table, id, srcPath, dstPath) {}
 
 TString TTargetTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
@@ -117,12 +125,10 @@ TString TTargetTableBase::GetStreamPath() const {
 }
 
 TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)
-    : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, dstPath)
-{
-}
+    : TTargetTableBase(replication, ETargetKind::IndexTable, id, srcPath, dstPath) {}
 
 TString TTargetIndexTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
 }
 
-}
+} // namespace NKikimr::NReplication::NController

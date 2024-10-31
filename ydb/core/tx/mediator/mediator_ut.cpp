@@ -14,7 +14,6 @@
 namespace NKikimr::NTxMediator {
 
 Y_UNIT_TEST_SUITE(MediatorTest) {
-
     using namespace Tests;
 
     enum class EWatcherCmd {
@@ -30,8 +29,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         explicit TWatcherCmd(ui64 subscriptionId, EWatcherCmd cmd, ui64 tabletId)
             : SubscriptionId(subscriptionId)
             , Cmd(cmd)
-            , TabletId(tabletId)
-        {}
+            , TabletId(tabletId) {}
     };
 
     struct TWatchUpdate {
@@ -40,8 +38,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         TWatchUpdate() = default;
 
         explicit TWatchUpdate(ui64 safeStep)
-            : SafeStep(safeStep)
-        {}
+            : SafeStep(safeStep) {}
 
         explicit TWatchUpdate(const NKikimrTxMediatorTimecast::TEvUpdate& record) {
             SafeStep = record.GetTimeBarrier();
@@ -64,8 +61,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         explicit TGranularUpdate(ui64 latestStep, THashMap<ui64, ui64> frozen = {}, THashSet<ui64> unfrozen = {})
             : LatestStep(latestStep)
             , Frozen(std::move(frozen))
-            , Unfrozen(std::move(unfrozen))
-        {}
+            , Unfrozen(std::move(unfrozen)) {}
 
         explicit TGranularUpdate(const NKikimrTxMediatorTimecast::TEvGranularUpdate& record) {
             LatestStep = record.GetLatestStep();
@@ -111,7 +107,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         }
     };
 
-    struct TUpdate : public std::variant<TWatchUpdate, TGranularUpdate> {
+    struct TUpdate: public std::variant<TWatchUpdate, TGranularUpdate> {
         using TBase = std::variant<TWatchUpdate, TGranularUpdate>;
         using TBase::TBase;
 
@@ -137,7 +133,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         }
     };
 
-    struct TWatcherState : public TThrRefBase {
+    struct TWatcherState: public TThrRefBase {
         using TPtr = TIntrusivePtr<TWatcherState>;
 
         ui64 SafeStep = 0;
@@ -168,14 +164,14 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         return out;
     }
 
-    template<class... TArgs>
+    template <class... TArgs>
     std::deque<TUpdate> MakeUpdates(const TArgs&... args) {
         std::deque<TUpdate> updates;
         (updates.push_back(args), ...);
         return updates;
     }
 
-    class TWatcherActor : public TActorBootstrapped<TWatcherActor> {
+    class TWatcherActor: public TActorBootstrapped<TWatcherActor> {
     public:
         enum EEv {
             EvReconnect = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
@@ -183,32 +179,29 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             EvRemoveTablet,
         };
 
-        struct TEvReconnect : public TEventLocal<TEvReconnect, EvReconnect> {
+        struct TEvReconnect: public TEventLocal<TEvReconnect, EvReconnect> {
             TEvReconnect() = default;
         };
 
-        struct TEvAddTablet : public TEventLocal<TEvAddTablet, EvAddTablet> {
+        struct TEvAddTablet: public TEventLocal<TEvAddTablet, EvAddTablet> {
             const ui64 TabletId;
 
             explicit TEvAddTablet(ui64 tabletId)
-                : TabletId(tabletId)
-            {}
+                : TabletId(tabletId) {}
         };
 
-        struct TEvRemoveTablet : public TEventLocal<TEvRemoveTablet, EvRemoveTablet> {
+        struct TEvRemoveTablet: public TEventLocal<TEvRemoveTablet, EvRemoveTablet> {
             const ui64 TabletId;
 
             explicit TEvRemoveTablet(ui64 tabletId)
-                : TabletId(tabletId)
-            {}
+                : TabletId(tabletId) {}
         };
 
     public:
         TWatcherActor(TWatcherState::TPtr state, ui64 mediatorId, ui32 bucket)
             : State(std::move(state))
             , MediatorId(mediatorId)
-            , Bucket(bucket)
-        {}
+            , Bucket(bucket) {}
 
         void Bootstrap() {
             Become(&TThis::StateWork);
@@ -307,8 +300,8 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         void Handle(TEvMediatorTimecast::TEvUpdate::TPtr& ev) {
             auto* msg = ev->Get();
-            auto& update = std::get<TWatchUpdate>(
-                State->Updates.emplace_back(std::in_place_type<TWatchUpdate>, msg->Record));
+            auto& update =
+                std::get<TWatchUpdate>(State->Updates.emplace_back(std::in_place_type<TWatchUpdate>, msg->Record));
             State->SafeStep = update.SafeStep;
         }
 
@@ -318,8 +311,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
                 return; // ignore outdated updates
             }
 
-            auto& update = std::get<TGranularUpdate>(
-                State->Updates.emplace_back(std::in_place_type<TGranularUpdate>, msg->Record));
+            auto& update =
+                std::get<TGranularUpdate>(State->Updates.emplace_back(std::in_place_type<TGranularUpdate>, msg->Record)
+                );
 
             State->LatestStep = update.LatestStep;
             State->Synchronized = true;
@@ -361,13 +355,11 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
     class TTargetTablet
         : public TActor<TTargetTablet>
-        , public NTabletFlatExecutor::TTabletExecutedFlat
-    {
+        , public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         TTargetTablet(const TActorId& tablet, TTabletStorageInfo* info)
             : TActor(&TThis::StateInit)
-            , TTabletExecutedFlat(info, tablet, nullptr)
-        {}
+            , TTabletExecutedFlat(info, tablet, nullptr) {}
 
     private:
         STFUNC(StateInit) {
@@ -377,8 +369,8 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProcessing::TEvPlanStep, Handle);
-            default:
-                HandleDefaultEvents(ev, SelfId());
+                default:
+                    HandleDefaultEvents(ev, SelfId());
             }
         }
 
@@ -416,14 +408,13 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         }
     };
 
-    class TMediatorTestWithWatcher : public NUnitTest::TBaseFixture {
+    class TMediatorTestWithWatcher: public NUnitTest::TBaseFixture {
     public:
         void SetUp(NUnitTest::TTestContext&) override {
             auto& pm = PM.emplace();
 
             TServerSettings serverSettings(pm.GetPort(2134));
-            serverSettings.SetDomainName("Root")
-                .SetUseRealThreads(false);
+            serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
             Server = new TServer(serverSettings);
             auto& runtime = GetRuntime();
@@ -437,9 +428,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             CoordinatorId = ChangeStateStorage(TTestTxConfig::Coordinator, Server->GetSettings().Domain);
             MediatorId = ChangeStateStorage(TTestTxConfig::TxTablet0, Server->GetSettings().Domain);
 
-            MediatorBootstrapper = CreateTestBootstrapper(runtime,
-                CreateTestTabletInfo(MediatorId, TTabletTypes::Mediator),
-                &CreateTxMediator);
+            MediatorBootstrapper = CreateTestBootstrapper(
+                runtime, CreateTestTabletInfo(MediatorId, TTabletTypes::Mediator), &CreateTxMediator
+            );
 
             {
                 TDispatchOptions options;
@@ -462,7 +453,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
             WatcherState = new TWatcherState();
             Watcher = runtime.Register(new TWatcherActor(WatcherState, MediatorId, 0));
-            runtime.WaitFor("watcher to connect", [this]{ return WatcherState->Connected; });
+            runtime.WaitFor("watcher to connect", [this] {
+                return WatcherState->Connected;
+            });
         }
 
     protected:
@@ -486,7 +479,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             auto& runtime = GetRuntime();
 
             TActorId client = QueuePipeClient(queue);
-            runtime.SendToPipe(client, queue, new TEvTxCoordinator::TEvCoordinatorSync(genCookie, MediatorId, CoordinatorId));
+            runtime.SendToPipe(
+                client, queue, new TEvTxCoordinator::TEvCoordinatorSync(genCookie, MediatorId, CoordinatorId)
+            );
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxCoordinator::TEvCoordinatorSyncResult>(queue);
             auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetCookie(), genCookie);
@@ -500,7 +495,8 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             TActorId client = QueuePipeClient(queue);
             // Note: prevStep is not actually used by mediator
             auto msg = std::make_unique<TEvTxCoordinator::TEvCoordinatorStep>(
-                step, /* prevStep */ 0, MediatorId, CoordinatorId, gen);
+                step, /* prevStep */ 0, MediatorId, CoordinatorId, gen
+            );
             size_t totalAffected = 0;
             for (auto& pr : txs) {
                 auto* protoTx = msg->Record.AddTransactions();
@@ -521,12 +517,13 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             ui64 tabletId = ChangeStateStorage(TTestTxConfig::TxTablet1 + index, Server->GetSettings().Domain);
 
             TargetTabletIds.push_back(tabletId);
-            TargetBootstrappers.push_back(
-                CreateTestBootstrapper(runtime,
-                    CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
-                    [](const TActorId& tablet, TTabletStorageInfo* info) {
-                        return new TTargetTablet(tablet, info);
-                    }));
+            TargetBootstrappers.push_back(CreateTestBootstrapper(
+                runtime,
+                CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
+                [](const TActorId& tablet, TTabletStorageInfo* info) {
+                    return new TTargetTablet(tablet, info);
+                }
+            ));
 
             {
                 TDispatchOptions options;
@@ -567,7 +564,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         }
 
         void WaitNoPending() {
-            GetRuntime().WaitFor("no pending commands", [this]{ return this->WatcherState->Pending.size() == 0; });
+            GetRuntime().WaitFor("no pending commands", [this] {
+                return this->WatcherState->Pending.size() == 0;
+            });
         }
 
     protected:
@@ -596,9 +595,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         // Mediator must send its current steps to the subscriber
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(0),
-            TWatchUpdate(0)));
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(0), TWatchUpdate(0)));
         WatcherState->Updates.clear();
 
         auto queue = runtime.AllocateEdgeActor();
@@ -612,40 +609,47 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         // Send an empty step, we expect both old and granular updates
         SendStep(queue, /* gen */ 1, /* step */ 1000);
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1000),
-            TWatchUpdate(1000)));
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(1000), TWatchUpdate(1000)));
         WatcherState->Updates.clear();
 
         ui64 tabletId = AddTargetTablet();
 
         // Block plan steps and send a step that involves the target tablet
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlanSteps(runtime);
-        SendStep(queue, /* gen */ 1, /* step */ 1010, {
-            {1, {tabletId}},
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tabletId}},
+            }
+        );
+        runtime.WaitFor("blocked plan step", [&] {
+            return blockedPlanSteps.size() > 0;
         });
-        runtime.WaitFor("blocked plan step", [&]{ return blockedPlanSteps.size() > 0; });
         UNIT_ASSERT_VALUES_EQUAL(blockedPlanSteps.size(), 1u);
 
         // Check that latest step is updated
-        runtime.WaitFor("granular update", [&]{ return WatcherState->Updates.size() > 0; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010)));
+        runtime.WaitFor("granular update", [&] {
+            return WatcherState->Updates.size() > 0;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(1010)));
         WatcherState->Updates.clear();
 
         // Subscribe to the target tablet, it must become frozen at a previous step
         AddWatchTablet(tabletId);
         WaitNoPending();
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tabletId, 1009u}}, {})));
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tabletId, 1009u}}, {})));
         WatcherState->Updates.clear();
 
         // Unblock the plan step and wait for both watch and granular update
         blockedPlanSteps.Unblock();
-        runtime.WaitFor("watch updates", [&]{ return WatcherState->Updates.size() >= 2; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {}, {tabletId}),
-            TWatchUpdate(1010)));
+        runtime.WaitFor("watch updates", [&] {
+            return WatcherState->Updates.size() >= 2;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {}, {tabletId}), TWatchUpdate(1010))
+        );
         WatcherState->Updates.clear();
     }
 
@@ -669,39 +673,69 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             UNIT_ASSERT_VALUES_EQUAL(sync.GetLatestKnown(), 0u);
         }
 
-        SendStep(queue, /* gen */ 1, /* step */ 1000, {
-            {1, {tablet1}},
-        });
-        SendStep(queue, /* gen */ 1, /* step */ 1010, {
-            {2, {tablet2}},
-        });
-        SendStep(queue, /* gen */ 1, /* step */ 1020, {
-            {3, {tablet3}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1000,
+            {
+                {1, {tablet1}},
+            }
+        );
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {2, {tablet2}},
+            }
+        );
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1020,
+            {
+                {3, {tablet3}},
+            }
+        );
 
-        runtime.WaitFor("step 1020", [&]{ return WatcherState->SafeStep >= 1020 && WatcherState->Frozen.empty(); });
+        runtime.WaitFor("step 1020", [&] {
+            return WatcherState->SafeStep >= 1020 && WatcherState->Frozen.empty();
+        });
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->SafeStep, 1020u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->LatestStep, 1020u);
 
         // Block plan steps at tablet 1
-        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan1(runtime,
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan1(
+            runtime,
             [&](const TEvTxProcessing::TEvPlanStep::TPtr& ev) {
                 return ev->Get()->Record.GetTabletID() == tablet1;
-            });
+            }
+        );
 
         WatcherState->Updates.clear();
 
-        SendStep(queue, /* gen */ 1, /* step */ 1030, {
-            {4, {tablet1, tablet2, tablet3}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1030,
+            {
+                {4, {tablet1, tablet2, tablet3}},
+            }
+        );
 
-        runtime.WaitFor("granular update", [&]{ return WatcherState->Updates.size() >= 1; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1030, {{tablet1, 1029}, {tablet2, 1029}, {tablet3, 1029}}, {})));
+        runtime.WaitFor("granular update", [&] {
+            return WatcherState->Updates.size() >= 1;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates,
+            MakeUpdates(TGranularUpdate(1030, {{tablet1, 1029}, {tablet2, 1029}, {tablet3, 1029}}, {}))
+        );
         WatcherState->Updates.clear();
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Frozen.size(), 3u);
 
-        runtime.WaitFor("unfrozen 2 tablets", [&]{ return WatcherState->Frozen.size() <= 1; });
+        runtime.WaitFor("unfrozen 2 tablets", [&] {
+            return WatcherState->Frozen.size() <= 1;
+        });
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Frozen.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.size(), 2u);
         WatcherState->Updates.clear();
@@ -711,10 +745,12 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         blockedPlan1.Unblock();
 
-        runtime.WaitFor("granular and watch update", [&]{ return WatcherState->Updates.size() >= 2; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1030, {}, {tablet1}),
-            TWatchUpdate(1030)));
+        runtime.WaitFor("granular and watch update", [&] {
+            return WatcherState->Updates.size() >= 2;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1030, {}, {tablet1}), TWatchUpdate(1030))
+        );
         WatcherState->Updates.clear();
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Frozen.size(), 0u);
     }
@@ -739,7 +775,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         SendStep(queue, /* gen */ 1, /* step */ 1000);
 
-        runtime.WaitFor("step 1000", [&]{ return WatcherState->SafeStep >= 1000; });
+        runtime.WaitFor("step 1000", [&] {
+            return WatcherState->SafeStep >= 1000;
+        });
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->SafeStep, 1000u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->LatestStep, 1000u);
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Frozen.size(), 0u);
@@ -748,11 +786,18 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         TBlockEvents<TEvTxMediator::TEvCommitTabletStep> blockedTabletSteps(runtime);
         TBlockEvents<TEvTxMediator::TEvStepPlanComplete> blockedPlanComplete(runtime);
 
-        SendStep(queue, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+            }
+        );
 
-        runtime.WaitFor("blocked plan", [&]{ return blockedPlanComplete.size() >= 1; });
+        runtime.WaitFor("blocked plan", [&] {
+            return blockedPlanComplete.size() >= 1;
+        });
         UNIT_ASSERT_VALUES_EQUAL(blockedTabletSteps.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(blockedPlanComplete.size(), 1u);
 
@@ -763,10 +808,12 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         blockedTabletSteps.Unblock(1);
         blockedPlanComplete.Unblock(1);
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet2, 1009}}, {}),
-            TGranularUpdate(1010, {}, {tablet2}),
-            TWatchUpdate(1010)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates,
+            MakeUpdates(
+                TGranularUpdate(1010, {{tablet2, 1009}}, {}), TGranularUpdate(1010, {}, {tablet2}), TWatchUpdate(1010)
+            )
+        );
     }
 
     Y_UNIT_TEST_F(TabletAckWhenDead, TMediatorTestWithWatcher) {
@@ -782,30 +829,38 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         SendStep(queue, /* gen */ 1, /* step */ 1000);
 
-        runtime.WaitFor("step 1000", [&]{ return WatcherState->SafeStep >= 1000; });
+        runtime.WaitFor("step 1000", [&] {
+            return WatcherState->SafeStep >= 1000;
+        });
         WatcherState->Updates.clear();
 
         StopTargetTablet(tablet1);
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        SendStep(queue, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1}},
+            }
+        );
 
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}}, {})));
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tablet1, 1009}}, {})));
         WatcherState->Updates.clear();
 
         // The target is currently stopped, so after ~10 minutes there will be
         // a hive request that will tell the pipe that this tablet doesn't
         // exist. Even though we technically didn't create this tablet, it will
         // be marked as dead and auto-ack transaction.
-        runtime.WaitFor("step 1010", [&]{ return WatcherState->SafeStep >= 1010; });
+        runtime.WaitFor("step 1010", [&] {
+            return WatcherState->SafeStep >= 1010;
+        });
 
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {}, {tablet1}),
-            TWatchUpdate(1010)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {}, {tablet1}), TWatchUpdate(1010))
+        );
     }
 
     Y_UNIT_TEST_F(PlanStepAckToReconnectedMediator, TMediatorTestWithWatcher) {
@@ -817,9 +872,14 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         auto queue1 = runtime.AllocateEdgeActor();
         Sync(queue1, 1);
-        SendStep(queue1, /* gen */ 1, /* step */ 1000, {
-            {1, {tablet1}},
-        });
+        SendStep(
+            queue1,
+            /* gen */ 1,
+            /* step */ 1000,
+            {
+                {1, {tablet1}},
+            }
+        );
 
         // Our queue must receive an ack
         {
@@ -828,13 +888,20 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         }
 
         // Mediator's ack must be blocked
-        runtime.WaitFor("blocked accept", [&]{ return blockedAccept.size() >= 1; });
+        runtime.WaitFor("blocked accept", [&] {
+            return blockedAccept.size() >= 1;
+        });
 
         auto queue2 = runtime.AllocateEdgeActor();
         Sync(queue2, 1);
-        SendStep(queue2, /* gen */ 2, /* step */ 1000, {
-            {1, {tablet1}},
-        });
+        SendStep(
+            queue2,
+            /* gen */ 2,
+            /* step */ 1000,
+            {
+                {1, {tablet1}},
+            }
+        );
 
         // Give it a chance to settle down
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
@@ -849,9 +916,14 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         auto queue3 = runtime.AllocateEdgeActor();
         Sync(queue3, 1);
-        SendStep(queue3, /* gen */ 3, /* step */ 1000, {
-            {1, {tablet1}},
-        });
+        SendStep(
+            queue3,
+            /* gen */ 3,
+            /* step */ 1000,
+            {
+                {1, {tablet1}},
+            }
+        );
 
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxProcessing::TEvPlanStepAck>(queue3);
@@ -870,48 +942,65 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         auto queue = runtime.AllocateEdgeActor();
         Sync(queue, 1);
         SendStep(queue, /* gen */ 1, /* step */ 1000);
-        runtime.WaitFor("step 1000", [&]{ return WatcherState->SafeStep >= 1000; });
+        runtime.WaitFor("step 1000", [&] {
+            return WatcherState->SafeStep >= 1000;
+        });
         WatcherState->Updates.clear();
 
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime);
 
-        SendStep(queue, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+            }
+        );
 
         // We expect tablet2 to not be reported since it's not watched yet
-        runtime.WaitFor("update", [&]{ return WatcherState->Updates.size() >= 1; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}}, {})));
+        runtime.WaitFor("update", [&] {
+            return WatcherState->Updates.size() >= 1;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tablet1, 1009}}, {})));
         WatcherState->Updates.clear();
 
         ReconnectWatcher();
 
-        runtime.WaitFor("updates", [&]{ return WatcherState->Updates.size() >= 2; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}}, {}),
-            TWatchUpdate(1000)));
+        runtime.WaitFor("updates", [&] {
+            return WatcherState->Updates.size() >= 2;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tablet1, 1009}}, {}), TWatchUpdate(1000))
+        );
         WatcherState->Updates.clear();
 
         WatcherState->Tablets.insert(tablet2);
         ReconnectWatcher();
 
-        runtime.WaitFor("updates", [&]{ return WatcherState->Updates.size() >= 2; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}}, {}),
-            TWatchUpdate(1000)));
+        runtime.WaitFor("updates", [&] {
+            return WatcherState->Updates.size() >= 2;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates,
+            MakeUpdates(TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}}, {}), TWatchUpdate(1000))
+        );
         WatcherState->Updates.clear();
 
         WatcherState->Tablets.erase(tablet1);
         ReconnectWatcher();
 
-        runtime.WaitFor("updates", [&]{ return WatcherState->Updates.size() >= 2; });
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet2, 1009}}, {}),
-            TWatchUpdate(1000)));
+        runtime.WaitFor("updates", [&] {
+            return WatcherState->Updates.size() >= 2;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tablet2, 1009}}, {}), TWatchUpdate(1000))
+        );
         WatcherState->Updates.clear();
 
-        runtime.WaitFor("both plans", [&]{ return blockedPlan.size() >= 2; });
+        runtime.WaitFor("both plans", [&] {
+            return blockedPlan.size() >= 2;
+        });
         std::sort(blockedPlan.begin(), blockedPlan.end(), [](auto& a, auto& b) {
             return a->Get()->Record.GetTabletID() < b->Get()->Record.GetTabletID();
         });
@@ -922,9 +1011,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         blockedPlan.Unblock(2);
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {}, {tablet2}),
-             TWatchUpdate(1010)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {}, {tablet2}), TWatchUpdate(1010))
+        );
     }
 
     Y_UNIT_TEST_F(MultipleSteps, TMediatorTestWithWatcher) {
@@ -939,31 +1028,57 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         auto queue = runtime.AllocateEdgeActor();
         Sync(queue, 1);
         SendStep(queue, /* gen */ 1, /* step */ 1000);
-        runtime.WaitFor("step 1000", [&]{ return WatcherState->SafeStep >= 1000; });
+        runtime.WaitFor("step 1000", [&] {
+            return WatcherState->SafeStep >= 1000;
+        });
         WatcherState->Updates.clear();
 
-        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan1(runtime,
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan1(
+            runtime,
             [&](const TEvTxProcessing::TEvPlanStep::TPtr& ev) {
                 return ev->Get()->Record.GetTabletID() == tablet1;
-            });
+            }
+        );
 
-        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan2(runtime,
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan2(
+            runtime,
             [&](const TEvTxProcessing::TEvPlanStep::TPtr& ev) {
                 return ev->Get()->Record.GetTabletID() == tablet2;
-            });
+            }
+        );
 
-        SendStep(queue, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-        });
-        SendStep(queue, /* gen */ 1, /* step */ 1020, {
-            {2, {tablet1}},
-        });
-        SendStep(queue, /* gen */ 1, /* step */ 1030, {
-            {3, {tablet2}},
-        });
-        SendStep(queue, /* gen */ 1, /* step */ 1040, {
-            {4, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+            }
+        );
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1020,
+            {
+                {2, {tablet1}},
+            }
+        );
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1030,
+            {
+                {3, {tablet2}},
+            }
+        );
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1040,
+            {
+                {4, {tablet1, tablet2}},
+            }
+        );
 
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(blockedPlan1.size(), 3u);
@@ -982,21 +1097,25 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         blockedPlan2.Unblock(1);
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}}, {}),
-            TGranularUpdate(1020),
-            TGranularUpdate(1030),
-            TGranularUpdate(1040),
-            TGranularUpdate(1040, {{tablet1, 1019}}, {}),
-            TGranularUpdate(1040, {{tablet2, 1029}}, {}),
-            TWatchUpdate(1010),
-            TGranularUpdate(1040, {{tablet1, 1039}}, {}),
-            TWatchUpdate(1020),
-            TGranularUpdate(1040, {{tablet2, 1039}}, {}),
-            TWatchUpdate(1030),
-            TGranularUpdate(1040, {}, {tablet1}),
-            TGranularUpdate(1040, {}, {tablet2}),
-            TWatchUpdate(1040)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates,
+            MakeUpdates(
+                TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}}, {}),
+                TGranularUpdate(1020),
+                TGranularUpdate(1030),
+                TGranularUpdate(1040),
+                TGranularUpdate(1040, {{tablet1, 1019}}, {}),
+                TGranularUpdate(1040, {{tablet2, 1029}}, {}),
+                TWatchUpdate(1010),
+                TGranularUpdate(1040, {{tablet1, 1039}}, {}),
+                TWatchUpdate(1020),
+                TGranularUpdate(1040, {{tablet2, 1039}}, {}),
+                TWatchUpdate(1030),
+                TGranularUpdate(1040, {}, {tablet1}),
+                TGranularUpdate(1040, {}, {tablet2}),
+                TWatchUpdate(1040)
+            )
+        );
     }
 
     Y_UNIT_TEST_F(WatchesBeforeFirstStep, TMediatorTestWithWatcher) {
@@ -1011,18 +1130,22 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         auto queue = runtime.AllocateEdgeActor();
         Sync(queue, 1);
 
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(0),
-            TWatchUpdate(0),
-            TGranularUpdate(0),
-            TGranularUpdate(0)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates,
+            MakeUpdates(TGranularUpdate(0), TWatchUpdate(0), TGranularUpdate(0), TGranularUpdate(0))
+        );
         WatcherState->Updates.clear();
 
         TBlockEvents<TEvTxMediator::TEvStepPlanComplete> blockedPlanComplete(runtime);
 
-        SendStep(queue, /* gen */ 1, /* step */ 1000, {
-            {1, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1000,
+            {
+                {1, {tablet1, tablet2}},
+            }
+        );
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates());
@@ -1030,9 +1153,7 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         blockedPlanComplete.Unblock();
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1000, {}, {}),
-            TWatchUpdate(1000)));
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(1000, {}, {}), TWatchUpdate(1000)));
     }
 
     Y_UNIT_TEST_F(RebootTargetTablets, TMediatorTestWithWatcher) {
@@ -1050,13 +1171,19 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime);
 
-        SendStep(queue, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+            }
+        );
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}})));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}}))
+        );
         WatcherState->Updates.clear();
         UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 2u);
 
@@ -1066,13 +1193,17 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates.back(), TWatchUpdate(1010));
         WatcherState->Updates.clear();
 
-        SendStep(queue, /* gen */ 1, /* step */ 1020, {
-            {2, {tablet1}},
-        });
+        SendStep(
+            queue,
+            /* gen */ 1,
+            /* step */ 1020,
+            {
+                {2, {tablet1}},
+            }
+        );
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1020, {{tablet1, 1019}})));
+        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(TGranularUpdate(1020, {{tablet1, 1019}})));
         WatcherState->Updates.clear();
         UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 1u);
         blockedPlan.clear();
@@ -1085,9 +1216,9 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         blockedPlan.Unblock();
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1020, {}, {tablet1}),
-            TWatchUpdate(1020)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1020, {}, {tablet1}), TWatchUpdate(1020))
+        );
     }
 
     Y_UNIT_TEST_F(ResendSubset, TMediatorTestWithWatcher) {
@@ -1105,16 +1236,22 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime);
 
-        SendStep(queue1, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-            {2, {tablet1}},
-            {3, {tablet2}},
-            {4, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue1,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+                {2, {tablet1}},
+                {3, {tablet2}},
+                {4, {tablet1, tablet2}},
+            }
+        );
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}})));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}}))
+        );
         WatcherState->Updates.clear();
         UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 2u);
         blockedPlan.clear();
@@ -1123,10 +1260,15 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
         Sync(queue2, 1);
 
         // Resend the same plan without tx 2 and 3 (e.g. volatile/lost)
-        SendStep(queue2, /* gen */ 2, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-            {4, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue2,
+            /* gen */ 2,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+                {4, {tablet1, tablet2}},
+            }
+        );
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates());
         UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 0u);
@@ -1165,24 +1307,35 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
 
         TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime);
 
-        SendStep(queue1, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-            {4, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue1,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+                {4, {tablet1, tablet2}},
+            }
+        );
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates(
-            TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}})));
+        UNIT_ASSERT_VALUES_EQUAL(
+            WatcherState->Updates, MakeUpdates(TGranularUpdate(1010, {{tablet1, 1009}, {tablet2, 1009}}))
+        );
         WatcherState->Updates.clear();
         UNIT_ASSERT_VALUES_EQUAL(blockedPlan.size(), 2u);
 
         // This should never happen in practice, but mediator shouldn't crash
-        SendStep(queue1, /* gen */ 1, /* step */ 1010, {
-            {1, {tablet1, tablet2}},
-            {2, {tablet1}},
-            {3, {tablet2}},
-            {4, {tablet1, tablet2}},
-        });
+        SendStep(
+            queue1,
+            /* gen */ 1,
+            /* step */ 1010,
+            {
+                {1, {tablet1, tablet2}},
+                {2, {tablet1}},
+                {3, {tablet2}},
+                {4, {tablet1, tablet2}},
+            }
+        );
         runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(WatcherState->Updates, MakeUpdates());
@@ -1200,7 +1353,6 @@ Y_UNIT_TEST_SUITE(MediatorTest) {
             Cerr << "... ack from " << ev->Get()->Record.GetTabletId() << Endl;
         }
     }
-
 }
 
 } // namespace NKikimr::NTxMediator

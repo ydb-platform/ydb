@@ -9,40 +9,40 @@ namespace NSchemeShard {
 
 namespace {
 
-    void FillIssues(NKikimrImport::TImport& import, const TImportInfo::TPtr importInfo) {
-        if (importInfo->Issue) {
-            AddIssue(import, importInfo->Issue);
-        }
-
-        for (const auto& item : importInfo->Items) {
-            if (item.Issue) {
-                AddIssue(import, item.Issue);
-            }
-        }
+void FillIssues(NKikimrImport::TImport& import, const TImportInfo::TPtr importInfo) {
+    if (importInfo->Issue) {
+        AddIssue(import, importInfo->Issue);
     }
 
-    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
-        NProtoBuf::Timestamp timestamp;
-        timestamp.set_seconds((i64)(sec));
-        timestamp.set_nanos(0);
-        return timestamp;
+    for (const auto& item : importInfo->Items) {
+        if (item.Issue) {
+            AddIssue(import, item.Issue);
+        }
     }
+}
 
-    TImportInfo::EState GetMinState(TImportInfo::TPtr importInfo) {
-        TImportInfo::EState state = TImportInfo::EState::Invalid;
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
+    NProtoBuf::Timestamp timestamp;
+    timestamp.set_seconds((i64)(sec));
+    timestamp.set_nanos(0);
+    return timestamp;
+}
 
-        for (const auto& item : importInfo->Items) {
-            if (state == TImportInfo::EState::Invalid) {
-                state = item.State;
-            }
+TImportInfo::EState GetMinState(TImportInfo::TPtr importInfo) {
+    TImportInfo::EState state = TImportInfo::EState::Invalid;
 
-            state = Min(state, item.State);
+    for (const auto& item : importInfo->Items) {
+        if (state == TImportInfo::EState::Invalid) {
+            state = item.State;
         }
 
-        return state;
+        state = Min(state, item.State);
     }
 
-} // anonymous
+    return state;
+}
+
+} // namespace
 
 void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportInfo::TPtr importInfo) {
     import.SetId(importInfo->Id);
@@ -60,81 +60,85 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     }
 
     switch (importInfo->State) {
-    case TImportInfo::EState::Waiting:
-        switch (GetMinState(importInfo)) {
-        case TImportInfo::EState::GetScheme:
-        case TImportInfo::EState::CreateTable:
-            import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
-            break;
-        case TImportInfo::EState::Transferring:
+        case TImportInfo::EState::Waiting:
+            switch (GetMinState(importInfo)) {
+                case TImportInfo::EState::GetScheme:
+                case TImportInfo::EState::CreateTable:
+                    import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
+                    break;
+                case TImportInfo::EState::Transferring:
             // TODO(ilnaz): fill items progress
-            import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
+                    import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
+                    break;
+                case TImportInfo::EState::BuildIndexes:
+                    import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
+                    break;
+                case TImportInfo::EState::Done:
+                    import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
+                    break;
+                default:
+                    import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_UNSPECIFIED);
+                    break;
+            }
             break;
-        case TImportInfo::EState::BuildIndexes:
-            import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
-            break;
+
         case TImportInfo::EState::Done:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
             break;
+
+        case TImportInfo::EState::Cancellation:
+            FillIssues(import, importInfo);
+            import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_CANCELLATION);
+            break;
+
+        case TImportInfo::EState::Cancelled:
+            import.SetStatus(Ydb::StatusIds::CANCELLED);
+            FillIssues(import, importInfo);
+            import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
+            break;
+
         default:
+            import.SetStatus(Ydb::StatusIds::UNDETERMINED);
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_UNSPECIFIED);
             break;
-        }
-        break;
-
-    case TImportInfo::EState::Done:
-        import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
-        break;
-
-    case TImportInfo::EState::Cancellation:
-        FillIssues(import, importInfo);
-        import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_CANCELLATION);
-        break;
-
-    case TImportInfo::EState::Cancelled:
-        import.SetStatus(Ydb::StatusIds::CANCELLED);
-        FillIssues(import, importInfo);
-        import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_CANCELLED);
-        break;
-
-    default:
-        import.SetStatus(Ydb::StatusIds::UNDETERMINED);
-        import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_UNSPECIFIED);
-        break;
     }
 
     switch (importInfo->Kind) {
-    case TImportInfo::EKind::S3:
-        import.MutableImportFromS3Settings()->CopyFrom(importInfo->Settings);
-        import.MutableImportFromS3Settings()->clear_access_key();
-        import.MutableImportFromS3Settings()->clear_secret_key();
-        break;
+        case TImportInfo::EKind::S3:
+            import.MutableImportFromS3Settings()->CopyFrom(importInfo->Settings);
+            import.MutableImportFromS3Settings()->clear_access_key();
+            import.MutableImportFromS3Settings()->clear_secret_key();
+            break;
     }
 }
 
 void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
-    db.Table<Schema::Imports>().Key(importInfo->Id).Update(
-        NIceDb::TUpdate<Schema::Imports::Uid>(importInfo->Uid),
-        NIceDb::TUpdate<Schema::Imports::Kind>(static_cast<ui8>(importInfo->Kind)),
-        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo->Settings.SerializeAsString()),
-        NIceDb::TUpdate<Schema::Imports::DomainPathOwnerId>(importInfo->DomainPathId.OwnerId),
-        NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo->DomainPathId.LocalPathId),
-        NIceDb::TUpdate<Schema::Imports::Items>(importInfo->Items.size())
-    );
+    db.Table<Schema::Imports>()
+        .Key(importInfo->Id)
+        .Update(
+            NIceDb::TUpdate<Schema::Imports::Uid>(importInfo->Uid),
+            NIceDb::TUpdate<Schema::Imports::Kind>(static_cast<ui8>(importInfo->Kind)),
+            NIceDb::TUpdate<Schema::Imports::Settings>(importInfo->Settings.SerializeAsString()),
+            NIceDb::TUpdate<Schema::Imports::DomainPathOwnerId>(importInfo->DomainPathId.OwnerId),
+            NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo->DomainPathId.LocalPathId),
+            NIceDb::TUpdate<Schema::Imports::Items>(importInfo->Items.size())
+        );
 
     if (importInfo->UserSID) {
-        db.Table<Schema::Imports>().Key(importInfo->Id).Update(
-            NIceDb::TUpdate<Schema::Imports::UserSID>(*importInfo->UserSID)
-        );
+        db.Table<Schema::Imports>()
+            .Key(importInfo->Id)
+            .Update(NIceDb::TUpdate<Schema::Imports::UserSID>(*importInfo->UserSID));
     }
 
     for (ui32 itemIdx : xrange(importInfo->Items.size())) {
         const auto& item = importInfo->Items.at(itemIdx);
 
-        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-            NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
-            NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State))
-        );
+        db.Table<Schema::ImportItems>()
+            .Key(importInfo->Id, itemIdx)
+            .Update(
+                NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
+                NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State))
+            );
     }
 }
 
@@ -147,37 +151,41 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::T
 }
 
 void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
-    db.Table<Schema::Imports>().Key(importInfo->Id).Update(
-        NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo->State)),
-        NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue),
-        NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo->StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo->EndTime.Seconds())
-    );
+    db.Table<Schema::Imports>()
+        .Key(importInfo->Id)
+        .Update(
+            NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo->State)),
+            NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue),
+            NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo->StartTime.Seconds()),
+            NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo->EndTime.Seconds())
+        );
 }
 
 void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
-        NIceDb::TUpdate<Schema::ImportItems::WaitTxId>(item.WaitTxId),
-        NIceDb::TUpdate<Schema::ImportItems::NextIndexIdx>(item.NextIndexIdx),
-        NIceDb::TUpdate<Schema::ImportItems::Issue>(item.Issue)
-    );
+    db.Table<Schema::ImportItems>()
+        .Key(importInfo->Id, itemIdx)
+        .Update(
+            NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
+            NIceDb::TUpdate<Schema::ImportItems::WaitTxId>(item.WaitTxId),
+            NIceDb::TUpdate<Schema::ImportItems::NextIndexIdx>(item.NextIndexIdx),
+            NIceDb::TUpdate<Schema::ImportItems::Issue>(item.Issue)
+        );
 }
 
 void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
-    );
+    db.Table<Schema::ImportItems>()
+        .Key(importInfo->Id, itemIdx)
+        .Update(NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString()));
     if (item.Permissions.Defined()) {
-        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-            NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
-        );
+        db.Table<Schema::ImportItems>()
+            .Key(importInfo->Id, itemIdx)
+            .Update(NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString()));
     }
 }
 
@@ -185,10 +193,12 @@ void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImport
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-        NIceDb::TUpdate<Schema::ImportItems::DstPathOwnerId>(item.DstPathId.OwnerId),
-        NIceDb::TUpdate<Schema::ImportItems::DstPathLocalId>(item.DstPathId.LocalPathId)
-    );
+    db.Table<Schema::ImportItems>()
+        .Key(importInfo->Id, itemIdx)
+        .Update(
+            NIceDb::TUpdate<Schema::ImportItems::DstPathOwnerId>(item.DstPathId.OwnerId),
+            NIceDb::TUpdate<Schema::ImportItems::DstPathLocalId>(item.DstPathId.LocalPathId)
+        );
 }
 
 void TSchemeShard::Handle(TEvImport::TEvCreateImportRequest::TPtr& ev, const TActorContext& ctx) {
@@ -243,5 +253,5 @@ void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* 
     }
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

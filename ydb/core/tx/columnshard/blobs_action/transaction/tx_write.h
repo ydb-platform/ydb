@@ -12,8 +12,7 @@ private:
 public:
     TTxWrite(TColumnShard* self, const TEvPrivate::TEvWriteBlobsResult::TPtr& putBlobResult)
         : TBase(self, "TTxWrite")
-        , PutBlobResult(putBlobResult) {
-    }
+        , PutBlobResult(putBlobResult) {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     void DoComplete(const TActorContext& ctx) override;
@@ -25,8 +24,10 @@ private:
     TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
 
-    bool CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
-    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
+    bool
+    CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
+    bool
+    InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
 
     class TReplyInfo {
     private:
@@ -38,8 +39,7 @@ private:
         TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
-        }
+            , Cookie(cookie) {}
 
         void DoSendReply(const TActorContext& ctx) {
             ctx.Send(DestinationForReply, Event.release(), 0, Cookie);

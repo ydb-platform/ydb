@@ -17,8 +17,7 @@ public:
         , AllocatedBytes(TBase::GetValue("Allocated/Bytes"))
         , AllocatedChunks(TBase::GetValue("Allocated/Count"))
         , WaitingBytes(TBase::GetValue("Waiting/Bytes"))
-        , WaitingChunks(TBase::GetValue("Waiting/Count")) {
-    }
+        , WaitingChunks(TBase::GetValue("Waiting/Count")) {}
 
     void Add(const ui64 volume, const bool allocated) {
         if (allocated) {
@@ -51,8 +50,7 @@ public:
     TCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& name)
         : TBase(NColumnShard::TCommonCountersOwner("grouped_memory_limiter", counters), "limiter_name", name)
         , GroupsCount(TBase::GetValue("Groups/Count"))
-        , ProcessesCount(TBase::GetValue("Processes/Count")) {
-    }
+        , ProcessesCount(TBase::GetValue("Processes/Count")) {}
 
     std::shared_ptr<TStageCounters> BuildStageCounters(const TString& stageName) const {
         return std::make_shared<TStageCounters>(*this, stageName);

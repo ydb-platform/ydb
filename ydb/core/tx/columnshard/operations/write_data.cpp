@@ -7,14 +7,16 @@ namespace NKikimr::NColumnShard {
 
 bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, const NEvWrite::IPayloadReader& payload) {
     if (proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_payload_format")("payload_format", (ui64)proto.GetPayloadFormat());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "invalid_payload_format")("payload_format", (ui64)proto.GetPayloadFormat());
         return false;
     }
     IncomingData = payload.GetDataFromPayload(proto.GetPayloadIndex());
     if (proto.HasType()) {
         auto type = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetType());
         if (!type) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "invalid_modification_type")("proto", proto.DebugString());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "invalid_modification_type")("proto", proto.DebugString());
             return false;
         }
         ModificationType = *type;
@@ -46,7 +48,8 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     if (PayloadSchema) {
         result = NArrow::DeserializeBatch(IncomingData, PayloadSchema);
     } else {
-        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
+        result =
+            NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
     }
 
     IncomingData = "";
@@ -60,7 +63,8 @@ ui64 TArrowData::GetSchemaVersion() const {
 bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto) {
     IncomingData = proto.GetData();
     if (proto.HasModificationType()) {
-        ModificationType = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetModificationType());
+        ModificationType =
+            TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetModificationType());
     }
     if (proto.HasMeta()) {
         const auto& incomingDataScheme = proto.GetMeta().GetSchema();
@@ -79,7 +83,8 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "empty_data");
         return false;
     }
-    if (NColumnShard::TLimits::GetMaxBlobSize() < IncomingData.size() && !AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
+    if (NColumnShard::TLimits::GetMaxBlobSize() < IncomingData.size() &&
+        !AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "too_big_blob");
         return false;
     }

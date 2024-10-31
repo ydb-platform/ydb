@@ -19,14 +19,13 @@ public:
     TTxInternalScan(NColumnShard::TColumnShard* self, TEvColumnShard::TEvInternalScan::TPtr& ev)
         : TBase(self)
         , InternalScanEvent(ev)
-        , LockId(InternalScanEvent->Get()->GetLockId())
-    {
-    }
+        , LockId(InternalScanEvent->Get()->GetLockId()) {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return NColumnShard::TXTYPE_START_INTERNAL_SCAN; }
-
+    TTxType GetTxType() const override {
+        return NColumnShard::TXTYPE_START_INTERNAL_SCAN;
+    }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader

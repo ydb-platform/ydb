@@ -48,26 +48,16 @@ void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxData
 }
 
 void CheckWorkingDirOnPropose(const TPath::TChecker& checks, bool isTableIndex) {
-    checks
-        .NotUnderDomainUpgrade()
-        .IsAtLocalSchemeShard()
-        .IsResolved()
-        .NotDeleted()
-        .IsLikeDirectory()
-        .NotUnderDeleting();
+    checks.NotUnderDomainUpgrade().IsAtLocalSchemeShard().IsResolved().NotDeleted().IsLikeDirectory().NotUnderDeleting(
+    );
 
     if (checks && !isTableIndex) {
         checks.IsCommonSensePath();
     }
 }
 
-void CheckSrcDirOnPropose(
-    const TPath::TChecker& checks,
-    bool isInsideTableIndexPath,
-    TTxId op)
-{
-    checks
-        .NotEmpty()
+void CheckSrcDirOnPropose(const TPath::TChecker& checks, bool isInsideTableIndexPath, TTxId op) {
+    checks.NotEmpty()
         .NotUnderDomainUpgrade()
         .IsAtLocalSchemeShard()
         .IsResolved()
@@ -89,4 +79,4 @@ void CheckSrcDirOnPropose(
     }
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NCdcStreamAtTable

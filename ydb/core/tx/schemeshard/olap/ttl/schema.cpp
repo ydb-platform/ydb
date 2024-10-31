@@ -18,4 +18,4 @@ TConclusionStatus TOlapTTL::Update(const TOlapTTLUpdate& update) {
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

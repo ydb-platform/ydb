@@ -1,5 +1,3 @@
 #include "constructor.h"
 
-namespace NKikimr::NOlap::NReader::NSysView {
-
-}
+namespace NKikimr::NOlap::NReader::NSysView {}

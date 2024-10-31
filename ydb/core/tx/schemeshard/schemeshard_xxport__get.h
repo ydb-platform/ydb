@@ -16,11 +16,10 @@ struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
 
     explicit TTxGet(TSelf* self, typename TEvRequest::TPtr& ev)
         : TTxBase(self)
-        , Request(ev)
-    {
-    }
+        , Request(ev) {}
 
-    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
+    bool
+    DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
         const auto& request = Request->Get()->Record;
 
         auto response = MakeHolder<TEvResponse>();
@@ -40,10 +39,9 @@ struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
-    }
+    void DoComplete(const TActorContext&) override {}
 
 }; // TTxGet
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

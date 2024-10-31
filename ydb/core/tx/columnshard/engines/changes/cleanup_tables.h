@@ -6,6 +6,7 @@ namespace NKikimr::NOlap {
 class TCleanupTablesColumnEngineChanges: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
+
 protected:
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
@@ -13,8 +14,7 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
-    virtual void DoCompile(TFinalizationContext& /*context*/) override {
-    }
+    virtual void DoCompile(TFinalizationContext& /*context*/) override {}
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& /*context*/) noexcept override {
         return TConclusionStatus::Success();
     }
@@ -31,9 +31,7 @@ protected:
 
 public:
     TCleanupTablesColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_TABLES) {
-
-    }
+        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_TABLES) {}
 
     THashSet<ui64> TablesToDrop;
 
@@ -56,4 +54,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

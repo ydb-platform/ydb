@@ -21,8 +21,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     STATEFN(StateAllocateTxId) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -40,13 +40,14 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         tx.SetInternal(true);
 
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-        case TReplication::ETargetKind::IndexTable:
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-            PathIdFromPathId(DstPathId, tx.MutableAlterTable()->MutablePathId());
-            tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
-                NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-            break;
+            case TReplication::ETargetKind::Table:
+            case TReplication::ETargetKind::IndexTable:
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+                PathIdFromPathId(DstPathId, tx.MutableAlterTable()->MutablePathId());
+                tx.MutableAlterTable()->MutableReplicationConfig()->SetMode(
+                    NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE
+                );
+                break;
         }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
@@ -58,8 +59,8 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             sFunc(TEvents::TEvWakeup, AllocateTxId);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -68,13 +69,13 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
-        case NKikimrScheme::StatusAccepted:
-            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
-            return SubscribeTx(record.GetTxId());
-        case NKikimrScheme::StatusMultipleModifications:
-            return Retry();
-        default:
-            return Error(record.GetStatus(), record.GetReason());
+            case NKikimrScheme::StatusAccepted:
+                Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
+                return SubscribeTx(record.GetTxId());
+            case NKikimrScheme::StatusMultipleModifications:
+                return Retry();
+            default:
+                return Error(record.GetStatus(), record.GetReason());
         }
     }
 
@@ -131,21 +132,20 @@ public:
     }
 
     explicit TDstAlterer(
-            const TActorId& parent,
-            ui64 schemeShardId,
-            ui64 rid,
-            ui64 tid,
-            TReplication::ETargetKind kind,
-            const TPathId& dstPathId)
+        const TActorId& parent,
+        ui64 schemeShardId,
+        ui64 rid,
+        ui64 tid,
+        TReplication::ETargetKind kind,
+        const TPathId& dstPathId
+    )
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
-        , LogPrefix("DstAlterer", ReplicationId, TargetId)
-    {
-    }
+        , LogPrefix("DstAlterer", ReplicationId, TargetId) {}
 
     void Bootstrap() {
         if (!DstPathId) {
@@ -181,14 +181,25 @@ private:
 IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId());
+    return CreateDstAlterer(
+        ctx.SelfID,
+        replication->GetSchemeShardId(),
+        replication->GetId(),
+        target->GetId(),
+        target->GetKind(),
+        target->GetDstPathId()
+    );
 }
 
-IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)
-{
+IActor* CreateDstAlterer(
+    const TActorId& parent,
+    ui64 schemeShardId,
+    ui64 rid,
+    ui64 tid,
+    TReplication::ETargetKind kind,
+    const TPathId& dstPathId
+) {
     return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

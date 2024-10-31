@@ -14,4 +14,4 @@ struct TSensitiveEventPB: public NActors::TEventPB<TEv, TRecord, EventType> {
     }
 };
 
-}
+} // namespace NKikimr::NReplication

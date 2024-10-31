@@ -19,11 +19,15 @@ bool ValidateConfig(const Ydb::Coordination::Config& config, TEvSchemeShard::ESt
     return true;
 }
 
-TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
-                    TPathElement::TPtr item, TKesusInfo::TPtr kesus, const TString& acl,
-                    const TChannelsBindings& tabletChannels,
-                    TOperationContext& context)
-{
+TTxState& PrepareChanges(
+    TOperationId operationId,
+    TPathElement::TPtr parentDir,
+    TPathElement::TPtr item,
+    TKesusInfo::TPtr kesus,
+    const TString& acl,
+    const TChannelsBindings& tabletChannels,
+    TOperationContext& context
+) {
     NIceDb::TNiceDb db(context.GetDB());
 
     item->CreateTxId = operationId.GetTxId();
@@ -35,14 +39,14 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     TTxState& txState = context.SS->CreateTx(operationId, TTxState::TxCreateKesus, pathId);
 
     auto shardIdx = context.SS->RegisterShardInfo(
-        TShardInfo::KesusInfo(operationId.GetTxId(), pathId)
-            .WithBindedChannels(tabletChannels));
+        TShardInfo::KesusInfo(operationId.GetTxId(), pathId).WithBindedChannels(tabletChannels)
+    );
     context.SS->TabletCounters->Simple()[COUNTER_KESUS_SHARD_COUNT].Add(1);
     txState.Shards.emplace_back(shardIdx, ETabletType::Kesus, TTxState::CreateParts);
     kesus->KesusShardIdx = shardIdx;
 
     if (parentDir->HasActiveChanges()) {
-        TTxId parentTxId =  parentDir->PlannedToCreate() ? parentDir->CreateTxId : parentDir->LastTxId;
+        TTxId parentTxId = parentDir->PlannedToCreate() ? parentDir->CreateTxId : parentDir->LastTxId;
         context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
     }
 
@@ -63,7 +67,9 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     for (auto shard : txState.Shards) {
         Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);
         context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
-        context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, operationId.GetTxId(), shard.TabletType);
+        context.SS->PersistShardMapping(
+            db, shard.Idx, InvalidTabletId, pathId, operationId.GetTxId(), shard.TabletType
+        );
     }
 
     return txState;
@@ -74,15 +80,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateKesus TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateKesus TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -140,7 +144,6 @@ public:
         TKesusInfo::TPtr kesus = context.SS->KesusInfos[txState->TargetPathId];
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
-
         auto kesusPath = TPath::Init(txState->TargetPathId, context.SS);
         Y_ABORT_UNLESS(kesusPath.IsResolved());
 
@@ -153,7 +156,8 @@ public:
             kesus->KesusShardIdx = shardIdx;
             kesus->KesusTabletId = tabletId;
 
-            auto event = MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), kesus->Config, kesus->Version);
+            auto event =
+                MakeHolder<NKesus::TEvKesus::TEvSetConfig>(ui64(OperationId.GetTxId()), kesus->Config, kesus->Version);
             event->Record.MutableConfig()->set_path(kesusPath.PathString()); // TODO: remove legacy field eventually
             event->Record.SetPath(kesusPath.PathString());
 
@@ -167,21 +171,18 @@ public:
     }
 };
 
-
 class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateKesus TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateKesus TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -247,7 +248,6 @@ public:
     }
 };
 
-
 class TCreateKesus: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -255,31 +255,31 @@ class TCreateKesus: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -313,8 +313,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -336,19 +335,15 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeKesus, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeKesus, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
+                checks.IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -370,8 +365,10 @@ public:
         const ui32 kesusProfileId = 0;
         TChannelsBindings kesusChannelsBindings;
         if (!context.SS->ResolveTabletChannels(kesusProfileId, dstPath.GetPathIdForDomain(), kesusChannelsBindings)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                        "Unable to construct channel binding for coordination node with the storage pool");
+            result->SetError(
+                NKikimrScheme::StatusInvalidParameter,
+                "Unable to construct channel binding for coordination node with the storage pool"
+            );
             return result;
         }
 
@@ -388,7 +385,8 @@ public:
         kesus->Config.CopyFrom(config);
         kesus->Version = 1;
 
-        const TTxState& txState = PrepareChanges(OperationId, parentPath.Base(), dstPath.Base(), kesus, acl, kesusChannelsBindings, context);
+        const TTxState& txState =
+            PrepareChanges(OperationId, parentPath.Base(), dstPath.Base(), kesus, acl, kesusChannelsBindings, context);
 
         NIceDb::TNiceDb db(context.GetDB());
         ++parentPath.Base()->DirAlterVersion;
@@ -424,7 +422,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -437,4 +435,4 @@ ISubOperation::TPtr CreateNewKesus(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateKesus>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -5,7 +5,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -63,15 +63,19 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DESCRIBER;
     }
 
-    explicit TTargetDescriber(const TActorId& sender, const TActorId& parent, ui64 rid, const TActorId& proxy, THashMap<ui64, TString>&& targets)
+    explicit TTargetDescriber(
+        const TActorId& sender,
+        const TActorId& parent,
+        ui64 rid,
+        const TActorId& proxy,
+        THashMap<ui64, TString>&& targets
+    )
         : Sender(sender)
         , Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
-        , Targets (std::move(targets))
-        , LogPrefix("TargetDescriber", ReplicationId)
-    {
-    }
+        , Targets(std::move(targets))
+        , LogPrefix("TargetDescriber", ReplicationId) {}
 
     void Bootstrap() {
         for (const auto& [id, _] : Targets) {
@@ -112,16 +116,12 @@ public:
     explicit TTxDescribeReplication(TController* self, TEvController::TEvDescribeReplication::TPtr& ev)
         : TTxBase("TxDescribeReplication", self)
         , Sender(ev->Sender)
-        , PubEv(ev)
-    {
-    }
+        , PubEv(ev) {}
 
     explicit TTxDescribeReplication(TController* self, TEvPrivate::TEvDescribeTargetsResult::TPtr& ev)
         : TTxBase("TxDescribeReplication", self)
         , Sender(ev->Get()->Sender)
-        , PrivEv(ev)
-    {
-    }
+        , PrivEv(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_DESCRIBE_REPLICATION;
@@ -240,25 +240,25 @@ public:
 
         auto& state = *Result->Record.MutableState();
         switch (replication->GetState()) {
-        case TReplication::EState::Ready:
-        case TReplication::EState::Removing:
-            state.MutableStandBy();
-            if (const auto lag = replication->GetLag()) {
-                state.MutableStandBy()->SetLagMilliSeconds(lag->MilliSeconds());
-            }
-            if (totalScanProgress) {
-                state.MutableStandBy()->SetInitialScanProgress(totalScanProgress->GetProgress());
-            }
-            break;
-        case TReplication::EState::Done:
-            state.MutableDone();
-            break;
-        case TReplication::EState::Error:
-            if (auto issue = state.MutableError()->AddIssues()) {
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
-                issue->set_message(replication->GetIssue());
-            }
-            break;
+            case TReplication::EState::Ready:
+            case TReplication::EState::Removing:
+                state.MutableStandBy();
+                if (const auto lag = replication->GetLag()) {
+                    state.MutableStandBy()->SetLagMilliSeconds(lag->MilliSeconds());
+                }
+                if (totalScanProgress) {
+                    state.MutableStandBy()->SetInitialScanProgress(totalScanProgress->GetProgress());
+                }
+                break;
+            case TReplication::EState::Done:
+                state.MutableDone();
+                break;
+            case TReplication::EState::Error:
+                if (auto issue = state.MutableError()->AddIssues()) {
+                    issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                    issue->set_message(replication->GetIssue());
+                }
+                break;
         }
 
         return true;
@@ -271,8 +271,9 @@ public:
             ctx.Send(Sender, Result.Release());
         } else if (TargetsToDescribe) {
             Y_ABORT_UNLESS(Replication);
-            ctx.Register(new TTargetDescriber(Sender, ctx.SelfID,
-                Replication->GetId(), Replication->GetYdbProxy(), std::move(TargetsToDescribe)));
+            ctx.Register(new TTargetDescriber(
+                Sender, ctx.SelfID, Replication->GetId(), Replication->GetYdbProxy(), std::move(TargetsToDescribe)
+            ));
         }
     }
 
@@ -286,4 +287,4 @@ void TController::RunTxDescribeReplication(TEvPrivate::TEvDescribeTargetsResult:
     Execute(new TTxDescribeReplication(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

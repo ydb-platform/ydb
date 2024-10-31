@@ -58,7 +58,8 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
     auto keyIndices = AS_VALUE(TListLiteral, keysIndicesNode);
     result.KeyIndices.resize(keyIndices->GetItemsCount());
     for (ui32 i = 0; i < result.KeyIndices.size(); ++i) {
-        result.KeyIndices[i] = AS_VALUE(TDataLiteral, keyIndices->GetItems()[i])->AsValue().Get<ui32>();;
+        result.KeyIndices[i] = AS_VALUE(TDataLiteral, keyIndices->GetItems()[i])->AsValue().Get<ui32>();
+        ;
     }
 
     auto keyTypes = AS_TYPE(TStructType, AS_TYPE(TStreamType, keysNode.GetStaticType())->GetItemType());
@@ -73,12 +74,16 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
     return result;
 }
 
-class TKqpLookupRowsWrapper : public TStatelessFlowComputationNode<TKqpLookupRowsWrapper> {
+class TKqpLookupRowsWrapper: public TStatelessFlowComputationNode<TKqpLookupRowsWrapper> {
     using TBase = TStatelessFlowComputationNode<TKqpLookupRowsWrapper>;
 
 public:
-    TKqpLookupRowsWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
+    TKqpLookupRowsWrapper(
+        TComputationMutables& mutables,
+        TKqpDatashardComputeContext& computeCtx,
+        const TParseLookupTableResult& parseResult,
+        IComputationNode* lookupKeysNode
+    )
         : TBase(mutables, this, EValueRepresentation::Boxed)
         , ComputeCtx(computeCtx)
         , ParseResult(parseResult)
@@ -86,13 +91,13 @@ public:
         , ColumnTags(ParseResult.Columns)
         , SystemColumnTags(ParseResult.SystemColumns)
         , ShardTableStats(ComputeCtx.GetDatashardCounters())
-        , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId()))
-    {
+        , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId())) {
         auto localTid = ComputeCtx.GetLocalTableId(ParseResult.TableId);
         auto tableInfo = ComputeCtx.Database->GetScheme().GetTableInfo(localTid);
         MKQL_ENSURE_S(tableInfo, "Unknown table " << ParseResult.TableId);
-        MKQL_ENSURE_S(tableInfo->KeyColumns.size() == ParseResult.KeyIndices.size(),
-            "Incomplete row key in LookupRows.");
+        MKQL_ENSURE_S(
+            tableInfo->KeyColumns.size() == ParseResult.KeyIndices.size(), "Incomplete row key in LookupRows."
+        );
     }
 
     TUnboxedValue DoCalculate(TComputationContext& ctx) const {
@@ -108,8 +113,9 @@ public:
 
                     NUdf::TUnboxedValue result;
                     TKqpTableStats stats;
-                    bool fetched = ComputeCtx.ReadRow(ParseResult.TableId, keyCells, ColumnTags, SystemColumnTags,
-                        ctx.HolderFactory, result, stats);
+                    bool fetched = ComputeCtx.ReadRow(
+                        ParseResult.TableId, keyCells, ColumnTags, SystemColumnTags, ctx.HolderFactory, result, stats
+                    );
 
                     if (stats.InvisibleRowSkips) {
                         ComputeCtx.BreakSetLocks();
@@ -156,12 +162,16 @@ private:
     TKqpTableStats& TaskTableStats;
 };
 
-class TKqpLookupTableWrapper : public TStatelessFlowComputationNode<TKqpLookupTableWrapper> {
+class TKqpLookupTableWrapper: public TStatelessFlowComputationNode<TKqpLookupTableWrapper> {
     using TBase = TStatelessFlowComputationNode<TKqpLookupTableWrapper>;
 
 public:
-    TKqpLookupTableWrapper(TComputationMutables& mutables, TKqpDatashardComputeContext& computeCtx,
-        const TParseLookupTableResult& parseResult, IComputationNode* lookupKeysNode)
+    TKqpLookupTableWrapper(
+        TComputationMutables& mutables,
+        TKqpDatashardComputeContext& computeCtx,
+        const TParseLookupTableResult& parseResult,
+        IComputationNode* lookupKeysNode
+    )
         : TBase(mutables, this, EValueRepresentation::Boxed)
         , ComputeCtx(computeCtx)
         , ParseResult(parseResult)
@@ -212,9 +222,15 @@ public:
             TUnboxedValue result;
             TKqpTableStats stats;
 
-            bool fetched = ComputeCtx.ReadRow(ParseResult.TableId, *Iterator, SystemColumnTags,
-                ParseResult.SkipNullKeys, ctx.HolderFactory, result, stats);
-
+            bool fetched = ComputeCtx.ReadRow(
+                ParseResult.TableId,
+                *Iterator,
+                SystemColumnTags,
+                ParseResult.SkipNullKeys,
+                ctx.HolderFactory,
+                result,
+                stats
+            );
 
             if (stats.InvisibleRowSkips) {
                 ComputeCtx.BreakSetLocks();
@@ -253,9 +269,11 @@ private:
     mutable TAutoPtr<NTable::TTableIter> Iterator;
 };
 
-IComputationNode* WrapKqpLookupTableInternal(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
-{
+IComputationNode* WrapKqpLookupTableInternal(
+    TCallable& callable,
+    const TComputationNodeFactoryContext& ctx,
+    TKqpDatashardComputeContext& computeCtx
+) {
     auto parseResult = ParseLookupTable(callable);
     auto lookupKeysNode = LocateNode(ctx.NodeLocator, *parseResult.LookupKeys.GetNode());
 
@@ -275,9 +293,11 @@ IComputationNode* WrapKqpLookupTableInternal(TCallable& callable, const TComputa
 
 } // namespace
 
-IComputationNode* WrapKqpLookupTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
-{
+IComputationNode* WrapKqpLookupTable(
+    TCallable& callable,
+    const TComputationNodeFactoryContext& ctx,
+    TKqpDatashardComputeContext& computeCtx
+) {
     return WrapKqpLookupTableInternal(callable, ctx, computeCtx);
 }
 

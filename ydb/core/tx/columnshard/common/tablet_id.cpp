@@ -2,9 +2,7 @@
 #include <util/stream/output.h>
 #include <util/generic/typetraits.h>
 
-namespace NKikimr::NOlap {
-
-}
+namespace NKikimr::NOlap {}
 
 template <>
 void Out<NKikimr::NOlap::TTabletId>(IOutputStream& os, TTypeTraits<NKikimr::NOlap::TTabletId>::TFuncParam val) {

@@ -6,24 +6,24 @@
 namespace NKikimr {
 namespace NLongTxService {
 
-    struct TLongTxServiceCounters : public TAtomicRefCount<TLongTxServiceCounters> {
-        using TGroupPtr = TIntrusivePtr<NMonitoring::TDynamicCounters>;
-        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+struct TLongTxServiceCounters: public TAtomicRefCount<TLongTxServiceCounters> {
+    using TGroupPtr = TIntrusivePtr<NMonitoring::TDynamicCounters>;
+    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
-        TCounterPtr AcquireReadSnapshotInRequests;
-        TCounterPtr AcquireReadSnapshotOutRequests;
-        TCounterPtr AcquireReadSnapshotInInFlight;
-        TCounterPtr AcquireReadSnapshotOutInFlight;
+    TCounterPtr AcquireReadSnapshotInRequests;
+    TCounterPtr AcquireReadSnapshotOutRequests;
+    TCounterPtr AcquireReadSnapshotInInFlight;
+    TCounterPtr AcquireReadSnapshotOutInFlight;
 
-        explicit TLongTxServiceCounters(const TGroupPtr& group);
-    };
+    explicit TLongTxServiceCounters(const TGroupPtr& group);
+};
 
-    struct TLongTxServiceSettings {
-        TIntrusiveConstPtr<TLongTxServiceCounters> Counters;
+struct TLongTxServiceSettings {
+    TIntrusiveConstPtr<TLongTxServiceCounters> Counters;
         // TODO: add settings for long tx service
-    };
+};
 
-    IActor* CreateLongTxService(const TLongTxServiceSettings& settings = {});
+IActor* CreateLongTxService(const TLongTxServiceSettings& settings = {});
 
 } // namespace NLongTxService
 } // namespace NKikimr

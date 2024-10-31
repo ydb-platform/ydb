@@ -5,13 +5,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TInitiateBuildIndexUnit : public TExecutionUnit {
+class TInitiateBuildIndexUnit: public TExecutionUnit {
     THolder<TEvChangeExchange::TEvAddSender> AddSender;
 
 public:
     TInitiateBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::InitiateBuildIndex, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::InitiateBuildIndex, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -42,9 +41,9 @@ public:
 
             if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
                 auto indexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
-                AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-                    pathId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
-                ));
+                AddSender.Reset(
+                    new TEvChangeExchange::TEvAddSender(pathId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId)
+                );
             }
 
             tableInfo = DataShard.AlterTableAddIndex(ctx, txc, pathId, version, indexDesc);
@@ -66,8 +65,7 @@ public:
         const TSnapshotKey key(pathId, step, txId);
         const ui64 flags = TSnapshot::FlagScheme;
 
-        DataShard.GetSnapshotManager().AddSnapshot(
-            txc.DB, key, params.GetSnapshotName(), flags, TDuration::Zero());
+        DataShard.GetSnapshotManager().AddSnapshot(txc.DB, key, params.GetSnapshotName(), flags, TDuration::Zero());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
@@ -82,10 +80,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateInitiateBuildIndexUnit(
-    TDataShard& dataShard,
-    TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateInitiateBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TInitiateBuildIndexUnit(dataShard, pipeline));
 }
 

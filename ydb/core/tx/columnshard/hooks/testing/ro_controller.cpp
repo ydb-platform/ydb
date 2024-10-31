@@ -21,7 +21,10 @@ bool TReadOnlyController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow:
     return true;
 }
 
-bool TReadOnlyController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+bool TReadOnlyController::DoOnWriteIndexComplete(
+    const NOlap::TColumnEngineChanges& change,
+    const ::NKikimr::NColumnShard::TColumnShard& /*shard*/
+) {
     if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
         CleaningFinishedCounter.Inc();
     }

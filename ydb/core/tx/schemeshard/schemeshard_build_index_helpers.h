@@ -2,13 +2,8 @@
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_E
-# error log macro redefinition
+#if defined LOG_T || defined LOG_D || defined LOG_I || defined LOG_N || defined LOG_W || defined LOG_E
+#error log macro redefinition
 #endif
 
 #define LOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << stream)

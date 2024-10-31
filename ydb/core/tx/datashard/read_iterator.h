@@ -21,13 +21,12 @@ struct TReadIteratorId {
 
     TReadIteratorId(const TActorId& sender, ui64 readId)
         : Sender(sender)
-        , ReadId(readId)
-    {}
+        , ReadId(readId) {}
 
-    bool operator ==(const TReadIteratorId& rhs) const = default;
+    bool operator==(const TReadIteratorId& rhs) const = default;
 
     struct THash {
-        size_t operator ()(const TReadIteratorId& id) const {
+        size_t operator()(const TReadIteratorId& id) const {
             return MultiHash(id.Sender.Hash(), id.ReadId);
         }
     };
@@ -56,8 +55,7 @@ struct TReadIteratorState {
 
         TQuota(ui64 rows, ui64 bytes)
             : Rows(rows)
-            , Bytes(bytes)
-        {}
+            , Bytes(bytes) {}
 
         ui64 Rows = Max<ui64>();
         ui64 Bytes = Max<ui64>();
@@ -65,19 +63,25 @@ struct TReadIteratorState {
 
 public:
     TReadIteratorState(
-            const TReadIteratorId& readId, const TPathId& pathId,
-            const TActorId& sessionId, const TRowVersion& readVersion, bool isHeadRead,
-            TMonotonic ts, NLWTrace::TOrbit&& orbit = {})
+        const TReadIteratorId& readId,
+        const TPathId& pathId,
+        const TActorId& sessionId,
+        const TRowVersion& readVersion,
+        bool isHeadRead,
+        TMonotonic ts,
+        NLWTrace::TOrbit&& orbit = {}
+    )
         : ReadId(readId.ReadId)
         , PathId(pathId)
         , ReadVersion(readVersion)
         , IsHeadRead(isHeadRead)
         , SessionId(sessionId)
         , StartTs(ts)
-        , Orbit(std::move(orbit))
-    {}
+        , Orbit(std::move(orbit)) {}
 
-    bool IsExhausted() const { return State == EState::Exhausted; }
+    bool IsExhausted() const {
+        return State == EState::Exhausted;
+    }
 
     // must be called only once per SeqNo
     void ConsumeSeqNo(ui64 rows, ui64 bytes) {
@@ -221,4 +225,4 @@ public:
 using TReadIteratorStatePtr = std::unique_ptr<TReadIteratorState>;
 using TReadIteratorsMap = std::unordered_map<TReadIteratorId, TReadIteratorStatePtr, TReadIteratorId::THash>;
 
-} // NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

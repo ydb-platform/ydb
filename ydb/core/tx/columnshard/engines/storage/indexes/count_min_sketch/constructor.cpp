@@ -5,7 +5,12 @@
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor::DoCreateIndexMeta(
+    const ui32 indexId,
+    const TString& indexName,
+    const NSchemeShard::TOlapSchema& currentSchema,
+    NSchemeShard::IErrorCollector& errors
+) const {
     std::set<ui32> columnIds;
     if (ColumnNames.empty()) {
         for (const auto& [id, _] : currentSchema.GetColumns().GetColumns()) {
@@ -20,7 +25,9 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor
         }
         AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId), columnIds);
+    return std::make_shared<TIndexMeta>(
+        indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::LocalMetadataStorageId), columnIds
+    );
 }
 
 NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -29,18 +36,25 @@ NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(con
     }
     const NJson::TJsonValue::TArray* columnNamesArray;
     if (!jsonInfo["column_names"].GetArrayPointer(&columnNamesArray)) {
-        return TConclusionStatus::Fail("column_names have to be in count min sketch features as array ['column_name_1', ... , 'column_name_N']");
+        return TConclusionStatus::Fail(
+            "column_names have to be in count min sketch features as array ['column_name_1', ... , 'column_name_N']"
+        );
     }
     for (auto&& i : *columnNamesArray) {
         if (!i.IsString()) {
-            return TConclusionStatus::Fail("column_names have to be in count min sketch features as array of strings ['column_name_1', ... , 'column_name_N']");
+            return TConclusionStatus::Fail(
+                "column_names have to be in count min sketch features as array of strings ['column_name_1', ... , "
+                "'column_name_N']"
+            );
         }
         ColumnNames.emplace(i.GetString());
     }
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) {
+NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromProto(
+    const NKikimrSchemeOp::TOlapIndexRequested& proto
+) {
     if (!proto.HasCountMinSketch()) {
         const TString errorMessage = "not found CountMinSketch section in proto: \"" + proto.DebugString() + "\"";
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
@@ -60,4 +74,4 @@ void TCountMinSketchConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexR
     }
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

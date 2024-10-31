@@ -6,9 +6,9 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 TString TColumnsSet::DebugString() const {
     return TStringBuilder() << "("
-        << "column_ids=" << JoinSeq(",", ColumnIds) << ";"
-        << "column_names=" << JoinSeq(",", ColumnNames) << ";"
-        << ");";
+                            << "column_ids=" << JoinSeq(",", ColumnIds) << ";"
+                            << "column_names=" << JoinSeq(",", ColumnNames) << ";"
+                            << ");";
 }
 
 TColumnsSet TColumnsSet::operator-(const TColumnsSet& external) const {
@@ -76,4 +76,4 @@ void TColumnsSet::Rebuild() {
     FilteredSchema = std::make_shared<TFilteredSnapshotSchema>(FullReadSchema, ColumnIds);
 }
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

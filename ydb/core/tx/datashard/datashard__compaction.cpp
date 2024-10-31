@@ -3,17 +3,18 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDataShard::TTxCompactTable : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxCompactTable: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvCompactTable::TPtr Ev;
 
 public:
     TTxCompactTable(TDataShard* ds, TEvDataShard::TEvCompactTable::TPtr ev)
         : TBase(ds)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_COMPACT_TABLE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_COMPACT_TABLE;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto& record = Ev->Get()->Record;
@@ -27,7 +28,8 @@ public:
                 Self->TabletID(),
                 record.GetPathId().GetOwnerId(),
                 record.GetPathId().GetLocalId(),
-                NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+                NKikimrTxDataShard::TEvCompactTableResult::FAILED
+            );
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -40,9 +42,8 @@ public:
                 << " of not owned " << pathId
                 << ", self path owner id# " << Self->GetPathOwnerId());
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
-                Self->TabletID(),
-                pathId,
-                NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+                Self->TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::FAILED
+            );
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -55,9 +56,8 @@ public:
                 << " of unknown " << pathId
                 << ", requested from " << Ev->Sender);
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
-                Self->TabletID(),
-                pathId,
-                NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+                Self->TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::FAILED
+            );
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -79,9 +79,8 @@ public:
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
-                Self->TabletID(),
-                pathId,
-                NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
+                Self->TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::BORROWED
+            );
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -98,9 +97,8 @@ public:
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
-                Self->TabletID(),
-                pathId,
-                NKikimrTxDataShard::TEvCompactTableResult::LOANED);
+                Self->TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::LOANED
+            );
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -119,9 +117,8 @@ public:
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
-                Self->TabletID(),
-                pathId,
-                NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+                Self->TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED
+            );
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -146,9 +143,8 @@ public:
             // compaction failed, for now we don't care
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START);
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
-                Self->TabletID(),
-                pathId,
-                NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+                Self->TabletID(), pathId, NKikimrTxDataShard::TEvCompactTableResult::FAILED
+            );
             ctx.Send(Ev->Sender, std::move(response));
         }
 
@@ -160,7 +156,7 @@ public:
     }
 };
 
-class TDataShard::TTxPersistFullCompactionTs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxPersistFullCompactionTs: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     ui64 TableId;
     TInstant Ts;
 
@@ -168,11 +164,12 @@ public:
     TTxPersistFullCompactionTs(TDataShard* ds, ui64 tableId, TInstant ts)
         : TBase(ds)
         , TableId(tableId)
-        , Ts(ts)
-    {}
+        , Ts(ts) {}
 
     // note, that type is the same as in TTxCompactTable
-    TTxType GetTxType() const override { return TXTYPE_COMPACT_TABLE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_COMPACT_TABLE;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
@@ -193,7 +190,7 @@ void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorCon
     Executor()->Execute(new TTxCompactTable(this, ev), ctx);
 }
 
-void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
+void TDataShard::CompactionComplete(ui32 tableId, const TActorContext& ctx) {
     auto finishedInfo = Executor()->GetFinishedCompactionInfo(tableId);
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -209,12 +206,7 @@ void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
             if (ti.second->Stats.LastFullCompaction < finishedInfo.FullCompactionTs) {
                 IncCounter(COUNTER_FULL_COMPACTION_DONE);
                 ti.second->Stats.LastFullCompaction = finishedInfo.FullCompactionTs;
-                Executor()->Execute(
-                    new TTxPersistFullCompactionTs(
-                        this,
-                        ti.first,
-                        finishedInfo.FullCompactionTs),
-                    ctx);
+                Executor()->Execute(new TTxPersistFullCompactionTs(this, ti.first, finishedInfo.FullCompactionTs), ctx);
             }
 
             ti.second->StatsNeedUpdate = true;
@@ -231,8 +223,8 @@ void TDataShard::ReplyCompactionWaiters(
     ui32 tableId,
     TLocalPathId localPathId,
     const NTabletFlatExecutor::TFinishedCompactionInfo& compactionInfo,
-    const TActorContext &ctx)
-{
+    const TActorContext& ctx
+) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
         "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
         << ", finished edge# " << compactionInfo.Edge
@@ -247,10 +239,8 @@ void TDataShard::ReplyCompactionWaiters(
 
         const auto& sender = std::get<1>(waiter);
         auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
-            TabletID(),
-            GetPathOwnerId(),
-            localPathId,
-            NKikimrTxDataShard::TEvCompactTableResult::OK);
+            TabletID(), GetPathOwnerId(), localPathId, NKikimrTxDataShard::TEvCompactTableResult::OK
+        );
         ctx.Send(sender, std::move(response));
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -271,9 +261,8 @@ void TDataShard::ReplyCompactionWaiters(
 
                 if (waiter->CompactingTables.empty()) { // all requested tables have been compacted
                     auto response = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(
-                        TabletID(),
-                        GetPathOwnerId(),
-                        waiter->RequestedTable);
+                        TabletID(), GetPathOwnerId(), waiter->RequestedTable
+                    );
                     ctx.Send(waiter->ActorId, std::move(response));
 
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -289,7 +278,7 @@ void TDataShard::ReplyCompactionWaiters(
 }
 
 void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const TActorContext& ctx) {
-    auto &record = ev->Get()->Record;
+    auto& record = ev->Get()->Record;
     auto response = MakeHolder<TEvDataShard::TEvGetCompactTableStatsResult>();
 
     const auto pathId = PathIdFromPathId(record.GetPathId());
@@ -306,5 +295,5 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
     ctx.Send(ev->Sender, std::move(response));
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

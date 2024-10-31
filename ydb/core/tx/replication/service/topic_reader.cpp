@@ -15,11 +15,10 @@ namespace NKikimr::NReplication::NService {
 class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[RemoteTopicReader]"
-                << "[" << Settings.GetBase().Topics_[0].Path_ << "]"
-                << "[" << Settings.GetBase().Topics_[0].PartitionIds_[0] << "]"
-                << SelfId() << " ";
+            LogPrefix = TStringBuilder() << "[RemoteTopicReader]"
+                                         << "[" << Settings.GetBase().Topics_[0].Path_ << "]"
+                                         << "[" << Settings.GetBase().Topics_[0].PartitionIds_[0] << "]" << SelfId()
+                                         << " ";
         }
 
         return LogPrefix.GetRef();
@@ -68,17 +67,22 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         LOG_D("Handle " << ev->Get()->ToString());
 
         auto& result = ev->Get()->Result;
-        Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
+        Send(
+            Worker,
+            new TEvWorker::TEvDataEnd(
+                result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)
+            )
+        );
     }
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         switch (ev->Get()->Result.GetStatus()) {
-        case NYdb::EStatus::SCHEME_ERROR:
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
-        default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            case NYdb::EStatus::SCHEME_ERROR:
+                return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
+            default:
+                return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
     }
 
@@ -106,8 +110,7 @@ public:
     explicit TRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts)
         : TActor(&TThis::StateWork)
         , YdbProxy(ydbProxy)
-        , Settings(opts)
-    {
+        , Settings(opts) {
         const auto& base = Settings.GetBase();
         Y_ABORT_UNLESS(base.Topics_.size() == 1);
         Y_ABORT_UNLESS(base.Topics_.at(0).PartitionIds_.size() == 1);
@@ -139,4 +142,4 @@ IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTo
     return new TRemoteTopicReader(ydbProxy, opts);
 }
 
-}
+} // namespace NKikimr::NReplication::NService

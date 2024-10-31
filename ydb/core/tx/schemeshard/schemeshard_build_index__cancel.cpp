@@ -7,11 +7,12 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TIndexBuilder::TTxCancel: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCancelRequest, TEvIndexBuilder::TEvCancelResponse> {
+struct TSchemeShard::TIndexBuilder::TTxCancel
+    : public TSchemeShard::TIndexBuilder::
+          TTxSimple<TEvIndexBuilder::TEvCancelRequest, TEvIndexBuilder::TEvCancelResponse> {
 public:
     explicit TTxCancel(TSelf* self, TEvIndexBuilder::TEvCancelRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_CANCEL_INDEX_BUILD)
-    {}
+        : TTxSimple(self, ev, TXTYPE_CANCEL_INDEX_BUILD) {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
@@ -21,8 +22,7 @@ public:
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
             return Reply(
-                Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
+                Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
             );
         }
         const TPathId domainPathId = database.GetPathIdForDomain();
@@ -39,7 +39,8 @@ public:
         if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <"
+                                 << record.GetDatabaseName() << ">"
             );
         }
 
@@ -60,7 +61,8 @@ public:
         if (indexBuildInfo.State > TIndexBuildInfo::EState::Filling) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> are almost done, cancellation has no sense"
+                TStringBuilder() << "Index build process with id <" << indexBuildId
+                                 << "> are almost done, cancellation has no sense"
             );
         }
 
@@ -80,4 +82,4 @@ ITransaction* TSchemeShard::CreateTxCancel(TEvIndexBuilder::TEvCancelRequest::TP
     return new TIndexBuilder::TTxCancel(this, ev);
 }
 
-} // NKikimr::NSchemeShard
+} // namespace NKikimr::NSchemeShard

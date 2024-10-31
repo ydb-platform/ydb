@@ -12,18 +12,19 @@ struct TTxAllocator::TTxReserve: public TTransactionBase<TTxAllocator> {
     ui64 RangeEnd = 0;
     bool Successed = false;
 
-    TTxReserve(TSelf *self, TEvTxAllocator::TEvAllocate::TPtr &ev)
+    TTxReserve(TSelf* self, TEvTxAllocator::TEvAllocate::TPtr& ev)
         : TBase(self)
-        , Event(ev)
-    {}
+        , Event(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_RESERVE; }
+    TTxType GetTxType() const override {
+        return TXTYPE_RESERVE;
+    }
 
     bool IsPosibleToAllocate(const ui64 requestedSize) const {
         return TSelf::MaxCapacity - RangeBegin >= requestedSize;
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
         NIceDb::TNiceDb db(txc.DB);
@@ -42,12 +43,14 @@ struct TTxAllocator::TTxReserve: public TTransactionBase<TTxAllocator> {
         }
 
         RangeEnd = RangeBegin + requestedSize;
-        db.Table<Schema::config>().Key(Schema::config::ReservedTo).Update(NIceDb::TUpdate<Schema::config::reservedIds>(RangeEnd));
+        db.Table<Schema::config>()
+            .Key(Schema::config::ReservedTo)
+            .Update(NIceDb::TUpdate<Schema::config::reservedIds>(RangeEnd));
         Successed = true;
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_ALLOCATOR,
                     "tablet# " << Self->TabletID() <<
                     " TTxReserve Complete" <<
@@ -64,10 +67,9 @@ struct TTxAllocator::TTxReserve: public TTransactionBase<TTxAllocator> {
     }
 };
 
-ITransaction* TTxAllocator::CreateTxReserve(TEvTxAllocator::TEvAllocate::TPtr &ev) {
+ITransaction* TTxAllocator::CreateTxReserve(TEvTxAllocator::TEvAllocate::TPtr& ev) {
     return new TTxReserve(this, ev);
 }
 
-}
-}
-
+} // namespace NTxAllocator
+} // namespace NKikimr

@@ -21,7 +21,9 @@ public:
 
 class IDataTasksProcessor {
 public:
-    class ITask: public NConveyor::ITask, public IApplyAction {
+    class ITask
+        : public NConveyor::ITask
+        , public IApplyAction {
     private:
         using TBase = NConveyor::ITask;
         const NActors::TActorId OwnerId;
@@ -36,10 +38,7 @@ public:
         virtual ~ITask() = default;
 
         ITask(const NActors::TActorId& ownerId)
-            : OwnerId(ownerId)
-        {
-
-        }
+            : OwnerId(ownerId) {}
     };
 };
 

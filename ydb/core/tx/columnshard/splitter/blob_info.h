@@ -12,14 +12,11 @@ private:
 
 public:
     TSplittedBlob(const TString& groupName)
-        : GroupName(groupName)
-    {
-
-    }
+        : GroupName(groupName) {}
 
     void Take(const std::shared_ptr<IPortionDataChunk>& chunk);
     bool operator<(const TSplittedBlob& item) const {
         return Size > item.Size;
     }
 };
-}
+} // namespace NKikimr::NOlap

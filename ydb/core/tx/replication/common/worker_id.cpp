@@ -5,9 +5,7 @@
 namespace NKikimr::NReplication {
 
 TWorkerId::TWorkerId(ui64 rid, ui64 tid, ui64 wid)
-    : std::tuple<ui64, ui64, ui64>(rid, tid, wid)
-{
-}
+    : std::tuple<ui64, ui64, ui64>(rid, tid, wid) {}
 
 ui64 TWorkerId::ReplicationId() const {
     return std::get<0>(*this);
@@ -35,7 +33,7 @@ void TWorkerId::Out(IOutputStream& out) const {
     out << ReplicationId() << ":" << TargetId() << ":" << WorkerId();
 }
 
-}
+} // namespace NKikimr::NReplication
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TWorkerId, o, x) {
     return x.Out(o);

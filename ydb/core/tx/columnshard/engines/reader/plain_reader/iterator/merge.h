@@ -20,15 +20,20 @@ protected:
     std::optional<ui64> IntervalChunkMemory;
 
 public:
-    TMergingContext(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& finish,
-        const ui32 intervalIdx, const bool includeFinish, const bool includeStart, const bool isExclusiveInterval)
+    TMergingContext(
+        const NArrow::NMerger::TSortableBatchPosition& start,
+        const NArrow::NMerger::TSortableBatchPosition& finish,
+        const ui32 intervalIdx,
+        const bool includeFinish,
+        const bool includeStart,
+        const bool isExclusiveInterval
+    )
         : Start(start)
         , Finish(finish)
         , IncludeFinish(includeFinish)
         , IncludeStart(includeStart)
         , IntervalIdx(intervalIdx)
-        , IsExclusiveIntervalFlag(isExclusiveInterval) {
-    }
+        , IsExclusiveIntervalFlag(isExclusiveInterval) {}
 
     void SetIntervalChunkMemory(const ui64 value) {
         IntervalChunkMemory = value;
@@ -54,7 +59,9 @@ public:
     }
 };
 
-class TBaseMergeTask: public IDataTasksProcessor::ITask, public NGroupedMemoryManager::IAllocation {
+class TBaseMergeTask
+    : public IDataTasksProcessor::ITask
+    , public NGroupedMemoryManager::IAllocation {
 private:
     using TBase = IDataTasksProcessor::ITask;
 
@@ -69,24 +76,30 @@ protected:
     std::optional<NArrow::TShardedRecordBatch> ShardedBatch;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
 
-    [[nodiscard]] std::optional<NArrow::NMerger::TCursor> DrainMergerLinearScan(const std::optional<ui32> resultBufferLimit);
+    [[nodiscard]] std::optional<NArrow::NMerger::TCursor> DrainMergerLinearScan(
+        const std::optional<ui32> resultBufferLimit
+    );
 
     void PrepareResultBatch();
 
 private:
     virtual bool DoApply(IDataReader& indexedDataRead) const override;
-    virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
-        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+    virtual bool DoOnAllocated(
+        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation
+    ) override;
 
 public:
-    TBaseMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext)
+    TBaseMergeTask(
+        const std::shared_ptr<TMergingContext>& mergingContext,
+        const std::shared_ptr<TSpecialReadContext>& readContext
+    )
         : TBase(readContext->GetCommonContext()->GetScanActorId())
         , IAllocation(TValidator::CheckNotNull(mergingContext)->GetIntervalChunkMemory())
         , Guard(readContext->GetCommonContext()->GetCounters().GetMergeTasksGuard())
         , Context(readContext)
         , MergingContext(mergingContext)
-        , IntervalIdx(MergingContext->GetIntervalIdx()) {
-    }
+        , IntervalIdx(MergingContext->GetIntervalIdx()) {}
 };
 
 class TStartMergeTask: public TBaseMergeTask {
@@ -103,8 +116,11 @@ public:
         return "CS::MERGE_START";
     }
 
-    TStartMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
-        THashMap<ui32, std::shared_ptr<IDataSource>>&& sources);
+    TStartMergeTask(
+        const std::shared_ptr<TMergingContext>& mergingContext,
+        const std::shared_ptr<TSpecialReadContext>& readContext,
+        THashMap<ui32, std::shared_ptr<IDataSource>>&& sources
+    );
 };
 
 class TContinueMergeTask: public TBaseMergeTask {
@@ -119,8 +135,11 @@ public:
         return "CS::MERGE_CONTINUE";
     }
 
-    TContinueMergeTask(const std::shared_ptr<TMergingContext>& mergingContext, const std::shared_ptr<TSpecialReadContext>& readContext,
-        std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger)
+    TContinueMergeTask(
+        const std::shared_ptr<TMergingContext>& mergingContext,
+        const std::shared_ptr<TSpecialReadContext>& readContext,
+        std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger
+    )
         : TBase(mergingContext, readContext) {
         AFL_VERIFY(merger);
         Merger = std::move(merger);

@@ -9,20 +9,21 @@ LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr::NDataShard {
 
-TDataShard::TTxWrite::TTxWrite(TDataShard* self,
-                                    NEvents::TDataEvents::TEvWrite::TPtr ev,
-                                    TInstant receivedAt,
-                                    ui64 tieBreakerIndex,
-                                    bool delayed,
-                                    NWilson::TSpan &&datashardTransactionSpan)
+TDataShard::TTxWrite::TTxWrite(
+    TDataShard* self,
+    NEvents::TDataEvents::TEvWrite::TPtr ev,
+    TInstant receivedAt,
+    ui64 tieBreakerIndex,
+    bool delayed,
+    NWilson::TSpan&& datashardTransactionSpan
+)
     : TBase(self, datashardTransactionSpan.GetTraceId())
     , Ev(std::move(ev))
     , ReceivedAt(receivedAt)
     , TieBreakerIndex(tieBreakerIndex)
     , TxId(Ev->Get()->GetTxId())
     , Acked(!delayed)
-    , DatashardTransactionSpan(std::move(datashardTransactionSpan))
-{ }
+    , DatashardTransactionSpan(std::move(datashardTransactionSpan)) {}
 
 bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite:: execute at tablet# " << Self->TabletID());
@@ -49,10 +50,19 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
-                    "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
+                LOG_LOG_S_THROTTLE(
+                    Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute),
+                    ctx,
+                    NActors::NLog::PRI_ERROR,
+                    NKikimrServices::TX_DATASHARD,
+                    "TTxWrite:: errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID()
+                                                                          << " status: " << status
+                                                                          << " error: " << errMessage
+                );
 
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage);
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
+                    Self->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, errMessage
+                );
 
                 TActorId target = Op ? Op->GetTarget() : Ev->Sender;
                 ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
@@ -72,7 +82,9 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 return true;
             }
 
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(std::move(Ev), ReceivedAt, TieBreakerIndex, txc, std::move(DatashardTransactionSpan));
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(
+                std::move(Ev), ReceivedAt, TieBreakerIndex, txc, std::move(DatashardTransactionSpan)
+            );
             Y_ABORT_UNLESS(!Ev);
 
             TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
@@ -186,7 +198,6 @@ void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
     Self->CheckSplitCanStart(ctx);
 }
 
-
 void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TTxWrite: at tablet# " << TabletID());
 
@@ -202,8 +213,7 @@ void TDataShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorCo
     }
 
     // Check if we need to delay an immediate transaction
-    if (MediatorStateWaiting && record.txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)
-    {
+    if (MediatorStateWaiting && record.txmode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE) {
         // We cannot calculate correct version until we restore mediator state
         LWTRACK(ProposeTransactionWaitMediatorState, msg->GetOrbit());
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
@@ -261,16 +271,16 @@ ui64 NEvWrite::TConvertor::GetProposeFlags(NKikimrDataEvents::TEvWrite::ETxMode 
 NKikimrDataEvents::TEvWrite::ETxMode NEvWrite::TConvertor::GetTxMode(ui64 flags) {
     if ((flags & TTxFlags::Immediate) && !(flags & TTxFlags::ForceOnline)) {
         return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_IMMEDIATE;
-    }
-    else if (flags & TTxFlags::VolatilePrepare) {
+    } else if (flags & TTxFlags::VolatilePrepare) {
         return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_VOLATILE_PREPARE;
-    }
-    else {
+    } else {
         return NKikimrDataEvents::TEvWrite::ETxMode::TEvWrite_ETxMode_MODE_PREPARE;
     }
 }
 
-NKikimrTxDataShard::TEvProposeTransactionResult::EStatus NEvWrite::TConvertor::GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
+NKikimrTxDataShard::TEvProposeTransactionResult::EStatus NEvWrite::TConvertor::GetStatus(
+    NKikimrDataEvents::TEvWriteResult::EStatus status
+) {
     switch (status) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
             return NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE;
@@ -281,7 +291,8 @@ NKikimrTxDataShard::TEvProposeTransactionResult::EStatus NEvWrite::TConvertor::G
     }
 }
 
-NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(NKikimrTxDataShard::TError::EKind code) {
+NKikimrDataEvents::TEvWriteResult::EStatus NEvWrite::TConvertor::ConvertErrCode(NKikimrTxDataShard::TError::EKind code
+) {
     switch (code) {
         case NKikimrTxDataShard::TError_EKind_OK:
             return NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
@@ -317,4 +328,4 @@ TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const 
             Y_ABORT("Unsupported");
     }
 }
-}
+} // namespace NKikimr::NDataShard

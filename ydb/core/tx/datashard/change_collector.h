@@ -22,16 +22,13 @@ public:
     virtual ui64 GetChangeGroup() = 0;
 };
 
-class TDataShardChangeGroupProvider final
-    : public IDataShardChangeGroupProvider
-{
+class TDataShardChangeGroupProvider final: public IDataShardChangeGroupProvider {
 public:
     // Note: for distributed transactions group is expected to be 0
     TDataShardChangeGroupProvider(TDataShard& self, NTable::TDatabase& db, std::optional<ui64> group = std::nullopt)
         : Self(self)
         , Db(db)
-        , Group(group)
-    { }
+        , Group(group) {}
 
     std::optional<ui64> GetCurrentChangeGroup() const override {
         return Group;
@@ -45,7 +42,7 @@ private:
     std::optional<ui64> Group;
 };
 
-class IDataShardChangeCollector : public NMiniKQL::IChangeCollector {
+class IDataShardChangeCollector: public NMiniKQL::IChangeCollector {
 public:
     // basic change record's info
     struct TChange {
@@ -61,9 +58,7 @@ public:
         ui64 LockOffset = 0;
 
         TInstant CreatedAt() const {
-            return Group
-                ? TInstant::MicroSeconds(Group)
-                : TInstant::MilliSeconds(Step);
+            return Group ? TInstant::MicroSeconds(Group) : TInstant::MilliSeconds(Step);
         }
     };
 
@@ -78,17 +73,19 @@ public:
 };
 
 IDataShardChangeCollector* CreateChangeCollector(
-        TDataShard& dataShard,
-        IDataShardUserDb& userDb,
-        IDataShardChangeGroupProvider& groupProvider,
-        NTable::TDatabase& db,
-        const TUserTable& table);
+    TDataShard& dataShard,
+    IDataShardUserDb& userDb,
+    IDataShardChangeGroupProvider& groupProvider,
+    NTable::TDatabase& db,
+    const TUserTable& table
+);
 IDataShardChangeCollector* CreateChangeCollector(
-        TDataShard& dataShard,
-        IDataShardUserDb& userDb,
-        IDataShardChangeGroupProvider& groupProvider,
-        NTable::TDatabase& db,
-        ui64 tableId);
+    TDataShard& dataShard,
+    IDataShardUserDb& userDb,
+    IDataShardChangeGroupProvider& groupProvider,
+    NTable::TDatabase& db,
+    ui64 tableId
+);
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

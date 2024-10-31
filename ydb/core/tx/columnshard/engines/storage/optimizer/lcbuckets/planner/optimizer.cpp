@@ -8,7 +8,10 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(
-    const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+    const ui64 pathId,
+    const std::shared_ptr<IStoragesManager>& storagesManager,
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema
+)
     : TBase(pathId)
     , Counters(std::make_shared<TCounters>())
     , StoragesManager(storagesManager)
@@ -19,15 +22,23 @@ TOptimizerPlanner::TOptimizerPlanner(
     Levels.emplace_back(
         std::make_shared<TLevelPortions>(2, 0.9, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(2)));
 */
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max()));
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max()));
-    Levels.emplace_back(std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180)));
+    Levels.emplace_back(
+        std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max())
+    );
+    Levels.emplace_back(
+        std::make_shared<TZeroLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max())
+    );
+    Levels.emplace_back(
+        std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180))
+    );
     std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();
 }
 
 std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
-    std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+    std::shared_ptr<TGranuleMeta> granule,
+    const std::shared_ptr<NDataLocks::TManager>& locksManager
+) const {
     AFL_VERIFY(LevelsByWeight.size());
     auto level = LevelsByWeight.begin()->second;
     auto data = level->GetOptimizationTask();
@@ -50,8 +61,12 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
         result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
     }
     auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
-        "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+    ("task_id",
+     result
+         ->GetTaskIdentifier())("positions", positions.DebugString())("level", level->GetLevelId())("target", data.GetTargetCompactionLevel())(
+        "data", data.DebugString()
+    );
     result->SetCheckPoints(std::move(positions));
     for (auto&& i : result->SwitchedPortions) {
         AFL_VERIFY(!locksManager->IsLocked(i.GetPortionInfo()));

@@ -13,6 +13,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeAddInFlightBytes;
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeRemoveInFlightBytes;
     std::shared_ptr<NColumnShard::TValueAggregationClient> InFlightBytes;
+
 public:
     TMemoryAggregation(const TString& moduleId, const TString& signalId)
         : TBase(moduleId) {
@@ -43,6 +44,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeWaitingStart;
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeWaitingFinish;
     NMonitoring::TDynamicCounters::TCounterPtr CurrentInWaiting;
+
 public:
     TScanMemoryCounter(const TString& limitName, const ui64 memoryLimit);
 
@@ -81,11 +83,11 @@ public:
         TAtomicCounter Value = 0;
         std::shared_ptr<IMemoryAccessor> MemoryAccessor;
         std::shared_ptr<TMemoryAggregation> MemorySignals;
+
     public:
         TGuard(std::shared_ptr<IMemoryAccessor> accesor, std::shared_ptr<TMemoryAggregation> memorySignals = nullptr)
             : MemoryAccessor(accesor)
-            , MemorySignals(memorySignals) {
-        }
+            , MemorySignals(memorySignals) {}
         ~TGuard() {
             FreeAll();
         }
@@ -109,15 +111,14 @@ public:
             Y_ABORT_UNLESS(InWaitingFlag.Val() == 0);
             InWaitingFlag = 1;
         }
+
     protected:
         virtual void DoOnBufferReady() = 0;
+
     public:
         using TPtr = std::shared_ptr<IMemoryAccessor>;
         IMemoryAccessor(std::shared_ptr<TScanMemoryLimiter> owner)
-            : Owner(owner)
-        {
-
-        }
+            : Owner(owner) {}
 
         bool HasBuffer() {
             return Owner->HasBufferOrSubscribe(nullptr);
@@ -158,15 +159,13 @@ private:
 
     void Free(const ui64 size);
     void Take(const ui64 size);
+
 public:
     TScanMemoryLimiter(const TString& limiterName, const ui64 memoryLimit)
         : LimiterName(limiterName)
         , AvailableMemoryLimit(memoryLimit)
         , AvailableMemory(memoryLimit)
-        , Counters("MemoryLimiters/" + limiterName, memoryLimit)
-    {
-
-    }
+        , Counters("MemoryLimiters/" + limiterName, memoryLimit) {}
     bool HasBufferOrSubscribe(std::shared_ptr<IMemoryAccessor> accessor);
 };
 
@@ -192,11 +191,11 @@ private:
             return it->second;
         }
     }
+
 public:
     static std::shared_ptr<TScanMemoryLimiter> GetLimiter(const TString& name) {
         return Singleton<TMemoryLimitersController>()->GetLimiterImpl(name);
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap

@@ -14,19 +14,18 @@ private:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSequence TDropParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropSequence TDropParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TDropParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr& ev, TOperationContext& context)
+        override {
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         auto status = ev->Get()->Record.GetStatus();
@@ -130,18 +129,19 @@ private:
 
 private:
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSequence TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TDropSequence TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::EventType,
+            }
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -215,25 +215,25 @@ class TDropSequence: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::DropParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::DropParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::DropParts:
-            return MakeHolder<TDropParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::DropParts:
+                return MakeHolder<TDropParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -255,16 +255,15 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath path = drop.HasId()
-            ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        TPath path = drop.HasId() ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                                  : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -286,8 +285,7 @@ public:
         TPath parent = path.Parent();
         {
             TPath::TChecker checks = parent.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -298,12 +296,11 @@ public:
                 if (parent->IsTable()) {
                     // allow immediately inside a normal table
                     if (parent.IsUnderOperation()) {
-                        checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId()
+                        ); // allowed only as part of consistent operations
                     }
                 } else {
-                    checks
-                        .NotUnderDeleting()
-                        .IsLikeDirectory();
+                    checks.NotUnderDeleting().IsLikeDirectory();
                 }
             }
 
@@ -321,8 +318,8 @@ public:
             // TODO: we probably want some kind of usage refcount
             auto tableInfo = context.SS->Tables.at(parent->PathId);
             if (tableInfo->IsUsingSequence(path->Name)) {
-                TString explain = TStringBuilder() << "cannot delete sequence " << path->Name
-                    << " used by table " << parent.PathString();
+                TString explain = TStringBuilder() << "cannot delete sequence " << path->Name << " used by table "
+                                                   << parent.PathString();
                 // FIXME: status is consistent with rmdir, but is it correct?
                 result->SetError(NKikimrScheme::StatusNameConflict, explain);
                 return result;
@@ -402,14 +399,14 @@ public:
     }
 };
 
-}
+} // namespace
 
 ISubOperation::TPtr CreateDropSequence(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropSequence>(id ,tx);
+    return MakeSubOperation<TDropSequence>(id, tx);
 }
 
 ISubOperation::TPtr CreateDropSequence(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TDropSequence>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

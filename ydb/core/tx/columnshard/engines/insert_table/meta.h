@@ -25,19 +25,19 @@ private:
 
 public:
     ui64 GetTxVolume() const {
-        return 512 + 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) + (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0) +
-               SchemaSubset.GetTxVolume();
+        return 512 + 2 * sizeof(ui64) + sizeof(ui32) + sizeof(OriginalProto) +
+               (SpecialKeysParsed ? SpecialKeysParsed->GetMemoryBytes() : 0) + SchemaSubset.GetTxVolume();
     }
 
     TInsertedDataMeta(const NKikimrTxColumnShard::TLogicalMetadata& proto)
-        : OriginalProto(proto)
-    {
+        : OriginalProto(proto) {
         AFL_VERIFY(proto.HasDirtyWriteTimeSeconds())("data", proto.DebugString());
         DirtyWriteTime = TInstant::Seconds(proto.GetDirtyWriteTimeSeconds());
         RecordsCount = proto.GetNumRows();
         RawBytes = proto.GetRawBytes();
         if (proto.HasModificationType()) {
-            ModificationType = TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetModificationType());
+            ModificationType =
+                TEnumOperator<NEvWrite::EModificationType>::DeserializeFromProto(proto.GetModificationType());
         }
         if (proto.HasSchemaSubset()) {
             SchemaSubset.DeserializeFromProto(proto.GetSchemaSubset()).Validate();
@@ -54,7 +54,6 @@ public:
     }
 
     NKikimrTxColumnShard::TLogicalMetadata SerializeToProto() const;
-
 };
 
-}
+} // namespace NKikimr::NOlap

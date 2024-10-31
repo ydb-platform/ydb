@@ -9,7 +9,11 @@ private:
     TTxConflicts Conflicts;
 
     virtual bool DoCheckInteraction(
-        const ui64 /*selfTxId*/, TInteractionsContext& /*context*/, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
+        const ui64 /*selfTxId*/,
+        TInteractionsContext& /*context*/,
+        TTxConflicts& conflicts,
+        TTxConflicts& /*notifications*/
+    ) const override {
         conflicts = Conflicts;
         return true;
     }
@@ -21,8 +25,7 @@ private:
 public:
     TEvReadFinishedWriter(const ui64 pathId, const TTxConflicts& conflicts)
         : PathId(pathId)
-        , Conflicts(conflicts)
-    {
+        , Conflicts(conflicts) {
         AFL_VERIFY(PathId);
     }
 };

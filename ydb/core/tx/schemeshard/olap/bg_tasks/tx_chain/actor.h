@@ -17,19 +17,22 @@ private:
     NActors::TActorId TxAllocatorClient;
 
     void SendCurrentTxToSS() {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("chain_tx", SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()].DebugString());
-        auto evModification = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(SessionLogic->GetCurrentTxIdVerified(), (ui64)TabletId);
-        *evModification->Record.AddTransaction() = SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()];
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+        ("chain_tx", SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()].DebugString());
+        auto evModification = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(
+            SessionLogic->GetCurrentTxIdVerified(), (ui64)TabletId
+        );
+        *evModification->Record.AddTransaction() =
+            SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()];
         NActors::TActivationContext::AsActorContext().Send(TabletActorId, evModification.release());
 
-        auto evRegister = std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(SessionLogic->GetCurrentTxIdVerified());
+        auto evRegister =
+            std::make_unique<TEvSchemeShard::TEvNotifyTxCompletion>(SessionLogic->GetCurrentTxIdVerified());
         NActors::TActivationContext::AsActorContext().Send(TabletActorId, evRegister.release());
     }
 
 protected:
-    virtual void OnTxCompleted(const ui64 /*txInternalId*/) override {
-
-    }
+    virtual void OnTxCompleted(const ui64 /*txInternalId*/) override {}
     virtual void OnSessionProgressSaved() override;
     virtual void OnSessionStateSaved() override {
         if (SessionLogic->IsFinished()) {
@@ -44,25 +47,30 @@ protected:
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev);
+
 public:
-    TTxChainActor(const std::shared_ptr<NKikimr::NOlap::NBackground::TSession>& session, const std::shared_ptr<NKikimr::NOlap::NBackground::ITabletAdapter>& adapter)
-        : TBase(session, adapter)
-    {
+    TTxChainActor(
+        const std::shared_ptr<NKikimr::NOlap::NBackground::TSession>& session,
+        const std::shared_ptr<NKikimr::NOlap::NBackground::ITabletAdapter>& adapter
+    )
+        : TBase(session, adapter) {
         AFL_VERIFY(!!Session);
         AFL_VERIFY(!!Adapter);
     }
 
     STATEFN(StateInProgress) {
-        const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
+        const NActors::TLogContextGuard gLogging =
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())(
+                "TabletId", TabletId
+            );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-        default:
-            TBase::StateInProgress(ev);
+            default:
+                TBase::StateInProgress(ev);
         }
     }
-
 };
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NBackground

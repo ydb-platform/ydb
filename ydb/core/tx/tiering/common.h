@@ -16,5 +16,8 @@ enum EEvents {
     EvEnd
 };
 
-static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_TIERING), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TIERING)");
-}
+static_assert(
+    EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_TIERING),
+    "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TIERING)"
+);
+} // namespace NKikimr::NColumnShard::NTiers

@@ -13,4 +13,4 @@ void TTxFinishAckFromInitiator::DoComplete(const TActorContext& /*ctx*/) {
     Self->SharingSessionsManager->RemoveDestinationSession(Session->GetSessionId());
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

@@ -10,7 +10,10 @@
 namespace NKikimr::NColumnShard {
 
 NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFlightRequest(
-    ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
+    ui64 cookie,
+    const NOlap::TVersionedIndex* /*index*/,
+    const TInstant now
+) {
     auto it = RequestsMeta.find(cookie);
     AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
     const NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase = it->second;
@@ -40,7 +43,10 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
 }
 
 void TInFlightReadsTracker::AddToInFlightRequest(
-    const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* /*index*/) {
+    const ui64 cookie,
+    NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase,
+    const NOlap::TVersionedIndex* /*index*/
+) {
     AFL_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
 
     auto readMeta = std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase);
@@ -61,7 +67,8 @@ void TInFlightReadsTracker::AddToInFlightRequest(
 }
 
 namespace {
-class TTransactionSavePersistentSnapshots: public NOlap::NDataSharing::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTransactionSavePersistentSnapshots
+    : public NOlap::NDataSharing::TExtendedTransactionBase<NColumnShard::TColumnShard> {
 private:
     using TBase = NOlap::NDataSharing::TExtendedTransactionBase<NColumnShard::TColumnShard>;
     const std::set<NOlap::TSnapshot> SaveSnapshots;
@@ -78,12 +85,14 @@ private:
         return true;
     }
 
-    virtual void DoComplete(const TActorContext& /*ctx*/) override {
-    }
+    virtual void DoComplete(const TActorContext& /*ctx*/) override {}
 
 public:
     TTransactionSavePersistentSnapshots(
-        NColumnShard::TColumnShard* self, std::set<NOlap::TSnapshot>&& saveSnapshots, std::set<NOlap::TSnapshot>&& removeSnapshots)
+        NColumnShard::TColumnShard* self,
+        std::set<NOlap::TSnapshot>&& saveSnapshots,
+        std::set<NOlap::TSnapshot>&& removeSnapshots
+    )
         : TBase(self)
         , SaveSnapshots(std::move(saveSnapshots))
         , RemoveSnapshots(std::move(removeSnapshots)) {
@@ -92,8 +101,8 @@ public:
 };
 }   // namespace
 
-std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
-    TColumnShard* self, const TDuration critDuration, const TInstant now) {
+std::unique_ptr<NTabletFlatExecutor::ITransaction>
+TInFlightReadsTracker::Ping(TColumnShard* self, const TDuration critDuration, const TInstant now) {
     std::set<NOlap::TSnapshot> snapshotsToSave;
     std::set<NOlap::TSnapshot> snapshotsToFree;
     for (auto&& i : SnapshotsLive) {
@@ -113,7 +122,9 @@ std::unique_ptr<NTabletFlatExecutor::ITransaction> TInFlightReadsTracker::Ping(
     Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
     if (snapshotsToFree.size() || snapshotsToSave.size()) {
         NYDBTest::TControllers::GetColumnShardController()->OnRequestTracingChanges(snapshotsToSave, snapshotsToFree);
-        return std::make_unique<TTransactionSavePersistentSnapshots>(self, std::move(snapshotsToSave), std::move(snapshotsToFree));
+        return std::make_unique<TTransactionSavePersistentSnapshots>(
+            self, std::move(snapshotsToSave), std::move(snapshotsToFree)
+        );
     } else {
         return nullptr;
     }
@@ -128,7 +139,8 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
 
     while (!rowset.EndOfSet()) {
         const NOlap::TSnapshot snapshot(
-            rowset.GetValue<Schema::InFlightSnapshots::PlanStep>(), rowset.GetValue<Schema::InFlightSnapshots::TxId>());
+            rowset.GetValue<Schema::InFlightSnapshots::PlanStep>(), rowset.GetValue<Schema::InFlightSnapshots::TxId>()
+        );
         AFL_VERIFY(SnapshotsLive.emplace(snapshot, TSnapshotLiveInfo::BuildFromDatabase(snapshot)).second);
 
         if (!rowset.Next()) {
@@ -140,11 +152,17 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
 }
 
 ui64 TInFlightReadsTracker::AddInFlightRequest(
-    NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+    NOlap::NReader::TReadMetadataBase::TConstPtr readMeta,
+    const NOlap::TVersionedIndex* index
+) {
     const ui64 cookie = NextCookie++;
     auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
     if (it == SnapshotsLive.end()) {
-        it = SnapshotsLive.emplace(readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())).first;
+        it = SnapshotsLive
+                 .emplace(
+                     readMeta->GetRequestSnapshot(), TSnapshotLiveInfo::BuildFromRequest(readMeta->GetRequestSnapshot())
+                 )
+                 .first;
         Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
     }
     it->second.AddRequest(cookie);

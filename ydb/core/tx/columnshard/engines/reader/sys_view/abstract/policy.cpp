@@ -13,4 +13,4 @@ THolder<ISysViewPolicy> ISysViewPolicy::BuildByPath(const TString& tablePath) {
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NReader::NSysView::NAbstract

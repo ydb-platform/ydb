@@ -5,20 +5,13 @@
 
 namespace NKikimr::NFlatTxCoordinator {
 
-class TTxCoordinator::TRestoreProcessingParamsActor
-    : public TActorBootstrapped<TRestoreProcessingParamsActor>
-{
+class TTxCoordinator::TRestoreProcessingParamsActor: public TActorBootstrapped<TRestoreProcessingParamsActor> {
 public:
-    TRestoreProcessingParamsActor(
-            const TActorId& owner,
-            ui64 tabletId,
-            const TPathId& tenantPathId,
-            ui64 version)
+    TRestoreProcessingParamsActor(const TActorId& owner, ui64 tabletId, const TPathId& tenantPathId, ui64 version)
         : Owner(owner)
         , TabletId(tabletId)
         , TenantPathId(tenantPathId)
-        , Version(version)
-    { }
+        , Version(version) {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::COORDINATOR_RESTORE_PROCESSING_PARAMS;
@@ -105,7 +98,7 @@ private:
 };
 
 bool TTxCoordinator::IsTabletInStaticDomain(TAppData* appData) {
-    for (auto domainCoordinatorId: appData->DomainsInfo->GetDomain()->Coordinators) {
+    for (auto domainCoordinatorId : appData->DomainsInfo->GetDomain()->Coordinators) {
         if (TabletID() == domainCoordinatorId) {
             return true;
         }
@@ -134,7 +127,8 @@ void TTxCoordinator::RestoreProcessingParams(const TActorContext& ctx) {
             "Coordinator# " << TabletID()
             << " resolving missing processing params version " << Config.Version
             << " from tenant " << tenantPathId);
-    RestoreProcessingParamsActor = Register(new TRestoreProcessingParamsActor(SelfId(), TabletID(), Info()->TenantPathId, Config.Version));
+    RestoreProcessingParamsActor =
+        Register(new TRestoreProcessingParamsActor(SelfId(), TabletID(), Info()->TenantPathId, Config.Version));
 }
 
 void TTxCoordinator::Handle(TEvPrivate::TEvRestoredProcessingParams::TPtr& ev, const TActorContext& ctx) {
@@ -148,7 +142,7 @@ void TTxCoordinator::Handle(TEvPrivate::TEvRestoredProcessingParams::TPtr& ev, c
     LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
             "Coordinator# " << TabletID()
             << " applying discovered processing params version " << params.GetVersion());
-    RestoreProcessingParamsActor = { };
+    RestoreProcessingParamsActor = {};
     DoConfiguration(TEvSubDomain::TEvConfigure(std::move(params)), ctx);
 }
 

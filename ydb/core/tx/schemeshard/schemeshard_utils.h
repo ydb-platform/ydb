@@ -44,7 +44,7 @@ inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames =
         return false;
     }
 
-    for (auto c: name) {
+    for (auto c : name) {
         if (!std::isalnum(c) && c != '_' && c != '-') {
             return false;
         }
@@ -53,7 +53,8 @@ inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames =
     return true;
 }
 
-inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {
+inline NKikimrSchemeOp::TModifyScheme
+TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {
     NKikimrSchemeOp::TModifyScheme tx;
     tx.SetWorkingDir(workingDir);
     tx.SetOperationType(type);
@@ -61,8 +62,11 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
     return tx;
 }
 
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total,
-                                  const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes);
+TSerializedCellVec ChooseSplitKeyByHistogram(
+    const NKikimrTableStats::THistogram& histogram,
+    ui64 total,
+    const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes
+);
 
 class TShardDeleter {
     struct TPerHiveDeletions {
@@ -80,21 +84,36 @@ class TShardDeleter {
 public:
     explicit TShardDeleter(ui64 myTabletId)
         : MyTabletID(myTabletId)
-        , HivePipeRetryPolicy({})
-    {}
+        , HivePipeRetryPolicy({}) {}
 
     TShardDeleter(const TShardDeleter&) = delete;
     TShardDeleter& operator=(const TShardDeleter&) = delete;
 
     void Shutdown(const TActorContext& ctx);
-    void SendDeleteRequests(TTabletId hiveTabletId, const THashSet<TShardIdx>& shardsToDelete,
-                            const THashMap<TShardIdx, TShardInfo>& shardsInfos, const TActorContext& ctx);
-    void ResendDeleteRequests(TTabletId hiveTabletId,
-                              const THashMap<TShardIdx, TShardInfo>& shardsInfos, const TActorContext& ctx);
-    void ResendDeleteRequest(TTabletId hiveTabletId,
-                             const THashMap<TShardIdx, TShardInfo>& shardsInfos, TShardIdx shardIdx, const TActorContext& ctx);
-    void RedirectDeleteRequest(TTabletId hiveFromTabletId, TTabletId hiveToTabletId, TShardIdx shardIdx,
-                               const THashMap<TShardIdx, TShardInfo>& shardsInfos, const TActorContext& ctx);
+    void SendDeleteRequests(
+        TTabletId hiveTabletId,
+        const THashSet<TShardIdx>& shardsToDelete,
+        const THashMap<TShardIdx, TShardInfo>& shardsInfos,
+        const TActorContext& ctx
+    );
+    void ResendDeleteRequests(
+        TTabletId hiveTabletId,
+        const THashMap<TShardIdx, TShardInfo>& shardsInfos,
+        const TActorContext& ctx
+    );
+    void ResendDeleteRequest(
+        TTabletId hiveTabletId,
+        const THashMap<TShardIdx, TShardInfo>& shardsInfos,
+        TShardIdx shardIdx,
+        const TActorContext& ctx
+    );
+    void RedirectDeleteRequest(
+        TTabletId hiveFromTabletId,
+        TTabletId hiveToTabletId,
+        TShardIdx shardIdx,
+        const THashMap<TShardIdx, TShardInfo>& shardsInfos,
+        const TActorContext& ctx
+    );
     void ShardDeleted(TShardIdx shardIdx, const TActorContext& ctx);
     bool Has(TTabletId hiveTabletId, TActorId pipeClientActorId) const;
     bool Has(TShardIdx shardIdx) const;
@@ -111,18 +130,17 @@ public:
         : TabletId(id)
         , TabletCounters(counters)
         , SelfPingInFlight(false)
-        , SelfPingWakeupScheduled(false)
-    {}
+        , SelfPingWakeupScheduled(false) {}
 
-    void Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr &ev, const TActorContext &ctx);
-    void OnAnyEvent(const TActorContext &ctx);
-    void DoSelfPing(const TActorContext &ctx);
-    void ScheduleSelfPingWakeup(const TActorContext &ctx);
+    void Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvWakeupToMeasureSelfResponseTime::TPtr& ev, const TActorContext& ctx);
+    void OnAnyEvent(const TActorContext& ctx);
+    void DoSelfPing(const TActorContext& ctx);
+    void ScheduleSelfPingWakeup(const TActorContext& ctx);
 
 private:
     const TTabletId TabletId;
-    TTabletCountersBase * const TabletCounters;
+    TTabletCountersBase* const TabletCounters;
 
     TDuration LastResponseTime;
     TInstant SelfPingSentTime;
@@ -139,37 +157,42 @@ public:
     ui64 Throughput;
 };
 
-} // NSchemeShard
+} // namespace NSchemeShard
 
 namespace NTableIndex {
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+);
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDesc,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix = {});
+    std::string_view suffix = {}
+);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix = {});
+    std::string_view suffix = {}
+);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
@@ -178,19 +201,29 @@ TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc
 using TColumnTypes = THashMap<TString, NScheme::TTypeInfo>;
 
 bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain);
-bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDesc, TColumnTypes& columnsTypes, TString& explain);
+bool ExtractTypes(
+    const NKikimrSchemeOp::TTableDescription& baseTableDesc,
+    TColumnTypes& columnsTypes,
+    TString& explain
+);
 
 bool IsCompatibleKeyTypes(
     const TColumnTypes& baseTableColumnsTypes,
     const TTableColumns& implTableColumns,
     bool uniformTable,
-    TString& explain);
+    TString& explain
+);
 
 template <typename TTableDesc>
-bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
-        const NSchemeShard::TSchemeLimits& schemeLimits, bool uniformTable,
-        TTableColumns& implTableColumns, NKikimrScheme::EStatus& status, TString& error)
-{
+bool CommonCheck(
+    const TTableDesc& tableDesc,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    const NSchemeShard::TSchemeLimits& schemeLimits,
+    bool uniformTable,
+    TTableColumns& implTableColumns,
+    NKikimrScheme::EStatus& status,
+    TString& error
+) {
     const TTableColumns baseTableColumns = ExtractInfo(tableDesc);
     const TIndexColumns indexKeys = ExtractInfo(indexDesc);
 
@@ -229,7 +262,8 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
         if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got "
+                                     << NScheme::TypeName(typeInfo);
             return false;
         }
     } else if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
@@ -239,11 +273,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
     if (implTableColumns.Keys.size() > schemeLimits.MaxTableKeyColumns) {
         status = NKikimrScheme::EStatus::StatusSchemeError;
-        error = TStringBuilder()
-            << "Too many keys indexed, index table reaches the limit of the maximum key columns count"
-            << ": indexing columns: " << indexKeys.KeyColumns.size()
-            << ", requested keys columns for index table: " << implTableColumns.Keys.size()
-            << ", limit: " << schemeLimits.MaxTableKeyColumns;
+        error =
+            TStringBuilder() << "Too many keys indexed, index table reaches the limit of the maximum key columns count"
+                             << ": indexing columns: " << indexKeys.KeyColumns.size()
+                             << ", requested keys columns for index table: " << implTableColumns.Keys.size()
+                             << ", limit: " << schemeLimits.MaxTableKeyColumns;
         return false;
     }
 
@@ -251,13 +285,16 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 }
 
 template <typename TTableDesc>
-bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
-        const NSchemeShard::TSchemeLimits& schemeLimits, TString& error)
-{
+bool CommonCheck(
+    const TTableDesc& tableDesc,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    const NSchemeShard::TSchemeLimits& schemeLimits,
+    TString& error
+) {
     TTableColumns implTableColumns;
     NKikimrScheme::EStatus status;
     return CommonCheck(tableDesc, indexDesc, schemeLimits, false, implTableColumns, status, error);
 }
 
-} // NTableIndex
-} // NKikimr
+} // namespace NTableIndex
+} // namespace NKikimr

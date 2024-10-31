@@ -19,8 +19,12 @@ void TTxScan::SendError(const TString& problem, const TString& details, const TA
 
     auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, Self->TabletID());
     ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-    auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-        TStringBuilder() << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << problem << "/" << details);
+    auto issue = NYql::YqlIssue(
+        {},
+        NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+        TStringBuilder() << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << problem
+                         << "/" << details
+    );
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
     ctx.Send(scanComputeActor, ev.Release());
@@ -47,8 +51,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }
-    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build() ("tx_id", txId)("scan_id", scanId)("gen", scanGen)(
-        "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout);
+    const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::
+        Build()("tx_id", txId)("scan_id", scanId)("gen", scanGen)("table", table)("snapshot", snapshot)("tablet", Self->TabletID())(
+            "timeout", timeout
+        );
 
     TReadMetadataPtr readMetadataRange;
     {
@@ -68,7 +74,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             isIndex = !sysViewPolicy;
             if (!sysViewPolicy) {
-                return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, request.GetReverse()));
+                return std::unique_ptr<IScannerConstructor>(
+                    new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, request.GetReverse())
+                );
             } else {
                 return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, request.GetReverse());
             }
@@ -76,7 +84,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
         read.StatsMode = request.GetStatsMode();
 
-        const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
+        const TVersionedIndex* vIndex =
+            Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
         auto parseResult = scannerConstructor->ParseProgram(vIndex, request, read);
         if (!parseResult) {
             return SendError("cannot parse program", parseResult.GetErrorMessage(), ctx);
@@ -125,10 +134,24 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), shardingPolicy, scanId,
-        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters()));
+    auto scanActor = ctx.Register(new TColumnShardScan(
+        Self->SelfId(),
+        scanComputeActor,
+        Self->GetStoragesManager(),
+        shardingPolicy,
+        scanId,
+        txId,
+        scanGen,
+        requestCookie,
+        Self->TabletID(),
+        timeout,
+        readMetadataRange,
+        dataFormat,
+        Self->Counters.GetScanCounters()
+    ));
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
+    ("event", "TTxScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }
 
 }   // namespace NKikimr::NOlap::NReader

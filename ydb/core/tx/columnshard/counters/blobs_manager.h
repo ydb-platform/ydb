@@ -28,14 +28,21 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DontMoveBarriers;
     NMonitoring::TDynamicCounters::TCounterPtr GCTasks;
     NMonitoring::TDynamicCounters::TCounterPtr EmptyGCTasks;
+
 public:
     const NMonitoring::TDynamicCounters::TCounterPtr SkipCollectionEmpty;
     const NMonitoring::TDynamicCounters::TCounterPtr SkipCollectionThrottling;
 
     TBlobsManagerGCCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
 
-    void OnGCTask(const ui32 keepsCount, const ui32 keepBytes, const ui32 deleteCount, const ui32 deleteBytes,
-        const bool isFull, const bool moveBarrier) const;
+    void OnGCTask(
+        const ui32 keepsCount,
+        const ui32 keepBytes,
+        const ui32 deleteCount,
+        const ui32 deleteBytes,
+        const bool isFull,
+        const bool moveBarrier
+    ) const;
 
     void OnEmptyGCTask() const {
         EmptyGCTasks->Add(1);
@@ -48,6 +55,7 @@ private:
     const NMonitoring::TDynamicCounters::TCounterPtr BlobsToDeleteCount;
     const NMonitoring::TDynamicCounters::TCounterPtr BlobsToDeleteDelayedCount;
     const NMonitoring::TDynamicCounters::TCounterPtr BlobsToKeepCount;
+
 public:
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentGen;
     const NMonitoring::TDynamicCounters::TCounterPtr CurrentStep;
@@ -64,4 +72,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

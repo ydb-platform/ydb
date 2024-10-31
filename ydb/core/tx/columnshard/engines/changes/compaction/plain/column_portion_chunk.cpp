@@ -17,8 +17,8 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
     const ui32 packedRecordSize = Context.GetColumnStat() ? Context.GetColumnStat()->GetPackedRecordSize() : 0;
     for (; i < startIndex + length; ++i) {
         ui64 recordSize = 0;
-        AFL_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize))("a", a->ToString())("a_type", a->type()->ToString())(
-            "builder_type", Builder->type()->ToString());
+        AFL_VERIFY(NArrow::Append(*Builder, *a, i, &recordSize))
+        ("a", a->ToString())("a_type", a->type()->ToString())("builder_type", Builder->type()->ToString());
         CurrentChunkRawSize += recordSize;
         PredictedPackedBytes += packedRecordSize ? packedRecordSize : (recordSize / 2);
         if (++CurrentPortionRecords == ChunkContext.GetPortionRowsCountLimit()) {
@@ -26,7 +26,8 @@ ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const u
             ++i;
             break;
         }
-        if (CurrentChunkRawSize >= Context.GetChunkRawBytesLimit() || PredictedPackedBytes >= Context.GetExpectedBlobPackedBytes()) {
+        if (CurrentChunkRawSize >= Context.GetChunkRawBytesLimit() ||
+            PredictedPackedBytes >= Context.GetExpectedBlobPackedBytes()) {
             FlushBuffer();
         }
     }
@@ -38,8 +39,12 @@ bool TColumnPortion::FlushBuffer() {
         return false;
     }
     auto newArrayChunk = NArrow::TStatusValidator::GetValid(Builder->Finish());
-    Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(Context.GetSaver().Apply(newArrayChunk, Context.GetResultField()),
-        std::make_shared<NArrow::NAccessor::TTrivialArray>(newArrayChunk), TChunkAddress(Context.GetColumnId(), 0), ColumnInfo));
+    Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+        Context.GetSaver().Apply(newArrayChunk, Context.GetResultField()),
+        std::make_shared<NArrow::NAccessor::TTrivialArray>(newArrayChunk),
+        TChunkAddress(Context.GetColumnId(), 0),
+        ColumnInfo
+    ));
     Builder = Context.MakeBuilder();
     CurrentChunkRawSize = 0;
     PredictedPackedBytes = 0;

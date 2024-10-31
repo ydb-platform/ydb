@@ -14,6 +14,7 @@ class TDataSourceEndpoint {
 private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, StartSources);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IDataSource>>, FinishSources);
+
 public:
     void AddStart(std::shared_ptr<IDataSource> source) {
         StartSources.emplace_back(source);
@@ -27,13 +28,11 @@ class TIntervalStat {
 private:
     YDB_READONLY(ui32, SourcesCount, 0);
     YDB_READONLY(bool, IsPoint, false);
+
 public:
     TIntervalStat(const ui32 sourcesCount, const bool isPoint)
         : SourcesCount(sourcesCount)
-        , IsPoint(isPoint)
-    {
-
-    }
+        , IsPoint(isPoint) {}
 };
 
 class TScanContext {
@@ -44,6 +43,7 @@ private:
     YDB_READONLY_DEF(TCurrentSources, CurrentSources);
     YDB_READONLY(bool, IsSpecialPoint, false);
     YDB_READONLY(bool, IsExclusiveInterval, false);
+
 public:
     void OnStartPoint(const TDataSourceEndpoint& point) {
         IsSpecialPoint = point.GetStartSources().size() && point.GetFinishSources().size();
@@ -82,7 +82,11 @@ private:
     ui64 MaxInFlight = 256;
     ui64 ZeroCount = 0;
     void DrainSources();
-    [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
+    [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(
+        const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources,
+        const bool isExclusiveInterval
+    ) const;
+
 public:
     void OnSentDataFromInterval(const ui32 intervalIdx) const {
         if (Context->IsAborted()) {
@@ -110,17 +114,20 @@ public:
         return sb;
     }
 
-    void OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
+    void OnIntervalResult(
+        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
         const std::optional<NArrow::TShardedRecordBatch>& batch,
-        const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
-        const ui32 intervalIdx, TPlainReadData& reader);
+        const std::shared_ptr<arrow::RecordBatch>& lastPK,
+        std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
+        const ui32 intervalIdx,
+        TPlainReadData& reader
+    );
 
     TConclusionStatus Start();
 
     TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 
     [[nodiscard]] TConclusion<bool> BuildNextInterval();
-
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

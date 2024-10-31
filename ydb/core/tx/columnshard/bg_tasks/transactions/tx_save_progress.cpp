@@ -8,7 +8,6 @@ bool TTxSaveSessionProgress::Execute(NTabletFlatExecutor::TTransactionContext& t
     return true;
 }
 
-void TTxSaveSessionProgress::DoComplete(const TActorContext& /*ctx*/) {
-}
+void TTxSaveSessionProgress::DoComplete(const TActorContext& /*ctx*/) {}
 
-}
+} // namespace NKikimr::NOlap::NBackground

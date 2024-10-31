@@ -8,7 +8,10 @@
 namespace NKikimr::NOlap {
 
 TIndexedWriteController::TIndexedWriteController(
-    const TActorId& dstActor, const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
+    const TActorId& dstActor,
+    const std::shared_ptr<IBlobsWritingAction>& action,
+    std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations
+)
     : Buffer(action, std::move(aggregations))
     , DstActor(dstActor) {
     auto blobs = Buffer.GroupIntoBlobs();
@@ -18,7 +21,10 @@ TIndexedWriteController::TIndexedWriteController(
     }
 }
 
-void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
+void TIndexedWriteController::DoOnReadyResult(
+    const NActors::TActorContext& ctx,
+    const NColumnShard::TBlobPutResult::TPtr& putResult
+) {
     Buffer.InitReadyInstant(TMonotonic::Now());
     auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(Buffer));
     ctx.Send(DstActor, result.release());
@@ -33,7 +39,9 @@ void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
     Range.BlobId = id;
 }
 
-std::shared_ptr<NKikimr::NOlap::TUserData> TWideSerializedBatch::BuildInsertionUserData(const NColumnShard::TColumnShard& owner) const {
+std::shared_ptr<NKikimr::NOlap::TUserData> TWideSerializedBatch::BuildInsertionUserData(
+    const NColumnShard::TColumnShard& owner
+) const {
     NKikimrTxColumnShard::TLogicalMetadata meta;
     meta.SetNumRows(SplittedBlobs.GetRowsCount());
     meta.SetRawBytes(SplittedBlobs.GetRawBytes());
@@ -45,12 +53,15 @@ std::shared_ptr<NKikimr::NOlap::TUserData> TWideSerializedBatch::BuildInsertionU
     Y_ABORT_UNLESS(blobRange.GetBlobId().IsValid());
 
     const auto& writeMeta = GetAggregation().GetWriteMeta();
-    meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType()));
+    meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType(
+    )));
     *meta.MutableSchemaSubset() = GetAggregation().GetSchemaSubset().SerializeToProto();
     auto schemeVersion = GetAggregation().GetSchemaVersion();
     auto tableSchema = owner.GetTablesManager().GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
 
-    return std::make_shared<NOlap::TUserData>(writeMeta.GetTableId(), blobRange, meta, tableSchema->GetVersion(), SplittedBlobs.GetData());
+    return std::make_shared<NOlap::TUserData>(
+        writeMeta.GetTableId(), blobRange, meta, tableSchema->GetVersion(), SplittedBlobs.GetData()
+    );
 }
 
 void TWritingBuffer::InitReadyInstant(const TMonotonic instant) {
@@ -90,7 +101,8 @@ std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
     }
     if (result.size()) {
         if (sumSize / result.size() < 4 * 1024 * 1024 && result.size() != 1) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "error_splitting")("size", sumSize)("count", result.size());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "error_splitting")("size", sumSize)("count", result.size());
         }
     }
     return result;

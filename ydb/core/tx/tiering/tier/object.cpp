@@ -44,16 +44,17 @@ NMetadata::NInternal::TTableRecord TTierConfig::SerializeToRecord() const {
     return result;
 }
 
-NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const
-{
+NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets
+) const {
     auto config = ProtoConfig.GetObjectStorage();
     if (secrets) {
         if (!secrets->GetSecretValue(GetAccessKey(), *config.MutableAccessKey())) {
-            ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot read access key secret for " << GetAccessKey().DebugString();
+            ALS_ERROR(NKikimrServices::TX_TIERING)
+                << "cannot read access key secret for " << GetAccessKey().DebugString();
         }
         if (!secrets->GetSecretValue(GetSecretKey(), *config.MutableSecretKey())) {
-            ALS_ERROR(NKikimrServices::TX_TIERING) << "cannot read secret key secret for " << GetSecretKey().DebugString();
+            ALS_ERROR(NKikimrServices::TX_TIERING)
+                << "cannot read secret key secret for " << GetSecretKey().DebugString();
         }
     }
     return config;
@@ -65,4 +66,4 @@ NJson::TJsonValue TTierConfig::SerializeConfigToJson() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

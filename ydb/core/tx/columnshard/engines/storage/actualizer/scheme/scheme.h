@@ -17,15 +17,14 @@ private:
     class TFindActualizationInfo {
     private:
         TRWAddress RWAddress;
+
     public:
         const TRWAddress& GetRWAddress() const {
             return RWAddress;
         }
 
         TFindActualizationInfo(TRWAddress&& rwAddress)
-            : RWAddress(std::move(rwAddress)) {
-
-        }
+            : RWAddress(std::move(rwAddress)) {}
     };
 
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
@@ -34,13 +33,15 @@ private:
     private:
         TRWAddress Address;
         YDB_ACCESSOR_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+
     public:
         TFindActualizationInfo ExtractFindId() {
             return TFindActualizationInfo(std::move(Address));
         }
 
         TString DebugString() const {
-            return TStringBuilder() << "{address=" << Address.DebugString() << ";target_scheme=" << TargetScheme->DebugString() << "}";
+            return TStringBuilder() << "{address=" << Address.DebugString()
+                                    << ";target_scheme=" << TargetScheme->DebugString() << "}";
         }
 
         const TRWAddress& GetAddress() const {
@@ -49,9 +50,7 @@ private:
 
         TFullActualizationInfo(TRWAddress&& address, const std::shared_ptr<ISnapshotSchema>& targetScheme)
             : Address(std::move(address))
-            , TargetScheme(targetScheme) {
-
-        }
+            , TargetScheme(targetScheme) {}
     };
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion) const;
@@ -59,7 +58,12 @@ private:
 protected:
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) override;
     virtual void DoRemovePortion(const ui64 portionId) override;
-    virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
+    virtual void DoExtractTasks(
+        TTieringProcessContext& tasksContext,
+        const TExternalTasksContext& externalContext,
+        TInternalTasksContext& internalContext
+    ) override;
+
 public:
     void Refresh(const TAddExternalContext& externalContext);
 
@@ -70,4 +74,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

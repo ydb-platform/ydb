@@ -10,11 +10,13 @@ public:
     static TString GetClassNameStatic() {
         return "BACKUP";
     }
+
 private:
     TSnapshot Snapshot = TSnapshot::Zero();
     TString TableName;
     ui64 TablePathId;
-    static inline const TFactory::TRegistrator<TBackupSelector> Registrator = TFactory::TRegistrator<TBackupSelector>(GetClassNameStatic());
+    static inline const TFactory::TRegistrator<TBackupSelector> Registrator =
+        TFactory::TRegistrator<TBackupSelector>(GetClassNameStatic());
 
     TConclusionStatus Validate() const {
         if (!Snapshot.Valid()) {
@@ -28,10 +30,12 @@ private:
         }
         return TConclusionStatus::Success();
     }
+
 protected:
     virtual std::unique_ptr<TEvDataShard::TEvKqpScan> DoBuildRequestInitiator(const TCursor& cursor) const override;
 
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto) override {
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto
+    ) override {
         auto result = Snapshot.DeserializeFromProto(proto.GetBackup().GetSnapshot());
         if (!result) {
             return result;
@@ -53,12 +57,11 @@ protected:
         TablePathId = proto.GetTableId();
         return Validate();
     }
+
 public:
     TBackupSelector() = default;
     TBackupSelector(const TSnapshot& snapshot)
-        : Snapshot(snapshot) {
-
-    }
+        : Snapshot(snapshot) {}
 
     virtual ui64 GetPathId() const override {
         return TablePathId;
@@ -77,4 +80,4 @@ public:
         return GetClassNameStatic();
     }
 };
-}
+} // namespace NKikimr::NOlap::NExport

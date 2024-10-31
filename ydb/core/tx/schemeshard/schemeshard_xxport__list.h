@@ -21,11 +21,10 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
 
     explicit TTxList(TSelf* self, typename TEvRequest::TPtr& ev)
         : TTxBase(self)
-        , Request(ev)
-    {
-    }
+        , Request(ev) {}
 
-    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
+    bool
+    DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
         const auto& record = Request->Get()->Record;
         const auto& request = record.GetRequest();
 
@@ -33,7 +32,8 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
         auto& resp = *response->Record.MutableResponse();
 
         const TPathId domainPathId = DomainPathId(record.GetDatabaseName());
-        const ui64 pageSize = Min(request.GetPageSize() ? Max(request.GetPageSize(), MinPageSize) : DefaultPageSize, MaxPageSize);
+        const ui64 pageSize =
+            Min(request.GetPageSize() ? Max(request.GetPageSize(), MinPageSize) : DefaultPageSize, MaxPageSize);
 
         ui64 page = DefaultPage;
         if (request.GetPageToken() && !TryFromString(request.GetPageToken(), page)) {
@@ -82,10 +82,9 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
-    }
+    void DoComplete(const TActorContext&) override {}
 
 }; // TTxList
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

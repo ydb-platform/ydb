@@ -10,6 +10,7 @@ class TIndexationCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::THistogramPtr HistogramCompactionInputBytes;
+
 public:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 
@@ -48,4 +49,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

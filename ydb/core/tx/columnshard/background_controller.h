@@ -22,10 +22,10 @@ private:
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
+
 public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
-        : Counters(std::move(counters)) {
-    }
+        : Counters(std::move(counters)) {}
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
 
@@ -103,4 +103,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

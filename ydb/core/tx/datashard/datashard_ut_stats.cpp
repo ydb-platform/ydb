@@ -12,20 +12,19 @@ using namespace NSchemeShard;
 using namespace Tests;
 
 namespace {
-    void UpsertRows(TServer::TPtr server, TActorId sender, ui32 keyFrom = 0, ui32 keyTo = 2000) {
-        TString query = "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
-        for (auto key : xrange(keyFrom, keyTo)) {
-            if (key != keyFrom)
-                query += ", ";
-            query += "(" + ToString(key) + ", " + ToString(key) + ") ";
-        }
-        ExecSQL(server, sender, query);
+void UpsertRows(TServer::TPtr server, TActorId sender, ui32 keyFrom = 0, ui32 keyTo = 2000) {
+    TString query = "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
+    for (auto key : xrange(keyFrom, keyTo)) {
+        if (key != keyFrom)
+            query += ", ";
+        query += "(" + ToString(key) + ", " + ToString(key) + ") ";
     }
+    ExecSQL(server, sender, query);
 }
+} // namespace
 
 Y_UNIT_TEST_SUITE(DataShardStats) {
-
-    NKikimrTableStats::TTableStats GetTableStats(TTestActorRuntime& runtime, ui64 tabletId, ui64 tableId) {
+    NKikimrTableStats::TTableStats GetTableStats(TTestActorRuntime & runtime, ui64 tabletId, ui64 tableId) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvDataShard::TEvGetTableStats>(tableId);
         runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
@@ -47,8 +46,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     Y_UNIT_TEST(OneChannelStatsCorrect) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -93,7 +91,16 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetChannels()[0].GetIndexSize(), bTreeIndex ? 0 : 54);
         }
 
-        Upsert(runtime, sender, shard1, tableId1, TShardedTableOptions().Columns_, 1, 100, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        Upsert(
+            runtime,
+            sender,
+            shard1,
+            tableId1,
+            TShardedTableOptions().Columns_,
+            1,
+            100,
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+        );
 
         {
             Cerr << "... waiting for stats after write" << Endl;
@@ -107,10 +114,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     Y_UNIT_TEST(MultipleChannelsStatsCorrect) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .AddStoragePool("ssd")
-            .AddStoragePool("hdd");
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).AddStoragePool("ssd").AddStoragePool("hdd");
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -122,13 +126,22 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false, "hdd"}})
-            .Families({{.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd"}, {.Name = "hdd", .DataPoolKind = "hdd"}});
+                        .Columns(
+                            {{"key", "Uint32", true, false},
+                             {"value", "Uint32", false, false},
+                             {"value2", "Uint32", false, false, "hdd"}}
+                        )
+                        .Families(
+                            {{.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd"},
+                             {.Name = "hdd", .DataPoolKind = "hdd"}}
+                        );
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3)");
+        ExecSQL(
+            server, sender, "UPSERT INTO `/Root/table-1` (key, value, value2) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3)"
+        );
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
@@ -169,8 +182,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -217,11 +229,15 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             auto stats = GetTableStats(runtime, shard1, tableId1.PathId.LocalPathId);
 
             auto dataSizeHistogram = ReadHistogram(stats.GetDataSizeHistogram());
-            TVector<std::pair<ui64, ui64>> expectedDataSizeHistogram = {{475, 7145}, {950, 14290}, {1425, 21435}, {1900, 28580}};
+            TVector<std::pair<ui64, ui64>> expectedDataSizeHistogram = {
+                {475, 7145}, {950, 14290}, {1425, 21435}, {1900, 28580}
+            };
             UNIT_ASSERT_VALUES_EQUAL(expectedDataSizeHistogram, dataSizeHistogram);
 
             auto rowCountHistogram = ReadHistogram(stats.GetRowCountHistogram());
-            TVector<std::pair<ui64, ui64>> expectedRowCountHistogram = {{475, 475}, {950, 950}, {1425, 1425}, {1900, 1900}};
+            TVector<std::pair<ui64, ui64>> expectedRowCountHistogram = {
+                {475, 475}, {950, 950}, {1425, 1425}, {1900, 1900}
+            };
             UNIT_ASSERT_VALUES_EQUAL(expectedRowCountHistogram, rowCountHistogram);
         }
 
@@ -248,26 +264,34 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         InitRoot(server, sender);
 
         auto opts = TShardedTableOptions()
-            .Columns({
-                {"key", "Uint32", true, false}, 
-                {"value", "String", false, false}, 
-                {"value2", "String", false, false, "hdd"}})
-            .Families({
-                {.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd", 
-                    .ExternalPoolKind = "ext", .DataThreshold = 100u, .ExternalThreshold = 200u}, 
-                {.Name = "hdd", .DataPoolKind = "hdd"}});
+                        .Columns(
+                            {{"key", "Uint32", true, false},
+                             {"value", "String", false, false},
+                             {"value2", "String", false, false, "hdd"}}
+                        )
+                        .Families(
+                            {{.Name = "default",
+                              .LogPoolKind = "ssd",
+                              .SysLogPoolKind = "ssd",
+                              .DataPoolKind = "ssd",
+                              .ExternalPoolKind = "ext",
+                              .DataThreshold = 100u,
+                              .ExternalThreshold = 200u},
+                             {.Name = "hdd", .DataPoolKind = "hdd"}}
+                        );
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
 
         TString smallValue(150, 'S');
         TString largeValue(1500, 'L');
-        ExecSQL(server, sender, (TString)"UPSERT INTO `/Root/table-1` (key, value, value2) VALUES " + 
-            "(1, \"AAA\", \"AAA\"), " + 
-            "(2, \"" + smallValue + "\", \"BBB\"), " + 
-            "(3, \"CCC\", \"" + smallValue + "\"), " + 
-            "(4, \"" + largeValue + "\", \"BBB\"), " + 
-            "(5, \"CCC\", \"" + largeValue + "\")");
+        ExecSQL(
+            server,
+            sender,
+            (TString) "UPSERT INTO `/Root/table-1` (key, value, value2) VALUES " + "(1, \"AAA\", \"AAA\"), " +
+                "(2, \"" + smallValue + "\", \"BBB\"), " + "(3, \"CCC\", \"" + smallValue + "\"), " + "(4, \"" +
+                largeValue + "\", \"BBB\"), " + "(5, \"CCC\", \"" + largeValue + "\")"
+        );
 
         {
             Cerr << "... waiting for stats after upsert" << Endl;
@@ -306,8 +330,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     Y_UNIT_TEST(SharedCacheGarbage) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -318,10 +341,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-            .Columns({
-                {"key", "Uint32", true, false}, 
-                {"value", "String", true, false}});
+        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "String", true, false}});
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
         const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
         const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
@@ -348,15 +368,15 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         // each batch ~70KB, ~700KB in total
         auto counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters());
-        Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
-        UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
+        Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val()
+             << Endl;
+        UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800 * 1024); // one index
     }
 
     Y_UNIT_TEST(CollectStatsForSeveralParts) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -380,11 +400,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             gen.UpliftPartSize = 0;
         }
 
-        auto opts = TShardedTableOptions()
-            .Columns({
-                {"key", "Uint32", true, false}, 
-                {"value", "Uint32", true, false}})
-            .Policy(policy.Get());
+        auto opts = TShardedTableOptions().Columns({{"key", "Uint32", true, false}, {"value", "Uint32", true, false}}
+        ).Policy(policy.Get());
 
         TDisableDataShardLogBatching disableDataShardLogBatching;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
@@ -428,8 +445,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -451,7 +467,9 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         CompactTable(runtime, shard1, tableId1, false);
 
-        runtime.WaitFor("blocked read", [&]{ return block.size(); });
+        runtime.WaitFor("blocked read", [&] {
+            return block.size();
+        });
 
         block.Stop().Unblock();
 
@@ -471,36 +489,33 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
     Y_UNIT_TEST(Follower) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableForceFollowers(true);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableForceFollowers(true);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
-        
+
         //runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
-        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1",
-            TShardedTableOptions()
-                .Followers(3));
+        auto [shards, tableId1] =
+            CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Followers(3));
         ui64 shard1 = shards.at(0);
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2);");
 
-       {
+        {
             Cerr << "... waiting leader stats" << Endl;
             auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowUpdates(), 2);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 2);
-        }        
-        
+        }
+
         {
             auto selectResult = KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
-            TString expectedSelectResult = 
+            TString expectedSelectResult =
                 "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
                 "{ items { uint32_value: 2 } items { uint32_value: 2 } }";
             UNIT_ASSERT_VALUES_EQUAL(selectResult, expectedSelectResult);
@@ -514,7 +529,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
             UNIT_ASSERT_LE(stats.GetFollowerId(), 3);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRangeReadRows(), 2);
         }
-    }    
+    }
 
 } // Y_UNIT_TEST_SUITE(DataShardStats)
 

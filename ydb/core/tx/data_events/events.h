@@ -14,14 +14,17 @@
 namespace NKikimr::NEvents {
 
 struct TDataEvents {
-
     class TCoordinatorInfo {
         YDB_READONLY(ui64, MinStep, 0);
         YDB_READONLY(ui64, MaxStep, 0);
         YDB_READONLY_DEF(google::protobuf::RepeatedField<ui64>, DomainCoordinators);
 
     public:
-        TCoordinatorInfo(const ui64 minStep, const ui64 maxStep, const google::protobuf::RepeatedField<ui64>& coordinators)
+        TCoordinatorInfo(
+            const ui64 minStep,
+            const ui64 maxStep,
+            const google::protobuf::RepeatedField<ui64>& coordinators
+        )
             : MinStep(minStep)
             , MaxStep(maxStep)
             , DomainCoordinators(coordinators) {}
@@ -33,12 +36,14 @@ struct TDataEvents {
         EvEnd
     };
 
-    static_assert(EEventType::EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS)");
+    static_assert(
+        EEventType::EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_DATA_OPERATIONS)"
+    );
 
-    struct TEvWrite : public NActors::TEventPB<TEvWrite, NKikimrDataEvents::TEvWrite, TDataEvents::EvWrite> {
+    struct TEvWrite: public NActors::TEventPB<TEvWrite, NKikimrDataEvents::TEvWrite, TDataEvents::EvWrite> {
     public:
         TEvWrite() = default;
-
 
         TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
@@ -62,8 +67,13 @@ struct TDataEvents {
             return *this;
         }
 
-        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,
-            ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
+        void AddOperation(
+            NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
+            const TTableId& tableId,
+            const std::vector<ui32>& columnIds,
+            ui64 payloadIndex,
+            NKikimrDataEvents::EDataFormat payloadFormat
+        ) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
 
@@ -81,20 +91,34 @@ struct TDataEvents {
             return Record.GetTxId();
         }
 
-        void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
-        NLWTrace::TOrbit& GetOrbit() { return Orbit; }
-        NLWTrace::TOrbit&& MoveOrbit() { return std::move(Orbit); }
+        void SetOrbit(NLWTrace::TOrbit&& orbit) {
+            Orbit = std::move(orbit);
+        }
+        NLWTrace::TOrbit& GetOrbit() {
+            return Orbit;
+        }
+        NLWTrace::TOrbit&& MoveOrbit() {
+            return std::move(Orbit);
+        }
+
     private:
         NLWTrace::TOrbit Orbit;
     };
 
-    struct TEvWriteResult : public NActors::TEventPB<TEvWriteResult, NKikimrDataEvents::TEvWriteResult, TDataEvents::EvWriteResult> {
+    struct TEvWriteResult
+        : public NActors::TEventPB<TEvWriteResult, NKikimrDataEvents::TEvWriteResult, TDataEvents::EvWriteResult> {
     public:
         TEvWriteResult() = default;
 
-        static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
+        static std::unique_ptr<TEvWriteResult> BuildError(
+            const ui64 origin,
+            const ui64 txId,
+            const NKikimrDataEvents::TEvWriteResult::EStatus& status,
+            const TString& errorMsg
+        ) {
             auto result = std::make_unique<TEvWriteResult>();
-            ACFL_ERROR("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
+            ACFL_ERROR("event", "ev_write_error")
+            ("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);
@@ -118,7 +142,8 @@ struct TDataEvents {
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TLock& lock) {
+        static std::unique_ptr<TEvWriteResult>
+        BuildCompleted(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TLock& lock) {
             auto result = std::make_unique<TEvWriteResult>();
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
@@ -129,7 +154,8 @@ struct TDataEvents {
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildPrepared(const ui64 origin, const ui64 txId, const TCoordinatorInfo& transactionInfo) {
+        static std::unique_ptr<TEvWriteResult>
+        BuildPrepared(const ui64 origin, const ui64 txId, const TCoordinatorInfo& transactionInfo) {
             auto result = std::make_unique<TEvWriteResult>();
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
@@ -158,19 +184,33 @@ struct TDataEvents {
             return TStringBuilder() << "Status: " << Record.GetStatus() << " Issues: " << Record.GetIssues();
         }
 
-        NKikimrDataEvents::TEvWriteResult::EStatus GetStatus() const { return Record.GetStatus(); }
+        NKikimrDataEvents::TEvWriteResult::EStatus GetStatus() const {
+            return Record.GetStatus();
+        }
 
-        bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
-        bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
-        bool IsError() const { return !IsPrepared() && !IsComplete(); }
+        bool IsPrepared() const {
+            return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED;
+        }
+        bool IsComplete() const {
+            return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED;
+        }
+        bool IsError() const {
+            return !IsPrepared() && !IsComplete();
+        }
 
-        void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
-        NLWTrace::TOrbit& GetOrbit() { return Orbit; }
-        NLWTrace::TOrbit&& MoveOrbit() { return std::move(Orbit); }
+        void SetOrbit(NLWTrace::TOrbit&& orbit) {
+            Orbit = std::move(orbit);
+        }
+        NLWTrace::TOrbit& GetOrbit() {
+            return Orbit;
+        }
+        NLWTrace::TOrbit&& MoveOrbit() {
+            return std::move(Orbit);
+        }
+
     private:
         NLWTrace::TOrbit Orbit;
     };
-
 };
 
-}
+} // namespace NKikimr::NEvents

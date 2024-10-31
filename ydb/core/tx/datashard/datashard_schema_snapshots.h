@@ -52,5 +52,5 @@ private:
 
 }; // TSchemaSnapshotManager
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

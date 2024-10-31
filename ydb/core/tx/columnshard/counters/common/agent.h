@@ -15,9 +15,7 @@ public:
     TSignalAggregations(const i64 sum, const i64 min, const i64 max)
         : Sum(sum)
         , Min(min)
-        , Max(max) {
-
-    }
+        , Max(max) {}
 };
 
 class TValueAggregationAgent: TNonCopyable {
@@ -39,4 +37,4 @@ public:
     std::shared_ptr<TValueAggregationClient> GetClient();
 };
 
-}
+} // namespace NKikimr::NColumnShard

@@ -40,7 +40,10 @@ struct TEvPrivate {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"
+    );
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {
@@ -89,17 +92,13 @@ struct TEvPrivate {
         explicit TGenericYdbProxyResult(ui64 rid, ui64 tid, NYdb::TStatus&& status)
             : ReplicationId(rid)
             , TargetId(tid)
-            , Status(std::move(status))
-        {
-        }
+            , Status(std::move(status)) {}
 
         TString ToString() const override {
             return TStringBuilder() << this->ToStringHeader() << " {"
-                << " ReplicationId: " << ReplicationId
-                << " TargetId: " << TargetId
-                << " Status: " << Status.GetStatus()
-                << " Issues: " << Status.GetIssues().ToOneLineString()
-            << " }";
+                                    << " ReplicationId: " << ReplicationId << " TargetId: " << TargetId
+                                    << " Status: " << Status.GetStatus()
+                                    << " Issues: " << Status.GetIssues().ToOneLineString() << " }";
         }
 
         bool IsSuccess() const {
@@ -128,16 +127,11 @@ struct TEvPrivate {
             : ReplicationId(rid)
             , TargetId(tid)
             , Status(status)
-            , Error(error)
-        {
-        }
+            , Error(error) {}
 
         TString ToStringBody() const {
-            return TStringBuilder()
-                << " ReplicationId: " << ReplicationId
-                << " TargetId: " << TargetId
-                << " Status: " << NKikimrScheme::EStatus_Name(Status)
-                << " Error: " << Error;
+            return TStringBuilder() << " ReplicationId: " << ReplicationId << " TargetId: " << TargetId
+                                    << " Status: " << NKikimrScheme::EStatus_Name(Status) << " Error: " << Error;
         }
 
         bool IsSuccess() const {
@@ -154,8 +148,12 @@ struct TEvPrivate {
     };
 
     struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
-        explicit TEvDropDstResult(ui64 rid, ui64 tid,
-            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        explicit TEvDropDstResult(
+            ui64 rid,
+            ui64 tid,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess,
+            const TString& error = {}
+        );
         TString ToString() const override;
     };
 
@@ -185,8 +183,7 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
-    struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
-    };
+    struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {};
 
     struct TEvResolveSecretResult: public TEventLocal<TEvResolveSecretResult, EvResolveSecretResult> {
         const ui64 ReplicationId;
@@ -202,8 +199,12 @@ struct TEvPrivate {
     };
 
     struct TEvAlterDstResult: public TGenericSchemeResult<TEvAlterDstResult, EvAlterDstResult> {
-        explicit TEvAlterDstResult(ui64 rid, ui64 tid,
-            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
+        explicit TEvAlterDstResult(
+            ui64 rid,
+            ui64 tid,
+            NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess,
+            const TString& error = {}
+        );
         TString ToString() const override;
     };
 
@@ -225,18 +226,14 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
-    struct TEvRequestCreateStream: public TEventLocal<TEvRequestCreateStream, EvRequestCreateStream> {
-    };
+    struct TEvRequestCreateStream: public TEventLocal<TEvRequestCreateStream, EvRequestCreateStream> {};
 
-    struct TEvAllowCreateStream: public TEventLocal<TEvAllowCreateStream, EvAllowCreateStream> {
-    };
+    struct TEvAllowCreateStream: public TEventLocal<TEvAllowCreateStream, EvAllowCreateStream> {};
 
-    struct TEvRequestDropStream: public TEventLocal<TEvRequestDropStream, EvRequestDropStream> {
-    };
+    struct TEvRequestDropStream: public TEventLocal<TEvRequestDropStream, EvRequestDropStream> {};
 
-    struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
-    };
+    struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {};
 
 }; // TEvPrivate
 
-}
+} // namespace NKikimr::NReplication::NController

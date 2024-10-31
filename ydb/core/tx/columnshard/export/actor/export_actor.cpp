@@ -11,8 +11,14 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
         CurrentData = NArrow::ToBatch(data, true);
         CurrentDataBlob = ExportSession->GetTask().GetSerializer()->SerializeFull(CurrentData);
         if (data) {
-            auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), 
-                BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT), ExportSession->GetCursor(), TabletId, ExportSession->GetTask().GetSelector()->GetPathId());
+            auto controller = std::make_shared<TWriteController>(
+                SelfId(),
+                std::vector<TString>({CurrentDataBlob}),
+                BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT),
+                ExportSession->GetCursor(),
+                TabletId,
+                ExportSession->GetTask().GetSelector()->GetPathId()
+            );
             Register(CreateWriteActor((ui64)TabletId, controller, TInstant::Max()));
         }
     } else {
@@ -27,9 +33,14 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
 
 void TActor::HandleExecute(NEvents::TEvExportWritingFailed::TPtr& /*ev*/) {
     SwitchStage(EStage::WaitWriting, EStage::WaitWriting);
-    auto controller = std::make_shared<TWriteController>(SelfId(), std::vector<TString>({CurrentDataBlob}), 
+    auto controller = std::make_shared<TWriteController>(
+        SelfId(),
+        std::vector<TString>({CurrentDataBlob}),
         BlobsOperator->StartWritingAction(NBlobOperations::EConsumer::EXPORT),
-        ExportSession->GetCursor(), TabletId, ExportSession->GetTask().GetSelector()->GetPathId());
+        ExportSession->GetCursor(),
+        TabletId,
+        ExportSession->GetTask().GetSelector()->GetPathId()
+    );
     Register(CreateWriteActor((ui64)TabletId, controller, TInstant::Max()));
 }
 
@@ -37,6 +48,7 @@ class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShar
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     const ui64 TxId;
+
 protected:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         Self->GetProgressTxController().FinishProposeOnExecute(TxId, txc);
@@ -45,21 +57,23 @@ protected:
     virtual void Complete(const TActorContext& ctx) override {
         Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
     }
+
 public:
     TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId)
         : TBase(self)
-        , TxId(txId) {
-    }
+        , TxId(txId) {}
 };
 
 void TActor::OnSessionStateSaved() {
     AFL_VERIFY(ExportSession->IsFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
-        ExecuteTransaction(std::make_unique<TTxProposeFinish>(GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId()));
+        ExecuteTransaction(std::make_unique<TTxProposeFinish>(
+            GetShardVerified<NColumnShard::TColumnShard>(), *ExportSession->GetTxId()
+        ));
     } else {
         Session->FinishActor();
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NExport

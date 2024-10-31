@@ -14,7 +14,7 @@
 namespace NKikimr {
 
 namespace NTabletFlatExecutor {
-    class TTransactionContext;
+class TTransactionContext;
 }
 
 using NTabletFlatExecutor::TTransactionContext;
@@ -26,10 +26,10 @@ class TDataShardUserDb;
 
 TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self);
 
-class TLockedWriteLimitException : public yexception {};
+class TLockedWriteLimitException: public yexception {};
 
 ///
-class TEngineBay : TNonCopyable {
+class TEngineBay: TNonCopyable {
 public:
     using TValidationInfo = NMiniKQL::IEngineFlat::TValidationInfo;
     using TValidatedKey = NMiniKQL::IEngineFlat::TValidatedKey;
@@ -47,15 +47,21 @@ public:
 
     virtual ~TEngineBay();
 
-    const NMiniKQL::IEngineFlat * GetEngine() const { return Engine.Get(); }
-    NMiniKQL::IEngineFlat * GetEngine();
-    NMiniKQL::TEngineHost * GetEngineHost() { return EngineHost.Get(); }
+    const NMiniKQL::IEngineFlat* GetEngine() const {
+        return Engine.Get();
+    }
+    NMiniKQL::IEngineFlat* GetEngine();
+    NMiniKQL::TEngineHost* GetEngineHost() {
+        return EngineHost.Get();
+    }
 
     TDataShardUserDb& GetUserDb();
     const TDataShardUserDb& GetUserDb() const;
 
     void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
-    void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
+    void SetUseLlvmRuntime(bool llvmRuntime) {
+        EngineSettings->LlvmRuntime = llvmRuntime;
+    }
 
     EResult Validate() {
         if (KeyValidator.GetInfo().Loaded)
@@ -91,10 +97,18 @@ public:
         EngineHost.Reset();
     }
 
-    TKeyValidator& GetKeyValidator() { return KeyValidator; }
-    const TKeyValidator& GetKeyValidator() const { return KeyValidator; }
-    TValidationInfo& TxInfo() { return KeyValidator.GetInfo(); }
-    const TValidationInfo& TxInfo() const { return KeyValidator.GetInfo(); }
+    TKeyValidator& GetKeyValidator() {
+        return KeyValidator;
+    }
+    const TKeyValidator& GetKeyValidator() const {
+        return KeyValidator;
+    }
+    TValidationInfo& TxInfo() {
+        return KeyValidator.GetInfo();
+    }
+    const TValidationInfo& TxInfo() const {
+        return KeyValidator.GetInfo();
+    }
     TEngineBay::TSizes CalcSizes(bool needsTotalKeysSize) const;
 
     void SetWriteVersion(TRowVersion writeVersion);
@@ -112,8 +126,12 @@ public:
     bool GetVolatileCommitOrdered() const;
     bool GetPerformedUserReads() const;
 
-    void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
-    const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }
+    void ResetCounters() {
+        EngineHostCounters = TEngineHostCounters();
+    }
+    const TEngineHostCounters& GetCounters() const {
+        return EngineHostCounters;
+    }
 
     NKqp::TKqpTasksRunner& GetKqpTasksRunner(NKikimrTxDataShard::TKqpTransaction& tx);
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
@@ -134,4 +152,5 @@ private:
     TIntrusivePtr<NKqp::TKqpTasksRunner> KqpTasksRunner;
 };
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

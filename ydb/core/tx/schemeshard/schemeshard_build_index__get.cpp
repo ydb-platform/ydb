@@ -3,16 +3,15 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 
-
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TIndexBuilder::TTxGet: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvGetRequest, TEvIndexBuilder::TEvGetResponse> {
+struct TSchemeShard::TIndexBuilder::TTxGet
+    : public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvGetRequest, TEvIndexBuilder::TEvGetResponse> {
 public:
     explicit TTxGet(TSelf* self, TEvIndexBuilder::TEvGetRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_GET_INDEX_BUILD, false)
-    {}
+        : TTxSimple(self, ev, TXTYPE_GET_INDEX_BUILD, false) {}
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
@@ -41,7 +40,8 @@ public:
         if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <" << record.GetDatabaseName() << ">"
+                TStringBuilder() << "Index build process with id <" << indexBuildId << "> not found in database <"
+                                 << record.GetDatabaseName() << ">"
             );
         }
 
@@ -59,4 +59,4 @@ ITransaction* TSchemeShard::CreateTxGet(TEvIndexBuilder::TEvGetRequest::TPtr& ev
     return new TIndexBuilder::TTxGet(this, ev);
 }
 
-} // NKikimr::NSchemeShard
+} // namespace NKikimr::NSchemeShard

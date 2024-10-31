@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NReader {
 
 void TReadStats::PrintToLog() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)
-        ("event", "statistic")
+    ("event", "statistic")
         ("begin", BeginTimestamp)
         ("index_granules", IndexGranules)
         ("index_portions", IndexPortions)
@@ -25,4 +25,4 @@ void TReadStats::PrintToLog() {
         ;
 }
 
-}
+} // namespace NKikimr::NOlap::NReader

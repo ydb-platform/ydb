@@ -12,9 +12,7 @@ TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation loca
     : Path(path)
     , Failed(false)
     , Status(EStatus::StatusSuccess)
-    , Location(location)
-{
-}
+    , Location(location) {}
 
 TPath::TChecker::operator bool() const {
     return !Failed;
@@ -32,13 +30,14 @@ const TPath::TChecker& TPath::TChecker::Fail(EStatus status, const TString& erro
     Failed = true;
     Status = status;
     Error = TStringBuilder() << "Check failed"
-        << ": path: '" << Path.PathString() << "'"
-        << ", error: " << error
+                             << ": path: '" << Path.PathString() << "'"
+                             << ", error: " << error
     // this line included only in debug error
     // because we do not want to forward information
     // about our sources to db user
 #ifndef NDEBUG
-        << ", source_location: " << NUtil::TrimSourceFileName(Location.file_name()) << ":" << Location.line()
+                             << ", source_location: " << NUtil::TrimSourceFileName(Location.file_name()) << ":"
+                             << Location.line()
 #endif
         ;
 
@@ -55,8 +54,11 @@ const TPath::TChecker& TPath::TChecker::IsResolved(EStatus status) const {
     }
 
     const auto nearest = Path.FirstResoledParent();
-    return Fail(status, TStringBuilder() << "path hasn't been resolved, nearest resolved path"
-        << ": '" << nearest.PathString() << "' (id: " << nearest.GetPathIdSafe() << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path hasn't been resolved, nearest resolved path"
+                         << ": '" << nearest.PathString() << "' (id: " << nearest.GetPathIdSafe() << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::HasResolvedPrefix(EStatus status) const {
@@ -104,8 +106,11 @@ const TPath::TChecker& TPath::TChecker::NotResolved(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path has been resolved"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path has been resolved"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NotUnderDeleting(EStatus status) const {
@@ -117,8 +122,11 @@ const TPath::TChecker& TPath::TChecker::NotUnderDeleting(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is being deleted right now"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is being deleted right now"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NotUnderDomainUpgrade(EStatus status) const {
@@ -130,8 +138,11 @@ const TPath::TChecker& TPath::TChecker::NotUnderDomainUpgrade(EStatus status) co
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is being upgraded as part of subdomain right now"
-        << " (domain id: " << Path.GetPathIdForDomain() << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is being upgraded as part of subdomain right now"
+                         << " (domain id: " << Path.GetPathIdForDomain() << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsDeleted(EStatus status) const {
@@ -143,8 +154,11 @@ const TPath::TChecker& TPath::TChecker::IsDeleted(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path hasn't been deleted yet"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path hasn't been deleted yet"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsUnderDeleting(EStatus status) const {
@@ -156,8 +170,11 @@ const TPath::TChecker& TPath::TChecker::IsUnderDeleting(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path isn't under deletion right now"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path isn't under deletion right now"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsUnderMoving(EStatus status) const {
@@ -169,8 +186,11 @@ const TPath::TChecker& TPath::TChecker::IsUnderMoving(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path isn't under moving right now"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path isn't under moving right now"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NotUnderOperation(EStatus status) const {
@@ -182,8 +202,11 @@ const TPath::TChecker& TPath::TChecker::NotUnderOperation(EStatus status) const 
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is under operation"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is under operation"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsUnderCreating(EStatus status) const {
@@ -195,8 +218,11 @@ const TPath::TChecker& TPath::TChecker::IsUnderCreating(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path isn't under creating right now"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path isn't under creating right now"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsUnderOperation(EStatus status) const {
@@ -208,8 +234,11 @@ const TPath::TChecker& TPath::TChecker::IsUnderOperation(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not under operation at all"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not under operation at all"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsUnderTheSameOperation(TTxId txId, EStatus status) const {
@@ -222,9 +251,11 @@ const TPath::TChecker& TPath::TChecker::IsUnderTheSameOperation(TTxId txId, ESta
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not under the same operation"
-        << ", active txId: " << activeTxId
-        << ", expected txId: " << txId);
+    return Fail(
+        status,
+        TStringBuilder() << "path is not under the same operation"
+                         << ", active txId: " << activeTxId << ", expected txId: " << txId
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NotUnderTheSameOperation(TTxId txId, EStatus status) const {
@@ -237,8 +268,11 @@ const TPath::TChecker& TPath::TChecker::NotUnderTheSameOperation(TTxId txId, ESt
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is under the same operation"
-        << ", txId: " << txId);
+    return Fail(
+        status,
+        TStringBuilder() << "path is under the same operation"
+                         << ", txId: " << txId
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NoOlapStore(EStatus status) const {
@@ -274,8 +308,11 @@ const TPath::TChecker& TPath::TChecker::IsOlapStore(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not an olap store"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not an olap store"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsColumnTable(EStatus status) const {
@@ -287,8 +324,11 @@ const TPath::TChecker& TPath::TChecker::IsColumnTable(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not an olap table"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not an olap table"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsSequence(EStatus status) const {
@@ -300,8 +340,11 @@ const TPath::TChecker& TPath::TChecker::IsSequence(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a sequence"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a sequence"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsReplication(EStatus status) const {
@@ -313,8 +356,11 @@ const TPath::TChecker& TPath::TChecker::IsReplication(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a replication"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a replication"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsCommonSensePath(EStatus status) const {
@@ -326,8 +372,11 @@ const TPath::TChecker& TPath::TChecker::IsCommonSensePath(EStatus status) const 
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a common path"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a common path"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsInsideTableIndexPath(EStatus status) const {
@@ -339,8 +388,11 @@ const TPath::TChecker& TPath::TChecker::IsInsideTableIndexPath(EStatus status) c
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path doesn't go through directories towards table index"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path doesn't go through directories towards table index"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsInsideCdcStreamPath(EStatus status) const {
@@ -352,8 +404,11 @@ const TPath::TChecker& TPath::TChecker::IsInsideCdcStreamPath(EStatus status) co
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path doesn't go through directories towards cdc stream"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path doesn't go through directories towards cdc stream"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsTable(EStatus status) const {
@@ -365,8 +420,11 @@ const TPath::TChecker& TPath::TChecker::IsTable(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a table"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a table"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
@@ -382,8 +440,11 @@ const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is a backup table"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is a backup table"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) const {
@@ -404,8 +465,11 @@ const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) con
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is an async replica table"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is an async replica table"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsBlockStoreVolume(EStatus status) const {
@@ -417,8 +481,11 @@ const TPath::TChecker& TPath::TChecker::IsBlockStoreVolume(EStatus status) const
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a block store volume"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a block store volume"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsFileStore(EStatus status) const {
@@ -430,8 +497,11 @@ const TPath::TChecker& TPath::TChecker::IsFileStore(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a FileStore"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a FileStore"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsKesus(EStatus status) const {
@@ -443,8 +513,11 @@ const TPath::TChecker& TPath::TChecker::IsKesus(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a kesus"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a kesus"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsPQGroup(EStatus status) const {
@@ -456,8 +529,11 @@ const TPath::TChecker& TPath::TChecker::IsPQGroup(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a topic"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a topic"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsSubDomain(EStatus status) const {
@@ -469,8 +545,11 @@ const TPath::TChecker& TPath::TChecker::IsSubDomain(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a subdomain"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a subdomain"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsExternalSubDomain(EStatus status) const {
@@ -482,8 +561,11 @@ const TPath::TChecker& TPath::TChecker::IsExternalSubDomain(EStatus status) cons
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not an external subdomain"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not an external subdomain"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsAtLocalSchemeShard(EStatus status) const {
@@ -496,8 +578,11 @@ const TPath::TChecker& TPath::TChecker::IsAtLocalSchemeShard(EStatus status) con
     }
 
     const auto nearest = Path.FirstResoledParent();
-    return Fail(status, TStringBuilder() << "path is an external domain, the redirection is needed"
-        << ": '" << nearest.PathString() << "' (id: " << nearest.GetPathIdSafe() << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is an external domain, the redirection is needed"
+                         << ": '" << nearest.PathString() << "' (id: " << nearest.GetPathIdSafe() << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsSolomon(EStatus status) const {
@@ -509,8 +594,11 @@ const TPath::TChecker& TPath::TChecker::IsSolomon(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a solomon"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a solomon"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsTableIndex(EStatus status) const {
@@ -522,8 +610,11 @@ const TPath::TChecker& TPath::TChecker::IsTableIndex(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a table index"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a table index"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsCdcStream(EStatus status) const {
@@ -535,8 +626,11 @@ const TPath::TChecker& TPath::TChecker::IsCdcStream(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a cdc stream"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a cdc stream"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsLikeDirectory(EStatus status) const {
@@ -548,8 +642,11 @@ const TPath::TChecker& TPath::TChecker::IsLikeDirectory(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a directory"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a directory"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
@@ -561,8 +658,11 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a directory"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a directory"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, EStatus status) const {
@@ -574,8 +674,11 @@ const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, ES
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "only paths to a single subdomain are allowed"
-        << ", another path: " << another.PathString());
+    return Fail(
+        status,
+        TStringBuilder() << "only paths to a single subdomain are allowed"
+                         << ", another path: " << another.PathString()
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const {
@@ -592,14 +695,20 @@ const TPath::TChecker& TPath::TChecker::FailOnWrongType(const TSet<TPathElement:
     }
 
     if (!expectedTypes.contains(Path.Base()->PathType)) {
-        return Fail(EStatus::StatusNameConflict, TStringBuilder() << "unexpected path type"
-            << " (" << BasicPathInfo(Path.Base()) << ")"
-            << ", expected types: " << JoinSeq(", ", expectedTypes));
+        return Fail(
+            EStatus::StatusNameConflict,
+            TStringBuilder() << "unexpected path type"
+                             << " (" << BasicPathInfo(Path.Base()) << ")"
+                             << ", expected types: " << JoinSeq(", ", expectedTypes)
+        );
     }
 
     if (!Path.Base()->IsCreateFinished()) {
-        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
-            << " (" << BasicPathInfo(Path.Base()) << ")");
+        return Fail(
+            EStatus::StatusMultipleModifications,
+            TStringBuilder() << "path exists but creating right now"
+                             << " (" << BasicPathInfo(Path.Base()) << ")"
+        );
     }
 
     return *this;
@@ -609,7 +718,8 @@ const TPath::TChecker& TPath::TChecker::FailOnWrongType(TPathElement::EPathType 
     return FailOnWrongType(TSet<TPathElement::EPathType>{expectedType});
 }
 
-const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const {
+const TPath::TChecker&
+TPath::TChecker::FailOnExist(const TSet<TPathElement::EPathType>& expectedTypes, bool acceptAlreadyExist) const {
     if (Failed) {
         return *this;
     }
@@ -623,26 +733,39 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(const TSet<TPathElement::EPa
     }
 
     if (!expectedTypes.contains(Path.Base()->PathType)) {
-        return Fail(EStatus::StatusNameConflict, TStringBuilder() << "unexpected path type"
-            << " (" << BasicPathInfo(Path.Base()) << ")"
-            << ", expected types: " << JoinSeq(", ", expectedTypes));
+        return Fail(
+            EStatus::StatusNameConflict,
+            TStringBuilder() << "unexpected path type"
+                             << " (" << BasicPathInfo(Path.Base()) << ")"
+                             << ", expected types: " << JoinSeq(", ", expectedTypes)
+        );
     }
 
     if (!Path.Base()->IsCreateFinished()) {
-        return Fail(EStatus::StatusMultipleModifications, TStringBuilder() << "path exists but creating right now"
-            << " (" << BasicPathInfo(Path.Base()) << ")");
+        return Fail(
+            EStatus::StatusMultipleModifications,
+            TStringBuilder() << "path exists but creating right now"
+                             << " (" << BasicPathInfo(Path.Base()) << ")"
+        );
     }
 
     if (acceptAlreadyExist) {
-        return Fail(EStatus::StatusAlreadyExists, TStringBuilder() << "path exist, request accepts it"
-            << " (" << BasicPathInfo(Path.Base()) << ")");
+        return Fail(
+            EStatus::StatusAlreadyExists,
+            TStringBuilder() << "path exist, request accepts it"
+                             << " (" << BasicPathInfo(Path.Base()) << ")"
+        );
     }
 
-    return Fail(EStatus::StatusSchemeError, TStringBuilder() << "path exist, request doesn't accept it"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        EStatus::StatusSchemeError,
+        TStringBuilder() << "path exist, request doesn't accept it"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
-const TPath::TChecker& TPath::TChecker::FailOnExist(TPathElement::EPathType expectedType, bool acceptAlreadyExist) const {
+const TPath::TChecker& TPath::TChecker::FailOnExist(TPathElement::EPathType expectedType, bool acceptAlreadyExist)
+    const {
     return FailOnExist(TSet<TPathElement::EPathType>{expectedType}, acceptAlreadyExist);
 }
 
@@ -669,10 +792,12 @@ const TPath::TChecker& TPath::TChecker::DepthLimit(ui64 delta, EStatus status) c
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "paths depth limit exceeded"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxDepth
-        << ", depth: " << Path.Depth()
-        << ", delta: " << delta);
+    return Fail(
+        status,
+        TStringBuilder() << "paths depth limit exceeded"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxDepth << ", depth: " << Path.Depth()
+                         << ", delta: " << delta
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::PathsLimit(ui64 delta, EStatus status) const {
@@ -693,10 +818,12 @@ const TPath::TChecker& TPath::TChecker::PathsLimit(ui64 delta, EStatus status) c
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "paths count limit exceeded"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxPaths
-        << ", paths: " << (pathsTotal - backupPaths)
-        << ", delta: " << delta);
+    return Fail(
+        status,
+        TStringBuilder() << "paths count limit exceeded"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxPaths
+                         << ", paths: " << (pathsTotal - backupPaths) << ", delta: " << delta
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::DirChildrenLimit(ui64 delta, EStatus status) const {
@@ -718,10 +845,12 @@ const TPath::TChecker& TPath::TChecker::DirChildrenLimit(ui64 delta, EStatus sta
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "children count limit exceeded"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxChildrenInDir
-        << ", children: " << (aliveChildren - backupChildren)
-        << ", delta: " << delta);
+    return Fail(
+        status,
+        TStringBuilder() << "children count limit exceeded"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxChildrenInDir
+                         << ", children: " << (aliveChildren - backupChildren) << ", delta: " << delta
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::ShardsLimit(ui64 delta, EStatus status) const {
@@ -742,10 +871,12 @@ const TPath::TChecker& TPath::TChecker::ShardsLimit(ui64 delta, EStatus status) 
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "shards count limit exceeded (in subdomain)"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxShards
-        << ", shards: " << (shardsTotal - backupShards)
-        << ", delta: " << delta);
+    return Fail(
+        status,
+        TStringBuilder() << "shards count limit exceeded (in subdomain)"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxShards
+                         << ", shards: " << (shardsTotal - backupShards) << ", delta: " << delta
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::PQPartitionsLimit(ui64 delta, EStatus status) const {
@@ -761,19 +892,23 @@ const TPath::TChecker& TPath::TChecker::PQPartitionsLimit(ui64 delta, EStatus st
     const auto pqPartitions = domainInfo->GetPQPartitionsInside();
 
     if (pqPartitions + delta > domainInfo->GetSchemeLimits().MaxPQPartitions) {
-        return Fail(status, TStringBuilder() << "data stream shards limit exceeded"
-            << ", limit: " << domainInfo->GetSchemeLimits().MaxPQPartitions
-            << ", data stream shards: " << pqPartitions
-            << ", delta: " << delta);
+        return Fail(
+            status,
+            TStringBuilder() << "data stream shards limit exceeded"
+                             << ", limit: " << domainInfo->GetSchemeLimits().MaxPQPartitions
+                             << ", data stream shards: " << pqPartitions << ", delta: " << delta
+        );
     }
 
     if (const auto& quotas = domainInfo->GetDatabaseQuotas()) {
         if (const auto limit = quotas->data_stream_shards_quota()) {
             if (pqPartitions + delta > limit) {
-                return Fail(status, TStringBuilder() << "data stream shards limit exceeded"
-                    << ", limit: " << limit
-                    << ", data stream shards: " << pqPartitions
-                    << ", delta: " << delta);
+                return Fail(
+                    status,
+                    TStringBuilder() << "data stream shards limit exceeded"
+                                     << ", limit: " << limit << ", data stream shards: " << pqPartitions
+                                     << ", delta: " << delta
+                );
             }
         }
     }
@@ -795,29 +930,38 @@ const TPath::TChecker& TPath::TChecker::PQReservedStorageLimit(ui64 delta, EStat
     static constexpr ui64 MaxPQStorage = Max<ui64>() / 2;
 
     if (pqReservedStorage + delta > MaxPQStorage) {
-        return Fail(status, TStringBuilder() << "data stream reserved storage size limit exceeded"
-            << ", limit: " << MaxPQStorage << " bytes"
-            << ", data stream reserved storage size: " << pqReservedStorage << " bytes"
-            << ", delta: " << delta << " bytes");
+        return Fail(
+            status,
+            TStringBuilder() << "data stream reserved storage size limit exceeded"
+                             << ", limit: " << MaxPQStorage << " bytes"
+                             << ", data stream reserved storage size: " << pqReservedStorage << " bytes"
+                             << ", delta: " << delta << " bytes"
+        );
     }
 
     if (const auto& quotas = domainInfo->GetDatabaseQuotas()) {
         if (const auto limit = quotas->data_stream_reserved_storage_quota()) {
             if (pqReservedStorage + delta > limit) {
-                return Fail(status, TStringBuilder() << "data stream reserved storage size limit exceeded"
-                    << ", limit: " << limit << " bytes"
-                    << ", data stream reserved storage size: " << pqReservedStorage << " bytes"
-                    << ", delta: " << delta << " bytes");
+                return Fail(
+                    status,
+                    TStringBuilder() << "data stream reserved storage size limit exceeded"
+                                     << ", limit: " << limit << " bytes"
+                                     << ", data stream reserved storage size: " << pqReservedStorage << " bytes"
+                                     << ", delta: " << delta << " bytes"
+                );
             }
         }
     }
 
     ui64 quotasAvailable = domainInfo->DiskSpaceQuotasAvailable();
     if (quotasAvailable < delta && AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
-        return Fail(status, TStringBuilder() << "database size limit exceeded"
-            << ", limit: " << domainInfo->GetDiskSpaceQuotas().HardQuota << " bytes"
-            << ", available: " << quotasAvailable << " bytes"
-            << ", delta: " << delta << " bytes");
+        return Fail(
+            status,
+            TStringBuilder() << "database size limit exceeded"
+                             << ", limit: " << domainInfo->GetDiskSpaceQuotas().HardQuota << " bytes"
+                             << ", available: " << quotasAvailable << " bytes"
+                             << ", delta: " << delta << " bytes"
+        );
     }
 
     return *this;
@@ -832,8 +976,11 @@ const TPath::TChecker& TPath::TChecker::IsExternalTable(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a external table"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a external table"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsExternalDataSource(EStatus status) const {
@@ -845,8 +992,11 @@ const TPath::TChecker& TPath::TChecker::IsExternalDataSource(EStatus status) con
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a external data source"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a external data source"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
@@ -858,12 +1008,15 @@ const TPath::TChecker& TPath::TChecker::IsView(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a view"
-        << " (" << BasicPathInfo(Path.Base()) << ")"
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a view"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
     );
 }
 
-const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir, EStatus status) const {
+const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir, EStatus status)
+    const {
     if (Failed) {
         return *this;
     }
@@ -874,8 +1027,10 @@ const TPath::TChecker& TPath::TChecker::FailOnRestrictedCreateInTempZone(bool al
 
     for (const auto& element : Path.Elements) {
         if (element->IsTemporary()) {
-            return Fail(status, TStringBuilder() << "path is temporary"
-                << " (" << BasicPathInfo(Path.Base()) << ")"
+            return Fail(
+                status,
+                TStringBuilder() << "path is temporary"
+                                 << " (" << BasicPathInfo(Path.Base()) << ")"
             );
         }
     }
@@ -892,8 +1047,11 @@ const TPath::TChecker& TPath::TChecker::IsResourcePool(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a resource pool"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a resource pool"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const {
@@ -905,8 +1063,11 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path is not a backup collection"
-        << " (" << BasicPathInfo(Path.Base()) << ")");
+    return Fail(
+        status,
+        TStringBuilder() << "path is not a backup collection"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus status) const {
@@ -929,10 +1090,12 @@ const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus stat
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "shards count limit exceeded (in dir)"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxShardsInPath
-        << ", shards: " << shardInPath
-        << ", delta: " << delta);
+    return Fail(
+        status,
+        TStringBuilder() << "shards count limit exceeded (in dir)"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxShardsInPath << ", shards: " << shardInPath
+                         << ", delta: " << delta
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::ExportsLimit(ui64 delta, EStatus status) const {
@@ -945,10 +1108,12 @@ const TPath::TChecker& TPath::TChecker::ExportsLimit(ui64 delta, EStatus status)
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "exports count limit exceeded"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxExports
-        << ", exports: " << Path.SS->Exports.size()
-        << ", delta: " << delta);
+    return Fail(
+        status,
+        TStringBuilder() << "exports count limit exceeded"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxExports
+                         << ", exports: " << Path.SS->Exports.size() << ", delta: " << delta
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::ImportsLimit(ui64 delta, EStatus status) const {
@@ -961,10 +1126,12 @@ const TPath::TChecker& TPath::TChecker::ImportsLimit(ui64 delta, EStatus status)
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "imports count limit exceeded"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxImports
-        << ", exports: " << Path.SS->Imports.size()
-        << ", delta: " << delta);
+    return Fail(
+        status,
+        TStringBuilder() << "imports count limit exceeded"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxImports
+                         << ", exports: " << Path.SS->Imports.size() << ", delta: " << delta
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::NotChildren(EStatus status) const {
@@ -977,8 +1144,11 @@ const TPath::TChecker& TPath::TChecker::NotChildren(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path has children, request doesn't accept it"
-        << ", children: " << childrenCount);
+    return Fail(
+        status,
+        TStringBuilder() << "path has children, request doesn't accept it"
+                         << ", children: " << childrenCount
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
@@ -986,7 +1156,7 @@ const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
         return *this;
     }
 
-    for (const auto& child: Path.Base()->GetChildren()) {
+    for (const auto& child : Path.Base()->GetChildren()) {
         auto name = child.first;
 
         TPath childPath = Path.Child(name);
@@ -1007,10 +1177,12 @@ const TPath::TChecker& TPath::TChecker::NotDeleted(EStatus status) const {
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "path has been deleted"
-        << " (" << BasicPathInfo(Path.Base()) << ")"
-        << ", drop stepId: " << Path.Base()->StepDropped
-        << ", drop txId: " << Path.Base()->DropTxId);
+    return Fail(
+        status,
+        TStringBuilder() << "path has been deleted"
+                         << " (" << BasicPathInfo(Path.Base()) << ")"
+                         << ", drop stepId: " << Path.Base()->StepDropped << ", drop txId: " << Path.Base()->DropTxId
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsValidACL(const TString& acl, EStatus status) const {
@@ -1036,9 +1208,12 @@ const TPath::TChecker& TPath::TChecker::IsValidACL(const TString& acl, EStatus s
         return *this;
     }
 
-    return Fail(status, TStringBuilder() << "ACL size limit exceeded"
-        << ", limit: " << domainInfo->GetSchemeLimits().MaxAclBytesSize
-        << ", new ACL size: " << bytesSize);
+    return Fail(
+        status,
+        TStringBuilder() << "ACL size limit exceeded"
+                         << ", limit: " << domainInfo->GetSchemeLimits().MaxAclBytesSize
+                         << ", new ACL size: " << bytesSize
+    );
 }
 
 const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus status) const {
@@ -1066,8 +1241,7 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
     const auto& myName = Path.NameParts.back();
 
     auto raiseErr = [this](EStatus st, const TString& myName, const TString& conflict) -> const TPath::TChecker& {
-        return Fail(st, TStringBuilder() << "name " << myName
-            << " is not uniq. Found in: " << conflict);
+        return Fail(st, TStringBuilder() << "name " << myName << " is not uniq. Found in: " << conflict);
     };
 
     if (path.Elements.back()->FindChild(myName)) {
@@ -1094,23 +1268,20 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
-    return TStringBuilder()
-        << "id: " << element->PathId << ", "
-        << "type: " << element->PathType << ", "
-        << "state: " << element->PathState;
+    return TStringBuilder() << "id: " << element->PathId << ", "
+                            << "type: " << element->PathType << ", "
+                            << "state: " << element->PathState;
 }
 
 TPath::TPath(TSchemeShard* ss)
-    : SS(ss)
-{
+    : SS(ss) {
     Y_ABORT_UNLESS(SS);
     Y_ABORT_UNLESS(IsEmpty() && !IsResolved());
 }
 
 TPath::TPath(TVector<TPathElement::TPtr>&& elements, TSchemeShard* ss)
     : SS(ss)
-    , Elements(std::move(elements))
-{
+    , Elements(std::move(elements)) {
     Y_ABORT_UNLESS(SS);
     Y_ABORT_UNLESS(Elements);
 
@@ -1139,10 +1310,10 @@ TPath::operator bool() const {
     return IsResolved();
 }
 
-bool TPath::operator ==(const TPath& another) const { // likely O(1) complexity, but might be O(path length)
+bool TPath::operator==(const TPath& another) const { // likely O(1) complexity, but might be O(path length)
     if (Y_LIKELY(IsResolved() && another.IsResolved())) {
         return Base()->PathId == another.Base()->PathId; // check path ids is the only right way to compare
-    }                                                    // PathStrings could be false equal due operation Init form deleted path element
+    } // PathStrings could be false equal due operation Init form deleted path element
     if (IsResolved() || another.IsResolved()) {
         return false;
     }
@@ -1166,7 +1337,7 @@ bool TPath::operator ==(const TPath& another) const { // likely O(1) complexity,
     return PathString() == another.PathString();
 }
 
-bool TPath::operator !=(const TPath& another) const {
+bool TPath::operator!=(const TPath& another) const {
     return !(*this == another);
 }
 
@@ -1273,9 +1444,7 @@ TPath& TPath::Dive(const TString& name) {
     if (Elements.empty() && NameParts.size() < SS->RootPathElements.size()) {
         NameParts.push_back(name);
 
-        if (NameParts.size() == SS->RootPathElements.size()
-                && NameParts == SS->RootPathElements)
-        {
+        if (NameParts.size() == SS->RootPathElements.size() && NameParts == SS->RootPathElements) {
             Elements = {SS->PathsById.at(SS->RootPathId())};
             NameParts = {Elements.front()->Name};
         }
@@ -1339,12 +1508,12 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
         TPath headOpPath = Init(txState->TargetPathId, ss);
 
         auto headPathNameParts = ss->RootPathElements;
-        headPathNameParts.insert(headPathNameParts.end(), std::next(headOpPath.NameParts.begin()), headOpPath.NameParts.end());
+        headPathNameParts.insert(
+            headPathNameParts.end(), std::next(headOpPath.NameParts.begin()), headOpPath.NameParts.end()
+        );
 
-        if (headPathNameParts.size() + 1 == pathParts.size()
-                && std::equal(headPathNameParts.begin(), headPathNameParts.end(),
-                              pathParts.begin()))
-        {
+        if (headPathNameParts.size() + 1 == pathParts.size() &&
+            std::equal(headPathNameParts.begin(), headPathNameParts.end(), pathParts.begin())) {
             // headOpPath is a prefix of the path
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "ResolveWithInactive: attach to the TargetPath of head operation"
@@ -1419,15 +1588,9 @@ bool TPath::IsUnderOperation() const {
 
     bool result = Base()->PathState != NKikimrSchemeOp::EPathState::EPathStateNoChanges;
     if (result) {
-        ui32 sum = (ui32)IsUnderCreating()
-            + (ui32)IsUnderAltering()
-            + (ui32)IsUnderCopying()
-            + (ui32)IsUnderBackingUp()
-            + (ui32)IsUnderRestoring()
-            + (ui32)IsUnderDeleting()
-            + (ui32)IsUnderDomainUpgrade()
-            + (ui32)IsUnderMoving()
-            + (ui32)IsUnderOutgoingIncrementalRestore();
+        ui32 sum = (ui32)IsUnderCreating() + (ui32)IsUnderAltering() + (ui32)IsUnderCopying() +
+                   (ui32)IsUnderBackingUp() + (ui32)IsUnderRestoring() + (ui32)IsUnderDeleting() +
+                   (ui32)IsUnderDomainUpgrade() + (ui32)IsUnderMoving() + (ui32)IsUnderOutgoingIncrementalRestore();
         Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
@@ -1524,7 +1687,7 @@ bool TPath::IsUnderOutgoingIncrementalRestore() const {
 TPath& TPath::RiseUntilOlapStore() {
     size_t end = Elements.size();
     while (end > 0) {
-        auto& current = Elements[end-1];
+        auto& current = Elements[end - 1];
         if (current->IsOlapStore()) {
             break;
         }
@@ -1638,10 +1801,7 @@ bool TPath::IsInsideCdcStreamPath() const {
     return true;
 }
 
-bool TPath::IsTableIndex(
-    const TMaybe<NKikimrSchemeOp::EIndexType>& type,
-    bool failOnUnresolved) const
-{
+bool TPath::IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type, bool failOnUnresolved) const {
     if (failOnUnresolved) {
         Y_ABORT_UNLESS(IsResolved());
     } else if (!IsResolved()) {
@@ -1741,22 +1901,19 @@ bool TPath::IsValidLeafName(TString& explain) const {
     }
 
     if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) {
-        explain += TStringBuilder()
-            << "path part '" << NSysView::SysPathName << "' is reserved by the system";
+        explain += TStringBuilder() << "path part '" << NSysView::SysPathName << "' is reserved by the system";
         return false;
     }
 
     if (IsPathPartContainsOnlyDots(leaf)) {
-        explain += TStringBuilder()
-            << "is not allowed path part contains only dots '" << leaf << "'";
+        explain += TStringBuilder() << "is not allowed path part contains only dots '" << leaf << "'";
         return false;
     }
 
     auto brokenAt = PathPartBrokenAt(leaf, schemeLimits.ExtraPathSymbolsAllowed);
     if (brokenAt != leaf.end()) {
-        explain += TStringBuilder()
-            << "symbol '" << *brokenAt << "'"
-            << " is not allowed in the path part '" << leaf << "'";
+        explain += TStringBuilder() << "symbol '" << *brokenAt << "'"
+                                    << " is not allowed in the path part '" << leaf << "'";
         return false;
     }
 
@@ -1777,17 +1934,21 @@ TString TPath::GetEffectiveACL() const {
         TPathElement::TPtr element = *item;
         version += element->ACLVersion;
 
-        if (element->CachedEffectiveACLVersion != version || !element->CachedEffectiveACL) {  // path needs actualizing
+        if (element->CachedEffectiveACLVersion != version || !element->CachedEffectiveACL) { // path needs actualizing
             if (item == Elements.begin()) { // it is root
                 if (!SS->IsDomainSchemeShard) {
-                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL, element->ACL, element->IsContainer());
+                    element->CachedEffectiveACL.Update(
+                        SS->ParentDomainCachedEffectiveACL, element->ACL, element->IsContainer()
+                    );
                 } else {
                     element->CachedEffectiveACL.Init(element->ACL);
                 }
             } else { // path element in the middle
                 auto prevIt = std::prev(item);
                 const auto& prevElement = *prevIt;
-                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL, element->ACL, element->IsContainer());
+                element->CachedEffectiveACL.Update(
+                    prevElement->CachedEffectiveACL, element->ACL, element->IsContainer()
+                );
             }
             element->CachedEffectiveACLVersion = version;
         }
@@ -1843,36 +2004,36 @@ void TPath::MaterializeLeaf(const TString& owner) {
 void TPath::MaterializeLeaf(const TString& owner, const TPathId& newPathId, bool allowInactivePath) {
     auto result = MaterializeImpl(owner, newPathId);
     switch (result) {
-    case EAttachChildResult::Undefined:
-        Y_ABORT("unexpected result: Undefined");
-        break;
+        case EAttachChildResult::Undefined:
+            Y_ABORT("unexpected result: Undefined");
+            break;
 
-    case EAttachChildResult::AttachedAsOnlyOne:
-    case EAttachChildResult::AttachedAsActual:
-        Y_ABORT_UNLESS(SS->PathIsActive(newPathId));
-        break;
+        case EAttachChildResult::AttachedAsOnlyOne:
+        case EAttachChildResult::AttachedAsActual:
+            Y_ABORT_UNLESS(SS->PathIsActive(newPathId));
+            break;
 
-    case EAttachChildResult::AttachedAsCreatedActual:
-    case EAttachChildResult::AttachedAsOlderUnCreated:
-    case EAttachChildResult::AttachedAsNewerDeleted:
-    case EAttachChildResult::AttachedAsNewerActual:
-        Y_FAIL_S("strange result for materialization: " << result);
-        break;
+        case EAttachChildResult::AttachedAsCreatedActual:
+        case EAttachChildResult::AttachedAsOlderUnCreated:
+        case EAttachChildResult::AttachedAsNewerDeleted:
+        case EAttachChildResult::AttachedAsNewerActual:
+            Y_FAIL_S("strange result for materialization: " << result);
+            break;
 
-    case EAttachChildResult::RejectAsInactive:
-        if (allowInactivePath) {
-            Y_ABORT_UNLESS(!SS->PathIsActive(newPathId));
-        } else {
-            Y_FAIL_S("MaterializeLeaf do not accept shadow paths, use allowInactivePath = true");
-        }
-        break;
+        case EAttachChildResult::RejectAsInactive:
+            if (allowInactivePath) {
+                Y_ABORT_UNLESS(!SS->PathIsActive(newPathId));
+            } else {
+                Y_FAIL_S("MaterializeLeaf do not accept shadow paths, use allowInactivePath = true");
+            }
+            break;
 
-    case EAttachChildResult::RejectAsOlderDeleted:
-    case EAttachChildResult::RejectAsDeleted:
-    case EAttachChildResult::RejectAsOlderActual:
-    case EAttachChildResult::RejectAsNewerUnCreated:
-        Y_FAIL_S("MaterializeLeaf do not accept rejection: " << result);
-        break;
+        case EAttachChildResult::RejectAsOlderDeleted:
+        case EAttachChildResult::RejectAsDeleted:
+        case EAttachChildResult::RejectAsOlderActual:
+        case EAttachChildResult::RejectAsNewerUnCreated:
+            Y_FAIL_S("MaterializeLeaf do not accept rejection: " << result);
+            break;
     };
 }
 
@@ -1915,9 +2076,7 @@ TPath& TPath::DiveByPathId(const TPathId& pathId) {
 }
 
 TPathId TPath::GetPathIdSafe() const {
-    return IsResolved()
-        ? Base()->PathId
-        : InvalidPathId;
+    return IsResolved() ? Base()->PathId : InvalidPathId;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

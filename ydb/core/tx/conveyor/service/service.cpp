@@ -4,16 +4,19 @@
 
 namespace NKikimr::NConveyor {
 
-TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
+TDistributor::TDistributor(
+    const TConfig& config,
+    const TString& conveyorName,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals
+)
     : Config(config)
     , ConveyorName(conveyorName)
-    , Counters(ConveyorName, conveyorSignals) {
-
-}
+    , Counters(ConveyorName, conveyorSignals) {}
 
 void TDistributor::Bootstrap() {
     const ui32 workersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
-    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString());
+    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)
+    ("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString());
     for (ui32 i = 0; i < workersCount; ++i) {
         const double usage = Config.GetWorkerCPUUsage(i);
         Workers.emplace_back(Register(new TWorker(ConveyorName, usage, SelfId())));
@@ -52,7 +55,8 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     const TString taskClass = ev->Get()->GetTask()->GetTaskClassIdentifier();
     auto itSignal = Signals.find(taskClass);
     if (itSignal == Signals.end()) {
-        itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
+        itSignal =
+            Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
     }
 
     TWorkerTask wTask(ev->Get()->GetTask(), itSignal->second);
@@ -74,11 +78,15 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         Counters.WaitWorkerRate->Inc();
     } else {
         Counters.OverlimitRate->Inc();
-        AFL_ERROR(NKikimrServices::TX_CONVEYOR)("action", "queue_overlimit")("sender", ev->Sender)("limit", Config.GetQueueSizeLimit());
-        ev->Get()->GetTask()->OnCannotExecute("scan conveyor overloaded (" + ::ToString(Waiting.size()) + " >= " + ::ToString(Config.GetQueueSizeLimit()) + ")");
+        AFL_ERROR(NKikimrServices::TX_CONVEYOR)
+        ("action", "queue_overlimit")("sender", ev->Sender)("limit", Config.GetQueueSizeLimit());
+        ev->Get()->GetTask()->OnCannotExecute(
+            "scan conveyor overloaded (" + ::ToString(Waiting.size()) +
+            " >= " + ::ToString(Config.GetQueueSizeLimit()) + ")"
+        );
     }
     Counters.WaitingQueueSize->Set(Waiting.size());
     Counters.AvailableWorkersCount->Set(Workers.size());
 }
 
-}
+} // namespace NKikimr::NConveyor

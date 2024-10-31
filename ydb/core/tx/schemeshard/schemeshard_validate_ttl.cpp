@@ -17,72 +17,84 @@ static inline NScheme::TTypeInfo GetType(const TTableInfo::TColumn& col) {
     return col.PType;
 }
 
-}
+} // namespace
 
-bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
+bool ValidateTtlSettings(
+    const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
-    const TSubDomainInfo& subDomain, TString& errStr)
-{
+    const TSubDomainInfo& subDomain,
+    TString& errStr
+) {
     using TTtlProto = NKikimrSchemeOp::TTTLSettings;
 
     switch (ttl.GetStatusCase()) {
-    case TTtlProto::kEnabled: {
-        const auto& enabled = ttl.GetEnabled();
-        const TString colName = enabled.GetColumnName();
+        case TTtlProto::kEnabled: {
+            const auto& enabled = ttl.GetEnabled();
+            const TString colName = enabled.GetColumnName();
 
-        auto it = colName2Id.find(colName);
-        if (it == colName2Id.end()) {
-            errStr = Sprintf("Cannot enable TTL on unknown column: '%s'", colName.data());
-            return false;
-        }
-
-        const TTableInfo::TColumn* column = nullptr;
-        const ui32 colId = it->second;
-        if (alterColumns.contains(colId)) {
-            column = &alterColumns.at(colId);
-        } else if (sourceColumns.contains(colId)) {
-            column = &sourceColumns.at(colId);
-        } else {
-            Y_ABORT_UNLESS("Unknown column");
-        }
-
-        if (IsDropped(*column)) {
-            errStr = Sprintf("Cannot enable TTL on dropped column: '%s'", colName.data());
-            return false;
-        }
-
-        const auto unit = enabled.GetColumnUnit();
-        if (!NValidation::TTTLValidator::ValidateUnit(GetType(*column), unit, errStr)) {
-            return false;
-        }
-
-        const TInstant now = TInstant::Now();
-        if (enabled.GetExpireAfterSeconds() > now.Seconds()) {
-            errStr = Sprintf("TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64 " years). The ttl behaviour is undefined before 1970.", now.Seconds(), now.Days(), now.Days() / 365);
-            return false;            
-        }
-
-        if (enabled.HasSysSettings()) {
-            const auto& sys = enabled.GetSysSettings();
-            if (TDuration::FromValue(sys.GetRunInterval()) < subDomain.GetTtlMinRunInterval()) {
-                errStr = Sprintf("TTL run interval cannot be less than limit: %" PRIu64, subDomain.GetTtlMinRunInterval().Seconds());
+            auto it = colName2Id.find(colName);
+            if (it == colName2Id.end()) {
+                errStr = Sprintf("Cannot enable TTL on unknown column: '%s'", colName.data());
                 return false;
             }
+
+            const TTableInfo::TColumn* column = nullptr;
+            const ui32 colId = it->second;
+            if (alterColumns.contains(colId)) {
+                column = &alterColumns.at(colId);
+            } else if (sourceColumns.contains(colId)) {
+                column = &sourceColumns.at(colId);
+            } else {
+                Y_ABORT_UNLESS("Unknown column");
+            }
+
+            if (IsDropped(*column)) {
+                errStr = Sprintf("Cannot enable TTL on dropped column: '%s'", colName.data());
+                return false;
+            }
+
+            const auto unit = enabled.GetColumnUnit();
+            if (!NValidation::TTTLValidator::ValidateUnit(GetType(*column), unit, errStr)) {
+                return false;
+            }
+
+            const TInstant now = TInstant::Now();
+            if (enabled.GetExpireAfterSeconds() > now.Seconds()) {
+                errStr = Sprintf(
+                    "TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64
+                    " years). The ttl behaviour is undefined before 1970.",
+                    now.Seconds(),
+                    now.Days(),
+                    now.Days() / 365
+                );
+                return false;
+            }
+
+            if (enabled.HasSysSettings()) {
+                const auto& sys = enabled.GetSysSettings();
+                if (TDuration::FromValue(sys.GetRunInterval()) < subDomain.GetTtlMinRunInterval()) {
+                    errStr = Sprintf(
+                        "TTL run interval cannot be less than limit: %" PRIu64,
+                        subDomain.GetTtlMinRunInterval().Seconds()
+                    );
+                    return false;
+                }
+            }
+            break;
         }
-        break;
-    }
 
-    case TTtlProto::kDisabled:
-        break;
+        case TTtlProto::kDisabled:
+            break;
 
-    default:
-        errStr = "TTL status must be specified";
-        return false;
+        default:
+            errStr = "TTL status must be specified";
+            return false;
     }
 
     return true;
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

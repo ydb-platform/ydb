@@ -3,7 +3,8 @@
 
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
-TPortionsIndex::TPortionIntervals TPortionsIndex::GetIntervalFeatures(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const {
+TPortionsIndex::TPortionIntervals
+TPortionsIndex::GetIntervalFeatures(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const {
     auto itFrom = Points.find(inputPortion.IndexKeyStart());
     AFL_VERIFY(itFrom != Points.end());
     auto itTo = Points.find(inputPortion.IndexKeyEnd());
@@ -44,7 +45,6 @@ TPortionsIndex::TPortionIntervals TPortionsIndex::GetIntervalFeatures(const TPor
             ++itFrom;
             AFL_VERIFY(itFrom != Points.end());
         }
-
     }
     return portionExcludeIntervals;
 }
@@ -113,4 +113,4 @@ void TPortionsIndex::AddPortion(const std::shared_ptr<TPortionInfo>& p) {
     BlobMemoryUsage.FlushCounters();
 }
 
-}
+} // namespace NKikimr::NOlap::NGranule::NPortionsIndex

@@ -8,41 +8,28 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCheckDataTxUnit : public TExecutionUnit {
+class TCheckDataTxUnit: public TExecutionUnit {
 public:
-    TCheckDataTxUnit(TDataShard &dataShard,
-                     TPipeline &pipeline);
+    TCheckDataTxUnit(TDataShard& dataShard, TPipeline& pipeline);
     ~TCheckDataTxUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &ctx) override;
-    void Complete(TOperation::TPtr op,
-                  const TActorContext &ctx) override;
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override;
 
 private:
 };
 
-TCheckDataTxUnit::TCheckDataTxUnit(TDataShard &dataShard,
-                                   TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::CheckDataTx, false, dataShard, pipeline)
-{
-}
+TCheckDataTxUnit::TCheckDataTxUnit(TDataShard& dataShard, TPipeline& pipeline)
+    : TExecutionUnit(EExecutionUnitKind::CheckDataTx, false, dataShard, pipeline) {}
 
-TCheckDataTxUnit::~TCheckDataTxUnit()
-{
-}
+TCheckDataTxUnit::~TCheckDataTxUnit() {}
 
-bool TCheckDataTxUnit::IsReadyToExecute(TOperation::TPtr) const
-{
+bool TCheckDataTxUnit::IsReadyToExecute(TOperation::TPtr) const {
     return true;
 }
 
-EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
-                                           TTransactionContext &,
-                                           const TActorContext &ctx)
-{
+EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) {
     Y_ABORT_UNLESS(op->IsDataTx() || op->IsReadTable());
     Y_ABORT_UNLESS(!op->IsAborted());
 
@@ -52,7 +39,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Executed;
     }
 
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
     auto dataTx = tx->GetDataTx();
     Y_ABORT_UNLESS(dataTx);
@@ -69,18 +56,22 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
     // Check if we are out of space and tx wants to update user
     // or system table.
-    if (DataShard.IsAnyChannelYellowStop()
-        && (dataTx->HasWrites() || !op->IsImmediate())) {
-        TString err = TStringBuilder()
-            << "Cannot perform transaction: out of disk space at tablet "
-            << DataShard.TabletID() << " txId " << op->GetTxId();
+    if (DataShard.IsAnyChannelYellowStop() && (dataTx->HasWrites() || !op->IsImmediate())) {
+        TString err = TStringBuilder() << "Cannot perform transaction: out of disk space at tablet "
+                                       << DataShard.TabletID() << " txId " << op->GetTxId();
 
         DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
 
         BuildResult(op)->AddError(NKikimrTxDataShard::TError::OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
+        LOG_LOG_S_THROTTLE(
+            DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute),
+            ctx,
+            NActors::NLog::PRI_ERROR,
+            NKikimrServices::TX_DATASHARD,
+            err
+        );
 
         return EExecutionStatus::Executed;
     }
@@ -88,9 +79,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
     if (tx->IsMvccSnapshotRead()) {
         auto snapshot = tx->GetMvccSnapshot();
         if (DataShard.IsFollower()) {
-            TString err = TStringBuilder()
-                << "Operation " << *op << " cannot read from snapshot " << snapshot
-                << " using data tx on a follower " << DataShard.TabletID();
+            TString err = TStringBuilder() << "Operation " << *op << " cannot read from snapshot " << snapshot
+                                           << " using data tx on a follower " << DataShard.TabletID();
 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                 ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
@@ -100,9 +90,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
             return EExecutionStatus::Executed;
         } else if (snapshot < DataShard.GetSnapshotManager().GetLowWatermark()) {
-            TString err = TStringBuilder()
-                << "Operation " << *op << " reads from stale snapshot " << snapshot
-                << " at " << DataShard.TabletID();
+            TString err = TStringBuilder() << "Operation " << *op << " reads from stale snapshot " << snapshot << " at "
+                                           << DataShard.TabletID();
 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                 ->AddError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST, err);
@@ -121,10 +110,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         txReads = dataTx->CalcReadSizes(hasTotalKeysSizeLimit);
 
         if (txReads.ReadSize > DataShard.GetTxReadSizeLimit()) {
-            TString err = TStringBuilder()
-                << "Transaction read size " << txReads.ReadSize << " exceeds limit "
-                << DataShard.GetTxReadSizeLimit() << " at tablet " << DataShard.TabletID()
-                << " txId " << op->GetTxId();
+            TString err = TStringBuilder() << "Transaction read size " << txReads.ReadSize << " exceeds limit "
+                                           << DataShard.GetTxReadSizeLimit() << " at tablet " << DataShard.TabletID()
+                                           << " txId " << op->GetTxId();
 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                 ->AddError(NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED, err);
@@ -135,12 +123,10 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        if (hasTotalKeysSizeLimit
-            && txReads.TotalKeysSize > *dataTx->PerShardKeysSizeLimitBytes()) {
-            TString err = TStringBuilder()
-                << "Transaction total keys size " << txReads.TotalKeysSize
-                << " exceeds limit " << *dataTx->PerShardKeysSizeLimitBytes()
-                << " at tablet " << DataShard.TabletID() << " txId " << op->GetTxId();
+        if (hasTotalKeysSizeLimit && txReads.TotalKeysSize > *dataTx->PerShardKeysSizeLimitBytes()) {
+            TString err = TStringBuilder() << "Transaction total keys size " << txReads.TotalKeysSize
+                                           << " exceeds limit " << *dataTx->PerShardKeysSizeLimitBytes()
+                                           << " at tablet " << DataShard.TabletID() << " txId " << op->GetTxId();
 
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                 ->AddError(NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED, err);
@@ -158,10 +144,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     keySize += cell.Size();
                 }
                 if (keySize > NLimits::MaxWriteKeySize) {
-                    TString err = TStringBuilder()
-                        << "Operation " << *op << " writes key of " << keySize
-                        << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
-                        << " bytes at " << DataShard.TabletID();
+                    TString err = TStringBuilder() << "Operation " << *op << " writes key of " << keySize
+                                                   << " bytes which exceeds limit " << NLimits::MaxWriteKeySize
+                                                   << " bytes at " << DataShard.TabletID();
 
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
                         ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
@@ -173,14 +158,14 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 }
                 for (const auto& col : key.Key->Columns) {
                     if (col.Operation == TKeyDesc::EColumnOperation::Set ||
-                        col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate)
-                    {
+                        col.Operation == TKeyDesc::EColumnOperation::InplaceUpdate) {
                         if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
                             TString err = TStringBuilder()
-                                << "Transaction write column value of " << col.ImmediateUpdateSize
-                                << " bytes is larger than the allowed threshold";
+                                          << "Transaction write column value of " << col.ImmediateUpdateSize
+                                          << " bytes is larger than the allowed threshold";
 
-                            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
+                            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)
+                                ->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
                             LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, err);
@@ -206,7 +191,13 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             BuildResult(op)->AddError(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
-                            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
+                            LOG_LOG_S_THROTTLE(
+                                DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute),
+                                ctx,
+                                NActors::NLog::PRI_ERROR,
+                                NKikimrServices::TX_DATASHARD,
+                                err
+                            );
 
                             return EExecutionStatus::Executed;
                         }
@@ -232,15 +223,15 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 if (auto* columnInfo = tableInfo.Columns.FindPtr(columnRecord.GetId())) {
                     // TODO: column types don't change when bound by id, but we may want to check anyway
                 } else {
-                    schemaChangedError = TStringBuilder() << "ReadTable cannot find column "
-                        << columnRecord.GetName() << " (" << columnRecord.GetId() << ")";
+                    schemaChangedError = TStringBuilder() << "ReadTable cannot find column " << columnRecord.GetName()
+                                                          << " (" << columnRecord.GetId() << ")";
                     break;
                 }
             }
             // TODO: validate key ranges?
         } else {
-            schemaChangedError = TStringBuilder() << "ReadTable cannot find table "
-                << record.GetTableId().GetOwnerId() << ":" << record.GetTableId().GetTableId();
+            schemaChangedError = TStringBuilder() << "ReadTable cannot find table " << record.GetTableId().GetOwnerId()
+                                                  << ":" << record.GetTableId().GetTableId();
         }
 
         if (schemaChangedError) {
@@ -252,9 +243,11 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
 
         if (record.HasSnapshotStep() && record.HasSnapshotTxId()) {
             if (!op->IsImmediate()) {
-                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
-                    NKikimrTxDataShard::TError::BAD_ARGUMENT,
-                    "ReadTable from snapshot must be an immediate transaction");
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
+                    ->AddError(
+                        NKikimrTxDataShard::TError::BAD_ARGUMENT,
+                        "ReadTable from snapshot must be an immediate transaction"
+                    );
                 op->Abort(EExecutionUnitKind::FinishPropose);
                 return EExecutionStatus::Executed;
             }
@@ -263,15 +256,16 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                 record.GetTableId().GetOwnerId(),
                 record.GetTableId().GetTableId(),
                 record.GetSnapshotStep(),
-                record.GetSnapshotTxId());
+                record.GetSnapshotTxId()
+            );
 
             if (!DataShard.GetSnapshotManager().AcquireReference(key)) {
                 // TODO: try upgrading to mvcc snapshot when available
-                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)->AddError(
-                    NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
-                    TStringBuilder()
-                        << "Shard " << DataShard.TabletID()
-                        << " has no snapshot " << key);
+                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
+                    ->AddError(
+                        NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
+                        TStringBuilder() << "Shard " << DataShard.TabletID() << " has no snapshot " << key
+                    );
                 op->Abort(EExecutionUnitKind::FinishPropose);
                 return EExecutionStatus::Executed;
             }
@@ -284,8 +278,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
     if (!op->IsImmediate()) {
         if (!Pipeline.AssignPlanInterval(op)) {
             TString err = TStringBuilder()
-                << "Can't propose tx " << op->GetTxId() << " at blocked shard "
-                << DataShard.TabletID();
+                          << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
             op->Abort(EExecutionUnitKind::FinishPropose);
 
@@ -294,7 +287,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             return EExecutionStatus::Executed;
         }
 
-        auto &res = BuildResult(op);
+        auto& res = BuildResult(op);
         res->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
         if (op->IsDataTx()) {
@@ -316,14 +309,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::Executed;
 }
 
-void TCheckDataTxUnit::Complete(TOperation::TPtr,
-                                const TActorContext &)
-{
-}
+void TCheckDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 
-THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard,
-                                              TPipeline &pipeline)
-{
+THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TCheckDataTxUnit(dataShard, pipeline));
 }
 

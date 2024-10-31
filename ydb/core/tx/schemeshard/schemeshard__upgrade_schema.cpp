@@ -5,16 +5,17 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
+struct TSchemeShard::TTxUpgradeSchema: public TTransactionBase<TSchemeShard> {
     bool IsOk = true;
 
     TTxUpgradeSchema(TSelf* self)
-        : TTransactionBase<TSchemeShard>(self)
-    {}
+        : TTransactionBase<TSchemeShard>(self) {}
 
     bool UpgradeInitState(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         ui64 initStateVal = (ui64)TTenantInitState::InvalidState;
-        if (!Self->ReadSysValue(db, Schema::SysParam_TenantInitState, initStateVal, (ui64)TTenantInitState::InvalidState)) {
+        if (!Self->ReadSysValue(
+                db, Schema::SysParam_TenantInitState, initStateVal, (ui64)TTenantInitState::InvalidState
+            )) {
             return false;
         }
 
@@ -51,8 +52,10 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    bool ReplaceExtraPathSymbolsAllowed(NIceDb::TNiceDb& db, const TActorContext &) {
-        auto srcRow = db.Table<Schema::UserAttributes>().Key(Self->RootPathId().LocalPathId, TString(ATTR_EXTRA_PATH_SYMBOLS_ALLOWED)).Select();
+    bool ReplaceExtraPathSymbolsAllowed(NIceDb::TNiceDb& db, const TActorContext&) {
+        auto srcRow = db.Table<Schema::UserAttributes>()
+                          .Key(Self->RootPathId().LocalPathId, TString(ATTR_EXTRA_PATH_SYMBOLS_ALLOWED))
+                          .Select();
         if (!srcRow.IsReady()) {
             return false;
         }
@@ -81,8 +84,9 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
         // db.Table<Schema::UserAttributes>().Key(Self->RootPathId().LocalPathId, ATTR_EXTRA_PATH_SYMBOLS_ALLOWED).Delete();
 
         if (!dstVal) {
-            db.Table<Schema::SubDomains>().Key(Self->RootPathId().LocalPathId).Update(
-                NIceDb::TUpdate<Schema::SubDomains::ExtraPathSymbolsAllowed>(srcVal));
+            db.Table<Schema::SubDomains>()
+                .Key(Self->RootPathId().LocalPathId)
+                .Update(NIceDb::TUpdate<Schema::SubDomains::ExtraPathSymbolsAllowed>(srcVal));
         }
 
         return true;
@@ -92,16 +96,15 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
         return TXTYPE_UPGRADE_SCHEME;
     }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxUpgradeSchema.Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wbitwise-instead-of-logical"
-        bool precharged = db.Table<Schema::Paths>().Precharge()
-                & db.Table<Schema::SubDomains>().Precharge()
-                & db.Table<Schema::UserAttributes>().Precharge();
+        bool precharged = db.Table<Schema::Paths>().Precharge() & db.Table<Schema::SubDomains>().Precharge() &
+                          db.Table<Schema::UserAttributes>().Precharge();
 
         if (!precharged) {
             return false;
@@ -111,7 +114,7 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
 #pragma clang diagnostic pop
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         if (!IsOk) {
             LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "send TEvPoisonPill to self " << Self->TabletID());
@@ -128,5 +131,5 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUpgradeSchema() {
     return new TTxUpgradeSchema(this);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

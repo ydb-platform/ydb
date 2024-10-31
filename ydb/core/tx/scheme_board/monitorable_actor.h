@@ -15,8 +15,10 @@ namespace NSchemeBoard {
 template <typename TDerived>
 class TMonitorableActor: public TActorBootstrapped<TDerived> {
     void MonRegister() {
-        this->Send(MakeSchemeBoardMonitoringId(), new TSchemeBoardMonEvents::TEvRegister(
-            TDerived::ActorActivityType(), this->MonAttributes()));
+        this->Send(
+            MakeSchemeBoardMonitoringId(),
+            new TSchemeBoardMonEvents::TEvRegister(TDerived::ActorActivityType(), this->MonAttributes())
+        );
     }
 
     void MonUnregister() {
@@ -47,5 +49,5 @@ public:
     }
 };
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

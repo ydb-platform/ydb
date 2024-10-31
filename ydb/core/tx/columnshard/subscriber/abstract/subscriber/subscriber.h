@@ -12,6 +12,7 @@ namespace NKikimr::NColumnShard::NSubscriber {
 class ISubscriber {
 private:
     virtual bool DoOnEvent(const std::shared_ptr<ISubscriptionEvent>& ev, TColumnShard& shard) = 0;
+
 public:
     bool OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev, TColumnShard& shard) {
         return DoOnEvent(ev, shard);
@@ -23,4 +24,4 @@ public:
     virtual ~ISubscriber() = default;
 };
 
-}
+} // namespace NKikimr::NColumnShard::NSubscriber

@@ -21,7 +21,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
     }
 
     TString CollectionSettings(const TString& name) {
-        return Sprintf(R"(
+        return Sprintf(
+            R"(
             Name: "%s"
 
             ExplicitEntryList {
@@ -31,7 +32,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 }
             }
             Cluster {}
-        )", name.c_str());
+        )",
+            name.c_str()
+        );
     }
 
     Y_UNIT_TEST(CreateWithReboots) {
@@ -57,7 +60,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 TestDescribeResult(describeResult, {NLs::Finished});
 
                 UNIT_ASSERT(describeResult.GetPathDescription().HasBackupCollectionDescription());
-                const auto& backupCollectionDescription = describeResult.GetPathDescription().GetBackupCollectionDescription();
+                const auto& backupCollectionDescription =
+                    describeResult.GetPathDescription().GetBackupCollectionDescription();
                 UNIT_ASSERT_VALUES_EQUAL(backupCollectionDescription.GetName(), DEFAULT_NAME_1);
                 UNIT_ASSERT_VALUES_EQUAL(backupCollectionDescription.GetVersion(), 0);
                 UNIT_ASSERT_VALUES_EQUAL(backupCollectionDescription.DebugString(), properties.DebugString());
@@ -73,17 +77,19 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             AsyncCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
-            AsyncDropBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
+            AsyncDropBackupCollection(
+                runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\""
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId - 1);
-
 
             TestDropBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist}
+                );
             }
         });
     }
@@ -97,7 +103,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TInactiveZone inactive(activeZone);
-                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                TestCreateBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings()
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -106,8 +114,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist}
+                );
             }
         });
     }
@@ -122,7 +131,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                TestCreateBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings()
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -131,8 +142,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist}
+                );
             }
         });
     }
@@ -147,7 +159,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                TestCreateBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings()
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -156,17 +170,23 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist}
+                );
 
-                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                TestCreateBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings()
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDropBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
+                TestDropBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\""
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist}
+                );
             }
         });
     }
@@ -181,10 +201,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                TestCreateBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings()
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDropBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
+                TestDropBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\""
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -194,7 +218,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestDropBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
+                TestDropBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\""
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
         });
@@ -210,13 +236,19 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
                 TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                TestCreateBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings()
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDropBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
+                TestDropBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\""
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+                TestCreateBackupCollection(
+                    runtime, ++t.TxId, "/MyRoot/.backups/collections", DefaultCollectionSettings()
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -225,8 +257,9 @@ Y_UNIT_TEST_SUITE(TBackupCollectionWithRebootsTests) {
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
-                                   {NLs::PathNotExist});
+                TestDescribeResult(
+                    DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist}
+                );
             }
         });
     }

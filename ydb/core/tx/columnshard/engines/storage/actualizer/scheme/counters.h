@@ -13,12 +13,14 @@ private:
 
     std::shared_ptr<NColumnShard::TValueAggregationAgent> QueueSizeInternalWrite;
     std::shared_ptr<NColumnShard::TValueAggregationAgent> QueueSizeExternalWrite;
+
 public:
     TSchemeGlobalCounters()
-        : TBase("SchemeActualizer")
-    {
-        QueueSizeExternalWrite = TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/ExternalWrite");
-        QueueSizeInternalWrite = TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/InternalWrite");
+        : TBase("SchemeActualizer") {
+        QueueSizeExternalWrite =
+            TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/ExternalWrite");
+        QueueSizeInternalWrite =
+            TBase::GetValueAutoAggregations("Granule/Scheme/Actualization/QueueSize/InternalWrite");
     }
 
     static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildQueueSizeExternalWrite() {
@@ -28,7 +30,6 @@ public:
     static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildQueueSizeInternalWrite() {
         return Singleton<TSchemeGlobalCounters>()->QueueSizeInternalWrite->GetClient();
     }
-
 };
 
 class TSchemeCounters {
@@ -38,10 +39,7 @@ public:
 
     TSchemeCounters()
         : QueueSizeInternalWrite(TSchemeGlobalCounters::BuildQueueSizeInternalWrite())
-        , QueueSizeExternalWrite(TSchemeGlobalCounters::BuildQueueSizeExternalWrite())
-{
-    }
-
+        , QueueSizeExternalWrite(TSchemeGlobalCounters::BuildQueueSizeExternalWrite()) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

@@ -17,7 +17,10 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
     }
 }
 
-void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(
+    NColumnShard::TColumnShard* self,
+    TWriteIndexContext& context
+) {
     THashSet<ui64> pathIds;
     if (!self) {
         return;
@@ -36,17 +39,24 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     }
 }
 
-void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(
+    NColumnShard::TColumnShard* self,
+    TWriteIndexCompleteContext& context
+) {
     for (auto& portionInfo : PortionsToDrop) {
         if (!context.EngineLogs.ErasePortion(portionInfo.GetPortionInfo())) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.GetPortionInfo().DebugString());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "Cannot erase portion")("portion", portionInfo.GetPortionInfo().DebugString());
         }
     }
     if (self) {
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
             self->Counters.GetTabletCounters()->OnDropPortionEvent(
-                p.GetPortionInfo().GetTotalRawBytes(), p.GetPortionInfo().GetTotalBlobBytes(), p.GetPortionInfo().GetRecordsCount());
+                p.GetPortionInfo().GetTotalRawBytes(),
+                p.GetPortionInfo().GetTotalBlobBytes(),
+                p.GetPortionInfo().GetRecordsCount()
+            );
         }
     }
 }
@@ -55,7 +65,8 @@ void TCleanupPortionsColumnEngineChanges::DoStart(NColumnShard::TColumnShard& se
     self.BackgroundController.StartCleanupPortions();
 }
 
-void TCleanupPortionsColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
+void TCleanupPortionsColumnEngineChanges::
+    DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
     self.BackgroundController.FinishCleanupPortions();
 }
 

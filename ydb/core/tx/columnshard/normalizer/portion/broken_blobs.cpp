@@ -15,20 +15,24 @@ class TNormalizerResult: public INormalizerChanges {
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
 
 public:
-    TNormalizerResult(THashMap<ui64, TPortionDataAccessor>&& portions, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
+    TNormalizerResult(
+        THashMap<ui64, TPortionDataAccessor>&& portions,
+        const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas
+    )
         : BrokenPortions(std::move(portions))
-        , Schemas(schemas) {
-    }
+        , Schemas(schemas) {}
 
-    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
+    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController)
+        const override {
         NOlap::TBlobManagerDb blobManagerDb(txc.DB);
 
         TDbWrapper db(txc.DB, nullptr);
         for (auto&& [_, portionInfo] : BrokenPortions) {
             auto schema = Schemas->FindPtr(portionInfo.GetPortionInfo().GetPortionId());
             AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
-                "portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)
+            ("event",
+             "portion_removed_as_broken")("portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
             auto copy = portionInfo.GetPortionInfo().MakeCopy();
             copy.SetRemoveSnapshot(TSnapshot(1, 1));
             copy.SaveMetaToDatabase(db);
@@ -49,8 +53,7 @@ public:
         return true;
     }
 
-    void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
-    }
+    void ApplyOnComplete(const TNormalizationController& /* normController */) const override {}
 
     ui64 GetSize() const override {
         return BrokenPortions.size();
@@ -66,17 +69,20 @@ private:
     THashMap<ui64, TPortionDataAccessor> BrokenPortions;
 
 public:
-    TReadTask(const TNormalizationContext& nCtx, const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions,
+    TReadTask(
+        const TNormalizationContext& nCtx,
+        const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions,
         std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas,
-        THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>>&& portionsByBlobId)
+        THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>>&& portionsByBlobId
+    )
         : TBase(actions, "CS::NORMALIZER")
         , NormContext(nCtx)
         , Schemas(std::move(schemas))
-        , PortionsByBlobId(portionsByBlobId) {
-    }
+        , PortionsByBlobId(portionsByBlobId) {}
 
 protected:
-    virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) override {
+    virtual void DoOnDataReady(const std::shared_ptr<
+                               NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) override {
         NBlobOperations::NRead::TCompositeReadBlobs blobs = ExtractBlobsData();
 
         THashSet<ui64> readyPortions;
@@ -92,7 +98,8 @@ protected:
                     auto restored = TReadPortionInfoWithBlobs::RestorePortion(p, blobs, it->second->GetIndexInfo());
                     auto restoredBatch = restored.RestoreBatch(*it->second, *it->second, {});
                     if (restoredBatch.IsFail()) {
-                        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("portion", p.DebugString())("fail", restoredBatch.GetErrorMessage());
+                        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)
+                        ("portion", p.DebugString())("fail", restoredBatch.GetErrorMessage());
                         BrokenPortions.emplace(p.GetPortionInfo().GetPortionId(), p);
                     }
                 }
@@ -101,10 +108,15 @@ protected:
 
         auto changes = std::make_shared<TNormalizerResult>(std::move(BrokenPortions), Schemas);
         TActorContext::AsActorContext().Send(
-            NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
+            NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes)
+        );
     }
 
-    virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
+    virtual bool DoOnError(
+        const TString& storageId,
+        const TBlobRange& range,
+        const IBlobsReadingAction::TErrorStatus& status
+    ) override {
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("blob_id", range.GetBlobId().ToStringNew())(
             "error", status.GetErrorMessage())("status", status.GetStatus())("event", "broken_blob_found")("storage_id", storageId);
         AFL_VERIFY(status.GetStatus() == NKikimrProto::EReplyStatus::NODATA)("status", status.GetStatus());
@@ -127,13 +139,14 @@ class TBrokenBlobsTask: public INormalizerTask {
     const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
 
 public:
-    TBrokenBlobsTask(THashMap<TString, THashSet<TBlobRange>>&& blobs,
+    TBrokenBlobsTask(
+        THashMap<TString, THashSet<TBlobRange>>&& blobs,
         THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>>&& portionsByBlobId,
-        const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
+        const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas
+    )
         : Blobs(std::move(blobs))
         , PortionsByBlobId(portionsByBlobId)
-        , Schemas(schemas) {
-    }
+        , Schemas(schemas) {}
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
         ui64 memSize = 0;
@@ -147,18 +160,28 @@ public:
             }
         }
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            nCtx.GetResourceSubscribeActor(), std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                                                  std::make_shared<TReadTask>(nCtx, actions, Schemas, std::move(PortionsByBlobId)), 0, memSize,
-                                                  "CS::NORMALIZER", controller.GetTaskSubscription()));
+            nCtx.GetResourceSubscribeActor(),
+            std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
+                std::make_shared<TReadTask>(nCtx, actions, Schemas, std::move(PortionsByBlobId)),
+                0,
+                memSize,
+                "CS::NORMALIZER",
+                controller.GetTaskSubscription()
+            )
+        );
     }
 };
 
-bool TNormalizer::CheckPortion(const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
+bool TNormalizer::
+    CheckPortion(const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/)
+        const {
     return false;
 }
 
 INormalizerTask::TPtr TNormalizer::BuildTask(
-    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions,
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+) const {
     THashMap<TString, THashSet<TBlobRange>> blobIds;
     THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>> portionByBlobId;
     for (auto&& portion : portions) {
@@ -169,8 +192,8 @@ INormalizerTask::TPtr TNormalizer::BuildTask(
             continue;
         }
         for (auto&& i : blobsByStorage) {
-            AFL_VERIFY(i.first == NBlobOperations::TGlobal::DefaultStorageId)("details", "Invalid storage for normalizer")(
-                "storage_id", i.first);
+            AFL_VERIFY(i.first == NBlobOperations::TGlobal::DefaultStorageId)
+            ("details", "Invalid storage for normalizer")("storage_id", i.first);
             for (auto&& b : i.second) {
                 portionByBlobId[i.first].emplace(b.BlobId, portion);
                 AFL_VERIFY(blobIds[i.first].emplace(b).second);

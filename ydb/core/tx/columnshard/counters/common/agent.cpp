@@ -6,10 +6,7 @@ namespace NKikimr::NColumnShard {
 TValueAggregationAgent::TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner)
     : ValueSignalSum(signalsOwner.GetAggregationValue("SUM/" + signalName))
     , ValueSignalMin(signalsOwner.GetAggregationValue("MIN/" + signalName))
-    , ValueSignalMax(signalsOwner.GetAggregationValue("MAX/" + signalName))
-{
-
-}
+    , ValueSignalMax(signalsOwner.GetAggregationValue("MAX/" + signalName)) {}
 
 bool TValueAggregationAgent::CalcAggregationsAndClean(i64& sum, i64& minValue, i64& maxValue) const {
     if (Values.empty()) {
@@ -75,4 +72,4 @@ std::shared_ptr<NKikimr::NColumnShard::TValueAggregationClient> TValueAggregatio
     return *Values.emplace(Values.end(), std::make_shared<TValueAggregationClient>());
 }
 
-}
+} // namespace NKikimr::NColumnShard

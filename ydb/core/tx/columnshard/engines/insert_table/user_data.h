@@ -17,8 +17,7 @@ private:
 
     public:
         TBlobStorageGuard(const TString& data)
-            : Data(data) {
-        }
+            : Data(data) {}
         ~TBlobStorageGuard();
     };
 
@@ -28,16 +27,31 @@ private:
 
 public:
     TUserData() = delete;
-    TUserData(const ui64 pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
-        const std::optional<TString>& blobData);
+    TUserData(
+        const ui64 pathId,
+        const TBlobRange& blobRange,
+        const NKikimrTxColumnShard::TLogicalMetadata& proto,
+        const ui64 schemaVersion,
+        const std::optional<TString>& blobData
+    );
 
-    static std::shared_ptr<TUserData> Build(const ui64 pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
-        const std::optional<TString>& blobData) {
+    static std::shared_ptr<TUserData> Build(
+        const ui64 pathId,
+        const TBlobRange& blobRange,
+        const NKikimrTxColumnShard::TLogicalMetadata& proto,
+        const ui64 schemaVersion,
+        const std::optional<TString>& blobData
+    ) {
         return std::make_shared<TUserData>(pathId, blobRange, proto, schemaVersion, blobData);
     }
 
-    static std::shared_ptr<TUserData> Build(const ui64 pathId, const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
-        const std::optional<TString>& blobData) {
+    static std::shared_ptr<TUserData> Build(
+        const ui64 pathId,
+        const TUnifiedBlobId& blobId,
+        const NKikimrTxColumnShard::TLogicalMetadata& proto,
+        const ui64 schemaVersion,
+        const std::optional<TString>& blobData
+    ) {
         return std::make_shared<TUserData>(pathId, TBlobRange(blobId), proto, schemaVersion, blobData);
     }
 

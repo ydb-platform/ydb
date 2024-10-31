@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 struct TS3Upload {
-    enum class EStatus: ui8 {
+    enum class EStatus : ui8 {
         UploadParts,
         Complete,
         Abort,
@@ -17,9 +17,7 @@ struct TS3Upload {
 
     explicit TS3Upload(const TString& id)
         : Id(id)
-        , Status(EStatus::UploadParts)
-    {
-    }
+        , Status(EStatus::UploadParts) {}
 
     TString Id;
     EStatus Status;
@@ -28,11 +26,9 @@ struct TS3Upload {
 
     void Out(IOutputStream& out) const {
         out << "{"
-            << " Id: " << Id
-            << " Status: " << Status
-            << " Error: " << Error
-            << " Parts: [" << JoinSeq(",", Parts) << "]"
-        << " }";
+            << " Id: " << Id << " Status: " << Status << " Error: " << Error << " Parts: [" << JoinSeq(",", Parts)
+            << "]"
+            << " }";
     }
 
 }; // TS3Upload

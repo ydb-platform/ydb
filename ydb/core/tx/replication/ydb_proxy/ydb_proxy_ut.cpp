@@ -16,8 +16,8 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         using TBase = NTestHelpers::TEnv<UseDatabase>;
 
     public:
-        using TBase::TBase;
         using TBase::Send;
+        using TBase::TBase;
 
         template <typename TEvResponse>
         auto Send(IEventBase* ev) {
@@ -30,14 +30,15 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // ok
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
-                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // fail
         {
-            auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
-                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(new TEvYdbProxy::TEvMakeDirectoryRequest("/Root", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
@@ -49,21 +50,24 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // make
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
-                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
             auto ev = env.Send<TEvYdbProxy::TEvRemoveDirectoryResponse>(
-                new TEvYdbProxy::TEvRemoveDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvRemoveDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // fail
         {
             auto ev = env.Send<TEvYdbProxy::TEvRemoveDirectoryResponse>(
-                new TEvYdbProxy::TEvRemoveDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvRemoveDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
@@ -74,8 +78,8 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         TEnv env;
         // describe root
         {
-            auto ev = env.Send<TEvYdbProxy::TEvDescribePathResponse>(
-                new TEvYdbProxy::TEvDescribePathRequest("/Root", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvDescribePathResponse>(new TEvYdbProxy::TEvDescribePathRequest("/Root", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
 
@@ -86,14 +90,16 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // make dir
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
-                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // describe dir
         {
-            auto ev = env.Send<TEvYdbProxy::TEvDescribePathResponse>(
-                new TEvYdbProxy::TEvDescribePathRequest("/Root/dir", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvDescribePathResponse>(new TEvYdbProxy::TEvDescribePathRequest("/Root/dir", {})
+                );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
 
@@ -107,8 +113,8 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         TEnv env;
         // describe empty root
         {
-            auto ev = env.Send<TEvYdbProxy::TEvListDirectoryResponse>(
-                new TEvYdbProxy::TEvListDirectoryRequest("/Root", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvListDirectoryResponse>(new TEvYdbProxy::TEvListDirectoryRequest("/Root", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
 
@@ -124,14 +130,15 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // make dir
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
-                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // describe non-empty root
         {
-            auto ev = env.Send<TEvYdbProxy::TEvListDirectoryResponse>(
-                new TEvYdbProxy::TEvListDirectoryRequest("/Root", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvListDirectoryResponse>(new TEvYdbProxy::TEvListDirectoryRequest("/Root", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
 
@@ -149,7 +156,8 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // make dir
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
-                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
@@ -160,7 +168,8 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // make dir
         {
             auto ev = env.Send<TEvYdbProxy::TEvMakeDirectoryResponse>(
-                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {}));
+                new TEvYdbProxy::TEvMakeDirectoryRequest("/Root/dir", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
@@ -171,13 +180,14 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // invalid key
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Float) // cannot be key
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Float) // cannot be key
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
@@ -185,26 +195,28 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // ok, created
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok, exists
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
@@ -215,27 +227,28 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // create
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
-            auto ev = env.Send<TEvYdbProxy::TEvDropTableResponse>(
-                new TEvYdbProxy::TEvDropTableRequest("/Root/table", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvDropTableResponse>(new TEvYdbProxy::TEvDropTableRequest("/Root/table", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // fail
         {
-            auto ev = env.Send<TEvYdbProxy::TEvDropTableResponse>(
-                new TEvYdbProxy::TEvDropTableRequest("/Root/table", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvDropTableResponse>(new TEvYdbProxy::TEvDropTableRequest("/Root/table", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
@@ -246,11 +259,11 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         TEnv<false> env;
         // fail
         {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .AppendDropColumns("extra");
+            auto settings = NYdb::NTable::TAlterTableSettings().AppendDropColumns("extra");
 
             auto ev = env.Send<TEvYdbProxy::TEvAlterTableResponse>(
-                new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings));
+                new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
@@ -258,34 +271,35 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // create
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .AddNullableColumn("extra", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .AddNullableColumn("extra", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .AppendDropColumns("extra");
+            auto settings = NYdb::NTable::TAlterTableSettings().AppendDropColumns("extra");
 
             auto ev = env.Send<TEvYdbProxy::TEvAlterTableResponse>(
-                new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings));
+                new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // invalid column
         {
-            auto settings = NYdb::NTable::TAlterTableSettings()
-                .AppendDropColumns("extra"); // not exist
+            auto settings = NYdb::NTable::TAlterTableSettings().AppendDropColumns("extra"); // not exist
 
             auto ev = env.Send<TEvYdbProxy::TEvAlterTableResponse>(
-                new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings));
+                new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
@@ -297,7 +311,8 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // fail
         {
             auto ev = env.Send<TEvYdbProxy::TEvCopyTableResponse>(
-                new TEvYdbProxy::TEvCopyTableRequest("/Root/table", "/Root/copy", {}));
+                new TEvYdbProxy::TEvCopyTableRequest("/Root/table", "/Root/copy", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
@@ -305,20 +320,22 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // create
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
             auto ev = env.Send<TEvYdbProxy::TEvCopyTableResponse>(
-                new TEvYdbProxy::TEvCopyTableRequest("/Root/table", "/Root/copy", {}));
+                new TEvYdbProxy::TEvCopyTableRequest("/Root/table", "/Root/copy", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
@@ -335,21 +352,22 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // create
         for (const auto& item : items) {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest(item.SourcePath(), std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest(item.SourcePath(), std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // copy
         {
-
-            auto ev = env.Send<TEvYdbProxy::TEvCopyTablesResponse>(
-                new TEvYdbProxy::TEvCopyTablesRequest(std::move(items), {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvCopyTablesResponse>(new TEvYdbProxy::TEvCopyTablesRequest(std::move(items), {})
+                );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
@@ -360,20 +378,22 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // create
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // describe
         {
             auto ev = env.Send<TEvYdbProxy::TEvDescribeTableResponse>(
-                new TEvYdbProxy::TEvDescribeTableRequest("/Root/table", {}));
+                new TEvYdbProxy::TEvDescribeTableRequest("/Root/table", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
 
@@ -393,37 +413,39 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // create table
         {
             auto schema = NYdb::NTable::TTableBuilder()
-                .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
-                .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
-                .SetPrimaryKeyColumn("key")
-                .Build();
+                              .AddNullableColumn("key", NYdb::EPrimitiveType::Uint64)
+                              .AddNullableColumn("value", NYdb::EPrimitiveType::Utf8)
+                              .SetPrimaryKeyColumn("key")
+                              .Build();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTableResponse>(
-                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {}));
+                new TEvYdbProxy::TEvCreateTableRequest("/Root/table", std::move(schema), {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
 
-        const auto feed = NYdb::NTable::TChangefeedDescription("updates",
-            NYdb::NTable::EChangefeedMode::Updates, NYdb::NTable::EChangefeedFormat::Json
+        const auto feed = NYdb::NTable::TChangefeedDescription(
+            "updates", NYdb::NTable::EChangefeedMode::Updates, NYdb::NTable::EChangefeedFormat::Json
         );
 
         // two attempts: create, check, retry, check
         for (int i = 1; i <= 2; ++i) {
             // create cdc stream
             {
-                auto settings = NYdb::NTable::TAlterTableSettings()
-                    .AppendAddChangefeeds(feed);
+                auto settings = NYdb::NTable::TAlterTableSettings().AppendAddChangefeeds(feed);
 
                 auto ev = env.Send<TEvYdbProxy::TEvAlterTableResponse>(
-                    new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings));
+                    new TEvYdbProxy::TEvAlterTableRequest("/Root/table", settings)
+                );
                 UNIT_ASSERT(ev);
                 UNIT_ASSERT(ev->Get()->Result.IsSuccess());
             }
             // describe
             {
                 auto ev = env.Send<TEvYdbProxy::TEvDescribeTableResponse>(
-                    new TEvYdbProxy::TEvDescribeTableRequest("/Root/table", {}));
+                    new TEvYdbProxy::TEvDescribeTableRequest("/Root/table", {})
+                );
                 UNIT_ASSERT(ev);
                 UNIT_ASSERT(ev->Get()->Result.IsSuccess());
 
@@ -438,19 +460,20 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         TEnv env;
         // invalid retention period
         {
-            auto settings = NYdb::NTopic::TCreateTopicSettings()
-                .RetentionPeriod(TDuration::Days(365));
+            auto settings = NYdb::NTopic::TCreateTopicSettings().RetentionPeriod(TDuration::Days(365));
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
         }
         // ok
         {
-            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvCreateTopicResponse>(new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {})
+                );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
@@ -460,39 +483,40 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         TEnv env;
         // fail
         {
-            auto settings = NYdb::NTopic::TAlterTopicSettings()
-                .SetRetentionPeriod(TDuration::Days(2));
+            auto settings = NYdb::NTopic::TAlterTopicSettings().SetRetentionPeriod(TDuration::Days(2));
 
             auto ev = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(
-                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings));
+                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
         // create
         {
-            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvCreateTopicResponse>(new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {})
+                );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
-            auto settings = NYdb::NTopic::TAlterTopicSettings()
-                .SetRetentionPeriod(TDuration::Days(2));
+            auto settings = NYdb::NTopic::TAlterTopicSettings().SetRetentionPeriod(TDuration::Days(2));
 
             auto ev = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(
-                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings));
+                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // invalid retention period
         {
-            auto settings = NYdb::NTopic::TAlterTopicSettings()
-                .SetRetentionPeriod(TDuration::Days(365));
+            auto settings = NYdb::NTopic::TAlterTopicSettings().SetRetentionPeriod(TDuration::Days(365));
 
             auto ev = env.Send<TEvYdbProxy::TEvAlterTopicResponse>(
-                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings));
+                new TEvYdbProxy::TEvAlterTopicRequest("/Root/topic", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
@@ -503,22 +527,23 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         TEnv env;
         // create
         {
-            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvCreateTopicResponse>(new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {})
+                );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
-            auto ev = env.Send<TEvYdbProxy::TEvDropTopicResponse>(
-                new TEvYdbProxy::TEvDropTopicRequest("/Root/topic", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvDropTopicResponse>(new TEvYdbProxy::TEvDropTopicRequest("/Root/topic", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // fail
         {
-            auto ev = env.Send<TEvYdbProxy::TEvDropTopicResponse>(
-                new TEvYdbProxy::TEvDropTopicRequest("/Root/topic", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvDropTopicResponse>(new TEvYdbProxy::TEvDropTopicRequest("/Root/topic", {}));
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
@@ -530,22 +555,25 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // fail
         {
             auto ev = env.Send<TEvYdbProxy::TEvDescribeTopicResponse>(
-                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", {}));
+                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
         // create
         {
-            auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {}));
+            auto ev =
+                env.Send<TEvYdbProxy::TEvCreateTopicResponse>(new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", {})
+                );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
             auto ev = env.Send<TEvYdbProxy::TEvDescribeTopicResponse>(
-                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", {}));
+                new TEvYdbProxy::TEvDescribeTopicRequest("/Root/topic", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
 
@@ -560,34 +588,36 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         // fail
         {
             auto ev = env.Send<TEvYdbProxy::TEvDescribeConsumerResponse>(
-                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer", {}));
+                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
         // create
         {
-            auto settings = NYdb::NTopic::TCreateTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName("consumer")
-                .EndAddConsumer();
+            auto settings =
+                NYdb::NTopic::TCreateTopicSettings().BeginAddConsumer().ConsumerName("consumer").EndAddConsumer();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // ok
         {
             auto ev = env.Send<TEvYdbProxy::TEvDescribeConsumerResponse>(
-                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer", {}));
+                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
         // fail
         {
             auto ev = env.Send<TEvYdbProxy::TEvDescribeConsumerResponse>(
-                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer2", {}));
+                new TEvYdbProxy::TEvDescribeConsumerRequest("/Root/topic", "consumer2", {})
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(!ev->Get()->Result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
@@ -595,13 +625,14 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
     }
 
     template <typename Env>
-    TActorId CreateTopicReader(Env& env, const TString& topicPath) {
+    TActorId CreateTopicReader(Env & env, const TString& topicPath) {
         auto settings = TEvYdbProxy::TTopicReaderSettings()
-            .ConsumerName("consumer")
-            .AppendTopics(NYdb::NTopic::TTopicReadSettings(topicPath));
+                            .ConsumerName("consumer")
+                            .AppendTopics(NYdb::NTopic::TTopicReadSettings(topicPath));
 
         auto ev = env.template Send<TEvYdbProxy::TEvCreateTopicReaderResponse>(
-            new TEvYdbProxy::TEvCreateTopicReaderRequest(settings));
+            new TEvYdbProxy::TEvCreateTopicReaderRequest(settings)
+        );
         UNIT_ASSERT(ev);
         UNIT_ASSERT(ev->Get()->Result);
 
@@ -609,20 +640,23 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
     }
 
     template <typename Env>
-    TEvYdbProxy::TReadTopicResult ReadTopicData(Env& env, TActorId& reader, const TString& topicPath) {
+    TEvYdbProxy::TReadTopicResult ReadTopicData(Env & env, TActorId & reader, const TString& topicPath) {
         do {
             env.SendAsync(reader, new TEvYdbProxy::TEvReadTopicRequest());
 
             try {
                 TAutoPtr<IEventHandle> ev;
-                env.GetRuntime().template GrabEdgeEventsRethrow<TEvYdbProxy::TEvReadTopicResponse, TEvYdbProxy::TEvTopicReaderGone>(ev);
+                env.GetRuntime()
+                    .template GrabEdgeEventsRethrow<TEvYdbProxy::TEvReadTopicResponse, TEvYdbProxy::TEvTopicReaderGone>(
+                        ev
+                    );
                 UNIT_ASSERT_VALUES_EQUAL(ev->Sender, reader);
 
                 switch (ev->GetTypeRewrite()) {
-                case TEvYdbProxy::EvReadTopicResponse:
-                    return ev->Get<TEvYdbProxy::TEvReadTopicResponse>()->Result;
-                case TEvYdbProxy::EvTopicReaderGone:
-                    ythrow yexception();
+                    case TEvYdbProxy::EvReadTopicResponse:
+                        return ev->Get<TEvYdbProxy::TEvReadTopicResponse>()->Result;
+                    case TEvYdbProxy::EvTopicReaderGone:
+                        ythrow yexception();
                 }
             } catch (yexception&) {
                 reader = CreateTopicReader(env, topicPath);
@@ -635,13 +669,12 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
 
         // create topic
         {
-            auto settings = NYdb::NTopic::TCreateTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName("consumer")
-                .EndAddConsumer();
+            auto settings =
+                NYdb::NTopic::TCreateTopicSettings().BeginAddConsumer().ConsumerName("consumer").EndAddConsumer();
 
             auto ev = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(
-                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings));
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", settings)
+            );
             UNIT_ASSERT(ev);
             UNIT_ASSERT(ev->Get()->Result.IsSuccess());
         }
@@ -710,4 +743,4 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
 
 } // YdbProxyTests
 
-}
+} // namespace NKikimr::NReplication

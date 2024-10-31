@@ -18,12 +18,10 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
     TEvExport::TEvForgetExportRequest::TPtr Request;
     bool Progress;
 
-    explicit TTxForget(TSelf *self, TEvExport::TEvForgetExportRequest::TPtr& ev)
+    explicit TTxForget(TSelf* self, TEvExport::TEvForgetExportRequest::TPtr& ev)
         : TXxport::TTxBase(self)
         , Request(ev)
-        , Progress(false)
-    {
-    }
+        , Progress(false) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_FORGET_EXPORT;
@@ -114,5 +112,5 @@ ITransaction* TSchemeShard::CreateTxForgetExport(TEvExport::TEvForgetExportReque
     return new TExport::TTxForget(this, ev);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

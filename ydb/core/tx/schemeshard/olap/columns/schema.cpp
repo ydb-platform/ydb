@@ -15,7 +15,11 @@ void TOlapColumnSchema::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescr
     Id = columnSchema.GetId();
 }
 
-bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+bool TOlapColumnsDescription::ApplyUpdate(
+    const TOlapColumnsUpdate& schemaUpdate,
+    IErrorCollector& errors,
+    ui32& nextEntityId
+) {
     if (Columns.empty() && schemaUpdate.GetAddColumns().empty()) {
         errors.AddError(NKikimrScheme::StatusSchemeError, "No add columns specified");
         return false;
@@ -25,16 +29,24 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
     std::map<ui32, ui32> orderedKeyColumnIds;
     for (auto&& column : schemaUpdate.GetAddColumns()) {
         if (ColumnsByName.contains(column.GetName())) {
-            errors.AddError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "column '" << column.GetName() << "' already exists");
+            errors.AddError(
+                NKikimrScheme::StatusAlreadyExists,
+                TStringBuilder() << "column '" << column.GetName() << "' already exists"
+            );
             return false;
         }
         if (hasColumnsBefore) {
             if (column.IsNotNull()) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, "Cannot add new not null column currently (not supported yet)");
+                errors.AddError(
+                    NKikimrScheme::StatusSchemeError, "Cannot add new not null column currently (not supported yet)"
+                );
                 return false;
             }
             if (column.GetKeyOrder()) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << column.GetName() << "' is pk column. its impossible to modify pk");
+                errors.AddError(
+                    NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "column '" << column.GetName() << "' is pk column. its impossible to modify pk"
+                );
                 return false;
             }
         }
@@ -50,7 +62,10 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
     for (auto&& columnDiff : schemaUpdate.GetAlterColumns()) {
         auto it = ColumnsByName.find(columnDiff.GetName());
         if (it == ColumnsByName.end()) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "column '" << columnDiff.GetName() << "' not exists for altering");
+            errors.AddError(
+                NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "column '" << columnDiff.GetName() << "' not exists for altering"
+            );
             return false;
         } else {
             auto itColumn = Columns.find(it->second);
@@ -77,12 +92,16 @@ bool TOlapColumnsDescription::ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate
     for (const auto& columnName : schemaUpdate.GetDropColumns()) {
         auto columnInfo = GetByName(columnName);
         if (!columnInfo) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown column for drop: " << columnName);
+            errors.AddError(
+                NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown column for drop: " << columnName
+            );
             return false;
         }
 
         if (columnInfo->IsKeyColumn()) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot remove pk column: " << columnName);
+            errors.AddError(
+                NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot remove pk column: " << columnName
+            );
             return false;
         }
         ColumnsByName.erase(columnName);
@@ -132,7 +151,8 @@ void TOlapColumnsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors)
+    const {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
     ui32 lastColumnId = 0;
@@ -149,7 +169,9 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
             return false;
         }
         if (colProto.HasId() && colProto.GetId() != col->GetId()) {
-            errors.AddError("Column '" + colName + "' has id " + colProto.GetId() + " that does not match schema preset");
+            errors.AddError(
+                "Column '" + colName + "' has id " + colProto.GetId() + " that does not match schema preset"
+            );
             return false;
         }
 
@@ -176,7 +198,9 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
         if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType()); typeName.StartsWith("pg")) {
             const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
             if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
-                errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported");
+                errors.AddError(
+                    "Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported"
+                );
                 return false;
             }
             typeInfo = NScheme::TTypeInfo(typeDesc);
@@ -185,14 +209,19 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
         } else {
             const NScheme::IType* type = typeRegistry->GetType(typeName);
             if (!type || !TOlapColumnAdd::IsAllowedType(type->GetTypeId())) {
-                errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported");
+                errors.AddError(
+                    "Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported"
+                );
                 return false;
             }
             typeInfo = NScheme::TTypeInfo(type->GetTypeId());
         }
 
         if (typeInfo != col->GetType()) {
-            errors.AddError("Type '" + TypeName(typeInfo) + "' specified for column '" + colName + "' does not match schema preset type '" + TypeName(col->GetType()) + "'");
+            errors.AddError(
+                "Type '" + TypeName(typeInfo) + "' specified for column '" + colName +
+                "' does not match schema preset type '" + TypeName(col->GetType()) + "'"
+            );
             return false;
         }
     }
@@ -224,4 +253,4 @@ const NKikimr::NSchemeShard::TOlapColumnSchema* TOlapColumnsDescription::GetById
     return TValidator::CheckNotNull(GetById(id));
 }
 
-}
+} // namespace NKikimr::NSchemeShard

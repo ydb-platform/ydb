@@ -26,8 +26,14 @@ void UpdateSpaceCommit(TSpaceLimits& limits, ui64 newValue, ui64 oldValue) {
     limits.Allocated -= diff;
 }
 
-bool CheckSpaceChanged(const TSpaceLimits& limits, ui64 newValue, ui64 oldValue,
-        TString& errStr, const char* tabletType, const char* suffix) {
+bool CheckSpaceChanged(
+    const TSpaceLimits& limits,
+    ui64 newValue,
+    ui64 oldValue,
+    TString& errStr,
+    const char* tabletType,
+    const char* suffix
+) {
     if (newValue <= oldValue) {
         return true;
     }
@@ -38,22 +44,26 @@ bool CheckSpaceChanged(const TSpaceLimits& limits, ui64 newValue, ui64 oldValue,
         return true;
     }
 
-    errStr = TStringBuilder()
-        << "New " << tabletType << " space is over a limit" << suffix
-        << ": " << newAllocated << " > " << limits.Limit;
+    errStr = TStringBuilder() << "New " << tabletType << " space is over a limit" << suffix << ": " << newAllocated
+                              << " > " << limits.Limit;
     return false;
 }
 
-}
+} // namespace
 
-TPathElement::TPathElement(TPathId pathId, TPathId parentPathId, TPathId domainPathId, const TString& name, const TString& owner)
+TPathElement::TPathElement(
+    TPathId pathId,
+    TPathId parentPathId,
+    TPathId domainPathId,
+    const TString& name,
+    const TString& owner
+)
     : PathId(pathId)
     , ParentPathId(parentPathId)
     , DomainPathId(domainPathId)
     , Name(name)
     , Owner(owner)
-    , UserAttrs(new TUserAttributes(1))
-{}
+    , UserAttrs(new TUserAttributes(1)) {}
 
 ui64 TPathElement::GetAliveChildren() const {
     return AliveChildrenCount;
@@ -182,8 +192,8 @@ bool TPathElement::IsBlobDepot() const {
 }
 
 bool TPathElement::IsContainer() const {
-    return PathType == EPathType::EPathTypeDir || PathType == EPathType::EPathTypeSubDomain
-        || PathType == EPathType::EPathTypeColumnStore;
+    return PathType == EPathType::EPathTypeDir || PathType == EPathType::EPathTypeSubDomain ||
+           PathType == EPathType::EPathTypeColumnStore;
 }
 
 bool TPathElement::IsLikeDirectory() const {
@@ -401,11 +411,17 @@ void TPathElement::ChangeVolumeSpaceCommit(TVolumeSpace newSpace, TVolumeSpace o
 }
 
 bool TPathElement::CheckVolumeSpaceChange(TVolumeSpace newSpace, TVolumeSpace oldSpace, TString& errStr) {
-    return (CheckSpaceChanged(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw, errStr, "volume", "") &&
-            CheckSpaceChanged(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD, errStr, "volume", " (ssd)") &&
-            CheckSpaceChanged(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD, errStr, "volume", " (hdd)") &&
-            CheckSpaceChanged(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl, errStr, "volume", " (ssd_nonrepl)") &&
-            CheckSpaceChanged(VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem, errStr, "volume", " (ssd_system)"));
+    return (
+        CheckSpaceChanged(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw, errStr, "volume", "") &&
+        CheckSpaceChanged(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD, errStr, "volume", " (ssd)") &&
+        CheckSpaceChanged(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD, errStr, "volume", " (hdd)") &&
+        CheckSpaceChanged(
+            VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl, errStr, "volume", " (ssd_nonrepl)"
+        ) &&
+        CheckSpaceChanged(
+            VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem, errStr, "volume", " (ssd_system)"
+        )
+    );
 }
 
 void TPathElement::ChangeFileStoreSpaceBegin(TFileStoreSpace newSpace, TFileStoreSpace oldSpace) {
@@ -419,8 +435,10 @@ void TPathElement::ChangeFileStoreSpaceCommit(TFileStoreSpace newSpace, TFileSto
 }
 
 bool TPathElement::CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStoreSpace oldSpace, TString& errStr) {
-    return (CheckSpaceChanged(FileStoreSpaceSSD, newSpace.SSD, oldSpace.SSD, errStr, "filestore", " (ssd)") &&
-            CheckSpaceChanged(FileStoreSpaceHDD, newSpace.HDD, oldSpace.HDD, errStr, "filestore", " (hdd)"));
+    return (
+        CheckSpaceChanged(FileStoreSpaceSSD, newSpace.SSD, oldSpace.SSD, errStr, "filestore", " (ssd)") &&
+        CheckSpaceChanged(FileStoreSpaceHDD, newSpace.HDD, oldSpace.HDD, errStr, "filestore", " (hdd)")
+    );
 }
 
 void TPathElement::SetAsyncReplica(bool value) {
@@ -432,19 +450,15 @@ void TPathElement::SetRestoreTable() {
 }
 
 bool TPathElement::HasRuntimeAttrs() const {
-    return (VolumeSpaceRaw.Allocated > 0 ||
-            VolumeSpaceSSD.Allocated > 0 ||
-            VolumeSpaceHDD.Allocated > 0 ||
-            VolumeSpaceSSDNonrepl.Allocated > 0 ||
-            VolumeSpaceSSDSystem.Allocated > 0 ||
-            FileStoreSpaceSSD.Allocated > 0 ||
-            FileStoreSpaceHDD.Allocated > 0 ||
-            IsAsyncReplica);
+    return (
+        VolumeSpaceRaw.Allocated > 0 || VolumeSpaceSSD.Allocated > 0 || VolumeSpaceHDD.Allocated > 0 ||
+        VolumeSpaceSSDNonrepl.Allocated > 0 || VolumeSpaceSSDSystem.Allocated > 0 || FileStoreSpaceSSD.Allocated > 0 ||
+        FileStoreSpaceHDD.Allocated > 0 || IsAsyncReplica
+    );
 }
 
-void TPathElement::SerializeRuntimeAttrs(
-        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const
-{
+void TPathElement::SerializeRuntimeAttrs(google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs
+) const {
     auto process = [userAttrs](const TSpaceLimits& limits, const char* name) {
         if (limits.Allocated > 0) {
             auto* attr = userAttrs->Add();
@@ -471,4 +485,4 @@ void TPathElement::SerializeRuntimeAttrs(
     }
 }
 
-}
+} // namespace NKikimr::NSchemeShard

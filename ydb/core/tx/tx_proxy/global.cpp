@@ -1,5 +1,3 @@
 #include "global.h"
 
-namespace NKikimr::NTxProxy {
-
-}
+namespace NKikimr::NTxProxy {}

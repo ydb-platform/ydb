@@ -124,4 +124,4 @@ Y_UNIT_TEST_SUITE(DoubleIndexedTests) {
     }
 }
 
-} // NKikimr
+} // namespace NKikimr

@@ -44,13 +44,12 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     THashMap<TString, std::shared_ptr<TSubscriberTypeCounters>> ResourceTypeCounters;
     TMutex Mutex;
+
 public:
     TSubscriberCounters()
-        : TBase("ResourcesSubscriber")
-    {
-    }
+        : TBase("ResourcesSubscriber") {}
 
     std::shared_ptr<TSubscriberTypeCounters> GetTypeCounters(const TString& resourceType);
 };
 
-}
+} // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

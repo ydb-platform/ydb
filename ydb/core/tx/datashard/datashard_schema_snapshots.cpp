@@ -9,14 +9,10 @@ namespace NDataShard {
 TSchemaSnapshot::TSchemaSnapshot(TUserTable::TCPtr schema, ui64 step, ui64 txId)
     : Schema(schema)
     , Step(step)
-    , TxId(txId)
-{
-}
+    , TxId(txId) {}
 
 TSchemaSnapshotManager::TSchemaSnapshotManager(const TDataShard* self)
-    : Self(self)
-{
-}
+    : Self(self) {}
 
 void TSchemaSnapshotManager::Reset() {
     Snapshots.clear();
@@ -58,7 +54,11 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
     return true;
 }
 
-bool TSchemaSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot) {
+bool TSchemaSnapshotManager::AddSnapshot(
+    NTable::TDatabase& db,
+    const TSchemaSnapshotKey& key,
+    const TSchemaSnapshot& snapshot
+) {
     if (auto it = Snapshots.find(key); it != Snapshots.end()) {
         Y_VERIFY_DEBUG_S(false, "Duplicate schema snapshot: " << key);
         return false;
@@ -92,9 +92,11 @@ void TSchemaSnapshotManager::RemoveShapshot(NTable::TDatabase& db, const TSchema
     PersistRemoveSnapshot(nicedb, key);
 }
 
-void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
-        const TPathId& prevTableId, const TPathId& newTableId)
-{
+void TSchemaSnapshotManager::RenameSnapshots(
+    NTable::TDatabase& db,
+    const TPathId& prevTableId,
+    const TPathId& newTableId
+) {
     Y_VERIFY_S(prevTableId < newTableId, "New table id should be greater than previous"
         << ": prev# " << prevTableId
         << ", new# " << newTableId);
@@ -168,7 +170,11 @@ bool TSchemaSnapshotManager::HasReference(const TSchemaSnapshotKey& key) const {
     }
 }
 
-void TSchemaSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot) {
+void TSchemaSnapshotManager::PersistAddSnapshot(
+    NIceDb::TNiceDb& db,
+    const TSchemaSnapshotKey& key,
+    const TSchemaSnapshot& snapshot
+) {
     using Schema = TDataShard::Schema;
     db.Table<Schema::SchemaSnapshots>()
         .Key(key.OwnerId, key.PathId, key.Version)
@@ -181,13 +187,11 @@ void TSchemaSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSche
 
 void TSchemaSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key) {
     using Schema = TDataShard::Schema;
-    db.Table<Schema::SchemaSnapshots>()
-        .Key(key.OwnerId, key.PathId, key.Version)
-        .Delete();
+    db.Table<Schema::SchemaSnapshots>().Key(key.OwnerId, key.PathId, key.Version).Delete();
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSchemaSnapshotKey, stream, value) {
     stream << "{ table " << value.OwnerId << ":" << value.PathId << " version " << value.Version << " }";

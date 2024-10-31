@@ -2,16 +2,14 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
-class TPropose : public TSubOperationState {
+class TPropose: public TSubOperationState {
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(std::move(id))
-    {}
+        : OperationId(std::move(id)) {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
@@ -55,34 +53,35 @@ private:
     const TOperationId OperationId;
 };
 
-class TAlterResourcePool : public TSubOperation {
+class TAlterResourcePool: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl) {
+    static bool
+    IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
@@ -109,7 +108,7 @@ class TAlterResourcePool : public TSubOperation {
         TPathElement::TPtr resourcePool = dstPath.Base();
 
         resourcePool->PathState = TPathElement::EPathState::EPathStateAlter;
-        resourcePool->LastTxId  = OperationId.GetTxId();
+        resourcePool->LastTxId = OperationId.GetTxId();
 
         return resourcePool;
     }
@@ -125,13 +124,19 @@ public:
         const TString& name = resourcePoolDescription.GetName();
         LOG_N("TAlterResourcePool Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
-                                                   static_cast<ui64>(OperationId.GetTxId()),
-                                                   static_cast<ui64>(context.SS->SelfTabletId()));
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted,
+            static_cast<ui64>(OperationId.GetTxId()),
+            static_cast<ui64>(context.SS->SelfTabletId())
+        );
 
         if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
             if (!context.SS->EnableResourcePoolsOnServerless) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+                result->SetError(
+                    NKikimrScheme::StatusPreconditionFailed,
+                    "Resource pools are disabled for serverless domains. Please contact your system administrator to "
+                    "enable it"
+                );
                 return result;
             }
         }
@@ -147,7 +152,8 @@ public:
 
         const auto& oldResourcePoolInfo = context.SS->ResourcePools.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldResourcePoolInfo);
-        const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::ModifyResourcePool(resourcePoolDescription, oldResourcePoolInfo);
+        const TResourcePoolInfo::TPtr resourcePoolInfo =
+            NResourcePool::ModifyResourcePool(resourcePoolDescription, oldResourcePoolInfo);
         Y_ABORT_UNLESS(resourcePoolInfo);
         RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
 

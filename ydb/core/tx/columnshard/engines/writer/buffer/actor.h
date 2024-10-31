@@ -13,6 +13,7 @@ private:
     TDuration FlushDuration = TDuration::Zero();
     ui64 SumSize = 0;
     void Flush();
+
 public:
     TActor(ui64 tabletId, const TActorId& parent);
     ~TActor() = default;
@@ -22,7 +23,11 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", ParentActorId));
+        TLogContextGuard gLogging(
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)(
+                "parent", ParentActorId
+            )
+        );
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvAddInsertedDataToBuffer, Handle);
@@ -33,4 +38,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard::NWriting

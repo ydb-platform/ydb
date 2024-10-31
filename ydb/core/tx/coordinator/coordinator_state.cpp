@@ -4,7 +4,6 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-
 namespace NKikimr::NFlatTxCoordinator {
 
 static constexpr size_t MaxSerializedStateChunk = 8 * 1024 * 1024;
@@ -12,8 +11,7 @@ static constexpr size_t MaxSerializedStateChunk = 8 * 1024 * 1024;
 TCoordinatorStateActor::TCoordinatorStateActor(TTxCoordinator* owner, const TActorId& prevStateActorId)
     : TActor(&TThis::StateWork)
     , Owner(owner)
-    , PrevStateActorId(prevStateActorId)
-{}
+    , PrevStateActorId(prevStateActorId) {}
 
 TCoordinatorStateActor::~TCoordinatorStateActor() {
     if (Owner) {
@@ -51,13 +49,14 @@ void TCoordinatorStateActor::PreserveState() {
     LastSentStep = Owner->VolatileState.LastSentStep;
     LastAcquiredStep = Owner->VolatileState.LastAcquired;
     LastConfirmedStep = Owner->VolatileState.LastConfirmedStep;
-    LastBlockedStep = Max(
-        Owner->VolatileState.LastBlockedPending,
-        Owner->VolatileState.LastBlockedCommitted);
+    LastBlockedStep = Max(Owner->VolatileState.LastBlockedPending, Owner->VolatileState.LastBlockedCommitted);
 
     if (!Owner->VolatileTransactions.empty()) {
         google::protobuf::Arena arena;
-        auto* state = google::protobuf::Arena::CreateMessage<NKikimrTxCoordinator::TEvCoordinatorStateResponse::TSerializedState>(&arena);
+        auto* state =
+            google::protobuf::Arena::CreateMessage<NKikimrTxCoordinator::TEvCoordinatorStateResponse::TSerializedState>(
+                &arena
+            );
         auto* pTxs = state->MutableVolatileTxs();
         pTxs->Reserve(Owner->VolatileTransactions.size());
         for (auto& tx : Owner->VolatileTransactions) {
@@ -168,17 +167,14 @@ void TTxCoordinator::DetachStateActor() {
     CoordinatorStateActor = nullptr;
 }
 
-class TTxCoordinator::TRestoreStateActor
-    : public TActorBootstrapped<TRestoreStateActor>
-{
+class TTxCoordinator::TRestoreStateActor: public TActorBootstrapped<TRestoreStateActor> {
 public:
     TRestoreStateActor(const TActorId& owner, ui32 generation, const TActorId& prevStateActorId, ui64 lastBlockedStep)
         : Owner(owner)
         , Generation(generation)
         , PrevStateActorId(prevStateActorId)
         , LastBlockedStep(lastBlockedStep)
-        , Deadline(TInstant::MilliSeconds(LastBlockedStep + 1))
-    { }
+        , Deadline(TInstant::MilliSeconds(LastBlockedStep + 1)) {}
 
     void PassAway() override {
         if (Subscribed) {
@@ -226,9 +222,12 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
             Subscribed = true;
         }
-        Send(PrevStateActorId,
+        Send(
+            PrevStateActorId,
             new TEvTxCoordinator::TEvCoordinatorStateRequest(Generation, ContinuationToken),
-            flags, Cookie);
+            flags,
+            Cookie
+        );
     }
 
     void NodeDisconnected() {
@@ -300,15 +299,12 @@ private:
 void TTxCoordinator::RestoreState(const TActorId& prevStateActorId, ui64 lastBlockedStep) {
     PrevStateActorId = prevStateActorId;
     RestoreStateActorId = RegisterWithSameMailbox(
-        new TRestoreStateActor(
-            SelfId(),
-            Executor()->Generation(),
-            prevStateActorId,
-            lastBlockedStep));
+        new TRestoreStateActor(SelfId(), Executor()->Generation(), prevStateActorId, lastBlockedStep)
+    );
 }
 
 void TTxCoordinator::Handle(TEvPrivate::TEvRestoredStateMissing::TPtr& ev) {
-    RestoreStateActorId = { };
+    RestoreStateActorId = {};
 
     // Assume the last blocked step was also planned and observed
     ui64 lastBlockedStep = ev->Get()->LastBlockedStep;
@@ -323,7 +319,7 @@ void TTxCoordinator::Handle(TEvPrivate::TEvRestoredStateMissing::TPtr& ev) {
 }
 
 void TTxCoordinator::Handle(TEvPrivate::TEvRestoredState::TPtr& ev) {
-    RestoreStateActorId = { };
+    RestoreStateActorId = {};
 
     auto& record = ev->Get()->Record;
 
@@ -335,15 +331,18 @@ void TTxCoordinator::Handle(TEvPrivate::TEvRestoredState::TPtr& ev) {
     VolatileState.LastConfirmedStep = record.GetLastConfirmedStep();
 
     // Last planned step is the maximum observed
-    VolatileState.LastPlanned = Max(
-        VolatileState.LastPlanned,
-        VolatileState.LastSentStep,
-        VolatileState.LastAcquired,
-        VolatileState.LastConfirmedStep);
+    VolatileState.LastPlanned =
+        Max(VolatileState.LastPlanned,
+            VolatileState.LastSentStep,
+            VolatileState.LastAcquired,
+            VolatileState.LastConfirmedStep);
 
     if (record.HasSerializedState()) {
         google::protobuf::Arena arena;
-        auto* state = google::protobuf::Arena::CreateMessage<NKikimrTxCoordinator::TEvCoordinatorStateResponse::TSerializedState>(&arena);
+        auto* state =
+            google::protobuf::Arena::CreateMessage<NKikimrTxCoordinator::TEvCoordinatorStateResponse::TSerializedState>(
+                &arena
+            );
         bool ok = state->ParseFromString(record.GetSerializedState());
         if (ok) {
             for (auto& protoTx : state->GetVolatileTxs()) {

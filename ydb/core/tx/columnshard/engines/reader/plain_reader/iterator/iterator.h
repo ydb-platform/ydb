@@ -11,23 +11,19 @@ private:
     const NColumnShard::TConcreteScanCounters Counters;
     std::deque<std::shared_ptr<TPartialReadResult>> Data;
     i64 RecordsCount = 0;
+
 public:
     TString DebugString() const {
         TStringBuilder sb;
-        sb
-            << "count:" << Data.size() << ";"
-            << "records_count:" << RecordsCount << ";"
-            ;
+        sb << "count:" << Data.size() << ";"
+           << "records_count:" << RecordsCount << ";";
         if (Data.size()) {
             sb << "schema=" << Data.front()->GetResultBatch().schema()->ToString() << ";";
         }
         return sb;
     }
     TReadyResults(const NColumnShard::TConcreteScanCounters& counters)
-        : Counters(counters)
-    {
-
-    }
+        : Counters(counters) {}
     const std::shared_ptr<TPartialReadResult>& emplace_back(std::shared_ptr<TPartialReadResult>&& v) {
         AFL_VERIFY(!!v);
         RecordsCount += v->GetResultBatch().num_rows();
@@ -63,7 +59,10 @@ private:
     virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
 
 public:
-    TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata);
+    TColumnShardScanIterator(
+        const std::shared_ptr<TReadContext>& context,
+        const TReadMetadata::TConstPtr& readMetadata
+    );
     ~TColumnShardScanIterator();
 
     virtual TConclusionStatus Start() override {
@@ -80,15 +79,13 @@ public:
     }
 
     virtual TString DebugString(const bool verbose) const override {
-        return TStringBuilder()
-            << "ready_results:(" << ReadyResults.DebugString() << ");"
-            << "indexed_data:(" << IndexedData->DebugString(verbose) << ")"
-            ;
+        return TStringBuilder() << "ready_results:(" << ReadyResults.DebugString() << ");"
+                                << "indexed_data:(" << IndexedData->DebugString(verbose) << ")";
     }
 
     virtual void Apply(const std::shared_ptr<IApplyAction>& task) override;
 
-    bool Finished() const  override {
+    bool Finished() const override {
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
@@ -101,4 +98,4 @@ private:
     void FillReadyResults();
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

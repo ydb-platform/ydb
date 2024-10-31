@@ -8,9 +8,7 @@ class TController::TTxAlterDstResult: public TTxBase {
 public:
     explicit TTxAlterDstResult(TController* self, TEvPrivate::TEvAlterDstResult::TPtr& ev)
         : TTxBase("TxAlterDstResult", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_ALTER_DST_RESULT;
@@ -59,12 +57,15 @@ public:
             }
         } else {
             target->SetDstState(TReplication::EDstState::Error);
-            target->SetIssue(TStringBuilder() << "Alter dst error"
-                << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
-                << ", " << Ev->Get()->Error);
+            target->SetIssue(
+                TStringBuilder() << "Alter dst error"
+                                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status) << ", " << Ev->Get()->Error
+            );
 
-            replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            replication->SetState(
+                TReplication::EState::Error,
+                TStringBuilder() << "Error in target #" << target->GetId() << ": " << target->GetIssue()
+            );
 
             CLOG_E(ctx, "Alter dst error"
                 << ": rid# " << rid
@@ -96,5 +97,4 @@ void TController::RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, c
     Execute(new TTxAlterDstResult(this, ev), ctx);
 }
 
-}
-
+} // namespace NKikimr::NReplication::NController

@@ -20,7 +20,12 @@ bool TDataShard::HasPipeServer(const TActorId& pipeServerId) {
     return PipeServers.contains(pipeServerId);
 }
 
-bool TDataShard::AddOverloadSubscriber(const TActorId& pipeServerId, const TActorId& actorId, ui64 seqNo, ERejectReasons reasons) {
+bool TDataShard::AddOverloadSubscriber(
+    const TActorId& pipeServerId,
+    const TActorId& actorId,
+    ui64 seqNo,
+    ERejectReasons reasons
+) {
     auto it = PipeServers.find(pipeServerId);
     if (it != PipeServers.end()) {
         bool wasEmpty = it->second.OverloadSubscribers.empty();
@@ -66,7 +71,8 @@ void TDataShard::NotifyOverloadSubscribers(ERejectReason reason) {
                     pipeServer->InterconnectSession,
                     actorId,
                     SelfId(),
-                    new TEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo));
+                    new TEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo)
+                );
                 pipeServer->OverloadSubscribers.erase(current);
             }
         }
@@ -88,7 +94,8 @@ void TDataShard::NotifyAllOverloadSubscribers() {
                 pipeServer->InterconnectSession,
                 actorId,
                 SelfId(),
-                new TEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo));
+                new TEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo)
+            );
         }
         pipeServer->OverloadSubscribers.clear();
         clearedSubscribers = true;
@@ -131,4 +138,4 @@ void TDataShard::Handle(TEvDataShard::TEvOverloadUnsubscribe::TPtr& ev, const TA
     }
 }
 
-} // namespae NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

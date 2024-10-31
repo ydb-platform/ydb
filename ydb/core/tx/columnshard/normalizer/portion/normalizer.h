@@ -23,23 +23,32 @@ private:
     TNormalizationContext NormContext;
 
 public:
-    TReadPortionsTask(const TNormalizationContext& nCtx, const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions,
-        typename TConveyorTask::TDataContainer&& data, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TReadPortionsTask(
+        const TNormalizationContext& nCtx,
+        const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions,
+        typename TConveyorTask::TDataContainer&& data,
+        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+    )
         : TBase(actions, "CS::NORMALIZER")
         , Data(std::move(data))
         , Schemas(std::move(schemas))
-        , NormContext(nCtx) {
-    }
+        , NormContext(nCtx) {}
 
 protected:
-    virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
+    virtual void DoOnDataReady(
+        const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard
+    ) override {
         NormContext.SetResourcesGuard(resourcesGuard);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), Schemas);
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
     }
 
-    virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
+    virtual bool DoOnError(
+        const TString& storageId,
+        const TBlobRange& range,
+        const IBlobsReadingAction::TErrorStatus& status
+    ) override {
         Y_UNUSED(status, range, storageId);
         return false;
     }
@@ -55,52 +64,69 @@ class TPortionsNormalizerTask: public INormalizerTask {
 
 public:
     TPortionsNormalizerTask(typename TConveyorTask::TDataContainer&& package)
-        : Package(std::move(package)) {
-    }
+        : Package(std::move(package)) {}
 
     TPortionsNormalizerTask(
-        typename TConveyorTask::TDataContainer&& package, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+        typename TConveyorTask::TDataContainer&& package,
+        const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+    )
         : Package(std::move(package))
-        , Schemas(schemas) {
-    }
+        , Schemas(schemas) {}
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
         controller.GetCounters().CountObjects(Package.size());
-        auto readingAction = controller.GetStoragesManager()->GetInsertOperator()->StartReadingAction(NBlobOperations::EConsumer::NORMALIZER);
+        auto readingAction = controller.GetStoragesManager()->GetInsertOperator()->StartReadingAction(
+            NBlobOperations::EConsumer::NORMALIZER
+        );
         ui64 memSize = 0;
         for (auto&& data : Package) {
             TConveyorTask::FillBlobRanges(readingAction, data);
             memSize += TConveyorTask::GetMemSize(data);
         }
-        std::vector<std::shared_ptr<IBlobsReadingAction>> actions = { readingAction };
+        std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readingAction};
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            nCtx.GetResourceSubscribeActor(), std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                                                  std::make_shared<TReadPortionsTask<TConveyorTask>>(nCtx, actions, std::move(Package), Schemas),
-                                                  1, memSize, "CS::NORMALIZER", controller.GetTaskSubscription()));
+            nCtx.GetResourceSubscribeActor(),
+            std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
+                std::make_shared<TReadPortionsTask<TConveyorTask>>(nCtx, actions, std::move(Package), Schemas),
+                1,
+                memSize,
+                "CS::NORMALIZER",
+                controller.GetTaskSubscription()
+            )
+        );
     }
 };
 
 class TPortionsNormalizerBase: public TNormalizationController::INormalizerComponent {
 public:
     TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
-    }
+        : DsGroupSelector(info.GetStorageInfo()) {}
 
     TConclusionStatus InitPortions(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager,
+        NIceDb::TNiceDb& db,
+        THashMap<ui64, TPortionInfoConstructor>& portions
+    );
     TConclusionStatus InitColumns(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager,
+        NIceDb::TNiceDb& db,
+        THashMap<ui64, TPortionInfoConstructor>& portions
+    );
     TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
 
-    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
-        const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>>
+    DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;
 
 protected:
     virtual INormalizerTask::TPtr BuildTask(
-        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
-    virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
+        std::vector<TPortionDataAccessor>&& portions,
+        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas
+    ) const = 0;
+    virtual TConclusion<bool>
+    DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
-    virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const = 0;
+    virtual bool
+    CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const = 0;
 
     virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& schema) const {
         return schema->GetPkColumnsIds();

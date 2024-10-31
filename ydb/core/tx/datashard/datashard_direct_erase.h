@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDirectTxErase : public IDirectTx {
+class TDirectTxErase: public IDirectTx {
     TEvDataShard::TEvEraseRowsRequest::TPtr Ev;
     THolder<TEvDataShard::TEvEraseRowsResponse> Result;
     THolder<IDataShardChangeCollector> ChangeCollector;
@@ -26,17 +26,20 @@ class TDirectTxErase : public IDirectTx {
         absl::flat_hash_set<ui64>* const VolatileReadDependencies;
 
     private:
-        explicit TExecuteParams(TDirectTxErase* tx, TTransactionContext* txc,
-                const TRowVersion& readVersion, const TRowVersion& writeVersion,
-                ui64 globalTxId, absl::flat_hash_set<ui64>* volatileReadDependencies)
+        explicit TExecuteParams(
+            TDirectTxErase* tx,
+            TTransactionContext* txc,
+            const TRowVersion& readVersion,
+            const TRowVersion& writeVersion,
+            ui64 globalTxId,
+            absl::flat_hash_set<ui64>* volatileReadDependencies
+        )
             : Tx(tx)
             , Txc(txc)
             , ReadVersion(readVersion)
             , WriteVersion(writeVersion)
             , GlobalTxId(globalTxId)
-            , VolatileReadDependencies(volatileReadDependencies)
-        {
-        }
+            , VolatileReadDependencies(volatileReadDependencies) {}
 
     public:
         static TExecuteParams ForCheck() {
@@ -63,22 +66,34 @@ class TDirectTxErase : public IDirectTx {
     };
 
     static EStatus CheckedExecute(
-        TDataShard* self, const TExecuteParams& params,
+        TDataShard* self,
+        const TExecuteParams& params,
         const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
+        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status,
+        TString& error
+    );
 
 public:
     explicit TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
 
-    static bool CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
+    static bool CheckRequest(
+        TDataShard* self,
+        const NKikimrTxDataShard::TEvEraseRowsRequest& request,
+        NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status,
+        TString& error
+    );
 
-    bool Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) override;
+    bool Execute(
+        TDataShard* self,
+        TTransactionContext& txc,
+        const TRowVersion& readVersion,
+        const TRowVersion& writeVersion,
+        ui64 globalTxId,
+        absl::flat_hash_set<ui64>& volatileReadDependencies
+    ) override;
     TDirectTxResult GetResult(TDataShard* self) override;
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const override;
 };
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

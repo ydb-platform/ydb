@@ -25,12 +25,20 @@ TVector<NKikimr::NMetadata::NInitializer::ITableModifier::TPtr> TTierRulesInitia
             column.set_name("description");
             column.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
         }
-        result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(request, "create"));
+        result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(
+            request, "create"
+        ));
         auto hRequest = TTieringRule::AddHistoryTableScheme(request);
-        result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(hRequest, "create_history"));
+        result.emplace_back(new NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>(
+            hRequest, "create_history"
+        ));
     }
-    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TTieringRule::GetBehaviour()->GetStorageTablePath(), "acl"));
-    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TTieringRule::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"));
+    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(
+        TTieringRule::GetBehaviour()->GetStorageTablePath(), "acl"
+    ));
+    result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(
+        TTieringRule::GetBehaviour()->GetStorageHistoryTablePath(), "acl_history"
+    ));
     return result;
 }
 
@@ -38,4 +46,4 @@ void TTierRulesInitializer::DoPrepare(NMetadata::NInitializer::IInitializerInput
     controller->OnPreparationFinished(BuildModifiers());
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

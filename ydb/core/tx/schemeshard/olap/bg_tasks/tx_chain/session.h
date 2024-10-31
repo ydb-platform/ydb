@@ -8,24 +8,29 @@
 
 namespace NKikimr::NSchemeShard::NOlap::NBackground {
 
-class TTxChainSession: public NKikimr::NOlap::NBackground::TSessionProtoAdapter<
-    NKikimrSchemeShardTxBackgroundProto::TTxChainSessionLogic, 
-    NKikimrSchemeShardTxBackgroundProto::TTxChainSessionProgress,
-    NKikimrSchemeShardTxBackgroundProto::TTxChainSessionState> {
+class TTxChainSession
+    : public NKikimr::NOlap::NBackground::TSessionProtoAdapter<
+          NKikimrSchemeShardTxBackgroundProto::TTxChainSessionLogic,
+          NKikimrSchemeShardTxBackgroundProto::TTxChainSessionProgress,
+          NKikimrSchemeShardTxBackgroundProto::TTxChainSessionState> {
 public:
     static TString GetStaticClassName() {
         return "SS::BG::TX_CHAIN";
     }
+
 private:
     using TBase = NKikimr::NOlap::NBackground::TSessionProtoAdapter<TProtoStorage, TProtoProgress, TProtoState>;
     YDB_READONLY_DEF(TTxChainData, TxData);
     YDB_READONLY(ui32, StepForExecute, 0);
     std::optional<ui64> CurrentTxId;
 
-    static const inline TFactory::TRegistrator<TTxChainSession> Registrator = TFactory::TRegistrator<TTxChainSession>(GetStaticClassName());
+    static const inline TFactory::TRegistrator<TTxChainSession> Registrator =
+        TFactory::TRegistrator<TTxChainSession>(GetStaticClassName());
 
 protected:
-    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NKikimr::NOlap::NBackground::TStartContext& context) const override;
+    virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(
+        const NKikimr::NOlap::NBackground::TStartContext& context
+    ) const override;
     virtual TConclusionStatus DoDeserializeFromProto(const TProtoLogic& proto) override {
         return TxData.DeserializeFromProto(proto.GetCommonData());
     }
@@ -50,14 +55,12 @@ protected:
         TProtoState result;
         return result;
     }
+
 public:
     TTxChainSession() = default;
 
     TTxChainSession(const TTxChainData& data)
-        : TxData(data)
-    {
-
-    }
+        : TxData(data) {}
 
     ui64 GetCurrentTxIdVerified() const {
         AFL_VERIFY(!!CurrentTxId);
@@ -97,4 +100,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NBackground

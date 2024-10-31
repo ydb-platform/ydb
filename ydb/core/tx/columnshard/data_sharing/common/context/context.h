@@ -17,6 +17,7 @@ private:
     YDB_READONLY(bool, Moving, false);
     TSnapshot SnapshotBarrier = TSnapshot::Zero();
     YDB_READONLY_DEF(std::optional<ui64>, TxId);
+
 public:
     TTransferContext() = default;
     bool IsEqualTo(const TTransferContext& context) const;
@@ -24,9 +25,15 @@ public:
 
     const TSnapshot& GetSnapshotBarrierVerified() const;
 
-    TTransferContext(const TTabletId destination, const THashSet<TTabletId>& sources, const TSnapshot& snapshotBarrier, const bool moving, const std::optional<ui64> txId = {});
+    TTransferContext(
+        const TTabletId destination,
+        const THashSet<TTabletId>& sources,
+        const TSnapshot& snapshotBarrier,
+        const bool moving,
+        const std::optional<ui64> txId = {}
+    );
     NKikimrColumnShardDataSharingProto::TTransferContext SerializeToProto() const;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TTransferContext& proto);
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

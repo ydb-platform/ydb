@@ -23,11 +23,8 @@ namespace NKikimr::NReplication::NService {
 class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TablePartitionWriter]"
-                << TableId
-                << "[" << TabletId << "]"
-                << SelfId() << " ";
+            LogPrefix = TStringBuilder() << "[TablePartitionWriter]" << TableId << "[" << TabletId << "]" << SelfId()
+                                         << " ";
         }
 
         return LogPrefix.GetRef();
@@ -41,8 +38,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     STATEFN(StateGetProxyServices) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -61,8 +58,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     STATEFN(StateWaitingRecords) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -98,8 +95,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     STATEFN(StateWaitingStatus) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvApplyReplicationChangesResult, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -108,29 +105,29 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
-        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK:
-            return Ready();
-        default:
-            LOG_E("Apply result"
+            case NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK:
+                return Ready();
+            default:
+                LOG_E("Apply result"
                 << ": status# " << static_cast<ui32>(record.GetStatus())
                 << ", reason# " << static_cast<ui32>(record.GetReason())
                 << ", error# " << record.GetErrorDescription());
-            if (IsHardError(record.GetReason())) {
-                return Leave(true);
-            } else {
-                return DelayedLeave();
-            }
+                if (IsHardError(record.GetReason())) {
+                    return Leave(true);
+                } else {
+                    return DelayedLeave();
+                }
         }
     }
 
     static bool IsHardError(NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason reason) {
         switch (reason) {
-        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR:
-        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST:
-        case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_UNEXPECTED_ROW_OPERATION:
-            return true;
-        default:
-            return false;
+            case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_SCHEME_ERROR:
+            case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST:
+            case NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_UNEXPECTED_ROW_OPERATION:
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -170,15 +167,15 @@ public:
     }
 
     explicit TTablePartitionWriter(
-            const TActorId& parent,
-            ui64 tabletId,
-            const TTableId& tableId,
-            THolder<IChangeRecordSerializer>&& serializer)
+        const TActorId& parent,
+        ui64 tabletId,
+        const TTableId& tableId,
+        THolder<IChangeRecordSerializer>&& serializer
+    )
         : Parent(parent)
         , TabletId(tabletId)
         , TableId(tableId)
-        , Serializer(std::move(serializer))
-    {}
+        , Serializer(std::move(serializer)) {}
 
     void Bootstrap() {
         GetProxyServices();
@@ -210,14 +207,10 @@ class TLocalTableWriter
     , public NChangeExchange::IChangeSenderIdentity
     , public NChangeExchange::IChangeSenderPathResolver
     , public NChangeExchange::IChangeSenderFactory
-    , private NSchemeCache::TSchemeCacheHelpers
-{
+    , private NSchemeCache::TSchemeCacheHelpers {
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[LocalTableWriter]"
-                << TablePathId
-                << SelfId() << " ";
+            LogPrefix = TStringBuilder() << "[LocalTableWriter]" << TablePathId << SelfId() << " ";
         }
 
         return LogPrefix.GetRef();
@@ -241,7 +234,9 @@ class TLocalTableWriter
 
     template <typename CheckFunc, typename FailFunc, typename T, typename... Args>
     bool Check(CheckFunc checkFunc, FailFunc failFunc, const T& subject, Args&&... args) {
-        return checkFunc("writer", subject, std::forward<Args>(args)..., std::bind(failFunc, this, std::placeholders::_1));
+        return checkFunc(
+            "writer", subject, std::forward<Args>(args)..., std::bind(failFunc, this, std::placeholders::_1)
+        );
     }
 
     template <typename T>
@@ -348,10 +343,13 @@ class TLocalTableWriter
 
                 schema->KeyColumns[column.KeyOrder] = column.PType;
             } else {
-                auto res = schema->ValueColumns.emplace(column.Name, TLightweightSchema::TColumn{
-                    .Tag = column.Id,
-                    .Type = column.PType,
-                });
+                auto res = schema->ValueColumns.emplace(
+                    column.Name,
+                    TLightweightSchema::TColumn{
+                        .Tag = column.Id,
+                        .Type = column.PType,
+                    }
+                );
                 Y_ABORT_UNLESS(res.second);
             }
         }
@@ -425,7 +423,9 @@ class TLocalTableWriter
         LOG_D("Handle " << ev->Get()->ToString());
 
         Y_ABORT_UNLESS(PendingRecords.empty());
-        TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
+        TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(
+            ::Reserve(ev->Get()->Records.size())
+        );
 
         for (auto& record : ev->Get()->Records) {
             records.emplace_back(record.Offset, TablePathId, record.Data.size());
@@ -502,18 +502,17 @@ public:
     }
 
     explicit TLocalTableWriter(
-            const TPathId& tablePathId,
-            THolder<IChangeRecordParser>&& parser,
-            THolder<IChangeRecordSerializer>&& serializer,
-            std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
+        const TPathId& tablePathId,
+        THolder<IChangeRecordParser>&& parser,
+        THolder<IChangeRecordSerializer>&& serializer,
+        std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn
+    )
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
         , TablePathId(tablePathId)
         , Parser(std::move(parser))
         , Serializer(std::move(serializer))
-        , CreateResolverFn(std::move(createResolverFn))
-    {
-    }
+        , CreateResolverFn(std::move(createResolverFn)) {}
 
     TPathId GetChangeSenderIdentity() const override final {
         return TablePathId;
@@ -553,11 +552,11 @@ private:
 }; // TLocalTableWriter
 
 IActor* CreateLocalTableWriter(
-        const TPathId& tablePathId,
-        THolder<IChangeRecordParser>&& parser,
-        THolder<IChangeRecordSerializer>&& serializer,
-        std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
-{
+    const TPathId& tablePathId,
+    THolder<IChangeRecordParser>&& parser,
+    THolder<IChangeRecordSerializer>&& serializer,
+    std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn
+) {
     return new TLocalTableWriter(tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
 }
 

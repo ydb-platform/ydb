@@ -13,9 +13,11 @@ class TStatScannerConstructor: public IScannerConstructor {
 private:
     using TBase = IScannerConstructor;
 
-    virtual std::shared_ptr<NAbstract::TReadStatsMetadata> BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
+    virtual std::shared_ptr<NAbstract::TReadStatsMetadata>
+    BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
 
-    virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override {
+    virtual TConclusion<std::shared_ptr<TReadMetadataBase>>
+    DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override {
         THashSet<ui32> readColumnIds(read.ColumnIds.begin(), read.ColumnIds.end());
         for (auto& [id, name] : read.GetProgram().GetSourceColumns()) {
             readColumnIds.insert(id);
@@ -46,15 +48,23 @@ private:
 
         return dynamic_pointer_cast<TReadMetadataBase>(out);
     }
+
 public:
     using TBase::TBase;
-    virtual TConclusionStatus ParseProgram(const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const override {
+    virtual TConclusionStatus ParseProgram(
+        const TVersionedIndex* vIndex,
+        const NKikimrTxDataShard::TEvKqpScan& proto,
+        TReadDescription& read
+    ) const override {
         typename NAbstract::TStatsIterator<TSysViewSchema>::TStatsColumnResolver columnResolver;
         return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
     }
     virtual std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const NColumnShard::TColumnShard* /*self*/) const override {
-        return GetColumns(NAbstract::TStatsIterator<TSysViewSchema>::StatsSchema, NAbstract::TStatsIterator<TSysViewSchema>::StatsSchema.KeyColumns);
+        return GetColumns(
+            NAbstract::TStatsIterator<TSysViewSchema>::StatsSchema,
+            NAbstract::TStatsIterator<TSysViewSchema>::StatsSchema.KeyColumns
+        );
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NSysView

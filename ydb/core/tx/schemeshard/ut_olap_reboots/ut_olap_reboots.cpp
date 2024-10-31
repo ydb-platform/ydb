@@ -32,7 +32,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateStore) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
                 // no inactive initialization
@@ -53,7 +52,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateTable) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
                 // no inactive initialization
@@ -80,7 +78,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateStandaloneTable) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
                 // no inactive initialization
@@ -100,7 +97,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateDropTable) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -129,7 +125,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateDropStandaloneTable) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
                 // no inactive initialization
@@ -152,7 +147,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateMultipleTables) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -160,18 +154,26 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateColumnTableRequest(t.TxId += 2, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable1"
                     ColumnShardCount: 1
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
-            t.TestEnv->ReliablePropose(runtime,
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateColumnTableRequest(t.TxId - 1, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable2"
                     ColumnShardCount: 1
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -186,20 +188,29 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateMultipleStandaloneTables) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
                 // no inactive initialization
             }
 
-            t.TestEnv->ReliablePropose(runtime,
-                CreateColumnTableRequest(t.TxId += 2, "/MyRoot",
-                                         SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable1")),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
-            t.TestEnv->ReliablePropose(runtime,
-                CreateColumnTableRequest(t.TxId - 1, "/MyRoot",
-                                         SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable2")),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->ReliablePropose(
+                runtime,
+                CreateColumnTableRequest(
+                    t.TxId += 2, "/MyRoot", SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable1")
+                ),
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
+            t.TestEnv->ReliablePropose(
+                runtime,
+                CreateColumnTableRequest(
+                    t.TxId - 1, "/MyRoot", SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable2")
+                ),
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -214,7 +225,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(DropMultipleTables) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -234,12 +244,16 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropColumnTableRequest(t.TxId += 2, "/MyRoot/OlapStore", "ColumnTable1"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
-            t.TestEnv->ReliablePropose(runtime,
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropColumnTableRequest(t.TxId - 1, "/MyRoot/OlapStore", "ColumnTable2"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -254,25 +268,30 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(DropMultipleStandaloneTables) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
-                                      SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable1"));
+                TestCreateColumnTable(
+                    runtime, ++t.TxId, "/MyRoot", SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable1")
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
-                                      SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable2"));
+                TestCreateColumnTable(
+                    runtime, ++t.TxId, "/MyRoot", SubstGlobalCopy(defaultTableSchema, "ColumnTable", "ColumnTable2")
+                );
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropColumnTableRequest(t.TxId += 2, "/MyRoot", "ColumnTable1"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
-            t.TestEnv->ReliablePropose(runtime,
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropColumnTableRequest(t.TxId - 1, "/MyRoot", "ColumnTable2"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -287,20 +306,25 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateDropStore) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
                 // no inactive initialization
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 CreateOlapStoreRequest(++t.TxId, "/MyRoot", defaultStoreSchema),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted,
+                 NKikimrScheme::StatusAlreadyExists,
+                 NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropOlapStoreRequest(++t.TxId, "/MyRoot", "OlapStore"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -314,7 +338,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(DropTableThenStore) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -328,14 +351,18 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropColumnTableRequest(++t.TxId, "/MyRoot/OlapStore", "ColumnTable"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 DropOlapStoreRequest(++t.TxId, "/MyRoot", "OlapStore"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -350,7 +377,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(AlterTtlSettings) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-
             {
                 TInactiveZone inactive(activeZone);
 
@@ -370,12 +396,19 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-                    NLs::HasColumnTableTtlSettingsVersion(1),
-                    NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
+                TestLs(
+                    runtime,
+                    "/MyRoot/OlapStore/ColumnTable",
+                    false,
+                    NLs::All(
+                        NLs::HasColumnTableTtlSettingsVersion(1),
+                        NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))
+                    )
+                );
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 AlterColumnTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable"
                     AlterTtlSettings {
@@ -385,32 +418,42 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                         }
                     }
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
 
-                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-                    NLs::HasColumnTableTtlSettingsVersion(2),
-                    NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+                TestLs(
+                    runtime,
+                    "/MyRoot/OlapStore/ColumnTable",
+                    false,
+                    NLs::All(
+                        NLs::HasColumnTableTtlSettingsVersion(2),
+                        NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))
+                    )
+                );
             }
 
-            t.TestEnv->ReliablePropose(runtime,
+            t.TestEnv->ReliablePropose(
+                runtime,
                 AlterColumnTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable"
                     AlterTtlSettings {
                         Disabled {}
                     }
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}
+            );
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
                 TInactiveZone inactive(activeZone);
 
-                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-                    NLs::HasColumnTableTtlSettingsVersion(3)));
+                TestLs(
+                    runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(NLs::HasColumnTableTtlSettingsVersion(3))
+                );
             }
         });
     }

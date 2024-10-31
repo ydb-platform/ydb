@@ -1,5 +1,3 @@
 #include "global.h"
 
-namespace NKikimr::NSchemeShard::NBackground {
-
-}
+namespace NKikimr::NSchemeShard::NBackground {}

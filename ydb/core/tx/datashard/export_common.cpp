@@ -10,9 +10,9 @@ namespace NKikimr {
 namespace NDataShard {
 
 static void ResortColumns(
-        google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& columns,
-        const TMap<ui32, TUserTable::TUserColumn>& order)
-{
+    google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& columns,
+    const TMap<ui32, TUserTable::TUserColumn>& order
+) {
     THashMap<TString, ui32> nameToTag;
     for (const auto& [tag, column] : order) {
         Y_ABORT_UNLESS(nameToTag.emplace(column.Name, tag).second);
@@ -25,10 +25,8 @@ static void ResortColumns(
     });
 }
 
-TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
-        const TMap<ui32, TUserTable::TUserColumn>& columns,
-        const NKikimrSchemeOp::TPathDescription& pathDesc)
-{
+TMaybe<Ydb::Table::CreateTableRequest>
+GenYdbScheme(const TMap<ui32, TUserTable::TUserColumn>& columns, const NKikimrSchemeOp::TPathDescription& pathDesc) {
     if (!pathDesc.HasTable()) {
         return Nothing();
     }
@@ -90,5 +88,5 @@ TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSch
     return permissions;
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

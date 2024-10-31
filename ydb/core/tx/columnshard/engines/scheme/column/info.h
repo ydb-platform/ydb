@@ -24,8 +24,16 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, PKColumnIndex);
     YDB_READONLY_DEF(TString, ColumnName);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ArrowField);
-    YDB_READONLY(NArrow::NSerialization::TSerializerContainer, Serializer, NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
-    YDB_READONLY(NArrow::NAccessor::TConstructorContainer, DataAccessorConstructor, NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor());
+    YDB_READONLY(
+        NArrow::NSerialization::TSerializerContainer,
+        Serializer,
+        NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer()
+    );
+    YDB_READONLY(
+        NArrow::NAccessor::TConstructorContainer,
+        DataAccessorConstructor,
+        NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor()
+    );
     YDB_READONLY(bool, NeedMinMax, false);
     YDB_READONLY(bool, IsSorted, false);
     YDB_READONLY(bool, IsNullable, false);
@@ -35,9 +43,16 @@ private:
     NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
 
 public:
-    TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
-        const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
-        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex);
+    TSimpleColumnInfo(
+        const ui32 columnId,
+        const std::shared_ptr<arrow::Field>& arrowField,
+        const NArrow::NSerialization::TSerializerContainer& serializer,
+        const bool needMinMax,
+        const bool isSorted,
+        const bool isNullable,
+        const std::shared_ptr<arrow::Scalar>& defaultValue,
+        const std::optional<ui32>& pkColumnIndex
+    );
 
     TColumnSaver GetColumnSaver() const {
         NArrow::NTransformation::ITransformer::TPtr transformer = GetSaveTransformer();
@@ -46,7 +61,9 @@ public:
     }
 
     std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
-        const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TSimpleColumnInfo& sourceColumnFeatures) const;
+        const std::vector<std::shared_ptr<IPortionDataChunk>>& source,
+        const TSimpleColumnInfo& sourceColumnFeatures
+    ) const;
 
     TString DebugString() const {
         TStringBuilder sb;

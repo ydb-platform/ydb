@@ -47,7 +47,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
         pr.second->GetSchema(*rec.MutableDescription());
 
         if (pr.second->Stats.StatsUpdateTime) {
-            auto &stats = *rec.MutableStats();
+            auto& stats = *rec.MutableStats();
             stats.SetRowCount(pr.second->Stats.DataStats.RowCount);
             stats.SetDataSize(pr.second->Stats.DataStats.DataSize.Size);
             stats.SetLastAccessTime(pr.second->Stats.AccessTime.ToStringLocalUpToSeconds());
@@ -56,9 +56,9 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
             stats.SetLastStatsReportTime(LastDbStatsReportTime.ToStringLocalUpToSeconds());
         }
 
-        auto *resourceMetrics = Executor()->GetResourceMetrics();
+        auto* resourceMetrics = Executor()->GetResourceMetrics();
         if (resourceMetrics) {
-            auto &metrics = *rec.MutableMetrics();
+            auto& metrics = *rec.MutableMetrics();
             resourceMetrics->Fill(metrics);
         }
     }
@@ -141,10 +141,8 @@ void TDataShard::Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev) {
         rec.SetReceivedAt(op->GetReceivedAt().GetValue());
     };
 
-    for (auto& pr : Pipeline.GetImmediateOps())
-        addOperation(pr.second);
-    for (auto& pr : TransQueue.GetTxsInFly())
-        addOperation(pr.second);
+    for (auto& pr : Pipeline.GetImmediateOps()) addOperation(pr.second);
+    for (auto& pr : TransQueue.GetTxsInFly()) addOperation(pr.second);
 
     Send(ev->Sender, response);
 }
@@ -174,27 +172,25 @@ void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev) {
 
     auto& protoDeps = *resp.MutableDependencies();
 
-    auto fillOpDependencies = [&](
-        const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>>& deps,
-        ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency>& arr)
-    {
-        for (auto& op : deps) {
-            auto& dep = *arr.Add();
-            dep.SetTarget(op->GetTxId());
-            dep.AddTypes("Data");
-        }
-    };
+    auto fillOpDependencies =
+        [&](const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>>& deps,
+            ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency>& arr) {
+            for (auto& op : deps) {
+                auto& dep = *arr.Add();
+                dep.SetTarget(op->GetTxId());
+                dep.AddTypes("Data");
+            }
+        };
 
-    auto fillVolatileDependencies = [&](
-        const absl::flat_hash_set<ui64>& deps,
-        ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency>& arr)
-    {
-        for (ui64 txId : deps) {
-            auto& dep = *arr.Add();
-            dep.SetTarget(txId);
-            dep.AddTypes("Data");
-        }
-    };
+    auto fillVolatileDependencies =
+        [&](const absl::flat_hash_set<ui64>& deps,
+            ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency>& arr) {
+            for (ui64 txId : deps) {
+                auto& dep = *arr.Add();
+                dep.SetTarget(txId);
+                dep.AddTypes("Data");
+            }
+        };
 
     fillOpDependencies(op->GetDependencies(), *protoDeps.MutableDependencies());
     fillOpDependencies(op->GetDependents(), *protoDeps.MutableDependents());
@@ -215,9 +211,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev) {
         auto& unit = *profile.AddUnitProfiles();
         unit.SetUnitKind(ToString(pr.first));
         if (pr.first == op->GetCurrentUnit()) {
-            auto waitTime = AppData()->TimeProvider->Now() - pr.second.ExecuteTime
-                - pr.second.CommitTime - pr.second.CompleteTime
-                - op->GetExecutionProfile().StartUnitAt;
+            auto waitTime = AppData()->TimeProvider->Now() - pr.second.ExecuteTime - pr.second.CommitTime -
+                            pr.second.CompleteTime - op->GetExecutionProfile().StartUnitAt;
             unit.SetWaitTime(waitTime.GetValue());
         } else {
             unit.SetWaitTime(pr.second.WaitTime.GetValue());
@@ -228,7 +223,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev) {
         unit.SetExecuteCount(pr.second.ExecuteCount);
     }
 
-    TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+    TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     if (tx) {
         tx->FillState(resp);
     }
@@ -242,8 +237,9 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev) {
     const auto& rec = ev->Get()->Record;
 
     if (rec.GetCollectKeySampleMs() > 0) {
-        EnableKeyAccessSampling(ActorContext(),
-            AppData()->TimeProvider->Now() + TDuration::MilliSeconds(rec.GetCollectKeySampleMs()));
+        EnableKeyAccessSampling(
+            ActorContext(), AppData()->TimeProvider->Now() + TDuration::MilliSeconds(rec.GetCollectKeySampleMs())
+        );
     }
 
     if (rec.GetActualData()) {

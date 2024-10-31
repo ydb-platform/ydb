@@ -8,6 +8,7 @@ namespace NKikimr::NSchemeShard::NValidation {
 
 class TTTLValidator {
 public:
-    static bool ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& errStr);
+    static bool
+    ValidateUnit(const NScheme::TTypeInfo columnType, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& errStr);
 };
-}
+} // namespace NKikimr::NSchemeShard::NValidation

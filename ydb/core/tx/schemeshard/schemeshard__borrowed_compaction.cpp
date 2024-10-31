@@ -28,12 +28,10 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
         << " at schemeshard " << TabletID());
 
     std::unique_ptr<TEvDataShard::TEvCompactBorrowed> request(
-        new TEvDataShard::TEvCompactBorrowed(pathId.OwnerId, pathId.LocalPathId));
+        new TEvDataShard::TEvCompactBorrowed(pathId.OwnerId, pathId.LocalPathId)
+    );
 
-    RunningBorrowedCompactions[shardIdx] = PipeClientCache->Send(
-        ctx,
-        ui64(datashardId),
-        request.release());
+    RunningBorrowedCompactions[shardIdx] = PipeClientCache->Send(ctx, ui64(datashardId), request.release());
 
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
@@ -119,15 +117,13 @@ void TSchemeShard::UpdateBorrowedCompactionQueueMetrics() {
     TabletCounters->Simple()[COUNTER_BORROWED_COMPACTION_QUEUE_RUNNING].Set(BorrowedCompactionQueue->RunningSize());
 }
 
-void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     const TTabletId tabletId(record.GetTabletId());
     const TShardIdx shardIdx = GetShardIdx(tabletId);
 
-    auto pathId = TPathId(
-        record.GetPathId().GetOwnerId(),
-        record.GetPathId().GetLocalId());
+    auto pathId = TPathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalId());
 
     auto duration = BorrowedCompactionQueue->OnDone(shardIdx);
 
@@ -158,4 +154,4 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
     UpdateBorrowedCompactionQueueMetrics();
 }
 
-} // NKikimr::NSchemeShard
+} // namespace NKikimr::NSchemeShard

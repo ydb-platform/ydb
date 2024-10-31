@@ -17,7 +17,10 @@ public:
         AFL_VERIFY(PortionInfo);
         return *PortionInfo;
     }
-    TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion, const std::shared_ptr<arrow::RecordBatch>& pkBatch)
+    TInsertedPortion(
+        NOlap::TWritePortionInfoWithBlobsResult&& portion,
+        const std::shared_ptr<arrow::RecordBatch>& pkBatch
+    )
         : PortionInfoConstructor(portion.DetachPortionConstructor())
         , PKBatch(pkBatch) {
         AFL_VERIFY(PKBatch);
@@ -44,7 +47,11 @@ public:
 
     void Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc);
 
-    TInsertedPortions(const NEvWrite::TWriteMeta& writeMeta, std::vector<TInsertedPortion>&& portions, const ui64 dataSize)
+    TInsertedPortions(
+        const NEvWrite::TWriteMeta& writeMeta,
+        std::vector<TInsertedPortion>&& portions,
+        const ui64 dataSize
+    )
         : WriteMeta(writeMeta)
         , Portions(std::move(portions))
         , DataSize(dataSize) {
@@ -91,13 +98,16 @@ public:
         return std::move(Fails);
     }
 
-    TEvWritePortionResult(const NKikimrProto::EReplyStatus writeStatus, const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
-        std::vector<TInsertedPortions>&& portions, std::vector<TFailedWrite>&& fails)
+    TEvWritePortionResult(
+        const NKikimrProto::EReplyStatus writeStatus,
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
+        std::vector<TInsertedPortions>&& portions,
+        std::vector<TFailedWrite>&& fails
+    )
         : WriteStatus(writeStatus)
         , WriteAction(writeAction)
         , InsertedPacks(portions)
-        , Fails(fails) {
-    }
+        , Fails(fails) {}
 };
 
 }   // namespace NKikimr::NColumnShard::NPrivateEvents::NWrite

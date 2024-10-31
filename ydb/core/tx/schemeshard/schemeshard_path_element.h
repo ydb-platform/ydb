@@ -33,7 +33,7 @@ struct TSpaceLimits {
     ui64 Limit = Max<ui64>();
 };
 
-struct TPathElement : TSimpleRefCount<TPathElement> {
+struct TPathElement: TSimpleRefCount<TPathElement> {
     using TPtr = TIntrusivePtr<TPathElement>;
     using TChildrenCont = TMap<TString, TPathId>;
     using EPathType = NKikimrSchemeOp::EPathType;
@@ -88,14 +88,15 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     size_t AllChildrenCount = 0;
 
     TActorId TempDirOwnerActorId; // Only for EPathType::EPathTypeDir.
-                                  // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
-                                  // See schemeshard__background_cleaning.cpp.
+        // Not empty if dir must be deleted after loosing connection with TempDirOwnerActorId actor.
+        // See schemeshard__background_cleaning.cpp.
 
 private:
     ui64 AliveChildrenCount = 0;
     ui64 BackupChildrenCount = 0;
     ui64 ShardsInsideCount = 0;
     TChildrenCont Children;
+
 public:
     TPathElement(TPathId pathId, TPathId parentPathId, TPathId domainPathId, const TString& name, const TString& owner);
     ui64 GetAliveChildren() const;
@@ -169,4 +170,4 @@ public:
     void SerializeRuntimeAttrs(google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const;
 };
 
-}
+} // namespace NKikimr::NSchemeShard

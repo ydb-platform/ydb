@@ -11,14 +11,13 @@ private:
     const std::optional<TActorId> ProgressActorId;
     const ui64 TxInternalId;
     virtual void DoComplete(const TActorContext& ctx) = 0;
+
 public:
     TTxGeneral(const std::optional<NActors::TActorId> progressActorId, const ui64 txInternalId)
         : ProgressActorId(progressActorId)
-        , TxInternalId(txInternalId)
-    {
-    }
+        , TxInternalId(txInternalId) {}
 
     void Complete(const TActorContext& ctx) override final;
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

@@ -30,7 +30,7 @@ class TTransactionContext;
 namespace NKikimr::NColumnShard {
 class TBlobManagerDb;
 class TColumnShard;
-}
+} // namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
@@ -43,12 +43,16 @@ private:
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
+
 public:
-    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
+    TPortionEvictionFeatures(
+        const std::shared_ptr<ISnapshotSchema>& currentScheme,
+        const std::shared_ptr<ISnapshotSchema>& targetScheme,
+        const TString& currentTierName
+    )
         : CurrentScheme(currentScheme)
         , TargetScheme(targetScheme)
-        , CurrentTierName(currentTierName)
-    {
+        , CurrentTierName(currentTierName) {
         AFL_VERIFY(CurrentTierName);
     }
 
@@ -62,7 +66,8 @@ public:
         TargetTierName = value;
     }
 
-    void OnSkipPortionWithProcessMemory(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait) const {
+    void OnSkipPortionWithProcessMemory(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait)
+        const {
         if (TargetTierName == NTiering::NCommon::DeleteTierName) {
             counters.OnSkipDeleteWithProcessMemory(dWait);
         } else {
@@ -81,7 +86,10 @@ public:
     NActualizer::TRWAddress GetRWAddress() {
         if (!RWAddress) {
             AFL_VERIFY(TargetTierName);
-            RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName), TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
+            RWAddress = NActualizer::TRWAddress(
+                CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName),
+                TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName)
+            );
         }
         return *RWAddress;
     }
@@ -106,13 +114,12 @@ private:
     ui64* LastGranuleId;
     ui64* LastPortionId;
     const TSnapshot Snapshot;
+
 public:
     TFinalizationContext(ui64& lastGranuleId, ui64& lastPortionId, const TSnapshot& snapshot)
         : LastGranuleId(&lastGranuleId)
         , LastPortionId(&lastPortionId)
-        , Snapshot(snapshot) {
-
-    }
+        , Snapshot(snapshot) {}
 
     ui64 NextGranuleId() {
         return ++(*LastGranuleId);
@@ -131,7 +138,12 @@ public:
     IDbWrapper& DBWrapper;
     TColumnEngineForLogs& EngineLogs;
     const TSnapshot Snapshot;
-    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot);
+    TWriteIndexContext(
+        NTable::TDatabase* db,
+        IDbWrapper& dbWrapper,
+        TColumnEngineForLogs& engineLogs,
+        const TSnapshot& snapshot
+    );
 };
 
 class TChangesFinishContext {
@@ -140,16 +152,17 @@ public:
     const TString ErrorMessage;
     TChangesFinishContext(const TString& errorMessage)
         : FinishedSuccessfully(false)
-        , ErrorMessage(errorMessage) {
-
-    }
+        , ErrorMessage(errorMessage) {}
 
     TChangesFinishContext() = default;
 };
 
-class TWriteIndexCompleteContext: TNonCopyable, public TChangesFinishContext {
+class TWriteIndexCompleteContext
+    : TNonCopyable
+    , public TChangesFinishContext {
 private:
     using TBase = TChangesFinishContext;
+
 public:
     const TActorContext& ActorContext;
     const ui32 BlobsWritten;
@@ -157,17 +170,20 @@ public:
     const TDuration Duration;
     TColumnEngineForLogs& EngineLogs;
     const TSnapshot Snapshot;
-    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten, const TDuration d,
-        TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
+    TWriteIndexCompleteContext(
+        const TActorContext& actorContext,
+        const ui32 blobsWritten,
+        const ui64 bytesWritten,
+        const TDuration d,
+        TColumnEngineForLogs& engineLogs,
+        const TSnapshot& snapshot
+    )
         : ActorContext(actorContext)
         , BlobsWritten(blobsWritten)
         , BytesWritten(bytesWritten)
         , Duration(d)
         , EngineLogs(engineLogs)
-        , Snapshot(snapshot)
-    {
-
-    }
+        , Snapshot(snapshot) {}
 };
 
 class TConstructionContext: TNonCopyable {
@@ -176,20 +192,21 @@ public:
     const NColumnShard::TIndexationCounters Counters;
     const NOlap::TSnapshot LastCommittedTx;
 
-    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters, const NOlap::TSnapshot& lastCommittedTx)
+    TConstructionContext(
+        const TVersionedIndex& schemaVersions,
+        const NColumnShard::TIndexationCounters& counters,
+        const NOlap::TSnapshot& lastCommittedTx
+    )
         : SchemaVersions(schemaVersions)
         , Counters(counters)
-        , LastCommittedTx(lastCommittedTx)
-    {
-
-    }
+        , LastCommittedTx(lastCommittedTx) {}
 };
 
 class TGranuleMeta;
 
 class TColumnEngineChanges {
 public:
-    enum class EStage: ui32 {
+    enum class EStage : ui32 {
         Created = 0,
         Started,
         Constructed,
@@ -198,6 +215,7 @@ public:
         Finished,
         Aborted
     };
+
 private:
     EStage Stage = EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
@@ -216,8 +234,7 @@ protected:
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
-    virtual void OnAbortEmergency() {
-    }
+    virtual void OnAbortEmergency() {}
 
     TBlobsAction BlobsAction;
 
@@ -258,11 +275,11 @@ public:
         return BlobsAction;
     }
 
-    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
-        : BlobsAction(storagesManager, consumerId)
-    {
-
-    }
+    TColumnEngineChanges(
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const NBlobOperations::EConsumer consumerId
+    )
+        : BlobsAction(storagesManager, consumerId) {}
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
     virtual ~TColumnEngineChanges();
@@ -300,7 +317,6 @@ public:
     ui64 TotalBlobsSize() const {
         return Blobs.GetTotalBlobsSize();
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap

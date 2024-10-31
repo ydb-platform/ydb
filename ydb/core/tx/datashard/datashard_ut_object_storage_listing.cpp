@@ -24,17 +24,19 @@ struct TProto {
 namespace {
 
 void CreateTable(TServer::TPtr server, const TActorId& sender, const TString& root, const TString& name) {
-    auto opts = TShardedTableOptions()
-        .Columns({
-            {"bucket", "Uint32", true, false},
-            {"path", "Utf8", true, false},
-            {"value", "Utf8", false, false},
-            {"deleted", "Bool", false, false}
-        });
+    auto opts = TShardedTableOptions().Columns(
+        {{"bucket", "Uint32", true, false},
+         {"path", "Utf8", true, false},
+         {"value", "Utf8", false, false},
+         {"deleted", "Bool", false, false}}
+    );
     CreateShardedTable(server, sender, root, name, opts);
 }
 
-TProto::TEvListingRequest MakeListingRequest(const TTableId& tableId, const std::optional<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> filterType) {
+TProto::TEvListingRequest MakeListingRequest(
+    const TTableId& tableId,
+    const std::optional<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> filterType
+) {
     TProto::TEvListingRequest request;
 
     TVector<TCell> bucketPrefixCell = {TCell::Make(100)};
@@ -95,9 +97,7 @@ protected:
 public:
     explicit TRequestRunner(const TActorId& replyTo, ui64 tabletID)
         : ReplyTo(replyTo)
-        , TabletID(tabletID)
-    {
-    }
+        , TabletID(tabletID) {}
 
     void Bootstrap() {
         if (Pipe) {
@@ -128,23 +128,26 @@ private:
 };
 
 std::pair<std::vector<std::string>, std::vector<std::string>> List(
-        TServer::TPtr server, const TActorId& sender, const TString& path,
-        const std::optional<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> doFilter,
-        ui32 status = NKikimrTxDataShard::TError::OK)
-{
+    TServer::TPtr server,
+    const TActorId& sender,
+    const TString& path,
+    const std::optional<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> doFilter,
+    ui32 status = NKikimrTxDataShard::TError::OK
+) {
     using TEvRequest = TEvDataShard::TEvObjectStorageListingRequest;
     using TEvResponse = TEvDataShard::TEvObjectStorageListingResponse;
 
     class TLister: public TRequestRunner<TEvResponse, TLister> {
     public:
         explicit TLister(
-                const TActorId& replyTo, ui64 tabletID,
-                const TTableId& tableId, const std::optional<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> doFilter)
+            const TActorId& replyTo,
+            ui64 tabletID,
+            const TTableId& tableId,
+            const std::optional<NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType> doFilter
+        )
             : TBase(replyTo, tabletID)
             , TableId(tableId)
-            , DoFilter(doFilter)
-        {
-        }
+            , DoFilter(doFilter) {}
 
         IEventBase* MakeRequest() const override {
             auto request = MakeHolder<TEvRequest>();
@@ -178,7 +181,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> List(
             commonPrefixes.emplace_back(row);
         }
     }
-        
+
     if (rec.ContentsRowsSize() > 0) {
         auto& files = rec.contentsrows();
         for (auto row : files) {
@@ -191,16 +194,13 @@ std::pair<std::vector<std::string>, std::vector<std::string>> List(
     return std::make_pair(commonPrefixes, contents);
 }
 
-} // anonymous
+} // namespace
 
 Y_UNIT_TEST_SUITE(ObjectStorageListingTest) {
-
     Y_UNIT_TEST(ListingNoFilter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -231,9 +231,7 @@ Y_UNIT_TEST_SUITE(ObjectStorageListingTest) {
     Y_UNIT_TEST(FilterListing) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings
-            .SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -253,7 +251,8 @@ Y_UNIT_TEST_SUITE(ObjectStorageListingTest) {
         )");
 
         {
-            auto res = List(server, sender, "/Root/table-1", NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL);
+            auto res =
+                List(server, sender, "/Root/table-1", NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_EQUAL);
 
             std::vector<std::string> expectedFolders = {"/test/visible/"};
             std::vector<std::string> expectedFiles = {"/test/foo.txt", "/test/foobar.txt"};
@@ -263,7 +262,9 @@ Y_UNIT_TEST_SUITE(ObjectStorageListingTest) {
         }
 
         {
-            auto res = List(server, sender, "/Root/table-1", NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_NOT_EQUAL);
+            auto res = List(
+                server, sender, "/Root/table-1", NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_NOT_EQUAL
+            );
 
             std::vector<std::string> expectedFolders = {"/test/deleted/"};
             std::vector<std::string> expectedFiles = {"/test/deleted.txt"};

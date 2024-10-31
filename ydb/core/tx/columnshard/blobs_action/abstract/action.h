@@ -18,9 +18,7 @@ private:
 
 public:
     TStorageAction(const std::shared_ptr<IBlobsStorageOperator>& storage)
-        : Storage(storage) {
-
-    }
+        : Storage(storage) {}
 
     const std::shared_ptr<IBlobsDeclareRemovingAction>& GetRemoving(const NBlobOperations::EConsumer consumerId) {
         if (!Removing) {
@@ -55,7 +53,11 @@ public:
         return !!Writing;
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterAction(
+        NColumnShard::TColumnShard& self,
+        TBlobManagerDb& dbBlobs,
+        const bool blobsWroteSuccessfully
+    ) {
         if (Removing) {
             Removing->OnExecuteTxAfterRemoving(dbBlobs, blobsWroteSuccessfully);
         }
@@ -87,13 +89,11 @@ private:
         }
         return it->second;
     }
+
 public:
     explicit TBlobsAction(std::shared_ptr<IStoragesManager> storages, const NBlobOperations::EConsumer consumerId)
         : Storages(storages)
-        , ConsumerId(consumerId)
-    {
-
-    }
+        , ConsumerId(consumerId) {}
 
     TString GetStorageIds() const {
         TStringBuilder sb;
@@ -158,7 +158,11 @@ public:
         }
     }
 
-    void OnExecuteTxAfterAction(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+    void OnExecuteTxAfterAction(
+        NColumnShard::TColumnShard& self,
+        TBlobManagerDb& dbBlobs,
+        const bool blobsWroteSuccessfully
+    ) {
         for (auto&& i : StorageActions) {
             i.second.OnExecuteTxAfterAction(self, dbBlobs, blobsWroteSuccessfully);
         }
@@ -181,7 +185,6 @@ public:
     std::shared_ptr<IBlobsReadingAction> GetReading(const TString& storageId) {
         return GetStorageAction(storageId).GetReading(ConsumerId);
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap

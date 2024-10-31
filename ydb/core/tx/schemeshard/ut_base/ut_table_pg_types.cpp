@@ -5,7 +5,6 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
-
     Y_UNIT_TEST_FLAG(CreateTableWithPgTypeColumn, EnableTablePgTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
@@ -15,7 +14,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
             if constexpr (EnableTablePgTypes) {
                 return TExpectedResult(NKikimrScheme::StatusAccepted);
             } else {
-                return TExpectedResult(NKikimrScheme::StatusSchemeError, "support for pg types is disabled (EnableTablePgTypes feature flag is off)");
+                return TExpectedResult(
+                    NKikimrScheme::StatusSchemeError,
+                    "support for pg types is disabled (EnableTablePgTypes feature flag is off)"
+                );
             }
         }();
 
@@ -46,7 +48,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardPgTypesInTables) {
             if constexpr (EnableTablePgTypes) {
                 return TExpectedResult(NKikimrScheme::StatusAccepted);
             } else {
-                return TExpectedResult(NKikimrScheme::StatusInvalidParameter, "support for pg types is disabled (EnableTablePgTypes feature flag is off)");
+                return TExpectedResult(
+                    NKikimrScheme::StatusInvalidParameter,
+                    "support for pg types is disabled (EnableTablePgTypes feature flag is off)"
+                );
             }
         }();
 

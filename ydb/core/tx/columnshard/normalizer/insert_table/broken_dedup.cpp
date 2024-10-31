@@ -8,28 +8,28 @@ namespace NKikimr::NOlap::NInsertionDedup {
 class TNormalizerRemoveChanges: public INormalizerChanges {
 private:
     std::vector<TInsertTableRecordLoadContext> Insertions;
+
 public:
-    virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normalizationContext*/) const override {
+    virtual bool ApplyOnExecute(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TNormalizationController& /*normalizationContext*/
+    ) const override {
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Insertions) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_aborted_record")("write_id", i.GetInsertWriteId());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+            ("event", "remove_aborted_record")("write_id", i.GetInsertWriteId());
             i.Remove(db);
         }
         return true;
     }
-    virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {
-
-    }
+    virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {}
 
     virtual ui64 GetSize() const override {
         return Insertions.size();
     }
 
     TNormalizerRemoveChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
-        : Insertions(insertions)
-    {
-
-    }
+        : Insertions(insertions) {}
 };
 
 class TNormalizerCleanDedupChanges: public INormalizerChanges {
@@ -38,7 +38,9 @@ private:
 
 public:
     virtual bool ApplyOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normalizationContext*/) const override {
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TNormalizationController& /*normalizationContext*/
+    ) const override {
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Insertions) {
             AFL_VERIFY(i.GetDedupId());
@@ -49,23 +51,21 @@ public:
         }
         return true;
     }
-    virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {
-    }
+    virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {}
 
     virtual ui64 GetSize() const override {
         return Insertions.size();
     }
 
     TNormalizerCleanDedupChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
-        : Insertions(insertions) {
-    }
+        : Insertions(insertions) {}
 };
-
 
 class TCollectionStates {
 private:
     YDB_READONLY_DEF(std::optional<TInsertTableRecordLoadContext>, Inserted);
     YDB_READONLY_DEF(std::optional<TInsertTableRecordLoadContext>, Aborted);
+
 public:
     void SetInserted(const TInsertTableRecordLoadContext& context) {
         AFL_VERIFY(!Inserted);
@@ -78,7 +78,9 @@ public:
 };
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoInit(
-    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    const TNormalizationController& /*controller*/,
+    NTabletFlatExecutor::TTransactionContext& txc
+) {
     NIceDb::TNiceDb db(txc.DB);
 
     using namespace NColumnShard;
@@ -127,24 +129,31 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
             AFL_VERIFY(false);
         }
         if (toCleanDedup.size() == 1000) {
-            result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerCleanDedupChanges>(toCleanDedup)));
+            result.emplace_back(
+                std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerCleanDedupChanges>(toCleanDedup))
+            );
             toCleanDedup.clear();
         }
         if (toRemove.size() == 1000) {
-            result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerRemoveChanges>(toRemove)));
+            result.emplace_back(
+                std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerRemoveChanges>(toRemove))
+            );
             toRemove.clear();
         }
     }
     if (toCleanDedup.size()) {
-        result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerCleanDedupChanges>(toCleanDedup)));
+        result.emplace_back(
+            std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerCleanDedupChanges>(toCleanDedup))
+        );
         toCleanDedup.clear();
     }
     if (toRemove.size()) {
-        result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerRemoveChanges>(toRemove)));
+        result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerRemoveChanges>(toRemove
+        )));
         toRemove.clear();
     }
 
     return result;
 }
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NInsertionDedup

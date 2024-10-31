@@ -86,7 +86,7 @@
     PROBE(WriteResult,                                                         \
         GROUPS("DataShard"),                                                   \
         TYPES(),                                                               \
-        NAMES())                                                               \
+        NAMES())
 
 // DATASHARD_PROVIDER
 
@@ -94,6 +94,6 @@ LWTRACE_DECLARE_PROVIDER(DATASHARD_PROVIDER)
 
 namespace NKikimr::NDataShard {
 
-    void RegisterDataShardProbes();
+void RegisterDataShardProbes();
 
 }

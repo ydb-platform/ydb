@@ -15,14 +15,12 @@ class TTieringInterval {
 private:
     YDB_ACCESSOR_DEF(TString, TierName);
     YDB_ACCESSOR_DEF(TDuration, DurationForEvict);
+
 public:
     TTieringInterval() = default;
     TTieringInterval(const TString& name, const TDuration d)
         : TierName(name)
-        , DurationForEvict(d)
-    {
-
-    }
+        , DurationForEvict(d) {}
 
     bool operator<(const TTieringInterval& item) const {
         return DurationForEvict < item.DurationForEvict;
@@ -52,9 +50,11 @@ private:
     YDB_ACCESSOR_DEF(TString, TieringRuleId);
     YDB_ACCESSOR_DEF(TString, DefaultColumn);
     YDB_ACCESSOR_DEF(TVector<TTieringInterval>, Intervals);
+
 protected:
     NJson::TJsonValue SerializeDescriptionToJson() const;
     bool DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonInfo);
+
 public:
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
 
@@ -75,6 +75,7 @@ public:
         YDB_READONLY(i32, TieringRuleIdIdx, -1);
         YDB_READONLY(i32, DefaultColumnIdx, -1);
         YDB_READONLY(i32, DescriptionIdx, -1);
+
     public:
         static inline const TString TieringRuleId = "tieringRuleId";
         static inline const TString DefaultColumn = "defaultColumn";
@@ -91,4 +92,4 @@ public:
     NKikimr::NOlap::TTiering BuildOlapTiers() const;
 };
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

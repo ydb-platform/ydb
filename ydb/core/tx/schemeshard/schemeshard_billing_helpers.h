@@ -12,5 +12,5 @@ struct TRUCalculator {
 
 }; // TRUCalculator
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

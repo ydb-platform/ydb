@@ -32,4 +32,4 @@ public:
     template <typename T>                                   \
     void N(NUnitTest::TTestContext&)
 
-}
+} // namespace NSchemeShardUT_Private

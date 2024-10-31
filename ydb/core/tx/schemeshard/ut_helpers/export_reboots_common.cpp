@@ -30,10 +30,8 @@ void Run(const TVector<TString>& tables, const TString& request, TTestWithReboot
         {
             TInactiveZone inactive(activeZone);
 
-            auto response = TestGetExport(runtime, exportId, "/MyRoot", {
-                Ydb::StatusIds::SUCCESS,
-                Ydb::StatusIds::NOT_FOUND
-            });
+            auto response =
+                TestGetExport(runtime, exportId, "/MyRoot", {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::NOT_FOUND});
 
             if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
                 return;
@@ -63,20 +61,22 @@ void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReb
         TestExport(runtime, ++t.TxId, "/MyRoot", request);
         const ui64 exportId = t.TxId;
 
-        t.TestEnv->ReliablePropose(runtime, CancelExportRequest(++t.TxId, "/MyRoot", exportId), {
-            Ydb::StatusIds::SUCCESS,
-            Ydb::StatusIds::NOT_FOUND
-        });
+        t.TestEnv->ReliablePropose(
+            runtime,
+            CancelExportRequest(++t.TxId, "/MyRoot", exportId),
+            {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::NOT_FOUND}
+        );
         t.TestEnv->TestWaitNotification(runtime, exportId);
 
         {
             TInactiveZone inactive(activeZone);
 
-            auto response = TestGetExport(runtime, exportId, "/MyRoot", {
-                Ydb::StatusIds::SUCCESS,
-                Ydb::StatusIds::CANCELLED,
-                Ydb::StatusIds::NOT_FOUND
-            });
+            auto response = TestGetExport(
+                runtime,
+                exportId,
+                "/MyRoot",
+                {Ydb::StatusIds::SUCCESS, Ydb::StatusIds::CANCELLED, Ydb::StatusIds::NOT_FOUND}
+            );
 
             if (response.GetResponse().GetEntry().GetStatus() == Ydb::StatusIds::NOT_FOUND) {
                 return;
@@ -108,9 +108,13 @@ void Forget(const TVector<TString>& tables, const TString& request, TTestWithReb
 
         const ui64 exportId = t.TxId;
 
-        t.TestEnv->ReliablePropose(runtime, ForgetExportRequest(++t.TxId, "/MyRoot", exportId), {
-            Ydb::StatusIds::SUCCESS,
-        });
+        t.TestEnv->ReliablePropose(
+            runtime,
+            ForgetExportRequest(++t.TxId, "/MyRoot", exportId),
+            {
+                Ydb::StatusIds::SUCCESS,
+            }
+        );
         t.TestEnv->TestWaitNotification(runtime, exportId);
 
         {
@@ -120,5 +124,5 @@ void Forget(const TVector<TString>& tables, const TString& request, TTestWithReb
     });
 }
 
-} // NExportReboots
-} // NSchemeShardUT_Private
+} // namespace NExportReboots
+} // namespace NSchemeShardUT_Private

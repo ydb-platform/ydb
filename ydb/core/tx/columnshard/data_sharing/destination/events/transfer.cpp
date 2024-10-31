@@ -8,8 +8,11 @@
 namespace NKikimr::NOlap::NDataSharing::NEvents {
 
 THashMap<TTabletId, TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
-    const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId, const TTransferContext& context,
-    const TVersionedIndex& index) {
+    const std::shared_ptr<IStoragesManager>& storages,
+    const TTabletId selfTabletId,
+    const TTransferContext& context,
+    const TVersionedIndex& index
+) {
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
     for (auto&& i : Portions) {
         auto schema = i.GetPortionInfo().GetSchema(index);
@@ -54,9 +57,9 @@ THashMap<TTabletId, TTaskForTablet> TPathIdData::BuildLinkTabletTasks(
     for (auto&& [storageId, blobs] : blobsInfo) {
         THashMap<TTabletId, TStorageTabletTask> storageTabletTasks;
         for (auto&& [_, blobInfo] : blobs) {
-            THashMap<TTabletId, TStorageTabletTask> blobTabletTasks = context.GetMoving()
-                                                                          ? blobInfo.BuildTabletTasksOnMove(context, selfTabletId, storageId)
-                                                                          : blobInfo.BuildTabletTasksOnCopy(context, selfTabletId, storageId);
+            THashMap<TTabletId, TStorageTabletTask> blobTabletTasks =
+                context.GetMoving() ? blobInfo.BuildTabletTasksOnMove(context, selfTabletId, storageId)
+                                    : blobInfo.BuildTabletTasksOnCopy(context, selfTabletId, storageId);
             for (auto&& [tId, tInfo] : blobTabletTasks) {
                 auto itTablet = storageTabletTasks.find(tId);
                 if (itTablet == storageTabletTasks.end()) {

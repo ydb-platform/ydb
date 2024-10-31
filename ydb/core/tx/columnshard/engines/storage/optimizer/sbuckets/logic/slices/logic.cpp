@@ -7,8 +7,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
 static const ui64 compactedDetector = 512 * 1024;
 
-std::vector<TPortionInfo::TConstPtr> TTimeSliceLogic::GetPortionsForMerge(
-    const TInstant /*now*/, const ui64 memLimit, const TBucketInfo& bucket) const {
+std::vector<TPortionInfo::TConstPtr>
+TTimeSliceLogic::GetPortionsForMerge(const TInstant /*now*/, const ui64 memLimit, const TBucketInfo& bucket) const {
     std::vector<TPortionInfo::TConstPtr> result;
     {
         ui64 memUsage = 0;
@@ -36,8 +36,8 @@ std::vector<TPortionInfo::TConstPtr> TTimeSliceLogic::GetPortionsForMerge(
     return result;
 }
 
-NKikimr::NOlap::NStorageOptimizer::NSBuckets::TCompactionTaskResult TTimeSliceLogic::DoBuildTask(
-    const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const {
+NKikimr::NOlap::NStorageOptimizer::NSBuckets::TCompactionTaskResult
+TTimeSliceLogic::DoBuildTask(const TInstant now, const ui64 memLimit, const TBucketInfo& bucket) const {
     std::vector<NArrow::TReplaceKey> stopPoints;
     std::vector<TPortionInfo::TConstPtr> portions = GetPortionsForMerge(now, memLimit, bucket);
 
@@ -68,8 +68,8 @@ NKikimr::NOlap::NStorageOptimizer::NSBuckets::TCompactionTaskResult TTimeSliceLo
     return TCompactionTaskResult(std::move(portions), std::move(splitKeys));
 }
 
-NKikimr::NOlap::NStorageOptimizer::NSBuckets::TCalcWeightResult TTimeSliceLogic::DoCalcWeight(
-    const TInstant /*now*/, const TBucketInfo& bucket) const {
+NKikimr::NOlap::NStorageOptimizer::NSBuckets::TCalcWeightResult
+TTimeSliceLogic::DoCalcWeight(const TInstant /*now*/, const TBucketInfo& bucket) const {
     ui64 size = 0;
     ui64 count = 0;
     for (auto&& [maxInstant, portions] : bucket.GetSnapshotPortions()) {

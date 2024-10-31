@@ -31,13 +31,12 @@ public:
 
 public:
     TNormalizer(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
-    }
+        : DsGroupSelector(info.GetStorageInfo()) {}
 
-    virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
-        const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    virtual TConclusion<std::vector<INormalizerTask::TPtr>>
+    DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
 private:
     NColumnShard::TBlobGroupSelector DsGroupSelector;
 };
-}   // namespace NKikimr::NOlap::NChunksActualization
+}   // namespace NKikimr::NOlap::NRestorePortionsFromChunks

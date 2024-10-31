@@ -5,11 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDropPersistentSnapshotUnit : public TExecutionUnit {
+class TDropPersistentSnapshotUnit: public TExecutionUnit {
 public:
     TDropPersistentSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::DropPersistentSnapshot, false, dataShard, pipeline)
-    { }
+        : TExecutionUnit(EExecutionUnitKind::DropPersistentSnapshot, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -50,10 +49,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateDropPersistentSnapshotUnit(
-        TDataShard& dataShard,
-        TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateDropPersistentSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TDropPersistentSnapshotUnit(dataShard, pipeline));
 }
 

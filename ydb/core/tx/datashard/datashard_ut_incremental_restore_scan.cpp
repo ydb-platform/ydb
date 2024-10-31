@@ -15,9 +15,7 @@ using namespace NSchemeShard;
 using namespace NSchemeBoard;
 using namespace Tests;
 
-class TDriverMock
-    : public NTable::IDriver
-{
+class TDriverMock: public NTable::IDriver {
 public:
     std::optional<NTable::EScan> LastScan;
 
@@ -26,7 +24,7 @@ public:
     }
 };
 
-class TCbExecutorActor : public TActorBootstrapped<TCbExecutorActor> {
+class TCbExecutorActor: public TActorBootstrapped<TCbExecutorActor> {
 public:
     enum EEv {
         EvExec = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
@@ -36,21 +34,22 @@ public:
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"
+    );
 
-    struct TEvExec : public TEventLocal<TEvExec, EvExec> {
+    struct TEvExec: public TEventLocal<TEvExec, EvExec> {
         std::function<void()> OnHandle;
         bool Async;
 
         TEvExec(std::function<void()> onHandle, bool async = true)
             : OnHandle(onHandle)
-            , Async(async)
-        {}
+            , Async(async) {}
     };
 
-    struct TEvBoot : public TEventLocal<TEvBoot, EvBoot> {};
-    struct TEvExecuted : public TEventLocal<TEvExecuted, EvExecuted> {};
+    struct TEvBoot: public TEventLocal<TEvBoot, EvBoot> {};
+    struct TEvExecuted: public TEventLocal<TEvExecuted, EvExecuted> {};
 
     std::function<void()> OnBootstrap;
     TActorId ReplyTo;
@@ -75,7 +74,8 @@ public:
     STATEFN(Serve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExec, Handle);
-            default: Y_ABORT("unexpected");
+            default:
+                Y_ABORT("unexpected");
         }
     }
 };
@@ -84,8 +84,7 @@ class TRuntimeCbExecutor {
 public:
     TRuntimeCbExecutor(TTestActorRuntime& runtime, std::function<void()> onBootstrap = {}, TActorId forwardTo = {})
         : Runtime(runtime)
-        , Sender(runtime.AllocateEdgeActor())
-    {
+        , Sender(runtime.AllocateEdgeActor()) {
         auto* executor = new TCbExecutorActor;
         executor->OnBootstrap = onBootstrap;
         executor->ForwardTo = forwardTo;
@@ -143,11 +142,10 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
     Y_UNIT_TEST(Empty) {
         TPortManager pm;
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         auto sender2 = runtime.AllocateEdgeActor();
 
@@ -155,11 +153,18 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         TUserTable::TPtr table = new TUserTable;
         NTable::TScheme::TTableSchema tableSchema;
-        table->Columns.emplace(0, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "Key", true));
+        table->Columns.emplace(
+            0, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "Key", true)
+        );
         tableSchema.Columns[0] = NTable::TColumn("key", 0, {}, "");
         tableSchema.Columns[0].KeyOrder = 0;
 
-        table->Columns.emplace(1, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Bool), "", "__ydb_incrBackupImpl_deleted", false));
+        table->Columns.emplace(
+            1,
+            TUserTable::TUserColumn(
+                NScheme::TTypeInfo(NScheme::NTypeIds::Bool), "", "__ydb_incrBackupImpl_deleted", false
+            )
+        );
         tableSchema.Columns[1] = NTable::TColumn("__ydb_incrBackupImpl_deleted", 1, {}, "");
         tableSchema.Columns[1].KeyOrder = 1;
 
@@ -170,15 +175,17 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         ui64 txId = 1337;
 
         auto* scan = CreateIncrementalRestoreScan(
-            sender,
-            [&](const TActorContext&, TActorId) {
-                return sender2;
-            },
-            sourcePathId,
-            table,
-            targetPathId,
-            txId,
-            {}).Release();
+                         sender,
+                         [&](const TActorContext&, TActorId) {
+                             return sender2;
+                         },
+                         sourcePathId,
+                         table,
+                         targetPathId,
+                         txId,
+                         {}
+        )
+                         .Release();
 
         TDriverMock driver;
 
@@ -206,27 +213,26 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
     Y_UNIT_TEST(ChangeSenderEmpty) {
         TPortManager pm;
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto edgeActor = runtime.AllocateEdgeActor();
 
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
         CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
         CreateShardedTable(
-             server,
-             edgeActor,
-             "/Root",
-             "IncrBackupTable",
-             SimpleTable()
-                .AllowSystemColumnNames(true)
-                .Columns({
-                    {"key", "Uint32", true, false},
-                    {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+            server,
+            edgeActor,
+            "/Root",
+            "IncrBackupTable",
+            SimpleTable().AllowSystemColumnNames(true).Columns(
+                {{"key", "Uint32", true, false},
+                 {"value", "Uint32", false, false},
+                 {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}
+            )
+        );
 
         TPathId targetPathId = *GetTablePathId(runtime, edgeActor, "/Root/Table");
         TPathId sourcePathId = *GetTablePathId(runtime, edgeActor, "/Root/IncrBackupTable");
@@ -246,27 +252,26 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
     Y_UNIT_TEST(ChangeSenderSimple) {
         TPortManager pm;
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto edgeActor = runtime.AllocateEdgeActor();
 
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
         auto [_, dstTable] = CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
         auto [srcShards, srcTable] = CreateShardedTable(
-             server,
-             edgeActor,
-             "/Root",
-             "IncrBackupTable",
-             SimpleTable()
-                .AllowSystemColumnNames(true)
-                .Columns({
-                    {"key", "Uint32", true, false},
-                    {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+            server,
+            edgeActor,
+            "/Root",
+            "IncrBackupTable",
+            SimpleTable().AllowSystemColumnNames(true).Columns(
+                {{"key", "Uint32", true, false},
+                 {"value", "Uint32", false, false},
+                 {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}
+            )
+        );
 
         TPathId targetPathId = dstTable.PathId;
         TPathId sourcePathId = srcTable.PathId;
@@ -290,22 +295,21 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
         }
 
         {
-
             NKikimrChangeExchange::TDataChange body;
-            TVector<TCell> keyCells = { TCell::Make(ui32(0)) };
+            TVector<TCell> keyCells = {TCell::Make(ui32(0))};
             auto key = TSerializedCellVec::Serialize(keyCells);
             body.MutableKey()->AddTags(0);
             body.MutableKey()->SetData(key);
             body.MutableErase();
 
             auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::IncrementalRestore)
-                .WithOrder(0)
-                .WithGroup(0)
-                .WithPathId(targetPathId)
-                .WithTableId(sourcePathId)
-                .WithBody(body.SerializeAsString())
-                .WithSource(TChangeRecord::ESource::InitialScan)
-                .Build();
+                                 .WithOrder(0)
+                                 .WithGroup(0)
+                                 .WithPathId(targetPathId)
+                                 .WithTableId(sourcePathId)
+                                 .WithBody(body.SerializeAsString())
+                                 .WithSource(TChangeRecord::ESource::InitialScan)
+                                 .Build();
 
             {
                 const auto& record = *recordPtr;

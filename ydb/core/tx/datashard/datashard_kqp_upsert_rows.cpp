@@ -26,16 +26,15 @@ struct TUpsertColumn {
     ui32 RowIndex;
 };
 
-class TKqpUpsertRowsWrapper : public TMutableComputationNode<TKqpUpsertRowsWrapper> {
+class TKqpUpsertRowsWrapper: public TMutableComputationNode<TKqpUpsertRowsWrapper> {
     using TBase = TMutableComputationNode<TKqpUpsertRowsWrapper>;
 
 public:
-    class TRowResult : public TComputationValue<TRowResult> {
+    class TRowResult: public TComputationValue<TRowResult> {
         using TBase = TComputationValue<TRowResult>;
 
     public:
-        TRowResult(TMemoryUsageInfo* memInfo, const TKqpUpsertRowsWrapper& owner,
-            NUdf::TUnboxedValue&& row)
+        TRowResult(TMemoryUsageInfo* memInfo, const TKqpUpsertRowsWrapper& owner, NUdf::TUnboxedValue&& row)
             : TBase(memInfo)
             , Owner(owner)
             , Row(std::move(row)) {}
@@ -71,8 +70,10 @@ public:
                 if (value) {
                     if (type.GetTypeId() != NScheme::NTypeIds::Pg) {
                         auto slot = NUdf::GetDataSlot(type.GetTypeId());
-                        MKQL_ENSURE(IsValidValue(slot, value),
-                            "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value);
+                        MKQL_ENSURE(
+                            IsValidValue(slot, value),
+                            "Malformed value for type: " << NUdf::GetDataTypeInfo(slot).Name << ", " << value
+                        );
                     } else {
                         Y_UNUSED(
                             NYql::NCommon::PgValueToNativeBinary(value, NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc()))
@@ -98,7 +99,8 @@ public:
 
             if (i64 delta = dsApplyCtx.ShardTableStats->NUpdateRow - nUpdateRow; delta > 0) {
                 dsApplyCtx.TaskTableStats->NUpdateRow += delta;
-                dsApplyCtx.TaskTableStats->UpdateRowBytes += dsApplyCtx.ShardTableStats->UpdateRowBytes - updateRowBytes;
+                dsApplyCtx.TaskTableStats->UpdateRowBytes +=
+                    dsApplyCtx.ShardTableStats->UpdateRowBytes - updateRowBytes;
             }
         };
 
@@ -107,12 +109,11 @@ public:
         NUdf::TUnboxedValue Row;
     };
 
-    class TRowsResult : public TComputationValue<TRowsResult> {
+    class TRowsResult: public TComputationValue<TRowsResult> {
         using TBase = TComputationValue<TRowsResult>;
 
     public:
-        TRowsResult(TMemoryUsageInfo* memInfo, const TKqpUpsertRowsWrapper& owner,
-            NUdf::TUnboxedValue&& rows)
+        TRowsResult(TMemoryUsageInfo* memInfo, const TKqpUpsertRowsWrapper& owner, NUdf::TUnboxedValue&& rows)
             : TBase(memInfo)
             , Owner(owner)
             , Rows(std::move(rows)) {}
@@ -138,17 +139,22 @@ public:
     }
 
 public:
-    TKqpUpsertRowsWrapper(TComputationMutables& mutables, const TTableId& tableId, IComputationNode* rowsNode,
-            TVector<NScheme::TTypeInfo>&& rowTypes, TVector<i32>&& rowTypeMods,
-            TVector<ui32>&& keyIndices, TVector<TUpsertColumn>&& upsertColumns)
+    TKqpUpsertRowsWrapper(
+        TComputationMutables& mutables,
+        const TTableId& tableId,
+        IComputationNode* rowsNode,
+        TVector<NScheme::TTypeInfo>&& rowTypes,
+        TVector<i32>&& rowTypeMods,
+        TVector<ui32>&& keyIndices,
+        TVector<TUpsertColumn>&& upsertColumns
+    )
         : TBase(mutables)
         , TableId(tableId)
         , RowsNode(rowsNode)
         , RowTypes(std::move(rowTypes))
         , RowTypeMods(std::move(rowTypeMods))
         , KeyIndices(std::move(keyIndices))
-        , UpsertColumns(std::move(upsertColumns))
-    {}
+        , UpsertColumns(std::move(upsertColumns)) {}
 
 private:
     void RegisterDependencies() const final {
@@ -166,9 +172,11 @@ private:
 
 } // namespace
 
-IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
-{
+IComputationNode* WrapKqpUpsertRows(
+    TCallable& callable,
+    const TComputationNodeFactoryContext& ctx,
+    TKqpDatashardComputeContext& computeCtx
+) {
     MKQL_ENSURE_S(callable.GetInputsCount() >= 3);
 
     auto tableNode = callable.GetInput(0);
@@ -185,8 +193,9 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
 
     auto rowType = AS_TYPE(TStructType, AS_TYPE(TStreamType, rowsNode.GetStaticType())->GetItemType());
 
-    MKQL_ENSURE_S(tableInfo->KeyColumnIds.size() <= rowType->GetMembersCount(),
-        "not enough columns in the runtime node");
+    MKQL_ENSURE_S(
+        tableInfo->KeyColumnIds.size() <= rowType->GetMembersCount(), "not enough columns in the runtime node"
+    );
 
     THashMap<TStringBuf, ui32> inputIndex; // column name -> struct field index
     THashMap<TStringBuf, ui32> columnIds; // column name -> user table column id (all columns)
@@ -217,7 +226,7 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
                 MKQL_ENSURE_S(!result.Error, "invalid type mod");
                 rowTypeMods[i] = result.Typmod;
             }
-        } 
+        }
     }
 
     TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());
@@ -234,13 +243,14 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     for (const auto& [_, column] : tableInfo->Columns) {
         if (column.NotNull && !isUpdate) {
             auto it = inputIndex.find(column.Name);
-            MKQL_ENSURE(it != inputIndex.end(),
-                "Not null column " << column.Name << " has to be specified in upsert");
+            MKQL_ENSURE(it != inputIndex.end(), "Not null column " << column.Name << " has to be specified in upsert");
 
             if (it != inputIndex.end()) {
                 auto columnType = rowType->GetMemberType(it->second);
-                MKQL_ENSURE(columnType->GetKind() != NMiniKQL::TType::EKind::Optional,
-                    "Not null column " << column.Name << " can't be optional");
+                MKQL_ENSURE(
+                    columnType->GetKind() != NMiniKQL::TType::EKind::Optional,
+                    "Not null column " << column.Name << " can't be optional"
+                );
             }
         }
     }
@@ -257,14 +267,21 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
         auto tableColumn = tableInfo->Columns.FindPtr(upsertColumn.ColumnId);
         MKQL_ENSURE_S(tableColumn);
 
-        MKQL_ENSURE_S(rowTypes[upsertColumn.RowIndex] == tableColumn->Type,
-            "upsert column type missmatch, column: " << tableColumn->Name);
+        MKQL_ENSURE_S(
+            rowTypes[upsertColumn.RowIndex] == tableColumn->Type,
+            "upsert column type missmatch, column: " << tableColumn->Name
+        );
     }
 
-    return new TKqpUpsertRowsWrapper(ctx.Mutables, tableId,
+    return new TKqpUpsertRowsWrapper(
+        ctx.Mutables,
+        tableId,
         LocateNode(ctx.NodeLocator, *rowsNode.GetNode()),
-        std::move(rowTypes), std::move(rowTypeMods),
-        std::move(keyIndices), std::move(upsertColumns));
+        std::move(rowTypes),
+        std::move(rowTypeMods),
+        std::move(keyIndices),
+        std::move(upsertColumns)
+    );
 }
 
 } // namespace NMiniKQL

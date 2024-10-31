@@ -15,11 +15,11 @@ private:
     private:
         TPortionDataAccessor PortionInfo;
         TPortionEvictionFeatures Features;
+
     public:
         TPortionForEviction(const TPortionDataAccessor& portion, TPortionEvictionFeatures&& features)
             : PortionInfo(portion)
-            , Features(std::move(features)) {
-        };
+            , Features(std::move(features)) {};
 
         TPortionEvictionFeatures& GetFeatures() {
             return Features;
@@ -34,11 +34,15 @@ private:
         }
     };
 
-    std::optional<TWritePortionInfoWithBlobsResult> UpdateEvictedPortion(TPortionForEviction& info, NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
-        TConstructionContext& context) const;
+    std::optional<TWritePortionInfoWithBlobsResult> UpdateEvictedPortion(
+        TPortionForEviction& info,
+        NBlobOperations::NRead::TCompositeReadBlobs& srcBlobs,
+        TConstructionContext& context
+    ) const;
 
     std::vector<TPortionForEviction> PortionsToEvict;
     const NActualizer::TRWAddress RWAddress;
+
 protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
@@ -57,13 +61,17 @@ protected:
         const auto pred = [](const TPortionForEviction& p) {
             return p.GetPortionInfo().GetPortionInfo().GetAddress();
         };
-        return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
+        return std::make_shared<NDataLocks::TListPortionsLock>(
+            TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred
+        );
     }
+
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
     private:
         ui64 SumBlobsMemory = 0;
         ui64 MaxRawMemory = 0;
+
     public:
         virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override {
             if (MaxRawMemory < portionInfo->GetTotalRawBytes()) {
@@ -103,11 +111,7 @@ public:
 
     TTTLColumnEngineChanges(const NActualizer::TRWAddress& address, const TSaverContext& saverContext)
         : TBase(saverContext, NBlobOperations::EConsumer::TTL)
-        , RWAddress(address)
-    {
-
-    }
-
+        , RWAddress(address) {}
 };
 
-}
+} // namespace NKikimr::NOlap

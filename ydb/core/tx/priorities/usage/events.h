@@ -29,8 +29,7 @@ struct TEvExecution {
 
     public:
         TEvRegisterClient(const ui64 clientId)
-            : ClientId(clientId) {
-        }
+            : ClientId(clientId) {}
     };
 
     class TEvUnregisterClient: public NActors::TEventLocal<TEvUnregisterClient, EvUnregisterClient> {
@@ -39,8 +38,7 @@ struct TEvExecution {
 
     public:
         TEvUnregisterClient(const ui64 clientId)
-            : ClientId(clientId) {
-        }
+            : ClientId(clientId) {}
     };
 
     class TEvAsk: public NActors::TEventLocal<TEvAsk, EvAsk> {
@@ -73,8 +71,7 @@ struct TEvExecution {
     public:
         TEvFree(const ui64 clientId, const ui32 count)
             : ClientId(clientId)
-            , Count(count) {
-        }
+            , Count(count) {}
     };
 
     class TEvAllocated: public NActors::TEventLocal<TEvAllocated, EvAllocated> {
@@ -85,8 +82,7 @@ struct TEvExecution {
     public:
         TEvAllocated(const ui32 requestId, const std::shared_ptr<TAllocationGuard>& guard)
             : RequestId(requestId)
-            , Guard(guard) {
-        }
+            , Guard(guard) {}
     };
 };
 

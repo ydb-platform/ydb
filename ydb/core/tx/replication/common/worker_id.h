@@ -5,7 +5,7 @@
 #include <tuple>
 
 namespace NKikimrReplication {
-    class TWorkerIdentity;
+class TWorkerIdentity;
 }
 
 namespace NKikimr::NReplication {
@@ -23,7 +23,7 @@ struct TWorkerId: std::tuple<ui64, ui64, ui64> {
     void Out(IOutputStream& out) const;
 };
 
-}
+} // namespace NKikimr::NReplication
 
 template <>
-struct THash<NKikimr::NReplication::TWorkerId> : THash<std::tuple<ui64, ui64, ui64>> {};
+struct THash<NKikimr::NReplication::TWorkerId>: THash<std::tuple<ui64, ui64, ui64>> {};

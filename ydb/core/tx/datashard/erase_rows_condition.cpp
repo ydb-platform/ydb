@@ -20,16 +20,16 @@ class TExpirationCondition: public IEraseRowsCondition {
 
     static TMaybe<ui64> InstantValue(TInstant instant, EUnit unit) {
         switch (unit) {
-        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-            return instant.Seconds();
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-            return instant.MilliSeconds();
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-            return instant.MicroSeconds();
-        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
-            return instant.NanoSeconds();
-        default:
-            return Nothing();
+            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+                return instant.Seconds();
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+                return instant.MilliSeconds();
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+                return instant.MicroSeconds();
+            case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+                return instant.NanoSeconds();
+            default:
+                return Nothing();
         }
     }
 
@@ -102,62 +102,61 @@ class TExpirationCondition: public IEraseRowsCondition {
         }
 
         switch (Type.GetTypeId()) {
-        case NScheme::NTypeIds::DyNumber:
-            return GetWallClockDyNumber();
-        case NScheme::NTypeIds::Pg:
-            return GetWallClockPg();
-        default:
-            Y_ABORT("Unreachable");
+            case NScheme::NTypeIds::DyNumber:
+                return GetWallClockDyNumber();
+            case NScheme::NTypeIds::Pg:
+                return GetWallClockPg();
+            default:
+                Y_ABORT("Unreachable");
         }
     }
 
     bool CheckUi64(ui64 value) const {
         switch (Type.GetTypeId()) {
         // 'date-type column' mode
-        case NScheme::NTypeIds::Date:
-            return TInstant::Days(value) <= WallClockInstant;
-        case NScheme::NTypeIds::Datetime:
-            return TInstant::Seconds(value) <= WallClockInstant;
-        case NScheme::NTypeIds::Timestamp:
-            return TInstant::MicroSeconds(value) <= WallClockInstant;
-        // 'value since epoch' mode
-        case NScheme::NTypeIds::Uint32:
-        case NScheme::NTypeIds::Uint64:
-            switch (Unit) {
-            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+            case NScheme::NTypeIds::Date:
+                return TInstant::Days(value) <= WallClockInstant;
+            case NScheme::NTypeIds::Datetime:
                 return TInstant::Seconds(value) <= WallClockInstant;
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-                return TInstant::MilliSeconds(value) <= WallClockInstant;
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+            case NScheme::NTypeIds::Timestamp:
                 return TInstant::MicroSeconds(value) <= WallClockInstant;
-            case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
-                return TInstant::MicroSeconds(value / 1000) <= WallClockInstant;
-            default:
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+        // 'value since epoch' mode
+            case NScheme::NTypeIds::Uint32:
+            case NScheme::NTypeIds::Uint64:
+                switch (Unit) {
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+                        return TInstant::Seconds(value) <= WallClockInstant;
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+                        return TInstant::MilliSeconds(value) <= WallClockInstant;
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+                        return TInstant::MicroSeconds(value) <= WallClockInstant;
+                    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
+                        return TInstant::MicroSeconds(value / 1000) <= WallClockInstant;
+                    default:
+                        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
                     "Unsupported unit: " << static_cast<ui32>(Unit));
-                return false;
-            }
-        default:
-            Y_ABORT("Unreachable");
+                        return false;
+                }
+            default:
+                Y_ABORT("Unreachable");
         }
     }
 
     bool CheckI64(i64 value) const {
-        
         // Dates before 1970 are deleted by TTL
         if (value < 0)
             return true;
 
         switch (Type.GetTypeId()) {
         // 'big date-type column' mode
-        case NScheme::NTypeIds::Date32:
-            return TInstant::Days(value) <= WallClockInstant;
-        case NScheme::NTypeIds::Datetime64:
-            return TInstant::Seconds(value) <= WallClockInstant;
-        case NScheme::NTypeIds::Timestamp64:
-            return TInstant::MicroSeconds(value) <= WallClockInstant;
-        default:
-            Y_ABORT("Unreachable");
+            case NScheme::NTypeIds::Date32:
+                return TInstant::Days(value) <= WallClockInstant;
+            case NScheme::NTypeIds::Datetime64:
+                return TInstant::Seconds(value) <= WallClockInstant;
+            case NScheme::NTypeIds::Timestamp64:
+                return TInstant::MicroSeconds(value) <= WallClockInstant;
+            default:
+                Y_ABORT("Unreachable");
         }
     }
 
@@ -165,17 +164,20 @@ class TExpirationCondition: public IEraseRowsCondition {
         if (const auto& wallClockSerialized = GetWallClockSerialized()) {
             switch (Type.GetTypeId()) {
             // 'value since epoch' mode
-            case NScheme::NTypeIds::DyNumber:
-                return value <= *wallClockSerialized;
-            case NScheme::NTypeIds::Pg: {
-                int result = NPg::PgNativeBinaryCompare(
-                    value.data(), value.size(),
-                    wallClockSerialized->data(), wallClockSerialized->size(),
-                    Type.GetPgTypeDesc());
-                return result <= 0;
-            }
-            default:
-                Y_ABORT("Unreachable");
+                case NScheme::NTypeIds::DyNumber:
+                    return value <= *wallClockSerialized;
+                case NScheme::NTypeIds::Pg: {
+                    int result = NPg::PgNativeBinaryCompare(
+                        value.data(),
+                        value.size(),
+                        wallClockSerialized->data(),
+                        wallClockSerialized->size(),
+                        Type.GetPgTypeDesc()
+                    );
+                    return result <= 0;
+                }
+                default:
+                    Y_ABORT("Unreachable");
             }
         } else {
             return false;
@@ -188,14 +190,10 @@ public:
         , WallClockInstant(TInstant::FromValue(wallClockTimestamp))
         , Unit(unit)
         , CannotSerialize(false)
-        , Pos(Max<NTable::TPos>())
-    {
-    }
+        , Pos(Max<NTable::TPos>()) {}
 
     explicit TExpirationCondition(const NKikimrTxDataShard::TExpirationCondition& proto)
-        : TExpirationCondition(proto.GetColumnId(), proto.GetWallClockTimestamp(), proto.GetColumnUnit())
-    {
-    }
+        : TExpirationCondition(proto.GetColumnId(), proto.GetWallClockTimestamp(), proto.GetColumnUnit()) {}
 
     void AddToRequest(NKikimrTxDataShard::TEvEraseRowsRequest& request) const override {
         auto& proto = *request.MutableExpiration();
@@ -224,24 +222,24 @@ public:
         }
 
         switch (Type.GetTypeId()) {
-        case NScheme::NTypeIds::Date:
-            return CheckUi64(cell.AsValue<ui16>());
-        case NScheme::NTypeIds::Datetime:
-        case NScheme::NTypeIds::Uint32:
-            return CheckUi64(cell.AsValue<ui32>());
-        case NScheme::NTypeIds::Timestamp:
-        case NScheme::NTypeIds::Uint64:
-            return CheckUi64(cell.AsValue<ui64>());
-        case NScheme::NTypeIds::Date32:
-            return CheckI64(cell.AsValue<i32>());
-        case NScheme::NTypeIds::Datetime64:
-        case NScheme::NTypeIds::Timestamp64:
-            return CheckI64(cell.AsValue<i64>());
-        case NScheme::NTypeIds::DyNumber:
-        case NScheme::NTypeIds::Pg:
-            return CheckSerialized(cell.AsBuf());
-        default:
-            return false;
+            case NScheme::NTypeIds::Date:
+                return CheckUi64(cell.AsValue<ui16>());
+            case NScheme::NTypeIds::Datetime:
+            case NScheme::NTypeIds::Uint32:
+                return CheckUi64(cell.AsValue<ui32>());
+            case NScheme::NTypeIds::Timestamp:
+            case NScheme::NTypeIds::Uint64:
+                return CheckUi64(cell.AsValue<ui64>());
+            case NScheme::NTypeIds::Date32:
+                return CheckI64(cell.AsValue<i32>());
+            case NScheme::NTypeIds::Datetime64:
+            case NScheme::NTypeIds::Timestamp64:
+                return CheckI64(cell.AsValue<i64>());
+            case NScheme::NTypeIds::DyNumber:
+            case NScheme::NTypeIds::Pg:
+                return CheckSerialized(cell.AsBuf());
+            default:
+                return false;
         }
     }
 
@@ -280,5 +278,5 @@ IEraseRowsCondition* CreateEraseRowsCondition(const NKikimrTxDataShard::TEvCondi
     return CreateEraseRowsConditionImpl(request);
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

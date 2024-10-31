@@ -25,7 +25,8 @@ public:
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasAlterUserAttributes()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "UserAttributes are not present");
@@ -58,8 +59,7 @@ public:
 
         TUserAttributes::TPtr alterData = path.Base()->UserAttrs->CreateNextVersion();
         if (!alterData->ApplyPatch(EUserAttributesOp::AlterUserAttrs, userAttrsPatch, errStr) ||
-            !alterData->CheckLimits(errStr))
-        {
+            !alterData->CheckLimits(errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -157,7 +157,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -170,4 +170,4 @@ ISubOperation::TPtr CreateAlterUserAttrs(TOperationId id, TTxState::ETxState sta
     return MakeSubOperation<TAlterUserAttrs>(id);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

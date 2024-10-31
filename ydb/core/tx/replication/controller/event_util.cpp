@@ -3,13 +3,26 @@
 
 namespace NKikimr::NReplication::NController {
 
-THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(const TReplication::TPtr replication, const TReplication::ITarget& target, ui64 partitionId) {
-    return MakeTEvRunWorker(replication->GetId(), target.GetId(), partitionId, replication->GetConfig().GetSrcConnectionParams(), target.GetStreamPath(), target.GetDstPathId());
+THolder<TEvService::TEvRunWorker>
+MakeTEvRunWorker(const TReplication::TPtr replication, const TReplication::ITarget& target, ui64 partitionId) {
+    return MakeTEvRunWorker(
+        replication->GetId(),
+        target.GetId(),
+        partitionId,
+        replication->GetConfig().GetSrcConnectionParams(),
+        target.GetStreamPath(),
+        target.GetDstPathId()
+    );
 }
 
-THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(ui64 replicationId, ui64 targetId, ui64 partitionId, const NKikimrReplication::TConnectionParams& connectionParams,
-        const TString& srcStreamPath, const TPathId& dstPathId)
-{
+THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(
+    ui64 replicationId,
+    ui64 targetId,
+    ui64 partitionId,
+    const NKikimrReplication::TConnectionParams& connectionParams,
+    const TString& srcStreamPath,
+    const TPathId& dstPathId
+) {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
 
@@ -30,4 +43,4 @@ THolder<TEvService::TEvRunWorker> MakeTEvRunWorker(ui64 replicationId, ui64 targ
     return ev;
 }
 
-}
+} // namespace NKikimr::NReplication::NController

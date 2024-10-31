@@ -7,13 +7,17 @@ class TController::TTxInit: public TTxBase {
     class TSysParamLoader: public ISysParamLoader {
     public:
         explicit TSysParamLoader(TRowset& rowset)
-            : Rowset(rowset)
-        {
-        }
+            : Rowset(rowset) {}
 
-        ui64 LoadInt() { return Rowset.template GetValue<Schema::SysParams::IntValue>(); }
-        TString LoadText() { return Rowset.template GetValue<Schema::SysParams::TextValue>(); }
-        TString LoadBinary() { return Rowset.template GetValue<Schema::SysParams::BinaryValue>(); }
+        ui64 LoadInt() {
+            return Rowset.template GetValue<Schema::SysParams::IntValue>();
+        }
+        TString LoadText() {
+            return Rowset.template GetValue<Schema::SysParams::TextValue>();
+        }
+        TString LoadBinary() {
+            return Rowset.template GetValue<Schema::SysParams::BinaryValue>();
+        }
 
     private:
         TRowset& Rowset;
@@ -80,8 +84,7 @@ class TController::TTxInit: public TTxBase {
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
             const auto dstPathId = TPathId(
-                rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
-                rowset.GetValue<Schema::Targets::DstPathLocalId>()
+                rowset.GetValue<Schema::Targets::DstPathOwnerId>(), rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
 
             auto replication = Self->Find(rid);
@@ -135,10 +138,7 @@ class TController::TTxInit: public TTxBase {
 
     inline bool Load(NIceDb::TNiceDb& db) {
         Self->Reset();
-        return LoadSysParams(db)
-            && LoadReplications(db)
-            && LoadTargets(db)
-            && LoadSrcStreams(db);
+        return LoadSysParams(db) && LoadReplications(db) && LoadTargets(db) && LoadSrcStreams(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {
@@ -148,9 +148,7 @@ class TController::TTxInit: public TTxBase {
 
 public:
     explicit TTxInit(TSelf* self)
-        : TTxBase("TxInit", self)
-    {
-    }
+        : TTxBase("TxInit", self) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_INIT;
@@ -172,4 +170,4 @@ void TController::RunTxInit(const TActorContext& ctx) {
     Execute(new TTxInit(this), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

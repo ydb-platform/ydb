@@ -7,14 +7,15 @@ namespace NKikimr::NSchemeShard {
 bool TOlapSchema::ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, IErrorCollector& errors) const {
     using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
     switch (ttl.GetStatusCase()) {
-        case TTtlProto::kEnabled:
-        {
+        case TTtlProto::kEnabled: {
             const auto* column = Columns.GetByName(ttl.GetEnabled().GetColumnName());
             if (!column) {
                 errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
-            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors);
+            return TTTLValidator::ValidateColumnTableTtl(
+                ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), errors
+            );
         }
         case TTtlProto::kDisabled:
         default:
@@ -91,7 +92,10 @@ void TOlapStoreSchemaPreset::Serialize(NKikimrSchemeOp::TColumnTableSchemaPreset
     TOlapSchema::Serialize(*presetProto.MutableSchema());
 }
 
-bool TOlapStoreSchemaPreset::ParseFromRequest(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, IErrorCollector& errors) {
+bool TOlapStoreSchemaPreset::ParseFromRequest(
+    const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto,
+    IErrorCollector& errors
+) {
     if (presetProto.HasId()) {
         errors.AddError("Schema preset id cannot be specified explicitly");
         return false;
@@ -103,4 +107,4 @@ bool TOlapStoreSchemaPreset::ParseFromRequest(const NKikimrSchemeOp::TColumnTabl
     Name = presetProto.GetName();
     return true;
 }
-}
+} // namespace NKikimr::NSchemeShard

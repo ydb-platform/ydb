@@ -17,24 +17,17 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterFileStore::TConfigureParts"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterFileStore::TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
-        });
+        : OperationId(id) {
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(
-        TEvFileStore::TEvUpdateConfigResponse::TPtr& ev,
-        TOperationContext& context) override
-    {
+    bool HandleReply(TEvFileStore::TEvUpdateConfigResponse::TPtr& ev, TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -98,7 +91,7 @@ public:
         Y_VERIFY_S(fs, "FileStore info is null. PathId: " << txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->Shards.size() == 1);
-        for (const auto& shard: txState->Shards) {
+        for (const auto& shard : txState->Shards) {
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::FileStore);
             auto shardIdx = shard.Idx;
             auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
@@ -125,24 +118,17 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterFileStore::TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TAlterFileStore::TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType
-        });
+        : OperationId(id) {
+        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
-    bool HandleReply(
-        TEvPrivate::TEvOperationPlan::TPtr& ev,
-        TOperationContext& context) override
-    {
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
         const auto ssId = context.SS->SelfTabletId();
 
@@ -210,9 +196,7 @@ class TAlterFileStore: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(
-        const TString& owner,
-        TOperationContext& context) override;
+    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override;
 
     void AbortPropose(TOperationContext&) override {
         Y_ABORT("no AbortPropose for TAlterFileStore");
@@ -235,39 +219,40 @@ private:
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
     TTxState& PrepareChanges(
-        TOperationId operationId, TPathElement::TPtr item,
+        TOperationId operationId,
+        TPathElement::TPtr item,
         TFileStoreInfo::TPtr fs,
         const TChannelsBindings& partitionChannels,
-        TOperationContext& context);
+        TOperationContext& context
+    );
 
-    const NKikimrFileStore::TConfig* ParseParams(
-        const NKikimrSchemeOp::TFileStoreDescription& operation,
-        TString& errStr);
+    const NKikimrFileStore::TConfig*
+    ParseParams(const NKikimrSchemeOp::TFileStoreDescription& operation, TString& errStr);
 
     bool ProcessChannelProfiles(
         const TPath& path,
@@ -275,20 +260,19 @@ private:
         const NKikimrFileStore::TConfig& alterConfig,
         TOperationContext& context,
         TProposeResponse& result,
-        TChannelsBindings& storeChannelsBinding);
+        TChannelsBindings& storeChannelsBinding
+    );
 
     void ApplyChannelBindings(
         TFileStoreInfo::TPtr volume,
         const TChannelsBindings& channelBindings,
-        TOperationContext& context);
+        TOperationContext& context
+    );
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THolder<TProposeResponse> TAlterFileStore::Propose(
-    const TString& owner,
-    TOperationContext& context)
-{
+THolder<TProposeResponse> TAlterFileStore::Propose(const TString& owner, TOperationContext& context) {
     Y_UNUSED(owner);
 
     const auto ssId = context.SS->SelfTabletId();
@@ -296,9 +280,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
     const auto& operation = Transaction.GetAlterFileStore();
     const TString& parentPathStr = Transaction.GetWorkingDir();
     const TString& name = operation.GetName();
-    const TPathId pathId = operation.HasPathId()
-        ? context.SS->MakeLocalId(operation.GetPathId())
-        : InvalidPathId;
+    const TPathId pathId = operation.HasPathId() ? context.SS->MakeLocalId(operation.GetPathId()) : InvalidPathId;
 
     LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "TAlterFileStore Propose"
@@ -307,10 +289,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         << ", opId: " << OperationId
         << ", at schemeshard: " << ssId);
 
-    auto result = MakeHolder<TProposeResponse>(
-        NKikimrScheme::StatusAccepted,
-        ui64(OperationId.GetTxId()),
-        ui64(ssId));
+    auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
     TString errStr;
     if (!operation.HasName() && !operation.HasPathId()) {
@@ -319,14 +298,12 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         return result;
     }
 
-    TPath path = operation.HasPathId()
-        ? TPath::Init(pathId, context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+    TPath path =
+        operation.HasPathId() ? TPath::Init(pathId, context.SS) : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
     {
         auto checks = path.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -347,9 +324,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
     Y_VERIFY_S(fs, "FileStore info is null. PathId: " << path.Base()->PathId);
 
     if (fs->AlterConfig) {
-        result->SetError(
-            NKikimrScheme::StatusMultipleModifications,
-            "There is another operation in flight");
+        result->SetError(NKikimrScheme::StatusMultipleModifications, "There is another operation in flight");
         return result;
     }
 
@@ -360,20 +335,13 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
     }
 
     if (alterConfig->HasVersion() && alterConfig->GetVersion() != fs->Version) {
-        result->SetError(
-            NKikimrScheme::StatusPreconditionFailed,
-            "Wrong version in config");
+        result->SetError(NKikimrScheme::StatusPreconditionFailed, "Wrong version in config");
         return result;
     }
 
     TChannelsBindings storeChannelsBinding;
-    const auto channelProfilesProcessed = ProcessChannelProfiles(
-        path,
-        fs->Config,
-        *alterConfig,
-        context,
-        *result,
-        storeChannelsBinding);
+    const auto channelProfilesProcessed =
+        ProcessChannelProfiles(path, fs->Config, *alterConfig, context, *result, storeChannelsBinding);
 
     if (!channelProfilesProcessed) {
         return result;
@@ -411,10 +379,8 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
     return result;
 }
 
-const NKikimrFileStore::TConfig* TAlterFileStore::ParseParams(
-    const NKikimrSchemeOp::TFileStoreDescription& operation,
-    TString& errStr)
-{
+const NKikimrFileStore::TConfig*
+TAlterFileStore::ParseParams(const NKikimrSchemeOp::TFileStoreDescription& operation, TString& errStr) {
     if (operation.HasIndexTabletId() || operation.HasVersion()) {
         errStr = "Setting schemeshard owned properties is not allowed";
         return nullptr;
@@ -440,8 +406,8 @@ TTxState& TAlterFileStore::PrepareChanges(
     TPathElement::TPtr item,
     TFileStoreInfo::TPtr fs,
     const TChannelsBindings& channelBindings,
-    TOperationContext& context)
-{
+    TOperationContext& context
+) {
     NIceDb::TNiceDb db(context.GetDB());
 
     item->LastTxId = operationId.GetTxId();
@@ -450,10 +416,7 @@ TTxState& TAlterFileStore::PrepareChanges(
     TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterFileStore, item->PathId);
     txState.State = TTxState::CreateParts;
 
-    ApplyChannelBindings(
-        fs,
-        channelBindings,
-        context);
+    ApplyChannelBindings(fs, channelBindings, context);
 
     txState.Shards.reserve(1);
     {
@@ -468,9 +431,13 @@ TTxState& TAlterFileStore::PrepareChanges(
         context.SS->PersistShardTx(db, shardIdx, operationId.GetTxId());
     }
 
-    LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_DEBUG(
+        context.Ctx,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
         "AlterFileStore txid# %" PRIu64 ", AlterVersion %" PRIu64,
-        operationId.GetTxId(), fs->AlterVersion);
+        operationId.GetTxId(),
+        fs->AlterVersion
+    );
 
     context.SS->PersistAddFileStoreAlter(db, item->PathId, fs);
     context.SS->PersistTxState(db, operationId);
@@ -485,14 +452,15 @@ bool TAlterFileStore::ProcessChannelProfiles(
     const NKikimrFileStore::TConfig& alterConfig,
     TOperationContext& context,
     TProposeResponse& result,
-    TChannelsBindings& storeChannelsBinding)
-{
+    TChannelsBindings& storeChannelsBinding
+) {
     const auto& alterEcps = alterConfig.GetExplicitChannelProfiles();
 
     if (alterEcps.size()) {
         if (ui32(alterEcps.size()) > NHive::MAX_TABLET_CHANNELS) {
-            auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
-                alterEcps.size(), NHive::MAX_TABLET_CHANNELS);
+            auto errStr = Sprintf(
+                "Wrong number of channels %u , should be [1 .. %lu]", alterEcps.size(), NHive::MAX_TABLET_CHANNELS
+            );
 
             result.SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return false;
@@ -500,8 +468,7 @@ bool TAlterFileStore::ProcessChannelProfiles(
 
         // Cannot delete explicit profiles for existing channels
         if (alterConfig.ExplicitChannelProfilesSize() < config.ExplicitChannelProfilesSize()) {
-            result.SetError(NKikimrScheme::StatusInvalidParameter,
-                "Cannot reduce the number of channel profiles");
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot reduce the number of channel profiles");
             return false;
         }
 
@@ -514,9 +481,9 @@ bool TAlterFileStore::ProcessChannelProfiles(
                 if (prevProfile.GetPoolKind() != newProfile.GetPoolKind()) {
                     result.SetError(
                         NKikimrScheme::StatusInvalidParameter,
-                        TStringBuilder() << "Cannot change PoolKind for channel " << i
-                            << ", " << prevProfile.GetPoolKind()
-                            << " -> " << newProfile.GetPoolKind());
+                        TStringBuilder() << "Cannot change PoolKind for channel " << i << ", "
+                                         << prevProfile.GetPoolKind() << " -> " << newProfile.GetPoolKind()
+                    );
 
                     return false;
                 }
@@ -530,14 +497,14 @@ bool TAlterFileStore::ProcessChannelProfiles(
         partitionPoolKinds.push_back(ecp.GetPoolKind());
     }
 
-    const auto storeChannelsResolved = context.SS->ResolveChannelsByPoolKinds(
-        partitionPoolKinds,
-        path.GetPathIdForDomain(),
-        storeChannelsBinding);
+    const auto storeChannelsResolved =
+        context.SS->ResolveChannelsByPoolKinds(partitionPoolKinds, path.GetPathIdForDomain(), storeChannelsBinding);
 
     if (!storeChannelsResolved) {
-        result.SetError(NKikimrScheme::StatusInvalidParameter,
-            "Unable to construct channel binding for filestore with the storage pool");
+        result.SetError(
+            NKikimrScheme::StatusInvalidParameter,
+            "Unable to construct channel binding for filestore with the storage pool"
+        );
         return false;
     }
 
@@ -546,10 +513,10 @@ bool TAlterFileStore::ProcessChannelProfiles(
 }
 
 void TAlterFileStore::ApplyChannelBindings(
-        TFileStoreInfo::TPtr fs,
-        const TChannelsBindings& channelBindings,
-        TOperationContext& context)
-{
+    TFileStoreInfo::TPtr fs,
+    const TChannelsBindings& channelBindings,
+    TOperationContext& context
+) {
     auto& shardInfo = context.SS->ShardInfos[fs->IndexShardIdx];
     if (!shardInfo.BindedChannels.empty()) {
         Y_ABORT_UNLESS(shardInfo.BindedChannels.size() <= channelBindings.size());
@@ -558,7 +525,7 @@ void TAlterFileStore::ApplyChannelBindings(
     }
 }
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -571,4 +538,4 @@ ISubOperation::TPtr CreateAlterFileStore(TOperationId id, TTxState::ETxState sta
     return MakeSubOperation<TAlterFileStore>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

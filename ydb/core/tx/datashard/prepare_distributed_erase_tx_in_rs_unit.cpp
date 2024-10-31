@@ -6,12 +6,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TPrepareDistributedEraseTxInRSUnit : public TExecutionUnit {
+class TPrepareDistributedEraseTxInRSUnit: public TExecutionUnit {
 public:
     TPrepareDistributedEraseTxInRSUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::PrepareDistributedEraseTxInRS, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::PrepareDistributedEraseTxInRS, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
@@ -35,8 +33,7 @@ public:
         return EExecutionStatus::Executed;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override {}
 };
 
 THolder<TExecutionUnit> CreatePrepareDistributedEraseTxInRSUnit(TDataShard& self, TPipeline& pipeline) {

@@ -112,21 +112,21 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
 
 const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
     if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+        return {NBlobOperations::TGlobal::DefaultStorageId};
     }
     return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
 }
 
 const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
     if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+        return {NBlobOperations::TGlobal::DefaultStorageId};
     }
     return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
 }
 
 const TString& TPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const {
     if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+        return {NBlobOperations::TGlobal::DefaultStorageId};
     }
     return indexInfo.GetIndexStorageId(indexId);
 }
@@ -158,9 +158,14 @@ bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) 
 }
 
 NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageId(
-    const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
+    const TString& specialTier,
+    const IStoragesManager& storages,
+    const TIndexInfo& indexInfo
+) const {
     if (HasInsertWriteId()) {
-        NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
+        NSplitter::TEntityGroups groups(
+            storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId
+        );
         return groups;
     } else {
         return indexInfo.GetEntityGroupsByStorageId(specialTier, storages);

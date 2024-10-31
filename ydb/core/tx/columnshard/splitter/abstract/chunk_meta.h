@@ -17,6 +17,7 @@ protected:
     ui32 RecordsCount = 0;
     ui32 RawBytes = 0;
     TSimpleChunkMeta() = default;
+
 public:
     TSimpleChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
 
@@ -30,6 +31,5 @@ public:
     ui32 GetRawBytes() const {
         return RawBytes;
     }
-
 };
-}
+} // namespace NKikimr::NOlap

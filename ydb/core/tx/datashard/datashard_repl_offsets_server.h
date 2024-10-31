@@ -7,9 +7,7 @@ namespace NKikimr::NDataShard {
 
 class TDataShard;
 
-class TReplicationSourceOffsetsServer
-    : public TActor<TReplicationSourceOffsetsServer>
-{
+class TReplicationSourceOffsetsServer: public TActor<TReplicationSourceOffsetsServer> {
     friend class TReplicationSourceOffsetsServerLink;
 
 private:
@@ -21,8 +19,7 @@ private:
 
         TReadId(const TActorId& actorId, ui64 readId)
             : ActorId(actorId)
-            , ReadId(readId)
-        { }
+            , ReadId(readId) {}
 
         size_t Hash() const {
             return CombineHashes(ActorId.Hash(), IntHash(ReadId));
@@ -79,8 +76,7 @@ private:
 public:
     TReplicationSourceOffsetsServer(TDataShard* self)
         : TActor(&TThis::StateWork)
-        , Self(self)
-    { }
+        , Self(self) {}
 
     ~TReplicationSourceOffsetsServer() {
         Unlink();
@@ -104,7 +100,13 @@ public:
     void Handle(TEvDataShard::TEvReplicationSourceOffsetsCancel::TPtr& ev);
     void ProcessRead(const TReadId& readId, TReadState& state);
     void ProcessNode(TNodeState& node);
-    void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags = 0, ui64 cookie = 0);
+    void SendViaSession(
+        const TActorId& sessionId,
+        const TActorId& target,
+        IEventBase* event,
+        ui32 flags = 0,
+        ui64 cookie = 0
+    );
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);

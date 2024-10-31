@@ -23,11 +23,20 @@ private:
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
     virtual TConclusionStatus DoOnFinished() override;
     virtual void DoOnError(const TString& errorMessage) override;
-    void SendErrorMessage(const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
+    void SendErrorMessage(
+        const TString& errorMessage,
+        const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass
+    );
 
 public:
-    TModificationRestoreTask(const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-        const TSnapshot actualSnapshot, const std::shared_ptr<arrow::RecordBatch>& incomingData, const TWritingContext& context);
+    TModificationRestoreTask(
+        const NActors::TActorId bufferActorId,
+        NEvWrite::TWriteData&& writeData,
+        const std::shared_ptr<IMerger>& merger,
+        const TSnapshot actualSnapshot,
+        const std::shared_ptr<arrow::RecordBatch>& incomingData,
+        const TWritingContext& context
+    );
 };
 
 }   // namespace NKikimr::NOlap

@@ -1,5 +1,3 @@
 #include "events.h"
 
-namespace NKikimr::NOlap::NGroupedMemoryManager::NEvents {
-
-}
+namespace NKikimr::NOlap::NGroupedMemoryManager::NEvents {}

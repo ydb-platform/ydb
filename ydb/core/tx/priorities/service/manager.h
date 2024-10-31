@@ -22,8 +22,7 @@ private:
 
     public:
         TPriority(const ui64 priority)
-            : ExternalPriority(priority) {
-        }
+            : ExternalPriority(priority) {}
 
         ui64 GetExternalPriority() const {
             return ExternalPriority;
@@ -48,8 +47,7 @@ private:
 
     public:
         TClientStatus(const ui64 clientId)
-            : ClientId(clientId) {
-        }
+            : ClientId(clientId) {}
     };
 
     THashMap<ui64, TClientStatus> Clients;
@@ -64,8 +62,7 @@ private:
         TAskRequest(const ui64 clientId, const std::shared_ptr<IRequest>& request, const ui32 size)
             : ClientId(clientId)
             , Request(request)
-            , Size(size) {
-        }
+            , Size(size) {}
     };
 
     ui32 UsedCount = 0;
@@ -78,7 +75,11 @@ private:
     TClientStatus& GetClientVerified(const ui64 clientId);
 
 public:
-    TManager(const std::shared_ptr<TCounters>& counters, const TConfig& config, const NActors::TActorId& serviceActorId);
+    TManager(
+        const std::shared_ptr<TCounters>& counters,
+        const TConfig& config,
+        const NActors::TActorId& serviceActorId
+    );
 
     void Ask(const ui64 client, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority);
     void AskMax(const ui64 client, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority);

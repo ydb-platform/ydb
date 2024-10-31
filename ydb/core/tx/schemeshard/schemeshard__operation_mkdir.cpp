@@ -12,15 +12,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "MkDir::TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "MkDir::TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {}
+        : OperationId(id) {}
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
@@ -77,23 +75,23 @@ class TMkDir: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -113,26 +111,30 @@ public:
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (Transaction.HasTempDirOwnerActorId() && !context.SS->EnableTempTables) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                TStringBuilder() << "It is not allowed to create temporary objects: " << name);
+            result->SetError(
+                NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "It is not allowed to create temporary objects: " << name
+            );
             return result;
         }
 
         if (Transaction.HasTempDirOwnerActorId() && Transaction.GetAllowCreateInTempDir()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+            result->SetError(
+                NKikimrScheme::StatusPreconditionFailed,
                 TStringBuilder() << "Can't create temporary directory while flag AllowCreateInTempDir is set."
-                    << " Temporary directory can't be created in another temporary directory.");
+                                 << " Temporary directory can't be created in another temporary directory."
+            );
             return result;
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -154,32 +156,23 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist({
-                            TPathElement::EPathType::EPathTypeDir,
-                            TPathElement::EPathType::EPathTypeSubDomain,
-                            TPathElement::EPathType::EPathTypeExtSubDomain,
-                            TPathElement::EPathType::EPathTypeColumnStore
-                        }, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    {TPathElement::EPathType::EPathTypeDir,
+                     TPathElement::EPathType::EPathTypeSubDomain,
+                     TPathElement::EPathType::EPathTypeExtSubDomain,
+                     TPathElement::EPathType::EPathTypeColumnStore},
+                    acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .IsValidACL(acl);
+                checks.IsValidLeafName().IsValidACL(acl);
             }
 
             if (checks && !context.SS->SystemBackupSIDs.contains(owner)) {
-                checks
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit();
+                checks.DepthLimit().PathsLimit().DirChildrenLimit();
             }
 
             if (!checks) {
@@ -202,8 +195,7 @@ public:
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
         const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();
         if (!userAttrs->ApplyPatch(EUserAttributesOp::MkDir, userAttrsDetails, errStr) ||
-            !userAttrs->CheckLimits(errStr))
-        {
+            !userAttrs->CheckLimits(errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -242,7 +234,8 @@ public:
         txState.State = TTxState::Propose;
 
         if (parentPath.Base()->HasActiveChanges()) {
-            auto parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+            auto parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -254,8 +247,7 @@ public:
                     << ", WorkingDir: " << parentPathStr
                     << ", TempDirOwnerActorId: " << newDir->TempDirOwnerActorId
                     << ", PathId: " << newDir->PathId);
-            context.OnComplete.UpdateTempDirsToMakeState(
-                newDir->TempDirOwnerActorId, newDir->PathId);
+            context.OnComplete.UpdateTempDirsToMakeState(newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
         dstPath.DomainInfo()->IncPathsInside();
@@ -285,7 +277,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -298,4 +290,4 @@ ISubOperation::TPtr CreateMkDir(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TMkDir>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

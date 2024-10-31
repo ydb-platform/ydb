@@ -10,10 +10,9 @@ private:
         Singleton<TTracing>()->Clean();
         Schedule(TDuration::Seconds(5), new NActors::TEvents::TEvWakeup);
     }
-public:
-    TRegularTracesCleanerActor() {
 
-    }
+public:
+    TRegularTracesCleanerActor() {}
 
     void Bootstrap() {
         Schedule(TDuration::Seconds(5), new NActors::TEvents::TEvWakeup);
@@ -29,4 +28,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NTracing

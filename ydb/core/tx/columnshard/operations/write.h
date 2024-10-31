@@ -63,15 +63,34 @@ private:
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;
 
-    TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
-        const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
-        const bool writePortions);
+    TWriteOperation(
+        const ui64 pathId,
+        const TOperationWriteId writeId,
+        const ui64 lockId,
+        const ui64 cookie,
+        const EOperationStatus& status,
+        const TInstant createdAt,
+        const std::optional<ui32> granuleShardingVersionId,
+        const NEvWrite::EModificationType mType,
+        const bool writePortions
+    );
 
     void Start(
-        TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context);
+        TColumnShard& owner,
+        const NEvWrite::IDataContainer::TPtr& data,
+        const NActors::TActorId& source,
+        const NOlap::TWritingContext& context
+    );
     void OnWriteFinish(
-        NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag);
-    void CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const;
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const std::vector<TInsertWriteId>& insertWriteIds,
+        const bool ephemeralFlag
+    );
+    void CommitOnExecute(
+        TColumnShard& owner,
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const NOlap::TSnapshot& snapshot
+    ) const;
     void CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& snapshot) const;
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
     void AbortOnComplete(TColumnShard& owner) const;
@@ -87,6 +106,7 @@ public:
 }   // namespace NKikimr::NColumnShard
 
 template <>
-inline void Out<NKikimr::NColumnShard::TWriteOperation>(IOutputStream& o, const NKikimr::NColumnShard::TWriteOperation& x) {
+inline void
+Out<NKikimr::NColumnShard::TWriteOperation>(IOutputStream& o, const NKikimr::NColumnShard::TWriteOperation& x) {
     return x.Out(o);
 }

@@ -32,7 +32,10 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader) const {
     return bits.GetData();
 }
 
-void TBloomIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
+void TBloomIndexMeta::DoFillIndexCheckers(
+    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info,
+    const NSchemeShard::TOlapSchema& schema
+) const {
     for (auto&& branch : info->GetBranches()) {
         std::map<ui32, std::shared_ptr<arrow::Scalar>> foundColumns;
         for (auto&& cId : ColumnIds) {

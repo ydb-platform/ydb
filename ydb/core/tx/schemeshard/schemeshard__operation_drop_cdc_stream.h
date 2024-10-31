@@ -14,13 +14,11 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoDropStreamPathChecks(
     const TOperationId& opId,
     const TPath& workingDirPath,
     const TString& tableName,
-    const TString& streamName);
+    const TString& streamName
+);
 
-ISubOperation::TPtr DoDropStreamChecks(
-    const TOperationId& opId,
-    const TPath& tablePath,
-    const TTxId lockTxId,
-    TOperationContext& context);
+ISubOperation::TPtr
+DoDropStreamChecks(const TOperationId& opId, const TPath& tablePath, const TTxId lockTxId, TOperationContext& context);
 
 void DoDropStream(
     TVector<ISubOperation::TPtr>& result,
@@ -30,6 +28,7 @@ void DoDropStream(
     const TPath& tablePath,
     const TPath& streamPath,
     const TTxId lockTxId,
-    TOperationContext& context);
+    TOperationContext& context
+);
 
-} // namespace NKikimr::NSchemesShard::NCdc
+} // namespace NKikimr::NSchemeShard::NCdc

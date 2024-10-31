@@ -28,4 +28,4 @@ void TTxGarbageCollectionStart::Complete(const TActorContext& /*ctx*/) {
     Operator->StartGC(Action);
 }
 
-}
+} // namespace NKikimr::NColumnShard

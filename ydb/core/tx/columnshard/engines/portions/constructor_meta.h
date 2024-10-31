@@ -25,7 +25,12 @@ private:
 
     std::optional<ui32> DeletionsCount;
     friend class TPortionInfoConstructor;
-    void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount, const std::optional<NArrow::TMinMaxSpecialKeys>& snapshotKeys, const TIndexInfo& indexInfo);
+    void FillMetaInfo(
+        const NArrow::TFirstLastSpecialKeys& primaryKeys,
+        const ui32 deletionsCount,
+        const std::optional<NArrow::TMinMaxSpecialKeys>& snapshotKeys,
+        const TIndexInfo& indexInfo
+    );
 
 public:
     TPortionMetaConstructor() = default;
@@ -47,8 +52,8 @@ public:
 
     TPortionMeta Build();
 
-    [[nodiscard]] bool LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
-
+    [[nodiscard]] bool
+    LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
 };
 
-}
+} // namespace NKikimr::NOlap

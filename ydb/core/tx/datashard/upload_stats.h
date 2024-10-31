@@ -19,11 +19,10 @@ public:
 class TUploadMonStats: public IStatHolder {
 public:
     explicit TUploadMonStats() = default;
-    explicit TUploadMonStats(const TString service,
-                             const TString subsystem);
+    explicit TUploadMonStats(const TString service, const TString subsystem);
 
     void Aggr(ui64 rows, ui64 bytes);
-    void Aggr(IStatHolder const* other);
+    void Aggr(const IStatHolder* other);
 
     TString ToString() const;
 
@@ -60,11 +59,9 @@ struct TUploadStatus {
     }
 
     TString ToString() const {
-        return TStringBuilder()
-               << "Status {"
-               << " Code: " << Ydb::StatusIds_StatusCode_Name(StatusCode)
-               << " Issues: " << Issues.ToString()
-               << " }";
+        return TStringBuilder() << "Status {"
+                                << " Code: " << Ydb::StatusIds_StatusCode_Name(StatusCode)
+                                << " Issues: " << Issues.ToString() << " }";
     }
 };
 
@@ -82,4 +79,4 @@ struct TUploadLimits: TUploadRetryLimits {
     ui64 BatchBytesLimit = 1u << 23; // 8MB
 };
 
-}
+} // namespace NKikimr::NDataShard

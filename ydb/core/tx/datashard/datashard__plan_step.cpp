@@ -7,16 +7,15 @@ namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxPlanStep::TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanStep::TPtr ev)
+TDataShard::TTxPlanStep::TTxPlanStep(TDataShard* self, TEvTxProcessing::TEvPlanStep::TPtr ev)
     : TBase(self)
     , Ev(ev)
     , IsAccepted(false)
-    , RequestStartTime(TAppData::TimeProvider->Now())
-{
+    , RequestStartTime(TAppData::TimeProvider->Now()) {
     Y_ABORT_UNLESS(Ev);
 }
 
-bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorContext &ctx) {
+bool TDataShard::TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_ABORT_UNLESS(Ev);
 
     // TEvPlanStep are strictly ordered by mediator so this Tx must not be retried not to break this ordering!
@@ -48,7 +47,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
         IsAccepted = Self->Pipeline.PlanTxs(step, txIds, txc, ctx);
     }
 
-    if (! IsAccepted) {
+    if (!IsAccepted) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
             "Ignore old txIds [" << JoinStrings(txIds.begin(), txIds.end(), ", ")
             << "] for step " << step << " outdated step " << Self->Pipeline.OutdatedCleanupStep()
@@ -75,7 +74,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     return true;
 }
 
-void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
+void TDataShard::TTxPlanStep::Complete(const TActorContext& ctx) {
     Y_ABORT_UNLESS(Ev);
     ui64 step = Ev->Get()->Record.GetStep();
 
@@ -99,13 +98,14 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     }
 }
 
-class TDataShard::TTxPlanPredictedTxs : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxPlanPredictedTxs: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxPlanPredictedTxs(TDataShard* self)
-        : TTransactionBase(self)
-    {}
+        : TTransactionBase(self) {}
 
-    TTxType GetTxType() const override { return TXTYPE_PLAN_PREDICTED_TXS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_PLAN_PREDICTED_TXS;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Self->ScheduledPlanPredictedTxs = false;
@@ -142,4 +142,5 @@ void TDataShard::SchedulePlanPredictedTxs() {
     }
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

@@ -8,16 +8,14 @@ private:
 
 public:
     TFixStringBitsStorage(const TString& data)
-        : Data(data)
-    {}
+        : Data(data) {}
 
     ui32 GetSizeBits() const {
         return Data.size() * 8;
     }
 
     TFixStringBitsStorage(const ui32 sizeBits)
-        : Data(sizeBits / 8 + ((sizeBits % 8) ? 1 : 0), '\0') {
-    }
+        : Data(sizeBits / 8 + ((sizeBits % 8) ? 1 : 0), '\0') {}
 
     void Set(const bool val, const ui32 idx) {
         AFL_VERIFY(idx < GetSizeBits());
@@ -43,23 +41,23 @@ public:
     static TString GetClassNameStatic() {
         return "BLOOM_FILTER";
     }
+
 private:
     using TBase = TSimpleIndexChecker;
     std::set<ui64> HashValues;
     static inline auto Registrator = TFactory::TRegistrator<TBloomFilterChecker>(GetClassNameStatic());
+
 protected:
     virtual bool DoDeserializeFromProtoImpl(const NKikimrSSA::TProgram::TOlapIndexChecker& proto) override;
     virtual void DoSerializeToProtoImpl(NKikimrSSA::TProgram::TOlapIndexChecker& proto) const override;
 
     virtual bool DoCheckImpl(const std::vector<TString>& blobs) const override;
+
 public:
     TBloomFilterChecker() = default;
     TBloomFilterChecker(const ui32 indexId, std::set<ui64>&& hashes)
         : TBase(indexId)
-        , HashValues(std::move(hashes))
-    {
-
-    }
+        , HashValues(std::move(hashes)) {}
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }

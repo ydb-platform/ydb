@@ -94,9 +94,7 @@ struct TRestore {
 
     static void PersistDone(const TPathId& pathId, TOperationContext& context) {
         NIceDb::TNiceDb db(context.GetDB());
-        db.Table<Schema::RestoreTasks>()
-            .Key(pathId.OwnerId, pathId.LocalPathId)
-            .Delete();
+        db.Table<Schema::RestoreTasks>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
     }
 
     static bool NeedToBill(const TPathId&, TOperationContext&) {
@@ -117,5 +115,5 @@ ISubOperation::TPtr CreateRestore(TOperationId id, TTxState::ETxState state) {
     );
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

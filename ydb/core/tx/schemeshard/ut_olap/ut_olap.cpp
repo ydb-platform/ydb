@@ -42,11 +42,11 @@ static const TString defaultTableSchema = R"(
 
 static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
     NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)).SetNullable(false),
-    NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
+    NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8))
 };
 
-}}
-
+} // namespace
+} // namespace NKikimr
 
 Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(CreateStore) {
@@ -124,22 +124,35 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::All(
-            NLs::PathExist,
-            NLs::HasColumnTableSchemaPreset("default")));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/MyDir/ColumnTable",
+            false,
+            NLs::All(NLs::PathExist, NLs::HasColumnTableSchemaPreset("default"))
+        );
 
         // Missing column from schema preset
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot/OlapStore/MyDir",
+            R"(
             Name: "ColumnTableMissingDataColumn"
             ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
         // Extra column not in schema preset
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot/OlapStore/MyDir",
+            R"(
             Name: "ColumnTableExtraColumn"
             ColumnShardCount: 1
             Schema {
@@ -148,10 +161,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "comment" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
         // Different column order
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot/OlapStore/MyDir",
+            R"(
             Name: "ColumnTableDifferentColumnOrder"
             ColumnShardCount: 1
             Schema {
@@ -159,10 +178,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
         // Extra key column
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot/OlapStore/MyDir",
+            R"(
             Name: "ColumnTableExtraKeyColumn"
             ColumnShardCount: 1
             Schema {
@@ -171,10 +196,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 KeyColumnNames: "timestamp"
                 KeyColumnNames: "data"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
         // Unknown key column
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot/OlapStore/MyDir",
+            R"(
             Name: "ColumnTableUnknownKeyColumn"
             ColumnShardCount: 1
             Schema {
@@ -182,10 +213,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "nottimestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
         // Different data column type
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot/OlapStore/MyDir",
+            R"(
             Name: "ColumnTableDataColumnType"
             ColumnShardCount: 1
             Schema {
@@ -193,7 +230,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "String" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
         // Repeating preset schema should succeed
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
@@ -214,12 +253,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/DirA/DirB/NestedTable", false, NLs::All(
-            NLs::PathExist,
-            NLs::HasColumnTableSchemaPreset("default")));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/DirA/DirB/NestedTable",
+            false,
+            NLs::All(NLs::PathExist, NLs::HasColumnTableSchemaPreset("default"))
+        );
 
         // Additional storage tier in schema
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(
+            runtime,
+            ++txId,
+            "/MyRoot/OlapStore/MyDir",
+            R"(
             Name: "TableWithTiers"
             ColumnShardCount: 1
             Schema {
@@ -227,7 +273,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: "timestamp"
             }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            {NKikimrScheme::StatusAccepted}
+        );
     }
 
     Y_UNIT_TEST(CustomDefaultPresets) {
@@ -247,9 +295,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::PathExist,
-            NLs::HasColumnTableSchemaPreset("default")));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/ColumnTable",
+            false,
+            NLs::All(NLs::PathExist, NLs::HasColumnTableSchemaPreset("default"))
+        );
     }
 
     Y_UNIT_TEST(CreateDropTable) {
@@ -348,8 +399,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT(sharding.HasHashSharding());
             auto& hashSharding = sharding.GetHashSharding();
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
-            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
-                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+            UNIT_ASSERT_EQUAL(
+                hashSharding.GetFunction(),
+                NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64
+            );
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };
@@ -409,8 +462,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT(sharding.HasHashSharding());
             auto& hashSharding = sharding.GetHashSharding();
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
-            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
-                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+            UNIT_ASSERT_EQUAL(
+                hashSharding.GetFunction(),
+                NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64
+            );
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
             UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
         };
@@ -443,11 +498,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema1);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/Table1", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/Table1",
+            false,
+            NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableSchemaVersion(1),
+                NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))
+            )
+        );
 
         TString tableSchema2 = R"(
             Name: "Table2"
@@ -460,11 +521,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema2);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/Table2", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsDisabled()));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/Table2",
+            false,
+            NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableSchemaVersion(1),
+                NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsDisabled()
+            )
+        );
 
         TString tableSchema3 = R"(
             Name: "Table3"
@@ -477,11 +544,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema3);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/Table3", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTiering("Tiering1")));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/Table3",
+            false,
+            NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableSchemaVersion(1),
+                NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsTiering("Tiering1")
+            )
+        );
 
         TString tableSchema4 = R"(
             Name: "Table4"
@@ -491,8 +564,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema4,
-                            {NKikimrScheme::StatusAccepted});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema4, {NKikimrScheme::StatusAccepted});
     }
 
     Y_UNIT_TEST(AlterStore) {
@@ -515,8 +587,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchemaX,
-                            {NKikimrScheme::StatusSchemeError});
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchemaX, {NKikimrScheme::StatusSchemeError});
 
         TString tableSchema = R"(
             Name: "ColumnTable"
@@ -532,13 +603,23 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/ColumnTable",
+            false,
+            NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableSchemaVersion(1),
+                NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))
+            )
+        );
 
-        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+        TestAlterOlapStore(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "OlapStore"
             AlterSchemaPresets {
                 Name: "default"
@@ -546,10 +627,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     AddColumns { Name: "comment" Type: "Utf8" }
                 }
             }
-        )", {NKikimrScheme::StatusAccepted});
+        )",
+            {NKikimrScheme::StatusAccepted}
+        );
 
         env.TestWaitNotification(runtime, txId);
-        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+        TestAlterOlapStore(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "OlapStore"
             AlterSchemaPresets {
                 Name: "default"
@@ -557,7 +644,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
                     AlterColumns { Name: "comment" DefaultValue: "10" }
                 }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
     }
 
     Y_UNIT_TEST(AlterTtl) {
@@ -597,11 +686,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/ColumnTable",
+            false,
+            NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableSchemaVersion(1),
+                NLs::HasColumnTableTtlSettingsVersion(1),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))
+            )
+        );
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
@@ -614,11 +709,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
-            NLs::HasColumnTableSchemaPreset("default"),
-            NLs::HasColumnTableSchemaVersion(1),
-            NLs::HasColumnTableTtlSettingsVersion(2),
-            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
+        TestLs(
+            runtime,
+            "/MyRoot/OlapStore/ColumnTable",
+            false,
+            NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableSchemaVersion(1),
+                NLs::HasColumnTableTtlSettingsVersion(2),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))
+            )
+        );
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
@@ -694,7 +795,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         UNIT_ASSERT(pathId);
         UNIT_ASSERT(planStep);
         {
-            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
+            auto description =
+                DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
 
@@ -703,19 +805,28 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_EQUAL(tabletStats.GetDataSize(), 0);
         }
 
-
         ui32 rowsInBatch = 100000;
 
         {   // Write data directly into shard
             TActorId sender = runtime.AllocateEdgeActor();
-            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, {"timestamp"});
 
             ui64 writeId = 0;
 
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
+                NTxUT::WriteData(
+                    runtime,
+                    sender,
+                    shardId,
+                    ++writeId,
+                    pathId,
+                    data,
+                    defaultYdbSchema,
+                    &writeIds,
+                    NEvWrite::EModificationType::Upsert
+                );
                 NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
                 txIds.insert(txId);
             }
@@ -727,13 +838,24 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
+            NTxUT::WriteData(
+                runtime,
+                sender,
+                shardId,
+                ++writeId,
+                pathId,
+                data,
+                defaultYdbSchema,
+                &writeIds,
+                NEvWrite::EModificationType::Upsert
+            );
             NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
             NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {
-            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
+            auto description =
+                DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
             Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
 
@@ -748,7 +870,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         }
 
         {
-            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
+            auto description =
+                DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
             auto& tabletStats = description.GetPathDescription().GetTableStats();
 
@@ -794,5 +917,5 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
-    }    
+    }
 }

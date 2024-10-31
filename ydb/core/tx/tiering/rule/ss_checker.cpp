@@ -10,17 +10,17 @@ void TSSFetchingActor::Handle(NSchemeShard::TEvSchemeShard::TEvProcessingRespons
     Controller->FetchingResult(ev->Get()->Record);
 }
 
-TSSFetchingActor::TSSFetchingActor(NSchemeShard::ISSDataProcessor::TPtr processor,
-    ISSFetchingController::TPtr controller, const TDuration livetime)
+TSSFetchingActor::TSSFetchingActor(
+    NSchemeShard::ISSDataProcessor::TPtr processor,
+    ISSFetchingController::TPtr controller,
+    const TDuration livetime
+)
     : TBase(livetime)
     , Processor(processor)
-    , Controller(controller)
-{
-
-}
+    , Controller(controller) {}
 
 constexpr NKikimrServices::TActivity::EType TSSFetchingActor::ActorActivityType() {
     return NKikimrServices::TActivity::SS_FETCHING_ACTOR;
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

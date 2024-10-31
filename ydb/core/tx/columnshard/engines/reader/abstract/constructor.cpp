@@ -4,8 +4,13 @@
 
 namespace NKikimr::NOlap::NReader {
 
-NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedIndex* vIndex,
-    const NKikimrSchemeOp::EOlapProgramType programType, const TString& serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver) const {
+NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(
+    const TVersionedIndex* vIndex,
+    const NKikimrSchemeOp::EOlapProgramType programType,
+    const TString& serializedProgram,
+    TReadDescription& read,
+    const IColumnResolver& columnResolver
+) const {
     AFL_VERIFY(!read.ColumnIds.size() || !read.ColumnNames.size());
     std::vector<TString> names;
     std::set<TString> namesChecker;
@@ -47,7 +52,9 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
             }
 
             const auto getDiffColumnsMessage = [&]() {
-                return TStringBuilder() << "ssa program has different columns with kqp request: kqp_columns=" << JoinSeq(",", namesChecker) << " vs program_columns=" << JoinSeq(",", programColumns);
+                return TStringBuilder() << "ssa program has different columns with kqp request: kqp_columns="
+                                        << JoinSeq(",", namesChecker)
+                                        << " vs program_columns=" << JoinSeq(",", programColumns);
             };
 
             if (namesChecker.size() != programColumns.size()) {
@@ -66,7 +73,8 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
     }
 }
 
-NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::BuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>>
+IScannerConstructor::BuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     TConclusion<std::shared_ptr<TReadMetadataBase>> result = DoBuildReadMetadata(self, read);
     if (result.IsFail()) {
         return result;
@@ -78,4 +86,4 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::Bu
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NReader

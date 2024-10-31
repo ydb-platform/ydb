@@ -25,7 +25,8 @@ Y_UNIT_TEST_SUITE(S3Writer) {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TString settings = Sprintf(R"(
+        TString settings = Sprintf(
+            R"(
             endpoint: "localhost:%d"
             scheme: HTTP
             bucket: "TEST"
@@ -33,7 +34,9 @@ Y_UNIT_TEST_SUITE(S3Writer) {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""
             }
-        )", port);
+        )",
+            port
+        );
         Ydb::Export::ExportToS3Settings request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(settings, &request));
 
@@ -42,14 +45,18 @@ Y_UNIT_TEST_SUITE(S3Writer) {
         TEnv env;
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
 
-        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
-            .Name = "Table",
-            .KeyColumns = {"key"},
-            .Columns = {
-                {.Name = "key", .Type = "Uint32"},
-                {.Name = "value", .Type = "Utf8"},
-            },
-        }));
+        env.CreateTable(
+            "/Root",
+            *MakeTableDescription(TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns =
+                    {
+                        {.Name = "key", .Type = "Uint32"},
+                        {.Name = "value", .Type = "Utf8"},
+                    },
+            })
+        );
 
         TString writerUuid = "AtufpxzetsqaVnEuozdXpD"; // basically base58-encoded uuid4
 
@@ -57,37 +64,56 @@ Y_UNIT_TEST_SUITE(S3Writer) {
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
-                                 R"({"finished":false,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");
+        UNIT_ASSERT_VALUES_EQUAL(
+            s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
+            R"({"finished":false,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})"
+        );
 
         using TRecord = TEvWorker::TEvData::TRecord;
-        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData({
-            TRecord(1, R"({"key":[1], "update":{"value":"10"}})"),
-            TRecord(2, R"({"key":[2], "update":{"value":"20"}})"),
-            TRecord(3, R"({"key":[3], "update":{"value":"30"}})"),
-        }));
+        env.Send<TEvWorker::TEvPoll>(
+            writer,
+            new TEvWorker::TEvData({
+                TRecord(1, R"({"key":[1], "update":{"value":"10"}})"),
+                TRecord(2, R"({"key":[2], "update":{"value":"20"}})"),
+                TRecord(3, R"({"key":[3], "update":{"value":"30"}})"),
+            })
+        );
 
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
-                                 R"({"finished":false,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/part.1.AtufpxzetsqaVnEuozdXpD.jsonl"),
-                                 R"({"key":[1], "update":{"value":"10"}})" "\n"
-                                 R"({"key":[2], "update":{"value":"20"}})" "\n"
-                                 R"({"key":[3], "update":{"value":"30"}})" "\n");
+        UNIT_ASSERT_VALUES_EQUAL(
+            s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
+            R"({"finished":false,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            s3Mock.GetData().at("/TEST/part.1.AtufpxzetsqaVnEuozdXpD.jsonl"),
+            R"({"key":[1], "update":{"value":"10"}})"
+            "\n"
+            R"({"key":[2], "update":{"value":"20"}})"
+            "\n"
+            R"({"key":[3], "update":{"value":"30"}})"
+            "\n"
+        );
 
         auto res = env.Send<TEvWorker::TEvGone>(writer, new TEvWorker::TEvData({}));
 
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, TEvWorker::TEvGone::DONE);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
-                                 R"({"finished":true,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})");
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().at("/TEST/part.1.AtufpxzetsqaVnEuozdXpD.jsonl"),
-                                 R"({"key":[1], "update":{"value":"10"}})" "\n"
-                                 R"({"key":[2], "update":{"value":"20"}})" "\n"
-                                 R"({"key":[3], "update":{"value":"30"}})" "\n");
+        UNIT_ASSERT_VALUES_EQUAL(
+            s3Mock.GetData().at("/TEST/writer.AtufpxzetsqaVnEuozdXpD.json"),
+            R"({"finished":true,"table_name":"/MyRoot/Table","writer_name":"AtufpxzetsqaVnEuozdXpD"})"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            s3Mock.GetData().at("/TEST/part.1.AtufpxzetsqaVnEuozdXpD.jsonl"),
+            R"({"key":[1], "update":{"value":"10"}})"
+            "\n"
+            R"({"key":[2], "update":{"value":"20"}})"
+            "\n"
+            R"({"key":[3], "update":{"value":"30"}})"
+            "\n"
+        );
     }
 
     // TODO test all retry behavior
 }
 
-}
+} // namespace NKikimr::NReplication::NService

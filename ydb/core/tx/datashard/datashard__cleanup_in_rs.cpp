@@ -11,15 +11,12 @@ using namespace NTabletFlatExecutor;
 static const TDuration REMOVAL_INTERVAL = TDuration::Seconds(1);
 constexpr ui64 MAX_RS_TO_REMOVE_IN_SINGLE_TX = 100000;
 
-class TDataShard::TTxRemoveOldInReadSets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxRemoveOldInReadSets: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxRemoveOldInReadSets(TDataShard *self)
-        : TBase(self)
-    {
-    }
+    TTxRemoveOldInReadSets(TDataShard* self)
+        : TBase(self) {}
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State == TShardState::Offline) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxRemoveOldInReadSets::Execute (skip) at " << Self->TabletID());
@@ -31,10 +28,9 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 removed = 0;
-        for (auto it = Self->InRSToRemove.begin(); it != Self->InRSToRemove.end(); ) {
+        for (auto it = Self->InRSToRemove.begin(); it != Self->InRSToRemove.end();) {
             auto cur = it++;
-            db.Table<Schema::InReadSets>()
-                .Key(cur->TxId, cur->Origin, cur->From, cur->To).Delete();
+            db.Table<Schema::InReadSets>().Key(cur->TxId, cur->Origin, cur->From, cur->To).Delete();
             Self->InRSToRemove.erase(cur);
             ++removed;
 
@@ -48,8 +44,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext& ctx) override {
         if (Self->State == TShardState::Offline) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxRemoveOldInReadSets::Complete (skip) at " << Self->TabletID());
@@ -69,23 +64,19 @@ public:
         }
     }
 
-    TTxType GetTxType() const override
-    {
+    TTxType GetTxType() const override {
         return TXTYPE_REMOVE_OLD_IN_READ_SETS;
     }
 
 private:
 };
 
-class TDataShard::TTxCheckInReadSets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxCheckInReadSets: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxCheckInReadSets(TDataShard *self)
-        : TBase(self)
-    {
-    }
+    TTxCheckInReadSets(TDataShard* self)
+        : TBase(self) {}
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
-    {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State == TShardState::Offline) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxCheckInReadSets::Execute (skip) at " << Self->TabletID());
@@ -126,8 +117,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override
-    {
+    void Complete(const TActorContext& ctx) override {
         if (Self->State == TShardState::Offline) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxCheckInReadSets::Complete (skip) at " << Self->TabletID());
@@ -147,22 +137,18 @@ public:
         }
     }
 
-    TTxType GetTxType() const override
-    {
+    TTxType GetTxType() const override {
         return TXTYPE_CHECK_IN_READ_SETS;
     }
 
 private:
 };
 
-ITransaction *TDataShard::CreateTxCheckInReadSets()
-{
+ITransaction* TDataShard::CreateTxCheckInReadSets() {
     return new TTxCheckInReadSets(this);
 }
 
-void TDataShard::Handle(TEvPrivate::TEvRemoveOldInReadSets::TPtr &ev,
-                               const TActorContext &ctx)
-{
+void TDataShard::Handle(TEvPrivate::TEvRemoveOldInReadSets::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ev);
     Execute(new TTxRemoveOldInReadSets(this), ctx);
 }

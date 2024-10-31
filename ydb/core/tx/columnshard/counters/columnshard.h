@@ -30,11 +30,12 @@ private:
 
 public:
     TWriteCounters(TCommonCountersOwner& owner)
-        : TBase(owner, "activity", "writing")
-    {
+        : TBase(owner, "activity", "writing") {
         VolumeWriteData = TBase::GetDeriviative("Write/Incoming/Bytes");
-        HistogramBytesWriteDataCount = TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
-        HistogramBytesWriteDataBytes = TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramBytesWriteDataCount =
+            TBase::GetHistogram("Write/Incoming/ByBytes/Count", NMonitoring::ExponentialHistogram(18, 2, 100));
+        HistogramBytesWriteDataBytes =
+            TBase::GetHistogram("Write/Incoming/ByBytes/Bytes", NMonitoring::ExponentialHistogram(18, 2, 100));
     }
 
     void OnIncomingData(const ui64 dataSize) const {
@@ -232,4 +233,4 @@ public:
     TCSCounters();
 };
 
-}
+} // namespace NKikimr::NColumnShard

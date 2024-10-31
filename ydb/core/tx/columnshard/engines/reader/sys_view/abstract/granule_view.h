@@ -10,10 +10,10 @@ private:
     YDB_READONLY(ui64, PathId, 0);
     YDB_READONLY_DEF(TPortions, Portions);
     YDB_READONLY_DEF(std::vector<NStorageOptimizer::TTaskDescription>, OptimizerTasks);
+
 public:
     TGranuleMetaView(const TGranuleMeta& granule, const bool reverse)
-        : PathId(granule.GetPathId())
-    {
+        : PathId(granule.GetPathId()) {
         for (auto&& i : granule.GetPortions()) {
             Portions.emplace_back(i.second);
         }
@@ -50,4 +50,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NSysView::NAbstract

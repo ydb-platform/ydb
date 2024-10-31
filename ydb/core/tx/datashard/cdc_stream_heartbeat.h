@@ -23,22 +23,31 @@ class TCdcStreamHeartbeatManager {
 
         explicit TNextHeartbeat(const TPathId& streamPathId, const TRowVersion& version)
             : StreamPathId(streamPathId)
-            , Version(version)
-        {}
+            , Version(version) {}
 
         friend bool operator>(const TNextHeartbeat& a, const TNextHeartbeat& b) {
             return a.Version > b.Version;
         }
     };
 
-    void PersistUpdate(NIceDb::TNiceDb& db, const TPathId& tablePathId, const TPathId& streamPathId, const THeartbeatInfo& info);
+    void PersistUpdate(
+        NIceDb::TNiceDb& db,
+        const TPathId& tablePathId,
+        const TPathId& streamPathId,
+        const THeartbeatInfo& info
+    );
     void PersistRemove(NIceDb::TNiceDb& db, const TPathId& tablePathId, const TPathId& streamPathId);
 
 public:
     void Reset();
     bool Load(NIceDb::TNiceDb& db);
 
-    void AddCdcStream(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId, TDuration heartbeatInterval);
+    void AddCdcStream(
+        NTable::TDatabase& db,
+        const TPathId& tablePathId,
+        const TPathId& streamPathId,
+        TDuration heartbeatInterval
+    );
     void DropCdcStream(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId);
 
     TRowVersion LowestVersion() const;
@@ -50,4 +59,4 @@ private:
     TPriorityQueue<TNextHeartbeat, TVector<TNextHeartbeat>, TGreater<TNextHeartbeat>> Schedule;
 };
 
-}
+} // namespace NKikimr::NDataShard

@@ -11,19 +11,18 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-void TSnapshotConstructor::EnrichSnapshotData(ISnapshot::TPtr original, NMetadata::NFetcher::ISnapshotAcceptorController::TPtr controller) const {
+void TSnapshotConstructor::EnrichSnapshotData(
+    ISnapshot::TPtr original,
+    NMetadata::NFetcher::ISnapshotAcceptorController::TPtr controller
+) const {
     controller->OnSnapshotEnriched(original);
 }
 
-TSnapshotConstructor::TSnapshotConstructor() {
-}
+TSnapshotConstructor::TSnapshotConstructor() {}
 
 std::vector<NMetadata::IClassBehaviour::TPtr> TSnapshotConstructor::DoGetManagers() const {
-    std::vector<NMetadata::IClassBehaviour::TPtr> result = {
-        TTierConfig::GetBehaviour(),
-        TTieringRule::GetBehaviour()
-    };
+    std::vector<NMetadata::IClassBehaviour::TPtr> result = {TTierConfig::GetBehaviour(), TTieringRule::GetBehaviour()};
     return result;
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

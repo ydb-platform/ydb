@@ -38,11 +38,11 @@ public:
     private:
         const ui64 Size;
         const ui64 Original;
+
     public:
         TMaxBlobSizeGuard(const ui64 value)
             : Size(value)
-            , Original(GetBlobSizeLimit())
-        {
+            , Original(GetBlobSizeLimit()) {
             SetMaxBlobSize(Size);
         }
 
@@ -85,15 +85,18 @@ struct TCompactionLimits {
         , GranuleOverloadSize(20 * TBase::MAX_BLOB_SIZE, TBase::MAX_BLOB_SIZE, 100 * TBase::MAX_BLOB_SIZE)
         , InGranuleCompactSeconds(2 * 60, 10, 3600)
         , GranuleIndexedPortionsSizeLimit(TBase::WARNING_INSERTED_PORTIONS_SIZE)
-        , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT)
-    {}
+        , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT) {}
 
     void RegisterControls(TControlBoard& icb) {
         icb.RegisterSharedControl(GoodBlobSize, "ColumnShardControls.IndexGoodBlobSize");
         icb.RegisterSharedControl(GranuleOverloadSize, "ColumnShardControls.GranuleOverloadBytes");
         icb.RegisterSharedControl(InGranuleCompactSeconds, "ColumnShardControls.CompactionDelaySec");
-        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, "ColumnShardControls.GranuleIndexedPortionsSizeLimit");
-        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, "ColumnShardControls.GranuleIndexedPortionsCountLimit");
+        icb.RegisterSharedControl(
+            GranuleIndexedPortionsSizeLimit, "ColumnShardControls.GranuleIndexedPortionsSizeLimit"
+        );
+        icb.RegisterSharedControl(
+            GranuleIndexedPortionsCountLimit, "ColumnShardControls.GranuleIndexedPortionsCountLimit"
+        );
     }
 
     NOlap::TCompactionLimits Get() const {
@@ -123,8 +126,7 @@ struct TUsage {
 class TCpuGuard {
 public:
     TCpuGuard(TUsage& usage)
-        : Usage(usage)
-    {}
+        : Usage(usage) {}
 
     ~TCpuGuard() {
         Usage.CPUExecTime = 1000000 * CpuTimer.PassedReset();
@@ -135,20 +137,18 @@ private:
     THPTimer CpuTimer;
 };
 
-
 // A helper to resolve DS groups where a tablet's blob ids
-class TBlobGroupSelector : public NOlap::IBlobGroupSelector {
+class TBlobGroupSelector: public NOlap::IBlobGroupSelector {
 private:
     TIntrusiveConstPtr<TTabletStorageInfo> TabletInfo;
 
 public:
     explicit TBlobGroupSelector(TIntrusiveConstPtr<TTabletStorageInfo> tabletInfo)
-        : TabletInfo(tabletInfo)
-    {}
+        : TabletInfo(tabletInfo) {}
 
     ui32 GetGroup(const TLogoBlobID& blobId) const override {
         return TabletInfo->GroupFor(blobId.Channel(), blobId.Generation());
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

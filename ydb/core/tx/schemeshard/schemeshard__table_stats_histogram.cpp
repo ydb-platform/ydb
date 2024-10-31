@@ -8,33 +8,37 @@ namespace NSchemeShard {
 static bool IsIntegerType(NScheme::TTypeInfo type) {
     // TODO: support pg types
     switch (type.GetTypeId()) {
-    case NScheme::NTypeIds::Bool:
+        case NScheme::NTypeIds::Bool:
 
-    case NScheme::NTypeIds::Int8:
-    case NScheme::NTypeIds::Uint8:
-    case NScheme::NTypeIds::Int16:
-    case NScheme::NTypeIds::Uint16:
-    case NScheme::NTypeIds::Int32:
-    case NScheme::NTypeIds::Uint32:
-    case NScheme::NTypeIds::Int64:
-    case NScheme::NTypeIds::Uint64:
+        case NScheme::NTypeIds::Int8:
+        case NScheme::NTypeIds::Uint8:
+        case NScheme::NTypeIds::Int16:
+        case NScheme::NTypeIds::Uint16:
+        case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Uint32:
+        case NScheme::NTypeIds::Int64:
+        case NScheme::NTypeIds::Uint64:
 
-    case NScheme::NTypeIds::Date:
-    case NScheme::NTypeIds::Datetime:
-    case NScheme::NTypeIds::Timestamp:
-    case NScheme::NTypeIds::Interval:
-    case NScheme::NTypeIds::Date32:
-    case NScheme::NTypeIds::Datetime64:
-    case NScheme::NTypeIds::Timestamp64:
-    case NScheme::NTypeIds::Interval64:
-        return true;
+        case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::Datetime:
+        case NScheme::NTypeIds::Timestamp:
+        case NScheme::NTypeIds::Interval:
+        case NScheme::NTypeIds::Date32:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            return true;
 
-    default:
-        return false;
+        default:
+            return false;
     }
 }
 
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, ui64 total, const TConstArrayRef<NScheme::TTypeInfo> &keyColumnTypes) {
+TSerializedCellVec ChooseSplitKeyByHistogram(
+    const NKikimrTableStats::THistogram& histogram,
+    ui64 total,
+    const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes
+) {
     if (histogram.GetBuckets().empty()) {
         return {};
     }
@@ -45,7 +49,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
         for (const auto& point : histogram.GetBuckets()) {
             ui64 leftSize = Min(point.GetValue(), total);
             ui64 rightSize = total - leftSize;
-            
+
             // search for a median point at which abs(leftSize - rightSize) is minimum
             ui64 sizesDiff = Max(leftSize, rightSize) - Min(leftSize, rightSize);
             if (idxMedDiff > sizesDiff) {
@@ -93,7 +97,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
             if (IsIntegerType(columnType) && !keyMed.GetCells()[i].IsNull()) {
                 // For integer types we can add 1 to med
                 ui64 val = 0;
-                size_t sz =  keyMed.GetCells()[i].Size();
+                size_t sz = keyMed.GetCells()[i].Size();
                 memcpy(&val, keyMed.GetCells()[i].Data(), sz);
                 val++;
                 splitKey[i] = TCell((const char*)&val, sz);
@@ -101,17 +105,13 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
                 // For other types let's do binary search between med and hi to find smallest key > med
 
                 // Compares only i-th cell in keys
-                auto fnCmpCurrentCell = [i, columnType] (const auto& keyMed, const auto& bucket) {
+                auto fnCmpCurrentCell = [i, columnType](const auto& keyMed, const auto& bucket) {
                     TSerializedCellVec bucketCells(bucket.GetKey());
                     return CompareTypedCells(keyMed.GetCells()[i], bucketCells.GetCells()[i], columnType) < 0;
                 };
 
                 const auto bucketsBegin = histogram.GetBuckets().begin();
-                const auto it = UpperBound(
-                            bucketsBegin + idxMed,
-                            bucketsBegin + idxHi,
-                            keyMed,
-                            fnCmpCurrentCell);
+                const auto it = UpperBound(bucketsBegin + idxMed, bucketsBegin + idxHi, keyMed, fnCmpCurrentCell);
                 TSerializedCellVec keyFound(it->GetKey());
                 splitKey[i] = keyFound.GetCells()[i];
             }
@@ -122,26 +122,31 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
     return TSerializedCellVec(splitKey);
 }
 
-TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui64>>& keysHist,
-                                  const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes,
-                                  const size_t prefixSize)
-{
+TSerializedCellVec DoFindSplitKey(
+    const TVector<std::pair<TSerializedCellVec, ui64>>& keysHist,
+    const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes,
+    const size_t prefixSize
+) {
     ui64 total = keysHist.back().second;
 
     // Compares bucket value
-    auto fnValueLess = [] (ui64 val, const auto& bucket) {
+    auto fnValueLess = [](ui64 val, const auto& bucket) {
         return val < bucket.second;
     };
 
     // Find the position of total/2
-    auto halfIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.5, fnValueLess);
-    auto loIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.1, fnValueLess);
-    auto hiIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.9, fnValueLess);
+    auto halfIt = std::upper_bound(keysHist.begin(), keysHist.end(), total * 0.5, fnValueLess);
+    auto loIt = std::upper_bound(keysHist.begin(), keysHist.end(), total * 0.1, fnValueLess);
+    auto hiIt = std::upper_bound(keysHist.begin(), keysHist.end(), total * 0.9, fnValueLess);
 
-    auto fnCmp = [&keyColumnTypes, prefixSize] (const auto& bucket1, const auto& bucket2) {
-        return CompareTypedCellVectors(bucket1.first.GetCells().data(), bucket2.first.GetCells().data(),
-                                       keyColumnTypes.data(),
-                                       std::min(bucket1.first.GetCells().size(), prefixSize), std::min(bucket2.first.GetCells().size(), prefixSize));
+    auto fnCmp = [&keyColumnTypes, prefixSize](const auto& bucket1, const auto& bucket2) {
+        return CompareTypedCellVectors(
+            bucket1.first.GetCells().data(),
+            bucket2.first.GetCells().data(),
+            keyColumnTypes.data(),
+            std::min(bucket1.first.GetCells().size(), prefixSize),
+            std::min(bucket2.first.GetCells().size(), prefixSize)
+        );
     };
 
     // Check if half key is no equal to low and high keys
@@ -155,33 +160,41 @@ TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui
     splitKey.resize(prefixSize);
     splitKey.resize(keyColumnTypes.size());
 
-
     return TSerializedCellVec(splitKey);
 }
 
-TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram& keySample, const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes) {
+TSerializedCellVec ChooseSplitKeyByKeySample(
+    const NKikimrTableStats::THistogram& keySample,
+    const TConstArrayRef<NScheme::TTypeInfo>& keyColumnTypes
+) {
     TVector<std::pair<TSerializedCellVec, ui64>> keysHist;
-    const auto & buckets = keySample.GetBuckets();
+    const auto& buckets = keySample.GetBuckets();
     keysHist.reserve(buckets.size());
 
     for (const auto& bucket : buckets) {
         keysHist.emplace_back(std::make_pair(TSerializedCellVec(bucket.GetKey()), bucket.GetValue()));
     }
 
-    auto fnCmp = [&keyColumnTypes] (const auto& key1, const auto& key2) {
-        return CompareTypedCellVectors(key1.first.GetCells().data(), key2.first.GetCells().data(),
-                                       keyColumnTypes.data(),
-                                       key1.first.GetCells().size(), key2.first.GetCells().size());
+    auto fnCmp = [&keyColumnTypes](const auto& key1, const auto& key2) {
+        return CompareTypedCellVectors(
+            key1.first.GetCells().data(),
+            key2.first.GetCells().data(),
+            keyColumnTypes.data(),
+            key1.first.GetCells().size(),
+            key2.first.GetCells().size()
+        );
     };
 
-    Sort(keysHist, [&fnCmp] (const auto& key1, const auto& key2) { return fnCmp(key1, key2) < 0; });
+    Sort(keysHist, [&fnCmp](const auto& key1, const auto& key2) {
+        return fnCmp(key1, key2) < 0;
+    });
 
     // The keys are now sorted. Next we convert the stats into a histogram by accumulating
     // stats for all previous keys at each key.
     size_t last = 0;
     for (size_t i = 1; i < keysHist.size(); ++i) {
         // Accumulate stats
-        keysHist[i].second += keysHist[i-1].second;
+        keysHist[i].second += keysHist[i - 1].second;
 
         if (fnCmp(keysHist[i], keysHist[last]) == 0) {
             // Merge equal keys
@@ -227,17 +240,17 @@ enum struct ESplitReason {
 
 const char* ToString(ESplitReason splitReason) {
     switch (splitReason) {
-    case ESplitReason::NO_SPLIT:
-        return "No split";
-    case ESplitReason::FAST_SPLIT_INDEX:
-        return "Fast split index table";
-    case ESplitReason::SPLIT_BY_SIZE:
-        return "Split by size";
-    case ESplitReason::SPLIT_BY_LOAD:
-        return "Split by load";
-    default:
-        Y_DEBUG_ABORT_UNLESS(!"Unexpected enum value");
-        return "Unexpected enum value";
+        case ESplitReason::NO_SPLIT:
+            return "No split";
+        case ESplitReason::FAST_SPLIT_INDEX:
+            return "Fast split index table";
+        case ESplitReason::SPLIT_BY_SIZE:
+            return "Split by size";
+        case ESplitReason::SPLIT_BY_LOAD:
+            return "Split by load";
+        default:
+            Y_DEBUG_ABORT_UNLESS(!"Unexpected enum value");
+            return "Unexpected enum value";
     }
 }
 
@@ -249,9 +262,7 @@ class TTxPartitionHistogram: public NTabletFlatExecutor::TTransactionBase<TSchem
 public:
     explicit TTxPartitionHistogram(TSelf* self, TEvDataShard::TEvGetTableStatsResult::TPtr& ev)
         : TBase(self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     virtual ~TTxPartitionHistogram() = default;
 
@@ -263,7 +274,6 @@ public:
     void Complete(const TActorContext& ctx) override;
 
 }; // TTxStorePartitionStats
-
 
 void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
@@ -283,9 +293,8 @@ void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const 
     Execute(new TTxPartitionHistogram(this, ev), ctx);
 }
 
-THolder<TProposeRequest> SplitRequest(
-    TSchemeShard* ss, TTxId& txId, TPathId& pathId, TTabletId datashardId, const TString& keyBuff)
-{
+THolder<TProposeRequest>
+SplitRequest(TSchemeShard* ss, TTxId& txId, TPathId& pathId, TTabletId datashardId, const TString& keyBuff) {
     auto request = MakeHolder<TProposeRequest>(ui64(txId), ui64(ss->SelfTabletId()));
     auto& record = request->Record;
 
@@ -317,8 +326,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     auto datashardId = TTabletId(rec.GetDatashardId());
     TPathId tableId = InvalidPathId;
     if (rec.HasTableOwnerId()) {
-        tableId = TPathId(TOwnerId(rec.GetTableOwnerId()),
-                          TLocalPathId(rec.GetTableLocalId()));
+        tableId = TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()));
     } else {
         tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
     }
@@ -357,7 +365,8 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         splitReason = ESplitReason::SPLIT_BY_SIZE;
     }
 
-    if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex)) {
+    if (splitReason == ESplitReason::NO_SPLIT &&
+        table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex)) {
         splitReason = ESplitReason::SPLIT_BY_LOAD;
     }
 
@@ -387,29 +396,44 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
         splitKey = ChooseSplitKeyByHistogram(histogram, dataSize, keyColumnTypes);
         if (splitKey.GetBuffer().empty()) {
-            LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_WARN(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Failed to find proper split key (initially) for '%s' of datashard %" PRIu64,
-                ToString(splitReason), datashardId);
+                ToString(splitReason),
+                datashardId
+            );
             return true;
         }
 
         // Split key must not be less than the first key
         TSerializedCellVec lowestKey(histogram.GetBuckets(0).GetKey());
-        if (0 < CompareTypedCellVectors(lowestKey.GetCells().data(), splitKey.GetCells().data(),
-                                    keyColumnTypes.data(),
-                                    lowestKey.GetCells().size(), splitKey.GetCells().size()))
-        {
-            LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "Failed to find proper split key (less than first) for '%s' of datashard %" PRIu64,
-                      ToString(splitReason), datashardId);
+        if (0 < CompareTypedCellVectors(
+                    lowestKey.GetCells().data(),
+                    splitKey.GetCells().data(),
+                    keyColumnTypes.data(),
+                    lowestKey.GetCells().size(),
+                    splitKey.GetCells().size()
+                )) {
+            LOG_WARN(
+                ctx,
+                NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Failed to find proper split key (less than first) for '%s' of datashard %" PRIu64,
+                ToString(splitReason),
+                datashardId
+            );
             return true;
         }
     }
 
     if (splitKey.GetBuffer().empty()) {
-        LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "Failed to find proper split key for '%s' of datashard %" PRIu64,
-                  ToString(splitReason), datashardId);
+        LOG_WARN(
+            ctx,
+            NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Failed to find proper split key for '%s' of datashard %" PRIu64,
+            ToString(splitReason),
+            datashardId
+        );
         return true;
     }
 
@@ -437,9 +461,9 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     return true;
 }
 
-
 void TTxPartitionHistogram::Complete(const TActorContext& ctx) {
     SplitOpSideEffects.ApplyOnComplete(Self, ctx);
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

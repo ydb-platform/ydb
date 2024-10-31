@@ -10,7 +10,7 @@ TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
     m["version"] = 0;
     NJson::TJsonArray fullBackups;
-    for (auto &[tp, _] : FullBackups) {
+    for (auto& [tp, _] : FullBackups) {
         NJson::TJsonMap backupMap;
         NJson::TJsonArray vts;
         vts.AppendValue(tp.Step);
@@ -22,4 +22,4 @@ TString TMetadata::Serialize() const {
     return NJson::WriteJson(&m, false);
 }
 
-} // NKikimr::NDataShard::NBackupRestore
+} // namespace NKikimr::NDataShard::NBackupRestore

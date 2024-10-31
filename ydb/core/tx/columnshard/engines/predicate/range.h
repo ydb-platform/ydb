@@ -12,8 +12,7 @@ private:
     TPredicateContainer PredicateTo;
     TPKRangeFilter(TPredicateContainer&& f, TPredicateContainer&& t)
         : PredicateFrom(std::move(f))
-        , PredicateTo(std::move(t)) {
-    }
+        , PredicateTo(std::move(t)) {}
 
 public:
     bool IsEmpty() const {

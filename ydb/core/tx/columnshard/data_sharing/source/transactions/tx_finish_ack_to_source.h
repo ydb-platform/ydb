@@ -9,19 +9,25 @@ class TTxFinishAckToSource: public TExtendedTransactionBase<NColumnShard::TColum
 private:
     using TBase = TExtendedTransactionBase<NColumnShard::TColumnShard>;
     std::shared_ptr<TSourceSession> Session;
+
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& /*ctx*/) override;
+
 public:
-    TTxFinishAckToSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& session, const TString& info)
+    TTxFinishAckToSource(
+        NColumnShard::TColumnShard* self,
+        const std::shared_ptr<TSourceSession>& session,
+        const TString& info
+    )
         : TBase(self, info)
-        , Session(session)
-    {
+        , Session(session) {
         AFL_VERIFY(!Session->GetCursorVerified()->IsValid());
     }
 
-    TTxType GetTxType() const override { return NColumnShard::TXTYPE_DATA_SHARING_FINISH_ACK_TO_SOURCE; }
+    TTxType GetTxType() const override {
+        return NColumnShard::TXTYPE_DATA_SHARING_FINISH_ACK_TO_SOURCE;
+    }
 };
 
-
-}
+} // namespace NKikimr::NOlap::NDataSharing

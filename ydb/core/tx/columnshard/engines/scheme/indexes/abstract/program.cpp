@@ -59,19 +59,13 @@ public:
     }
 
     IRequestNode(const TString& name)
-        : Name(name) {
-
-    }
+        : Name(name) {}
 
     IRequestNode(const std::string& name)
-        : Name(name.data(), name.size()) {
-
-    }
+        : Name(name.data(), name.size()) {}
 
     IRequestNode(const char* name)
-        : Name(name) {
-
-    }
+        : Name(name) {}
 
     virtual ~IRequestNode() = default;
 
@@ -164,6 +158,7 @@ class TConstantNode: public IRequestNode {
 private:
     using TBase = IRequestNode;
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, Constant);
+
 protected:
     virtual NJson::TJsonValue DoSerializeToJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -177,16 +172,17 @@ protected:
     virtual std::shared_ptr<IRequestNode> DoCopy() const override {
         return std::make_shared<TConstantNode>(GetName(), Constant);
     }
+
 public:
     TConstantNode(const std::string& name, const std::shared_ptr<arrow::Scalar>& constant)
         : TBase(name)
-        , Constant(constant) {
-    }
+        , Constant(constant) {}
 };
 
 class TRootNode: public IRequestNode {
 private:
     using TBase = IRequestNode;
+
 protected:
     virtual bool DoCollapse() override {
         return false;
@@ -200,17 +196,17 @@ protected:
     virtual std::shared_ptr<IRequestNode> DoCopy() const override {
         return nullptr;
     }
+
 public:
     TRootNode()
-        : TBase("ROOT") {
-
-    }
+        : TBase("ROOT") {}
 };
 
 class TOriginalColumn: public IRequestNode {
 private:
     using TBase = IRequestNode;
     YDB_READONLY_DEF(TString, ColumnName);
+
 protected:
     virtual bool DoCollapse() override {
         return false;
@@ -224,12 +220,11 @@ protected:
     virtual std::shared_ptr<IRequestNode> DoCopy() const override {
         return std::make_shared<TOriginalColumn>(GetName());
     }
+
 public:
     TOriginalColumn(const std::string& columnName)
         : TBase(GetNextId(TString(columnName.data(), columnName.size())))
-        , ColumnName(columnName.data(), columnName.size()) {
-
-    }
+        , ColumnName(columnName.data(), columnName.size()) {}
 };
 
 class TPackAnd: public IRequestNode {
@@ -237,6 +232,7 @@ private:
     using TBase = IRequestNode;
     THashMap<TString, std::shared_ptr<arrow::Scalar>> Conditions;
     bool IsEmptyFlag = false;
+
 protected:
     virtual bool DoCollapse() override {
         return false;
@@ -257,6 +253,7 @@ protected:
     virtual std::shared_ptr<IRequestNode> DoCopy() const override {
         return std::make_shared<TPackAnd>(*this);
     }
+
 public:
     TPackAnd(const TPackAnd&) = default;
     TPackAnd(const TString& cName, const std::shared_ptr<arrow::Scalar>& value)
@@ -293,6 +290,7 @@ class TOperationNode: public IRequestNode {
 private:
     using TBase = IRequestNode;
     NYql::TKernelRequestBuilder::EBinaryOp Operation;
+
 protected:
     virtual NJson::TJsonValue DoSerializeToJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -309,19 +307,27 @@ protected:
             Parent->RemoveChildren(GetNodeName());
             return true;
         }
-        if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::Equals && Children.size() == 2 && Children[1]->Is<TConstantNode>() && Children[0]->Is<TOriginalColumn>()) {
-            Parent->Exchange(GetNodeName(), std::make_shared<TPackAnd>(Children[0]->As<TOriginalColumn>()->GetColumnName(), Children[1]->As<TConstantNode>()->GetConstant()));
+        if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::Equals && Children.size() == 2 &&
+            Children[1]->Is<TConstantNode>() && Children[0]->Is<TOriginalColumn>()) {
+            Parent->Exchange(
+                GetNodeName(),
+                std::make_shared<TPackAnd>(
+                    Children[0]->As<TOriginalColumn>()->GetColumnName(), Children[1]->As<TConstantNode>()->GetConstant()
+                )
+            );
             return true;
         }
         if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::And) {
-            if (Parent->Is<TOperationNode>() && Parent->As<TOperationNode>()->Operation == NYql::TKernelRequestBuilder::EBinaryOp::And) {
+            if (Parent->Is<TOperationNode>() &&
+                Parent->As<TOperationNode>()->Operation == NYql::TKernelRequestBuilder::EBinaryOp::And) {
                 Parent->Attach(Children);
                 Parent->RemoveChildren(GetNodeName());
                 return true;
             }
         }
         if (Operation == NYql::TKernelRequestBuilder::EBinaryOp::Or) {
-            if (Parent->Is<TOperationNode>() && Parent->As<TOperationNode>()->Operation == NYql::TKernelRequestBuilder::EBinaryOp::Or) {
+            if (Parent->Is<TOperationNode>() &&
+                Parent->As<TOperationNode>()->Operation == NYql::TKernelRequestBuilder::EBinaryOp::Or) {
                 Parent->Attach(Children);
                 Parent->RemoveChildren(GetNodeName());
                 return true;
@@ -357,7 +363,8 @@ protected:
             std::vector<std::shared_ptr<IRequestNode>> newNodes;
             std::set<TString> cNames;
             for (auto&& i : Children) {
-                if (i->Is<TOperationNode>() && i->As<TOperationNode>()->Operation == NYql::TKernelRequestBuilder::EBinaryOp::Or) {
+                if (i->Is<TOperationNode>() &&
+                    i->As<TOperationNode>()->Operation == NYql::TKernelRequestBuilder::EBinaryOp::Or) {
                     auto orNode = i;
                     RemoveChildren(i->GetNodeName());
                     auto copy = orNode->GetChildren();
@@ -368,9 +375,16 @@ protected:
                             producedChildren.emplace_back(c->Copy());
                         }
                         producedChildren.emplace_back(orNodeChildren->Copy());
-                        newNodes.emplace_back(std::make_shared<TOperationNode>(GetNextId(Name), NYql::TKernelRequestBuilder::EBinaryOp::And, producedChildren));
+                        newNodes.emplace_back(std::make_shared<TOperationNode>(
+                            GetNextId(Name), NYql::TKernelRequestBuilder::EBinaryOp::And, producedChildren
+                        ));
                     }
-                    Parent->Exchange(GetNodeName(), std::make_shared<TOperationNode>(GetNextId(orNode->GetName()), NYql::TKernelRequestBuilder::EBinaryOp::Or, newNodes));
+                    Parent->Exchange(
+                        GetNodeName(),
+                        std::make_shared<TOperationNode>(
+                            GetNextId(orNode->GetName()), NYql::TKernelRequestBuilder::EBinaryOp::Or, newNodes
+                        )
+                    );
                     return true;
                 }
             }
@@ -381,12 +395,17 @@ protected:
         std::vector<std::shared_ptr<IRequestNode>> children;
         return std::make_shared<TOperationNode>(GetName(), Operation, children);
     }
+
 public:
     NYql::TKernelRequestBuilder::EBinaryOp GetOperation() const {
         return Operation;
     }
 
-    TOperationNode(const std::string& name, const NYql::TKernelRequestBuilder::EBinaryOp& operation, const std::vector<std::shared_ptr<IRequestNode>>& args)
+    TOperationNode(
+        const std::string& name,
+        const NYql::TKernelRequestBuilder::EBinaryOp& operation,
+        const std::vector<std::shared_ptr<IRequestNode>>& args
+    )
         : TBase(name)
         , Operation(operation) {
         for (auto&& i : args) {
@@ -398,6 +417,7 @@ public:
 class TNormalForm {
 private:
     std::map<std::string, std::shared_ptr<IRequestNode>> Nodes;
+
 public:
     TNormalForm() = default;
 
@@ -407,7 +427,8 @@ public:
             if (arg.IsGenerated()) {
                 auto it = Nodes.find(arg.GetColumnName());
                 if (it == Nodes.end()) {
-                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "program_arg_is_missing")("program", program.DebugString());
+                    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)
+                    ("event", "program_arg_is_missing")("program", program.DebugString());
                     return false;
                 }
                 argNodes.emplace_back(it->second);
@@ -423,7 +444,12 @@ public:
             AFL_VERIFY(argNodes.size() == 0);
             Nodes.emplace(assign.GetName(), std::make_shared<TConstantNode>(assign.GetName(), assign.GetConstant()));
         } else if (!!assign.GetYqlOperationId()) {
-            Nodes.emplace(assign.GetName(), std::make_shared<TOperationNode>(assign.GetName(), (NYql::TKernelRequestBuilder::EBinaryOp)*assign.GetYqlOperationId(), argNodes));
+            Nodes.emplace(
+                assign.GetName(),
+                std::make_shared<TOperationNode>(
+                    assign.GetName(), (NYql::TKernelRequestBuilder::EBinaryOp)*assign.GetYqlOperationId(), argNodes
+                )
+            );
         } else {
             return false;
         }

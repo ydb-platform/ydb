@@ -31,9 +31,13 @@ struct TEvExternal {
         YDB_READONLY(ui64, ExternalGroupId, 0);
 
     public:
-        explicit TEvStartTask(const ui64 externalProcessId, const ui64 externalScopeId,
-            const ui64 externalGroupId, const std::vector<std::shared_ptr<IAllocation>>& allocations,
-            const std::optional<ui32>& stageFeaturesIdx)
+        explicit TEvStartTask(
+            const ui64 externalProcessId,
+            const ui64 externalScopeId,
+            const ui64 externalGroupId,
+            const std::vector<std::shared_ptr<IAllocation>>& allocations,
+            const std::optional<ui32>& stageFeaturesIdx
+        )
             : Allocations(allocations)
             , StageFeaturesIdx(stageFeaturesIdx)
             , ExternalProcessId(externalProcessId)
@@ -53,8 +57,7 @@ struct TEvExternal {
         explicit TEvFinishTask(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId)
             : ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId)
-            , AllocationId(allocationId) {
-        }
+            , AllocationId(allocationId) {}
     };
 
     class TEvUpdateTask: public NActors::TEventLocal<TEvUpdateTask, EvUpdateAllocationTask> {
@@ -65,12 +68,16 @@ struct TEvExternal {
         YDB_READONLY(ui64, Volume, 0);
 
     public:
-        explicit TEvUpdateTask(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume)
+        explicit TEvUpdateTask(
+            const ui64 externalProcessId,
+            const ui64 externalScopeId,
+            const ui64 allocationId,
+            const ui64 volume
+        )
             : ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId)
             , AllocationId(allocationId)
-            , Volume(volume) {
-        }
+            , Volume(volume) {}
     };
 
     class TEvFinishGroup: public NActors::TEventLocal<TEvFinishGroup, EvFinishAllocationGroup> {
@@ -83,8 +90,7 @@ struct TEvExternal {
         explicit TEvFinishGroup(const ui64 externalProcessId, const ui32 externalScopeId, const ui64 externalGroupId)
             : ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId)
-            , ExternalGroupId(externalGroupId) {
-        }
+            , ExternalGroupId(externalGroupId) {}
     };
 
     class TEvStartGroup: public NActors::TEventLocal<TEvStartGroup, EvStartAllocationGroup> {
@@ -97,8 +103,7 @@ struct TEvExternal {
         explicit TEvStartGroup(const ui64 externalProcessId, const ui32 externalScopeId, const ui64 externalGroupId)
             : ExternalProcessId(externalProcessId)
             , ExternalScopeId(externalScopeId)
-            , ExternalGroupId(externalGroupId) {
-        }
+            , ExternalGroupId(externalGroupId) {}
     };
 
     class TEvFinishProcess: public NActors::TEventLocal<TEvFinishProcess, EvFinishAllocationProcess> {
@@ -107,19 +112,21 @@ struct TEvExternal {
 
     public:
         explicit TEvFinishProcess(const ui64 externalProcessId)
-            : ExternalProcessId(externalProcessId) {
-        }
+            : ExternalProcessId(externalProcessId) {}
     };
 
     class TEvStartProcess: public NActors::TEventLocal<TEvStartProcess, EvStartAllocationProcess> {
     private:
         YDB_READONLY(ui64, ExternalProcessId, 0);
         YDB_READONLY_DEF(std::vector<std::shared_ptr<TStageFeatures>>, Stages);
+
     public:
-        explicit TEvStartProcess(const ui64 externalProcessId, const std::vector<std::shared_ptr<TStageFeatures>>& stages)
+        explicit TEvStartProcess(
+            const ui64 externalProcessId,
+            const std::vector<std::shared_ptr<TStageFeatures>>& stages
+        )
             : ExternalProcessId(externalProcessId)
-            , Stages(stages) {
-        }
+            , Stages(stages) {}
     };
 
     class TEvFinishProcessScope: public NActors::TEventLocal<TEvFinishProcessScope, EvFinishAllocationProcessScope> {
@@ -130,9 +137,7 @@ struct TEvExternal {
     public:
         explicit TEvFinishProcessScope(const ui64 externalProcessId, const ui64 externalScopeId)
             : ExternalProcessId(externalProcessId)
-            , ExternalScopeId(externalScopeId)
-        {
-        }
+            , ExternalScopeId(externalScopeId) {}
     };
 
     class TEvStartProcessScope: public NActors::TEventLocal<TEvStartProcessScope, EvStartAllocationProcessScope> {
@@ -143,8 +148,7 @@ struct TEvExternal {
     public:
         explicit TEvStartProcessScope(const ui64 externalProcessId, const ui64 externalScopeId)
             : ExternalProcessId(externalProcessId)
-            , ExternalScopeId(externalScopeId) {
-        }
+            , ExternalScopeId(externalScopeId) {}
     };
 };
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager::NEvents

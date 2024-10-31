@@ -20,14 +20,11 @@ void NKikimr::NDataShard::TUploadMonStats::Aggr(ui64 rows, ui64 bytes) {
     BytesSent += bytes;
 }
 
-void NKikimr::NDataShard::TUploadMonStats::Aggr(const NKikimr::NDataShard::IStatHolder *other) {
+void NKikimr::NDataShard::TUploadMonStats::Aggr(const NKikimr::NDataShard::IStatHolder* other) {
     Aggr(other->GetRows(), other->GetBytes());
 }
 
 TString NKikimr::NDataShard::TUploadMonStats::ToString() const {
-    return TStringBuilder()
-            << "Stats { "
-            << " RowsSent: " << RowsSent
-            << " BytesSent: " << BytesSent
-            << " }";
+    return TStringBuilder() << "Stats { "
+                            << " RowsSent: " << RowsSent << " BytesSent: " << BytesSent << " }";
 }

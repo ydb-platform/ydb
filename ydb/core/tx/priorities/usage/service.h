@@ -19,6 +19,7 @@ private:
         Y_ABORT_UNLESS(TQueuePolicy::Name.size() == 4);
         return TQueuePolicy::Name;
     }
+
 public:
     [[nodiscard]] static ui64 RegisterClient() {
         static TAtomicCounter Counter = 0;
@@ -35,18 +36,24 @@ public:
             context.Send(MakeServiceId(), new TEvExecution::TEvUnregisterClient(clientId));
         }
     }
-    static void Ask(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
+    static void
+    Ask(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
         AFL_VERIFY(request);
         if (TSelf::IsEnabled()) {
-            NActors::TActorContext::AsActorContext().Send(MakeServiceId(), new TEvExecution::TEvAsk(clientId, count, request, priority));
+            NActors::TActorContext::AsActorContext().Send(
+                MakeServiceId(), new TEvExecution::TEvAsk(clientId, count, request, priority)
+            );
         } else {
             request->OnAllocated(std::make_shared<TAllocationGuard>(NActors::TActorId(), clientId, count));
         }
     }
-    static void AskMax(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
+    static void
+    AskMax(const ui64 clientId, const ui64 priority, const std::shared_ptr<IRequest>& request, const ui32 count = 1) {
         AFL_VERIFY(request);
         if (TSelf::IsEnabled()) {
-            NActors::TActorContext::AsActorContext().Send(MakeServiceId(), new TEvExecution::TEvAskMax(clientId, count, request, priority));
+            NActors::TActorContext::AsActorContext().Send(
+                MakeServiceId(), new TEvExecution::TEvAskMax(clientId, count, request, priority)
+            );
         } else {
             request->OnAllocated(std::make_shared<TAllocationGuard>(NActors::TActorId(), clientId, count));
         }
@@ -60,11 +67,11 @@ public:
     static NActors::TActorId MakeServiceId(const ui64 nodeId) {
         return NActors::TActorId(nodeId, "SrvcPrqe" + GetQueueName());
     }
-    static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> queueSignals) {
+    static NActors::IActor*
+    CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> queueSignals) {
         Register(config);
         return new TDistributor(config, GetQueueName(), queueSignals);
     }
-
 };
 
 class TCompConveyorPolicy {
@@ -74,4 +81,4 @@ public:
 
 using TCompServiceOperator = TServiceOperatorImpl<TCompConveyorPolicy>;
 
-}
+} // namespace NKikimr::NPrioritiesQueue

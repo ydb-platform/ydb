@@ -11,20 +11,26 @@ private:
     std::shared_ptr<TDestinationSession> Session;
     const TTabletId SourceTabletId;
     bool Finished = false;
+
 protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
+
 public:
-    TTxFinishFromSource(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& session)
+    TTxFinishFromSource(
+        NColumnShard::TColumnShard* self,
+        const TTabletId sourceTabletId,
+        const std::shared_ptr<TDestinationSession>& session
+    )
         : TBase(self)
         , Session(session)
-        , SourceTabletId(sourceTabletId)
-    {
+        , SourceTabletId(sourceTabletId) {
         Session->GetCursorVerified(SourceTabletId).ReceiveFinished().Validate();
     }
 
-    TTxType GetTxType() const override { return NColumnShard::TXTYPE_DATA_SHARING_FINISH_FROM_SOURCE; }
+    TTxType GetTxType() const override {
+        return NColumnShard::TXTYPE_DATA_SHARING_FINISH_FROM_SOURCE;
+    }
 };
 
-
-}
+} // namespace NKikimr::NOlap::NDataSharing

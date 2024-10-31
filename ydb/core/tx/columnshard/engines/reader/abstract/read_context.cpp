@@ -3,7 +3,6 @@
 namespace NKikimr::NOlap::NReader {
 
 IDataReader::IDataReader(const std::shared_ptr<TReadContext>& context)
-    : Context(context) {
-}
+    : Context(context) {}
 
-}
+} // namespace NKikimr::NOlap::NReader

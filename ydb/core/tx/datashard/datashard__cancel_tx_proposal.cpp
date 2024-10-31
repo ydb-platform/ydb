@@ -3,28 +3,26 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDataShard::TTxCancelTransactionProposal : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxCancelTransactionProposal: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxCancelTransactionProposal(TDataShard *self, ui64 txId);
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_CANCEL_TX_PROPOSAL; }
+    TTxCancelTransactionProposal(TDataShard* self, ui64 txId);
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override {
+        return TXTYPE_CANCEL_TX_PROPOSAL;
+    }
+
 private:
     const ui64 TxId;
     std::vector<std::unique_ptr<IEventHandle>> Replies;
     TMonotonic ReplyTs;
 };
 
-TDataShard::TTxCancelTransactionProposal::TTxCancelTransactionProposal(TDataShard *self,
-                                                                              ui64 txId)
+TDataShard::TTxCancelTransactionProposal::TTxCancelTransactionProposal(TDataShard* self, ui64 txId)
     : TBase(self)
-    , TxId(txId)
-{
-}
+    , TxId(txId) {}
 
-bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
-                                                              const TActorContext &ctx)
-{
+bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     if (Self->IsFollower()) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Unexpected TTxCancelTransactionProposal at tablet follower "
@@ -57,8 +55,7 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
     return true;
 }
 
-void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx)
-{
+void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext& ctx) {
     if (ReplyTs) {
         Self->SendConfirmedReplies(ReplyTs, std::move(Replies));
     } else {
@@ -67,7 +64,7 @@ void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx
     Self->CheckSplitCanStart(ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx) {
     ui64 txId = ev->Get()->Record.GetTxId();
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvDataShard::TEvCancelTransactionProposal " << TabletID()
                 << " txId " <<  txId);

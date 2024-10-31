@@ -66,12 +66,10 @@ public:
 
     TTxEventContainer(const ui64 txId, const std::shared_ptr<ITxEvent>& txEvent)
         : TBase(txEvent)
-        , TxId(txId) {
-    }
+        , TxId(txId) {}
 
     TTxEventContainer(const ui64 txId)
-        : TxId(txId) {
-    }
+        : TxId(txId) {}
 
     bool operator<(const TTxEventContainer& item) const {
         return TxId < item.TxId;
@@ -81,14 +79,23 @@ public:
 class ITxEventWriter {
 protected:
     virtual bool DoCheckInteraction(
-        const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const = 0;
+        const ui64 selfTxId,
+        TInteractionsContext& context,
+        TTxConflicts& conflicts,
+        TTxConflicts& notifications
+    ) const = 0;
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() = 0;
 
 public:
     ITxEventWriter() = default;
     virtual ~ITxEventWriter() = default;
 
-    bool CheckInteraction(const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const {
+    bool CheckInteraction(
+        const ui64 selfTxId,
+        TInteractionsContext& context,
+        TTxConflicts& conflicts,
+        TTxConflicts& notifications
+    ) const {
         TTxConflicts conflictsResult;
         TTxConflicts notificationsResult;
         const bool result = DoCheckInteraction(selfTxId, context, conflictsResult, notificationsResult);

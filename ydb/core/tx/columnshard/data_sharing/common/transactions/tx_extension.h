@@ -11,25 +11,29 @@ private:
     const ui32 TabletTxNo;
     using TBase = NTabletFlatExecutor::TTransactionBase<TShard>;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) = 0;
-    virtual void DoComplete(const NActors::TActorContext & ctx) = 0;
+    virtual void DoComplete(const NActors::TActorContext& ctx) = 0;
 
 public:
-    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override final {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)("tx_info", TxInfo);
+    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx)
+        override final {
+        NActors::TLogContextGuard logGuard =
+            NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)(
+                "tx_info", TxInfo
+            );
         return DoExecute(txc, ctx);
     }
     virtual void Complete(const NActors::TActorContext& ctx) override final {
-        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)("tx_info", TxInfo);
+        NActors::TLogContextGuard logGuard =
+            NActors::TLogContextBuilder::Build()("tablet_id", TBase::Self->TabletID())("local_tx_no", TabletTxNo)(
+                "tx_info", TxInfo
+            );
         return DoComplete(ctx);
     }
 
     TExtendedTransactionBase(TShard* self, const TString& txInfo = Default<TString>())
         : TBase(self)
         , TxInfo(txInfo)
-        , TabletTxNo(++TBase::Self->TabletTxCounter)
-    {
-
-    }
+        , TabletTxNo(++TBase::Self->TabletTxCounter) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

@@ -16,15 +16,13 @@ namespace {
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "AlterCdcStream TPropose"
-            << " opId# " << OperationId << " ";
+        return TStringBuilder() << "AlterCdcStream TPropose"
+                                << " opId# " << OperationId << " ";
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -82,21 +80,21 @@ class TAlterCdcStream: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -112,13 +110,14 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         const auto streamPath = TPath::Resolve(workingDir, context.SS).Dive(streamName);
         {
             const auto checks = streamPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -135,8 +134,7 @@ public:
         const auto tablePath = streamPath.Parent();
         {
             const auto checks = tablePath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -162,29 +160,32 @@ public:
         TCdcStreamInfo::EState newState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
 
         switch (op.GetActionCase()) {
-        case NKikimrSchemeOp::TAlterCdcStream::kDisable:
-            requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
-            if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateReady) {
-                newState = requiredState;
-            }
-            break;
-        case NKikimrSchemeOp::TAlterCdcStream::kGetReady:
-            requiredState = TCdcStreamInfo::EState::ECdcStreamStateReady;
-            if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
-                newState = requiredState;
-            }
-            break;
-        default:
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
-                << "Unknown action: " << static_cast<ui32>(op.GetActionCase()));
-            return result;
+            case NKikimrSchemeOp::TAlterCdcStream::kDisable:
+                requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
+                if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateReady) {
+                    newState = requiredState;
+                }
+                break;
+            case NKikimrSchemeOp::TAlterCdcStream::kGetReady:
+                requiredState = TCdcStreamInfo::EState::ECdcStreamStateReady;
+                if (stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan) {
+                    newState = requiredState;
+                }
+                break;
+            default:
+                result->SetError(
+                    NKikimrScheme::StatusInvalidParameter,
+                    TStringBuilder() << "Unknown action: " << static_cast<ui32>(op.GetActionCase())
+                );
+                return result;
         }
 
         if (newState == TCdcStreamInfo::EState::ECdcStreamStateInvalid) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
-                << "Cannot switch state"
-                << ": from# " << stream->State
-                << ", to# " << requiredState);
+            result->SetError(
+                NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "Cannot switch state"
+                                 << ": from# " << stream->State << ", to# " << requiredState
+            );
             return result;
         }
 
@@ -231,7 +232,8 @@ public:
 
 class TConfigurePartsAtTable: public NCdcStreamState::TConfigurePartsAtTable {
 protected:
-    void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
+    void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context)
+        const override {
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         auto path = context.SS->PathsById.at(pathId);
 
@@ -260,7 +262,9 @@ protected:
             found = true;
 
             Y_ABORT_UNLESS(stream->AlterData);
-            context.SS->DescribeCdcStream(childPathId, childName, stream->AlterData, *notice.MutableStreamDescription());
+            context.SS->DescribeCdcStream(
+                childPathId, childName, stream->AlterData, *notice.MutableStreamDescription()
+            );
         }
     }
 
@@ -271,7 +275,8 @@ public:
 
 class TConfigurePartsAtTableDropSnapshot: public TConfigurePartsAtTable {
 protected:
-    void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
+    void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context)
+        const override {
         TConfigurePartsAtTable::FillNotice(pathId, tx, context);
 
         Y_ABORT_UNLESS(context.SS->TablesWithSnapshots.contains(pathId));
@@ -299,15 +304,15 @@ class TAlterCdcStreamAtTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
 
         return TTxState::Invalid;
@@ -315,40 +320,36 @@ class TAlterCdcStreamAtTable: public TSubOperation {
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::ConfigureParts:
-            if (DropSnapshot) {
-                return MakeHolder<TConfigurePartsAtTableDropSnapshot>(OperationId);
-            } else {
-                return MakeHolder<TConfigurePartsAtTable>(OperationId);
-            }
-        case TTxState::Propose:
-            if (DropSnapshot) {
-                return MakeHolder<NCdcStreamState::TProposeAtTableDropSnapshot>(OperationId);
-            } else {
-                return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
-            }
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::ConfigureParts:
+                if (DropSnapshot) {
+                    return MakeHolder<TConfigurePartsAtTableDropSnapshot>(OperationId);
+                } else {
+                    return MakeHolder<TConfigurePartsAtTable>(OperationId);
+                }
+            case TTxState::Propose:
+                if (DropSnapshot) {
+                    return MakeHolder<NCdcStreamState::TProposeAtTableDropSnapshot>(OperationId);
+                } else {
+                    return MakeHolder<NCdcStreamState::TProposeAtTable>(OperationId);
+                }
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
 public:
     explicit TAlterCdcStreamAtTable(TOperationId id, const TTxTransaction& tx, bool dropSnapshot)
         : TSubOperation(id, tx)
-        , DropSnapshot(dropSnapshot)
-    {
-    }
+        , DropSnapshot(dropSnapshot) {}
 
     explicit TAlterCdcStreamAtTable(TOperationId id, TTxState::ETxState state, bool dropSnapshot)
         : TSubOperation(id, state)
-        , DropSnapshot(dropSnapshot)
-    {
-    }
+        , DropSnapshot(dropSnapshot) {}
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
@@ -360,13 +361,14 @@ public:
             << ": opId# " << OperationId
             << ", stream# " << workingDir << "/" << tableName << "/" << streamName);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID()
+        );
 
         const auto tablePath = TPath::Resolve(workingDir, context.SS).Dive(tableName);
         {
             const auto checks = tablePath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -389,8 +391,7 @@ public:
         const auto streamPath = tablePath.Child(streamName);
         {
             const auto checks = streamPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -417,8 +418,11 @@ public:
         }
 
         if (DropSnapshot && !context.SS->TablesWithSnapshots.contains(tablePath.Base()->PathId)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, TStringBuilder() << "Table has no snapshots"
-                << ": pathId# " << tablePath.Base()->PathId);
+            result->SetError(
+                NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "Table has no snapshots"
+                                 << ": pathId# " << tablePath.Base()->PathId
+            );
             return result;
         }
 
@@ -441,9 +445,8 @@ public:
         Y_ABORT_UNLESS(stream->AlterVersion != 0);
         Y_ABORT_UNLESS(stream->AlterData);
 
-        const auto txType = DropSnapshot
-            ? TTxState::TxAlterCdcStreamAtTableDropSnapshot
-            : TTxState::TxAlterCdcStreamAtTable;
+        const auto txType =
+            DropSnapshot ? TTxState::TxAlterCdcStreamAtTableDropSnapshot : TTxState::TxAlterCdcStreamAtTable;
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
@@ -479,19 +482,18 @@ private:
 
 }; // TAlterCdcStreamAtTable
 
-} // anonymous
+} // namespace
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
-        const TOperationId& opId,
-        const TPath& workingDirPath,
-        const TString& tableName,
-        const TString& streamName)
-{
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TString& tableName,
+    const TString& streamName
+) {
     const auto tablePath = workingDirPath.Child(tableName);
     {
         const auto checks = tablePath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -512,8 +514,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
     const auto streamPath = tablePath.Child(streamName);
     {
         const auto checks = streamPath.Check();
-        checks
-            .NotEmpty()
+        checks.NotEmpty()
             .NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
             .IsResolved()
@@ -530,14 +531,15 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
 }
 
 void DoAlterStream(
-        TVector<ISubOperation::TPtr>& result,
-        const NKikimrSchemeOp::TAlterCdcStream& op,
-        const TOperationId& opId,
-        const TPath& workingDirPath,
-        const TPath& tablePath)
-{
+    TVector<ISubOperation::TPtr>& result,
+    const NKikimrSchemeOp::TAlterCdcStream& op,
+    const TOperationId& opId,
+    const TPath& workingDirPath,
+    const TPath& tablePath
+) {
     {
-        auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
+        auto outTx =
+            TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamImpl);
         outTx.MutableAlterCdcStream()->CopyFrom(op);
         if (op.HasGetReady()) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
@@ -546,7 +548,9 @@ void DoAlterStream(
         result.push_back(CreateAlterCdcStreamImpl(NextPartId(opId, result), outTx));
     }
     {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable);
+        auto outTx = TransactionTemplate(
+            workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStreamAtTable
+        );
         outTx.MutableAlterCdcStream()->CopyFrom(op);
         if (op.HasGetReady()) {
             outTx.MutableLockGuard()->SetOwnerTxId(op.GetGetReady().GetLockTxId());
@@ -576,7 +580,8 @@ ISubOperation::TPtr CreateAlterCdcStreamAtTable(TOperationId id, TTxState::ETxSt
     return MakeSubOperation<TAlterCdcStreamAtTable>(id, state, dropSnapshot);
 }
 
-TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateAlterCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream);
 
     LOG_D("CreateAlterCdcStream"
@@ -610,7 +615,8 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
     DoAlterStream(result, op, opId, workingDirPath, tablePath);
 
     if (op.HasGetReady()) {
-        auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
+        auto outTx =
+            TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
         outTx.SetFailOnExist(true);
         outTx.SetInternal(true);
         outTx.MutableLockConfig()->SetName(tablePath.LeafName());
@@ -620,7 +626,9 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
     }
 
     if (workingDirPath.IsTableIndex()) {
-        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        auto outTx = TransactionTemplate(
+            workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex
+        );
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
 
@@ -630,4 +638,4 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -5,15 +5,11 @@
 namespace NKikimr::NReplication::NController {
 
 TTabletLogPrefix::TTabletLogPrefix(const TController* self)
-    : TabletId(self->TabletID())
-{
-}
+    : TabletId(self->TabletID()) {}
 
 TTabletLogPrefix::TTabletLogPrefix(const TController* self, const TString& txName)
     : TabletId(self->TabletID())
-    , TxName(txName)
-{
-}
+    , TxName(txName) {}
 
 void TTabletLogPrefix::Out(IOutputStream& output) const {
     output << "[controller " << TabletId << "]";
@@ -26,9 +22,7 @@ void TTabletLogPrefix::Out(IOutputStream& output) const {
 TActorLogPrefix::TActorLogPrefix(const TString& activity, ui64 rid, ui64 tid)
     : Activity(activity)
     , ReplicationId(rid)
-    , TargetId(tid)
-{
-}
+    , TargetId(tid) {}
 
 void TActorLogPrefix::Out(IOutputStream& output) const {
     output << "[" << Activity << "]";
@@ -41,7 +35,7 @@ void TActorLogPrefix::Out(IOutputStream& output) const {
     output << " ";
 }
 
-}
+} // namespace NKikimr::NReplication::NController
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TTabletLogPrefix, output, value) {
     value.Out(output);

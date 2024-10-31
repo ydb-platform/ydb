@@ -28,10 +28,12 @@ Y_UNIT_TEST_SUITE(TUniqueIndexTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),
             {NLs::PathExist,
              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
              NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-             NLs::IndexKeys({"indexed"})});
+             NLs::IndexKeys({"indexed"})}
+        );
     }
 }

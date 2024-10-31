@@ -26,8 +26,7 @@ private:
     YDB_READONLY(i64, InternalLevelWeight, 0);
     TOptimizationPriority(const i64 level, const i64 levelWeight)
         : Level(level)
-        , InternalLevelWeight(levelWeight) {
-    }
+        , InternalLevelWeight(levelWeight) {}
 
 public:
     ui64 GetGeneralPriority() const {
@@ -70,8 +69,7 @@ private:
 
 public:
     TTaskDescription(const ui64 taskId)
-        : TaskId(taskId) {
-    }
+        : TaskId(taskId) {}
 
     bool operator<(const TTaskDescription& item) const {
         return TaskId < item.TaskId;
@@ -84,10 +82,14 @@ private:
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 
 protected:
-    virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
+    virtual void DoModifyPortions(
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove
+    ) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
-        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager
+    ) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
     virtual TString DoDebugString() const {
@@ -101,8 +103,7 @@ protected:
 
 public:
     IOptimizerPlanner(const ui64 pathId)
-        : PathId(pathId) {
-    }
+        : PathId(pathId) {}
 
     std::vector<TTaskDescription> GetTasksDescription() const {
         return DoGetTasksDescription();
@@ -119,8 +120,7 @@ public:
         TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
 
         TModificationGuard(IOptimizerPlanner& owner)
-            : Owner(owner) {
-        }
+            : Owner(owner) {}
         ~TModificationGuard() {
             Owner.ModifyPortions(AddPortions, RemovePortions);
         }
@@ -141,14 +141,20 @@ public:
         return DoSerializeToJsonVisual();
     }
 
-    void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
-        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+    void ModifyPortions(
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
+        const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove
+    ) {
+        NActors::TLogContextGuard g(
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId)
+        );
         DoModifyPortions(add, remove);
     }
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
-        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+        std::shared_ptr<TGranuleMeta> granule,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager
+    ) const;
     TOptimizationPriority GetUsefulMetric() const {
         return DoGetUsefulMetric();
     }
@@ -167,11 +173,14 @@ public:
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
 
     public:
-        TBuildContext(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(
+            const ui64 pathId,
+            const std::shared_ptr<IStoragesManager>& storages,
+            const std::shared_ptr<arrow::Schema>& pkSchema
+        )
             : PathId(pathId)
             , Storages(storages)
-            , PKSchema(pkSchema) {
-        }
+            , PKSchema(pkSchema) {}
     };
 
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlannerConstructor, TString>;
@@ -227,14 +236,17 @@ public:
     }
 };
 
-class TOptimizerPlannerConstructorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor> {
+class TOptimizerPlannerConstructorContainer
+    : public NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IOptimizerPlannerConstructor>;
 
 public:
     using TBase::TBase;
 
-    static TConclusion<TOptimizerPlannerConstructorContainer> BuildFromProto(const IOptimizerPlannerConstructor::TProto& data) {
+    static TConclusion<TOptimizerPlannerConstructorContainer> BuildFromProto(
+        const IOptimizerPlannerConstructor::TProto& data
+    ) {
         TOptimizerPlannerConstructorContainer result;
         if (!result.DeserializeFromProto(data)) {
             return TConclusionStatus::Fail("cannot parse interface from proto: " + data.DebugString());

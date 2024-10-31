@@ -10,7 +10,7 @@ class ISSEntity;
 class ISSEntityEvolution;
 class TEntityInitializationContext;
 class TEvolutionInitializationContext;
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter
 
 namespace NKikimr::NSchemeShard {
 
@@ -31,7 +31,9 @@ public:
     }
 
     std::set<ui64> GetShardIdsSet() const {
-        return std::set<ui64>(Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end());
+        return std::set<ui64>(
+            Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end()
+        );
     }
 
     const auto& GetColumnShards() const {
@@ -56,9 +58,12 @@ public:
     TAggregatedStats Stats;
 
     TColumnTableInfo() = default;
-    TColumnTableInfo(ui64 alterVersion, const NKikimrSchemeOp::TColumnTableDescription& description,
+    TColumnTableInfo(
+        ui64 alterVersion,
+        const NKikimrSchemeOp::TColumnTableDescription& description,
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
-        TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
+        TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing()
+    );
 
     const NKikimrSchemeOp::TColumnStoreSharding& GetStandaloneShardingVerified() const {
         AFL_VERIFY(!!StandaloneSharding);
@@ -83,7 +88,8 @@ public:
         Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
     }
 
-    static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
+    static TColumnTableInfo::TPtr
+    BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
 
     bool IsStandalone() const {
         return !!StandaloneSharding;
@@ -104,9 +110,11 @@ public:
         Stats.UpdateTableStats(shardIdx, pathId, newStats);
     }
 
-    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;
+    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>>
+    BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;
 
-    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntityEvolution>> BuildEvolution(const TPathId& pathId, const NOlap::NAlter::TEvolutionInitializationContext& iContext) const;
+    TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntityEvolution>>
+    BuildEvolution(const TPathId& pathId, const NOlap::NAlter::TEvolutionInitializationContext& iContext) const;
 };
 
-}
+} // namespace NKikimr::NSchemeShard

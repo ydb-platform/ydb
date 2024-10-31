@@ -7,7 +7,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
-
 // ad-hoc test parametrization support: only for single boolean flag
 // taken from ydb/core/ut/common/kqp_ut_common.h:Y_UNIT_TEST_TWIN
 //TODO: introduce general support for test parametrization?
@@ -22,7 +21,6 @@
     static TTestRegistration##N testRegistration##N;                                                               \
     template<bool OPT>                                                                                             \
     void Test##N(NUnitTest::TTestContext&)
-
 
 namespace NKikimr {
 namespace NTxProxyUT {
@@ -112,8 +110,7 @@ protected:
 
 class TTestEnv: public TBaseTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0)
-    {
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0) {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
 
         GetSettings().SetNodeCount(staticNodes);
@@ -140,39 +137,51 @@ public:
 void Print(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
 
 namespace NTestLs {
-    TString Finished(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir);
-    TString IsUnavailable(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    TString IsDoesNotExist(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString Finished(
+    const TAutoPtr<NMsgBusProxy::TBusResponse>& resp,
+    NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir
+);
+TString IsUnavailable(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString IsDoesNotExist(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
 
-    TString IsSubdomain(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    TString IsExtSubdomain(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    TString WithPools(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString IsSubdomain(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString IsExtSubdomain(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString WithPools(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
 
+TString InSubdomain(
+    const TAutoPtr<NMsgBusProxy::TBusResponse>& resp,
+    NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir
+);
+TString InSubdomainWithPools(
+    const TAutoPtr<NMsgBusProxy::TBusResponse>& resp,
+    NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir
+);
+TString NotInSubdomain(
+    const TAutoPtr<NMsgBusProxy::TBusResponse>& resp,
+    NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir
+);
+TString HasUserAttributes(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, TVector<std::pair<TString, TString>> attrs);
+NKikimrSubDomains::TDomainDescription ExtractDomainDescription(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TVector<NKikimrSchemeOp::TTablePartition> ExtractTablePartitions(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+NKikimrSchemeOp::TTableDescription ExtractTableDescription(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString CheckStatus(
+    const TAutoPtr<NMsgBusProxy::TBusResponse>& resp,
+    NKikimrScheme::EStatus schemeStatus = NKikimrScheme::StatusSuccess
+);
 
-    TString InSubdomain(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir);
-    TString InSubdomainWithPools(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir);
-    TString NotInSubdomain(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrSchemeOp::EPathType type = NKikimrSchemeOp::EPathTypeDir);
-    TString HasUserAttributes(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, TVector<std::pair<TString, TString>> attrs);
-    NKikimrSubDomains::TDomainDescription ExtractDomainDescription(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    TVector<NKikimrSchemeOp::TTablePartition> ExtractTablePartitions(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    NKikimrSchemeOp::TTableDescription ExtractTableDescription(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    TString CheckStatus(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrScheme::EStatus schemeStatus = NKikimrScheme::StatusSuccess);
+TString ChildrenCount(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, ui64 count);
+TString NoChildren(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString HasChild(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, TString name, NKikimrSchemeOp::EPathType type);
 
-    TString ChildrenCount(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, ui64 count);
-    TString NoChildren(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    TString HasChild(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, TString name, NKikimrSchemeOp::EPathType type);
+TString PathType(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrSchemeOp::EPathType type);
+TString IsDir(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+TString IsTable(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
 
-    TString PathType(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp, NKikimrSchemeOp::EPathType type);
-    TString IsDir(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-    TString IsTable(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+using TPathVersion = Tests::TClient::TPathVersion;
+TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
 
-
-
-    using TPathVersion = Tests::TClient::TPathVersion;
-    TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-
-    TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-}
+TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
+} // namespace NTestLs
 
 namespace NHelpers {
 const TDuration WaitTimeOut = TDuration::Seconds(ChoiceFastOrFat(10, 600));
@@ -189,24 +198,33 @@ inline constexpr static T ChoiceThreadSanOrDefault(T tsan, T def) noexcept {
 }
 const ui32 active_tenants_nodes = ChoiceThreadSanOrDefault(1, 5);
 
-ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString& name, ui64 shard_index, const TStoragePools& pools = {});
+ui64 CreateSubDomainAndTabletInside(
+    TBaseTestEnv& env,
+    const TString& name,
+    ui64 shard_index,
+    const TStoragePools& pools = {}
+);
 
-void CheckTableIsOfline(TBaseTestEnv &env, ui64 tablet_id);
-void CheckTableBecomeAlive(TBaseTestEnv &env, ui64 tablet_id);
-void CheckTableBecomeOfline(TBaseTestEnv &env, ui64 tablet_id);
-void CheckTableRunOnProperTenantNode(TBaseTestEnv &env, const TString& tenant, ui64 tablet_id);
+void CheckTableIsOfline(TBaseTestEnv& env, ui64 tablet_id);
+void CheckTableBecomeAlive(TBaseTestEnv& env, ui64 tablet_id);
+void CheckTableBecomeOfline(TBaseTestEnv& env, ui64 tablet_id);
+void CheckTableRunOnProperTenantNode(TBaseTestEnv& env, const TString& tenant, ui64 tablet_id);
 
-NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSetting(const TString &name, const TStoragePools &pools = {});
-NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString &name, const TStoragePools &pools = {});
+NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSetting(const TString& name, const TStoragePools& pools = {});
+NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString& name, const TStoragePools& pools = {});
 
-NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString &name);
-void SetRowInSimpletable(TBaseTestEnv& env, ui64 key, ui64 value, const TString &path);
-}
+NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString& name);
+void SetRowInSimpletable(TBaseTestEnv& env, ui64 key, ui64 value, const TString& path);
+} // namespace NHelpers
 
 class TTestEnvWithPoolsSupport: public TBaseTestEnv {
 public:
-    TTestEnvWithPoolsSupport(ui32 staticNodes = 1, ui32 dynamicNodes = 0, ui32 poolsCount = 2, bool enableAlterDatabaseCreateHiveFirst = true)
-    {
+    TTestEnvWithPoolsSupport(
+        ui32 staticNodes = 1,
+        ui32 dynamicNodes = 0,
+        ui32 poolsCount = 2,
+        bool enableAlterDatabaseCreateHiveFirst = true
+    ) {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
         GetSettings().SetEnableMockOnSingleNode(false);
 
@@ -230,7 +248,7 @@ public:
 
     TStoragePools CreatePoolsForTenant(const TString& tenant) {
         TStoragePools result;
-        for (auto& poolType: Settings->StoragePoolTypes) {
+        for (auto& poolType : Settings->StoragePoolTypes) {
             auto& poolKind = poolType.first;
             result.emplace_back(GetClient().CreateStoragePool(poolKind, tenant), poolKind);
         }
@@ -238,4 +256,5 @@ public:
     }
 };
 
-}}
+} // namespace NTxProxyUT
+} // namespace NKikimr

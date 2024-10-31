@@ -4,8 +4,7 @@
 namespace NKikimr::NDataShard {
 
 TTableConflictsCache::TTableConflictsCache(ui64 localTid)
-    : LocalTid(localTid)
-{}
+    : LocalTid(localTid) {}
 
 void TTableConflictsCache::AddUncommittedWrite(TConstArrayRef<TCell> key, ui64 txId, NTable::TDatabase& db) {
     if (WriteKeys.empty()) {
@@ -28,7 +27,7 @@ void TTableConflictsCache::AddUncommittedWrite(TConstArrayRef<TCell> key, ui64 t
         }
         auto r = p->WriteKeys.insert(k);
         Y_ABORT_UNLESS(r.second);
-        AddRollbackOp(TRollbackOpRemoveUncommittedWrite{ txId, k }, db);
+        AddRollbackOp(TRollbackOpRemoveUncommittedWrite{txId, k}, db);
     }
 }
 
@@ -49,9 +48,9 @@ void TTableConflictsCache::RemoveUncommittedWrites(TConstArrayRef<TCell> key, NT
         Y_ABORT_UNLESS(it != UncommittedWrites.end());
         auto r = it->second->WriteKeys.erase(k);
         Y_ABORT_UNLESS(r);
-        AddRollbackOp(TRollbackOpAddUncommittedWrite{ txId, k }, db);
+        AddRollbackOp(TRollbackOpAddUncommittedWrite{txId, k}, db);
         if (it->second->WriteKeys.empty()) {
-            AddRollbackOp(TRollbackOpRestoreUncommittedWrite{ txId, std::move(it->second) }, db);
+            AddRollbackOp(TRollbackOpRestoreUncommittedWrite{txId, std::move(it->second)}, db);
             UncommittedWrites.erase(it);
         }
     }
@@ -68,7 +67,7 @@ void TTableConflictsCache::RemoveUncommittedWrites(ui64 txId, NTable::TDatabase&
     auto* p = it->second.get();
 
     // Note: UncommittedWrite will be kept alive by rollback buffer
-    AddRollbackOp(TRollbackOpRestoreUncommittedWrite{ txId, std::move(it->second) }, db);
+    AddRollbackOp(TRollbackOpRestoreUncommittedWrite{txId, std::move(it->second)}, db);
     UncommittedWrites.erase(it);
 
     // Note: on rollback these links will be restored
@@ -77,7 +76,7 @@ void TTableConflictsCache::RemoveUncommittedWrites(ui64 txId, NTable::TDatabase&
     }
 }
 
-class TTableConflictsCache::TTxObserver : public NTable::ITransactionObserver {
+class TTableConflictsCache::TTxObserver: public NTable::ITransactionObserver {
 public:
     TTxObserver() {}
 
@@ -284,21 +283,20 @@ void TTableConflictsCache::OnRollbackChanges() {
     };
 
     while (!RollbackOps.empty()) {
-        std::visit(TPerformRollback{ this }, RollbackOps.back());
+        std::visit(TPerformRollback{this}, RollbackOps.back());
         RollbackOps.pop_back();
     }
 }
 
-class TConflictsCache::TTxFindWriteConflicts
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
-{
+class TConflictsCache::TTxFindWriteConflicts: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxFindWriteConflicts(TDataShard* self, ui64 txId)
         : TBase(self)
-        , TxId(txId)
-    { }
+        , TxId(txId) {}
 
-    TTxType GetTxType() const override { return TXTYPE_FIND_WRITE_CONFLICTS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_FIND_WRITE_CONFLICTS;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         auto& cache = Self->GetConflictsCache();

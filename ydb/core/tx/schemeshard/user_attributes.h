@@ -97,8 +97,14 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
     static bool CheckAttribute(EUserAttributesOp op, const TString& name, const TString& value, TString& errStr);
     static bool CheckAttributeRemove(EUserAttributesOp op, const TString& name, TString& errStr);
     static bool CheckValueStringWeak(const TString& name, const TString& value, TString& errStr);
-    static bool CheckValueUint64(const TString& name, const TString& value, TString& errStr, ui64 minValue = 0, ui64 maxValue = Max<ui64>());
+    static bool CheckValueUint64(
+        const TString& name,
+        const TString& value,
+        TString& errStr,
+        ui64 minValue = 0,
+        ui64 maxValue = Max<ui64>()
+    );
     static bool CheckValueJson(const TString& name, const TString& value, TString& errStr);
 };
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -39,7 +39,7 @@ void TMemoryChanges::GrabNewShard(TSchemeShard*, const TShardIdx& shardId) {
     Shards.emplace(shardId, nullptr);
 }
 
-void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) {
+void TMemoryChanges::GrabShard(TSchemeShard* ss, const TShardIdx& shardId) {
     Y_ABORT_UNLESS(ss->ShardInfos.contains(shardId));
 
     const auto& shard = ss->ShardInfos.at(shardId);
@@ -250,4 +250,4 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     }
 }
 
-}
+} // namespace NKikimr::NSchemeShard

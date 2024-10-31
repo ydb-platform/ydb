@@ -17,7 +17,7 @@ class TPortionDataAccessor;
 namespace NDataLocks {
 class TManager;
 }
-}
+} // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NDataSharing {
 
@@ -41,18 +41,20 @@ private:
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     EState State = EState::Created;
+
 protected:
     TTransferContext TransferContext;
-    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) = 0;
+    virtual bool DoStart(
+        const NColumnShard::TColumnShard& shard,
+        const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions
+    ) = 0;
     virtual THashSet<ui64> GetPathIdsForStart() const = 0;
+
 public:
     virtual ~TCommonSession() = default;
 
     TCommonSession(const TString& info)
-        : Info(info)
-    {
-
-    }
+        : Info(info) {}
 
     TCommonSession(const TString& sessionId, const TString& info, const TTransferContext& transferContext)
         : SessionId(sessionId)
@@ -121,7 +123,6 @@ public:
         }
         return TConclusionStatus::Success();
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

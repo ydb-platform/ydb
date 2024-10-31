@@ -15,81 +15,64 @@ namespace NKikimr::NReplication::NService {
 TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime)
     : Offset(offset)
     , Data(data)
-    , CreateTime(createTime)
-{
-}
+    , CreateTime(createTime) {}
 
 TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime)
     : Offset(offset)
     , Data(std::move(data))
-    , CreateTime(createTime)
-{
-}
+    , CreateTime(createTime) {}
 
 TEvWorker::TEvData::TEvData(const TString& source, const TVector<TRecord>& records)
     : Source(source)
-    , Records(records)
-{
-}
+    , Records(records) {}
 
 TEvWorker::TEvData::TEvData(const TString& source, TVector<TRecord>&& records)
     : Source(source)
-    , Records(std::move(records))
-{
-}
+    , Records(std::move(records)) {}
 
 void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
     out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " CreateTime: " << CreateTime.ToStringUpToSeconds()
-    << " }";
+        << " Offset: " << Offset << " Data: " << Data.size() << "b"
+        << " CreateTime: " << CreateTime.ToStringUpToSeconds() << " }";
 }
 
 TString TEvWorker::TEvData::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
-        << " Source: " << Source
-        << " Records [" << JoinSeq(",", Records) << "]"
-    << " }";
+                            << " Source: " << Source << " Records [" << JoinSeq(",", Records) << "]"
+                            << " }";
 }
 
 TEvWorker::TEvGone::TEvGone(EStatus status, const TString& errorDescription)
     : Status(status)
-    , ErrorDescription(errorDescription)
-{
-}
+    , ErrorDescription(errorDescription) {}
 
 TString TEvWorker::TEvGone::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
-        << " Status: " << Status
-        << " ErrorDescription: " << ErrorDescription
-    << " }";
+                            << " Status: " << Status << " ErrorDescription: " << ErrorDescription << " }";
 }
 
 TEvWorker::TEvStatus::TEvStatus(TDuration lag)
-    : Lag(lag)
-{
-}
+    : Lag(lag) {}
 
 TString TEvWorker::TEvStatus::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
-        << " Lag: " << Lag
-    << " }";
+                            << " Lag: " << Lag << " }";
 }
 
-TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds)
+TEvWorker::TEvDataEnd::TEvDataEnd(
+    ui64 partitionId,
+    TVector<ui64>&& adjacentPartitionsIds,
+    TVector<ui64>&& childPartitionsIds
+)
     : PartitionId(partitionId)
     , AdjacentPartitionsIds(std::move(adjacentPartitionsIds))
-    , ChildPartitionsIds(std::move(childPartitionsIds))
-{
-}
+    , ChildPartitionsIds(std::move(childPartitionsIds)) {}
 
 TString TEvWorker::TEvDataEnd::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
-        << " PartitionId: " << PartitionId
-        << " AdjacentPartitionsIds: " << JoinSeq(", ", AdjacentPartitionsIds)
-        << " ChildPartitionsIds: " << JoinSeq(", ", ChildPartitionsIds)
-    << " }";
+                            << " PartitionId: " << PartitionId
+                            << " AdjacentPartitionsIds: " << JoinSeq(", ", AdjacentPartitionsIds)
+                            << " ChildPartitionsIds: " << JoinSeq(", ", ChildPartitionsIds) << " }";
 }
 
 class TWorker: public TActorBootstrapped<TWorker> {
@@ -103,9 +86,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         explicit TActorInfo(std::function<IActor*(void)>&& createFn)
             : CreateFn(std::move(createFn))
             , InitDone(false)
-            , CreateAttempt(0)
-        {
-        }
+            , CreateAttempt(0) {}
 
         operator TActorId() const {
             return ActorId;
@@ -134,9 +115,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[Worker]"
-                << SelfId() << " ";
+            LogPrefix = TStringBuilder() << "[Worker]" << SelfId() << " ";
         }
 
         return LogPrefix.GetRef();
@@ -235,13 +214,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {
         switch (ev->Get()->Status) {
-        case TEvWorker::TEvGone::UNAVAILABLE:
-            if (info.GetCreateAttempt() < MaxAttempts) {
-                return info.Register(this);
-            }
-            [[fallthrough]];
-        default:
-            return Leave(ev);
+            case TEvWorker::TEvGone::UNAVAILABLE:
+                if (info.GetCreateAttempt() < MaxAttempts) {
+                    return info.Register(this);
+                }
+                [[fallthrough]];
+            default:
+                return Leave(ev);
         }
     }
 
@@ -257,7 +236,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void ScheduleLagReport() {
-        const auto random = TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % LagReportInterval.MicroSeconds());
+        const auto random =
+            TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % LagReportInterval.MicroSeconds());
         Schedule(LagReportInterval + random, new TEvents::TEvWakeup());
     }
 
@@ -286,15 +266,14 @@ public:
     }
 
     explicit TWorker(
-            const TActorId& parent,
-            std::function<IActor*(void)>&& createReaderFn,
-            std::function<IActor*(void)>&& createWriterFn)
+        const TActorId& parent,
+        std::function<IActor*(void)>&& createReaderFn,
+        std::function<IActor*(void)>&& createWriterFn
+    )
         : Parent(parent)
         , Reader(std::move(createReaderFn))
         , Writer(std::move(createWriterFn))
-        , Lag(TDuration::Zero())
-    {
-    }
+        , Lag(TDuration::Zero()) {}
 
     void Bootstrap() {
         for (auto* actor : {&Reader, &Writer}) {
@@ -330,11 +309,11 @@ private:
 };
 
 IActor* CreateWorker(
-        const TActorId& parent,
-        std::function<IActor*(void)>&& createReaderFn,
-        std::function<IActor*(void)>&& createWriterFn)
-{
+    const TActorId& parent,
+    std::function<IActor*(void)>&& createReaderFn,
+    std::function<IActor*(void)>&& createWriterFn
+) {
     return new TWorker(parent, std::move(createReaderFn), std::move(createWriterFn));
 }
 
-}
+} // namespace NKikimr::NReplication::NService

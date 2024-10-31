@@ -16,13 +16,11 @@ private:
     TActorId GetExternalDataActorId() const {
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
+
 public:
     TActor(std::shared_ptr<TTiersManager> owner)
         : Owner(owner)
-        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
-    {
-
-    }
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>()) {}
     ~TActor() {
         Owner->Stop(false);
     }
@@ -39,7 +37,10 @@ public:
     void Bootstrap() {
         Become(&TThis::StateMain);
         AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
-        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation()));
+        Send(
+            GetExternalDataActorId(),
+            new NMetadata::NProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation())
+        );
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
     }
 
@@ -67,7 +68,10 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
-        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(Owner->GetExternalDataManipulation()));
+        Send(
+            GetExternalDataActorId(),
+            new NMetadata::NProvider::TEvUnsubscribeExternal(Owner->GetExternalDataManipulation())
+        );
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(SecretsFetcher));
         PassAway();
     }
@@ -102,33 +106,38 @@ bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
 TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TTierConfig& config)
     : TabletId(tabletId)
     , TabletActorId(tabletActorId)
-    , Config(config)
-{
-}
+    , Config(config) {}
 
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
+NArrow::NSerialization::TSerializerContainer ConvertCompression(
+    const NKikimrSchemeOp::TCompressionOptions& compressionProto
+) {
     NArrow::NSerialization::TSerializerContainer container;
     container.DeserializeFromProto(compressionProto).Validate();
     return container;
 }
 
-NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto) {
+NArrow::NSerialization::TSerializerContainer ConvertCompression(
+    const NKikimrSchemeOp::TOlapColumn::TSerializer& serializerProto
+) {
     NArrow::NSerialization::TSerializerContainer container;
     AFL_VERIFY(container.DeserializeFromProto(serializerProto));
     return container;
 }
-}
+} // namespace NTiers
 
-void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs:"
-        << (snapshotExt ? " snapshots" : "") << (secrets ? " secrets" : "") << " at tablet " << TabletId;
+void TTiersManager::TakeConfigs(
+    NMetadata::NFetcher::ISnapshot::TPtr snapshotExt,
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets
+) {
+    ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs:" << (snapshotExt ? " snapshots" : "")
+                                          << (secrets ? " secrets" : "") << " at tablet " << TabletId;
 
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshotExt);
     Y_ABORT_UNLESS(snapshotPtr);
     Snapshot = snapshotExt;
     Secrets = secrets;
     auto& snapshot = *snapshotPtr;
-    for (auto itSelf = Managers.begin(); itSelf != Managers.end(); ) {
+    for (auto itSelf = Managers.begin(); itSelf != Managers.end();) {
         auto it = snapshot.GetTierConfigs().find(itSelf->first);
         if (it == snapshot.GetTierConfigs().end()) {
             itSelf->second.Stop();
@@ -201,7 +210,8 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
     for (auto&& i : PathIdTiering) {
         auto* tieringRule = snapshotPtr->GetTieringById(i.second);
         if (tieringRule) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "activation");
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+            ("path_id", i.first)("tiering_name", i.second)("event", "activation");
             NOlap::TTiering tiering = tieringRule->BuildOlapTiers();
             for (auto& [name, tier] : tiering.GetTierByName()) {
                 AFL_VERIFY(name != NOlap::NTiering::NCommon::DeleteTierName);
@@ -212,7 +222,8 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
             }
             result.emplace(i.first, std::move(tiering));
         } else {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("path_id", i.first)("tiering_name", i.second)("event", "not_found");
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+            ("path_id", i.first)("tiering_name", i.second)("event", "not_found");
         }
     }
     return result;
@@ -226,4 +237,4 @@ TActorId TTiersManager::GetActorId() const {
     }
 }
 
-}
+} // namespace NKikimr::NColumnShard

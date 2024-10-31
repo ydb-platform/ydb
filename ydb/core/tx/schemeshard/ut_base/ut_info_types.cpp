@@ -8,12 +8,9 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
-
     void VerifyDeduplicateColumnFamiliesById(
-            const TString& srcProtoText,
-            const TString& dstProtoText,
-            const TString& posMapExpected)
-    {
+        const TString& srcProtoText, const TString& dstProtoText, const TString& posMapExpected
+    ) {
         NKikimrSchemeOp::TPartitionConfig config;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(srcProtoText, &config);
         UNIT_ASSERT_C(parseOk, "Failed to parse TPartitionConfig:\n" << srcProtoText);
@@ -22,7 +19,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardInfoTypesTest) {
 
         TString result;
         ::google::protobuf::TextFormat::PrintToString(config, &result);
-        TString expected = StripStringLeft(dstProtoText, [](const auto* it) { return *it == '\n'; });
+        TString expected = StripStringLeft(dstProtoText, [](const auto* it) {
+            return *it == '\n';
+        });
 
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
 
@@ -69,7 +68,8 @@ ColumnFamilies {
   }
 }
 )",
-        "{ 0 -> 0 }");
+            "{ 0 -> 0 }"
+        );
     }
 
     Y_UNIT_TEST(LostId) {
@@ -116,7 +116,8 @@ ColumnFamilies {
   }
 }
 )",
-        "{ 0 -> 0, 1 -> 1 }");
+            "{ 0 -> 0, 1 -> 1 }"
+        );
     }
 
     Y_UNIT_TEST(DeduplicationOrder) {
@@ -164,7 +165,8 @@ ColumnFamilies {
   }
 }
 )",
-        "{ 0 -> 0, 1 -> 1 }");
+            "{ 0 -> 0, 1 -> 1 }"
+        );
     }
 
     Y_UNIT_TEST(MultipleDeduplications) {
@@ -236,7 +238,7 @@ ColumnFamilies {
   }
 }
 )",
-        "{ 0 -> 0, 1 -> 1 }");
+            "{ 0 -> 0, 1 -> 1 }"
+        );
     }
-
 }

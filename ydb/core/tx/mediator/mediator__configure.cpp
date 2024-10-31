@@ -6,7 +6,7 @@ namespace NTxMediator {
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
 
-struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
+struct TTxMediator::TTxConfigure: public TTransactionBase<TTxMediator> {
     TActorId AckTo;
     ui64 Version;
     TVector<TCoordinatorId> Coordinators;
@@ -14,20 +14,27 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
     TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
 
-    TTxConfigure(TSelf *mediator, TActorId ackTo, ui64 version, const TVector<TCoordinatorId>& coordinators, ui32 timeCastBuckets)
+    TTxConfigure(
+        TSelf* mediator,
+        TActorId ackTo,
+        ui64 version,
+        const TVector<TCoordinatorId>& coordinators,
+        ui32 timeCastBuckets
+    )
         : TBase(mediator)
         , AckTo(ackTo)
         , Version(version)
         , Coordinators(coordinators)
         , TimeCastBuketsPerMediator(timeCastBuckets)
-        , ConfigurationApplied(false)
-    {
+        , ConfigurationApplied(false) {
         Y_ABORT_UNLESS(TimeCastBuketsPerMediator);
     }
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
         auto rowset = db.Table<Schema::DomainConfiguration>().Range().Select();
@@ -55,22 +62,28 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
         }
 
         if (curVersion == 0) {
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
+            Respond = new TEvSubDomain::TEvConfigureStatus(
+                NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()
+            );
             db.Table<Schema::DomainConfiguration>().Key(Version).Update(
-                        NIceDb::TUpdate<Schema::DomainConfiguration::Coordinators>(Coordinators),
-                        NIceDb::TUpdate<Schema::DomainConfiguration::TimeCastBuckets>(TimeCastBuketsPerMediator));
+                NIceDb::TUpdate<Schema::DomainConfiguration::Coordinators>(Coordinators),
+                NIceDb::TUpdate<Schema::DomainConfiguration::TimeCastBuckets>(TimeCastBuketsPerMediator)
+            );
             ConfigurationApplied = true;
-        } else if (curVersion == Version && curCoordinators == Coordinators && curBuckets == TimeCastBuketsPerMediator) {
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID());
+        } else if (curVersion == Version && curCoordinators == Coordinators &&
+                   curBuckets == TimeCastBuketsPerMediator) {
+            Respond = new TEvSubDomain::TEvConfigureStatus(
+                NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID()
+            );
         } else {
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
+            Respond =
+                new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
         }
-
 
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR,
              "tablet# " << Self->TabletID() <<
              " version# " << Version <<
@@ -83,9 +96,14 @@ struct TTxMediator::TTxConfigure : public TTransactionBase<TTxMediator> {
     }
 };
 
-ITransaction* TTxMediator::CreateTxConfigure(TActorId ackTo, ui64 version, const TVector<TCoordinatorId> &coordinators, ui32 timeCastBuckets) {
+ITransaction* TTxMediator::CreateTxConfigure(
+    TActorId ackTo,
+    ui64 version,
+    const TVector<TCoordinatorId>& coordinators,
+    ui32 timeCastBuckets
+) {
     return new TTxMediator::TTxConfigure(this, ackTo, version, coordinators, timeCastBuckets);
 }
 
-}
-}
+} // namespace NTxMediator
+} // namespace NKikimr

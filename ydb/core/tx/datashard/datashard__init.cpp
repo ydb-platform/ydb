@@ -6,15 +6,13 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/util/pb.h>
 
-
 namespace NKikimr {
 namespace NDataShard {
 
 using namespace NTabletFlatExecutor;
 
 TDataShard::TTxInit::TTxInit(TDataShard* ds)
-    : TBase(ds)
-{}
+    : TBase(ds) {}
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute");
@@ -50,9 +48,9 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         }
 
         return done;
-    } catch (const TNotReadyTabletException &) {
+    } catch (const TNotReadyTabletException&) {
         return false;
-    } catch (const TSchemeErrorTabletException &ex) {
+    } catch (const TSchemeErrorTabletException& ex) {
         Y_UNUSED(ex);
         Y_ABORT();
     } catch (...) {
@@ -60,7 +58,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
     }
 }
 
-void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
+void TDataShard::TTxInit::Complete(const TActorContext& ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
 
     // Start MakeSnapshot() if we started in SplitSrcMakeSnapshot state
@@ -91,10 +89,8 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     Self->ResolveTablePath(ctx);
 
     // Plan cleanup if needed
-    if (Self->State == TShardState::Ready ||
-        Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
-        Self->State == TShardState::SplitSrcMakeSnapshot)
-    {
+    if (Self->State == TShardState::Ready || Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
+        Self->State == TShardState::SplitSrcMakeSnapshot) {
         // Initialize snapshot expiration queue with current context time
         Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
         Self->PlanCleanup(ctx);
@@ -132,7 +128,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
 #define LOAD_SYS_BYTES(db, row, value) if (!TDataShard::SysGetBytes(db, row, value)) return false;
 #define LOAD_SYS_BOOL(db, row, value) if (!TDataShard::SysGetBool(db, row, value)) return false;
 
-bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
+bool TDataShard::TTxInit::ReadEverything(TTransactionContext& txc) {
     // Note that we should not store any data directly into Self until NoMoreReads() is called
     // But it is ok for initialization, as long as ALL FOLLOWING ACTIONS ARE IDEMPOTENT
 
@@ -223,7 +219,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     { // Reads user tables metadata
         Self->TableInfos.clear(); // For idempotency
-        auto rowset = db.Table<Schema::UserTables>().GreaterOrEqual(0).Select();  // TODO[serxa]: this should be Range() but it is not working right now
+        auto rowset = db.Table<Schema::UserTables>().GreaterOrEqual(0).Select(
+        );  // TODO[serxa]: this should be Range() but it is not working right now
         if (!rowset.IsReady())
             return false;
         while (!rowset.EndOfSet()) {
@@ -268,7 +265,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             ui64 dstTablet = rowset.GetValue<Schema::SplitSrcSnapshots::DstTabletId>();
             TString snapBody = rowset.GetValue<Schema::SplitSrcSnapshots::SnapshotMeta>();
 
-            TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot = new NKikimrTxDataShard::TEvSplitTransferSnapshot;
+            TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot =
+                new NKikimrTxDataShard::TEvSplitTransferSnapshot;
             bool parseOk = ParseFromStringNoSizeLimit(*snapshot, snapBody);
             Y_ABORT_UNLESS(parseOk);
             Self->SplitSrcSnapshotSender.AddDst(dstTablet);
@@ -360,16 +358,16 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             Y_ABORT_UNLESS(parseOk);
 
             switch (Self->State) {
-            case TShardState::SplitSrcWaitForNoTxInFlight:
-            case TShardState::SplitSrcMakeSnapshot:
+                case TShardState::SplitSrcWaitForNoTxInFlight:
+                case TShardState::SplitSrcMakeSnapshot:
                 // split just started, there might be in-flight transactions
-                break;
-            default:
-                for (ui32 i = 0; i < Self->SrcSplitDescription->DestinationRangesSize(); ++i) {
-                    ui64 dstTablet = Self->SrcSplitDescription->GetDestinationRanges(i).GetTabletID();
-                    Self->ChangeExchangeSplitter.AddDst(dstTablet);
-                }
-                break;
+                    break;
+                default:
+                    for (ui32 i = 0; i < Self->SrcSplitDescription->DestinationRangesSize(); ++i) {
+                        ui64 dstTablet = Self->SrcSplitDescription->GetDestinationRanges(i).GetTabletID();
+                        Self->ChangeExchangeSplitter.AddDst(dstTablet);
+                    }
+                    break;
             }
         }
     }
@@ -393,7 +391,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         if (!Self->TransQueue.Load(db))
             return false;
 
-        for (auto &pr : Self->TransQueue.GetTxsInFly()) {
+        for (auto& pr : Self->TransQueue.GetTxsInFly()) {
             pr.second->BuildExecutionPlan(true);
             if (!pr.second->IsExecutionPlanFinished())
                 Self->Pipeline.GetExecutionUnit(pr.second->GetCurrentUnit()).AddOperation(pr.second);
@@ -466,7 +464,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSourceOffsets::TableId)) {
+    if (Self->State != TShardState::Offline &&
+        txc.DB.GetScheme().GetTableInfo(Schema::ReplicationSourceOffsets::TableId)) {
         auto rowset = db.Table<Schema::ReplicationSourceOffsets>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -480,7 +479,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             if (auto* table = Self->FindReplicatedTable(pathId)) {
                 if (auto* source = table->FindSource(sourceId)) {
                     ui64 splitKeyId = rowset.GetValue<Schema::ReplicationSourceOffsets::SplitKeyId>();
-                    TSerializedCellVec splitKey = TSerializedCellVec(rowset.GetValue<Schema::ReplicationSourceOffsets::SplitKey>());
+                    TSerializedCellVec splitKey =
+                        TSerializedCellVec(rowset.GetValue<Schema::ReplicationSourceOffsets::SplitKey>());
                     i64 maxOffset = rowset.GetValue<Schema::ReplicationSourceOffsets::MaxOffset>();
                     source->LoadSplitKey(splitKeyId, std::move(splitKey), maxOffset);
                 }
@@ -493,7 +493,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     Self->ReceiveReplicationSourceOffsetsFrom.clear();
-    if (Self->State == TShardState::SplitDstReceivingSnapshot && txc.DB.GetScheme().GetTableInfo(Schema::DstReplicationSourceOffsetsReceived::TableId)) {
+    if (Self->State == TShardState::SplitDstReceivingSnapshot &&
+        txc.DB.GetScheme().GetTableInfo(Schema::DstReplicationSourceOffsetsReceived::TableId)) {
         auto rowset = db.Table<Schema::DstReplicationSourceOffsetsReceived>().Select();
         if (!rowset.IsReady()) {
             return false;
@@ -547,15 +548,16 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 }
 
 /// Creates and updates schema at tablet boot time
-class TDataShard::TTxInitSchema : public TTransactionBase<TDataShard> {
+class TDataShard::TTxInitSchema: public TTransactionBase<TDataShard> {
 public:
     TTxInitSchema(TDataShard* self)
-        : TBase(self)
-    {}
+        : TBase(self) {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT_SCHEMA;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute");
 
@@ -573,7 +575,9 @@ public:
         // if the datashard is in the process of drop.
         if (Self->State == TShardState::PreOffline || Self->State == TShardState::Offline) {
             db.MaterializeExisting<Schema>();
-            Schema::SchemaTables<Schema::SchemaOperations>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
+            Schema::SchemaTables<Schema::SchemaOperations>::Materialize(
+                txc.DB, NIceDb::EMaterializationMode::NonExisting
+            );
             Schema::SchemaTables<Schema::ScanProgress>::Materialize(txc.DB, NIceDb::EMaterializationMode::NonExisting);
         } else {
             db.Materialize<Schema>();
@@ -592,13 +596,12 @@ public:
         }
 
         //remove this code after all datashards upgrade Sys_SubDomainInfo row in Sys
-        if (Self->State == TShardState::Ready ||
-            Self->State == TShardState::SplitSrcWaitForNoTxInFlight) {
+        if (Self->State == TShardState::Ready || Self->State == TShardState::SplitSrcWaitForNoTxInFlight) {
             TString rawProcessingParams;
             LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams)
 
             if (rawProcessingParams.empty()) {
-                auto *domain = AppData(ctx)->DomainsInfo->GetDomain();
+                auto* domain = AppData(ctx)->DomainsInfo->GetDomain();
                 NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(*domain);
                 LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_SubDomainInfo");
                 Self->PersistSys(db, Schema::Sys_SubDomainInfo, params.SerializeAsString());
@@ -622,22 +625,23 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Complete");
         Self->Execute(Self->CreateTxInit(), ctx);
     }
 };
 
 /// Initializes schema defaults changes
-class TDataShard::TTxInitSchemaDefaults : public TTransactionBase<TDataShard> {
+class TDataShard::TTxInitSchemaDefaults: public TTransactionBase<TDataShard> {
 public:
     TTxInitSchemaDefaults(TDataShard* self)
-        : TBase(self)
-    {}
+        : TBase(self) {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA_DEFAULTS; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT_SCHEMA_DEFAULTS;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Execute");
 
         if (Self->State == TShardState::Ready) {
@@ -649,7 +653,7 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Complete");
     }
 };
@@ -666,9 +670,12 @@ ITransaction* TDataShard::CreateTxInitSchemaDefaults() {
     return new TTxInitSchemaDefaults(this);
 }
 
-bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorContext &ctx,
-                                          NKikimrTxDataShard::TError::EKind & status, TString& errMessage)
-{
+bool TDataShard::SyncSchemeOnFollower(
+    TTransactionContext& txc,
+    const TActorContext& ctx,
+    NKikimrTxDataShard::TError::EKind& status,
+    TString& errMessage
+) {
     status = NKikimrTxDataShard::TError::OK;
     errMessage.clear();
 
@@ -757,11 +764,12 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
         if (userTablesSchema->Columns.contains(Schema::UserTables::ShadowTid::ColumnId)) {
             // New schema with ShadowTid column
-            auto rowset = db.Table<Schema::UserTables>().Select<
-                Schema::UserTables::Tid,
-                Schema::UserTables::LocalTid,
-                Schema::UserTables::Schema,
-                Schema::UserTables::ShadowTid>();
+            auto rowset = db.Table<Schema::UserTables>()
+                              .Select<
+                                  Schema::UserTables::Tid,
+                                  Schema::UserTables::LocalTid,
+                                  Schema::UserTables::Schema,
+                                  Schema::UserTables::ShadowTid>();
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
@@ -781,10 +789,9 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
             }
         } else {
             // Older schema without ShadowTid column
-            auto rowset = db.Table<Schema::UserTables>().Select<
-                Schema::UserTables::Tid,
-                Schema::UserTables::LocalTid,
-                Schema::UserTables::Schema>();
+            auto rowset =
+                db.Table<Schema::UserTables>()
+                    .Select<Schema::UserTables::Tid, Schema::UserTables::LocalTid, Schema::UserTables::Schema>();
             if (!rowset.IsReady())
                 return false;
             while (!rowset.EndOfSet()) {
@@ -830,4 +837,5 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     return true;
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

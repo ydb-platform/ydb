@@ -127,7 +127,12 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
         default: {
             NYql::TIssues issues;
             issues.AddIssue("Unsupported transaction mode");
-            Send(ev->Sender, new TEvLongTxService::TEvBeginTxResult(Ydb::StatusIds::BAD_REQUEST, std::move(issues)), 0, ev->Cookie);
+            Send(
+                ev->Sender,
+                new TEvLongTxService::TEvBeginTxResult(Ydb::StatusIds::BAD_REQUEST, std::move(issues)),
+                0,
+                ev->Cookie
+            );
             return;
         }
     }
@@ -150,9 +155,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
 
     auto it = Transactions.find(txId.UniqueId);
     if (it == Transactions.end() || it->second.State == ETxState::Uninitialized) {
-        return SendReply(ERequestType::Commit, ev->Sender, ev->Cookie,
-            Ydb::StatusIds::BAD_SESSION, TStringBuilder()
-                << "Unknown transaction id: " << txId);
+        return SendReply(
+            ERequestType::Commit,
+            ev->Sender,
+            ev->Cookie,
+            Ydb::StatusIds::BAD_SESSION,
+            TStringBuilder() << "Unknown transaction id: " << txId
+        );
     }
 
     auto& tx = it->second;
@@ -164,7 +173,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvCommitTx::TPtr& ev) {
         return;
     }
 
-    tx.Committers.push_back(TSenderId{ ev->Sender, ev->Cookie });
+    tx.Committers.push_back(TSenderId{ev->Sender, ev->Cookie});
     if (tx.State == ETxState::Committing) {
         return;
     }
@@ -223,17 +232,25 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvRollbackTx::TPtr& ev) {
 
     auto it = Transactions.find(txId.UniqueId);
     if (it == Transactions.end() || it->second.State == ETxState::Uninitialized) {
-        return SendReply(ERequestType::Rollback, ev->Sender, ev->Cookie,
-            Ydb::StatusIds::BAD_SESSION, TStringBuilder()
-                << "Unknown transaction id: " << txId);
+        return SendReply(
+            ERequestType::Rollback,
+            ev->Sender,
+            ev->Cookie,
+            Ydb::StatusIds::BAD_SESSION,
+            TStringBuilder() << "Unknown transaction id: " << txId
+        );
     }
 
     auto& tx = it->second;
     if (tx.State == ETxState::Committing) {
         // TODO: could we try to abort?
-        return SendReply(ERequestType::Rollback, ev->Sender, ev->Cookie,
-            Ydb::StatusIds::SESSION_BUSY, TStringBuilder()
-                << "Cannot rollback committing transaction id: " << txId);
+        return SendReply(
+            ERequestType::Rollback,
+            ev->Sender,
+            ev->Cookie,
+            Ydb::StatusIds::SESSION_BUSY,
+            TStringBuilder() << "Cannot rollback committing transaction id: " << txId
+        );
     }
 
     Send(ev->Sender, new TEvLongTxService::TEvRollbackTxResult(Ydb::StatusIds::SUCCESS), 0, ev->Cookie);
@@ -266,8 +283,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWrites::T
 
     TLongTxId txId = msg->GetLongTxId();
     if (!txId.IsWritable()) {
-        return SendReply(ERequestType::AttachColumnShardWrites, ev->Sender, ev->Cookie,
-            Ydb::StatusIds::BAD_REQUEST, "Cannot attach writes to a read-only tx");
+        return SendReply(
+            ERequestType::AttachColumnShardWrites,
+            ev->Sender,
+            ev->Cookie,
+            Ydb::StatusIds::BAD_REQUEST,
+            "Cannot attach writes to a read-only tx"
+        );
     }
 
     if (txId.NodeId != SelfId().NodeId()) {
@@ -276,15 +298,24 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAttachColumnShardWrites::T
 
     auto it = Transactions.find(txId.UniqueId);
     if (it == Transactions.end() || it->second.State == ETxState::Uninitialized) {
-        return SendReply(ERequestType::AttachColumnShardWrites, ev->Sender, ev->Cookie,
-            Ydb::StatusIds::BAD_SESSION, TStringBuilder()
-                << "Unknown transaction id: " << txId);
+        return SendReply(
+            ERequestType::AttachColumnShardWrites,
+            ev->Sender,
+            ev->Cookie,
+            Ydb::StatusIds::BAD_SESSION,
+            TStringBuilder() << "Unknown transaction id: " << txId
+        );
     }
 
     auto& tx = it->second;
     if (tx.State != ETxState::Active) {
-        return SendReply(ERequestType::AttachColumnShardWrites, ev->Sender, ev->Cookie,
-            Ydb::StatusIds::UNDETERMINED, "Cannot attach new writes to the transaction");
+        return SendReply(
+            ERequestType::AttachColumnShardWrites,
+            ev->Sender,
+            ev->Cookie,
+            Ydb::StatusIds::UNDETERMINED,
+            "Cannot attach new writes to the transaction"
+        );
     }
 
     for (const auto& write : msg->Record.GetWrites()) {
@@ -350,7 +381,14 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
     if (databaseName.empty()) {
         NYql::TIssues issues;
         issues.AddIssue("Cannot acquire snapshot for an unspecified database");
-        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::SCHEME_ERROR, std::move(issues), std::move(msg->Orbit)), 0, ev->Cookie);
+        Send(
+            ev->Sender,
+            new TEvLongTxService::TEvAcquireReadSnapshotResult(
+                Ydb::StatusIds::SCHEME_ERROR, std::move(issues), std::move(msg->Orbit)
+            ),
+            0,
+            ev->Cookie
+        );
         return;
     }
 
@@ -409,7 +447,14 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     if (msg->Status == Ydb::StatusIds::SUCCESS) {
         for (auto& userReq : req->UserRequests) {
             LWTRACK(AcquireReadSnapshotSuccess, userReq.Orbit, msg->Snapshot.Step, msg->Snapshot.TxId);
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(userReq.Orbit)), 0, userReq.Cookie);
+            Send(
+                userReq.Sender,
+                new TEvLongTxService::TEvAcquireReadSnapshotResult(
+                    databaseName, msg->Snapshot, std::move(userReq.Orbit)
+                ),
+                0,
+                userReq.Cookie
+            );
         }
         for (auto& beginReq : req->BeginTxRequests) {
             auto txId = beginReq.TxId;
@@ -429,7 +474,12 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     } else {
         for (auto& userReq : req->UserRequests) {
             LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(msg->Status));
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(msg->Status, msg->Issues, std::move(userReq.Orbit)), 0, userReq.Cookie);
+            Send(
+                userReq.Sender,
+                new TEvLongTxService::TEvAcquireReadSnapshotResult(msg->Status, msg->Issues, std::move(userReq.Orbit)),
+                0,
+                userReq.Cookie
+            );
         }
         for (auto& beginReq : req->BeginTxRequests) {
             Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(msg->Status, msg->Issues), 0, beginReq.Cookie);
@@ -487,21 +537,27 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
     Y_ABORT_UNLESS(lock.RefCount > 0);
     if (0 == --lock.RefCount) {
         for (auto& pr : lock.LocalSubscribers) {
-            Send(pr.first,
+            Send(
+                pr.first,
                 new TEvLongTxService::TEvLockStatus(
-                    lockId, SelfId().NodeId(),
-                    NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND),
-                0, pr.second);
+                    lockId, SelfId().NodeId(), NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND
+                ),
+                0,
+                pr.second
+            );
         }
         for (auto& prSession : lock.RemoteSubscribers) {
             TActorId sessionId = prSession.first;
             for (const auto& pr : prSession.second) {
                 SendViaSession(
-                    sessionId, pr.first,
+                    sessionId,
+                    pr.first,
                     new TEvLongTxService::TEvLockStatus(
-                        lockId, SelfId().NodeId(),
-                        NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND),
-                    0, pr.second);
+                        lockId, SelfId().NodeId(), NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND
+                    ),
+                    0,
+                    pr.second
+                );
             }
             auto itSession = Sessions.find(sessionId);
             if (itSession != Sessions.end()) {
@@ -520,11 +576,14 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
 
     if (!lockId) {
         SendViaSession(
-            ev->InterconnectSession, ev->Sender,
+            ev->InterconnectSession,
+            ev->Sender,
             new TEvLongTxService::TEvLockStatus(
-                lockId, lockNode,
-                NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
-            0, ev->Cookie);
+                lockId, lockNode, NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE
+            ),
+            0,
+            ev->Cookie
+        );
         return;
     }
 
@@ -533,11 +592,14 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
         auto& node = ConnectProxyNode(lockNode);
         if (node.State == EProxyState::Disconnected) {
             // Looks like there's no proxy for this node
-            Send(ev->Sender,
+            Send(
+                ev->Sender,
                 new TEvLongTxService::TEvLockStatus(
-                    lockId, lockNode,
-                    NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
-                0, ev->Cookie);
+                    lockId, lockNode, NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE
+                ),
+                0,
+                ev->Cookie
+            );
             return;
         }
 
@@ -547,11 +609,14 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
         }
 
         if (lock.State == EProxyLockState::Subscribed) {
-            Send(ev->Sender,
+            Send(
+                ev->Sender,
                 new TEvLongTxService::TEvLockStatus(
-                    lockId, lockNode,
-                    NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED),
-                0, ev->Cookie);
+                    lockId, lockNode, NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED
+                ),
+                0,
+                ev->Cookie
+            );
             lock.RepliedSubscribers[ev->Sender] = ev->Cookie;
             return;
         }
@@ -564,9 +629,12 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
             lock.Cookie = ++LastCookie;
             node.CookieToLock[lock.Cookie] = lockId;
             SendViaSession(
-                node.Session, MakeLongTxServiceID(lockNode),
+                node.Session,
+                MakeLongTxServiceID(lockNode),
                 new TEvLongTxService::TEvSubscribeLock(lockId, lockNode),
-                IEventHandle::FlagTrackDelivery, lock.Cookie);
+                IEventHandle::FlagTrackDelivery,
+                lock.Cookie
+            );
         }
 
         // Otherwise we wait until the lock is subscribed
@@ -576,11 +644,14 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
     auto it = Locks.find(lockId);
     if (it == Locks.end()) {
         SendViaSession(
-            ev->InterconnectSession, ev->Sender,
+            ev->InterconnectSession,
+            ev->Sender,
             new TEvLongTxService::TEvLockStatus(
-                lockId, lockNode,
-                NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND),
-            0, ev->Cookie);
+                lockId, lockNode, NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND
+            ),
+            0,
+            ev->Cookie
+        );
         return;
     }
 
@@ -594,11 +665,12 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
     }
 
     SendViaSession(
-        ev->InterconnectSession, ev->Sender,
-        new TEvLongTxService::TEvLockStatus(
-            lockId, lockNode,
-            NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED),
-        0, ev->Cookie);
+        ev->InterconnectSession,
+        ev->Sender,
+        new TEvLongTxService::TEvLockStatus(lockId, lockNode, NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED),
+        0,
+        ev->Cookie
+    );
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
@@ -643,9 +715,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     if (lockStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
         lock.State = EProxyLockState::Subscribed;
         for (auto& pr : lock.NewSubscribers) {
-            Send(pr.first,
-                new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus),
-                0, pr.second);
+            Send(pr.first, new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus), 0, pr.second);
             lock.RepliedSubscribers[pr.first] = pr.second;
         }
         lock.NewSubscribers.clear();
@@ -655,15 +725,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     // Treat any other status as a confirmed error, reply to all and remove the lock
 
     for (auto& pr : lock.RepliedSubscribers) {
-        Send(pr.first,
-            new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus),
-            0, pr.second);
+        Send(pr.first, new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus), 0, pr.second);
     }
 
     for (auto& pr : lock.NewSubscribers) {
-        Send(pr.first,
-            new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus),
-            0, pr.second);
+        Send(pr.first, new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus), 0, pr.second);
     }
 
     node->CookieToLock.erase(lock.Cookie);
@@ -699,8 +765,10 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
             // We don't need this lock anymore, unsubscribe if the node is already connected
             if (node->State == EProxyState::Connected) {
                 SendViaSession(
-                    node->Session, MakeLongTxServiceID(lockNode),
-                    new TEvLongTxService::TEvUnsubscribeLock(lockId, lockNode));
+                    node->Session,
+                    MakeLongTxServiceID(lockNode),
+                    new TEvLongTxService::TEvUnsubscribeLock(lockId, lockNode)
+                );
             }
             if (node->LockExpireQueue.Has(&lock)) {
                 node->LockExpireQueue.Remove(&lock);
@@ -735,9 +803,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev)
     }
 }
 
-void TLongTxServiceActor::SendViaSession(const TActorId& sessionId, const TActorId& recipient,
-        IEventBase* event, ui32 flags, ui64 cookie)
-{
+void TLongTxServiceActor::SendViaSession(
+    const TActorId& sessionId,
+    const TActorId& recipient,
+    IEventBase* event,
+    ui32 flags,
+    ui64 cookie
+) {
     auto ev = MakeHolder<IEventHandle>(recipient, SelfId(), event, flags, cookie);
     if (sessionId) {
         ev->Rewrite(TEvInterconnect::EvForward, sessionId);
@@ -745,17 +817,25 @@ void TLongTxServiceActor::SendViaSession(const TActorId& sessionId, const TActor
     TActivationContext::Send(ev.Release());
 }
 
-void TLongTxServiceActor::SendReply(ERequestType type, TActorId sender, ui64 cookie,
-        Ydb::StatusIds::StatusCode status, TStringBuf details)
-{
+void TLongTxServiceActor::SendReply(
+    ERequestType type,
+    TActorId sender,
+    ui64 cookie,
+    Ydb::StatusIds::StatusCode status,
+    TStringBuf details
+) {
     NYql::TIssues issues;
     issues.AddIssue(details);
     SendReplyIssues(type, sender, cookie, status, issues);
 }
 
-void TLongTxServiceActor::SendReplyIssues(ERequestType type, TActorId sender, ui64 cookie,
-        Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
-{
+void TLongTxServiceActor::SendReplyIssues(
+    ERequestType type,
+    TActorId sender,
+    ui64 cookie,
+    Ydb::StatusIds::StatusCode status,
+    const NYql::TIssues& issues
+) {
     switch (type) {
         case ERequestType::Commit:
             Send(sender, new TEvLongTxService::TEvCommitTxResult(status, issues), 0, cookie);
@@ -860,9 +940,12 @@ void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
         lock.Cookie = ++LastCookie;
         node.CookieToLock[lock.Cookie] = lock.Cookie;
         SendViaSession(
-            node.Session, MakeLongTxServiceID(nodeId),
+            node.Session,
+            MakeLongTxServiceID(nodeId),
             new TEvLongTxService::TEvSubscribeLock(lockId, nodeId),
-            IEventHandle::FlagTrackDelivery, lock.Cookie);
+            IEventHandle::FlagTrackDelivery,
+            lock.Cookie
+        );
     }
 }
 
@@ -1026,19 +1109,25 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
     const ui64 lockId = lock.LockId;
 
     for (auto& pr : lock.RepliedSubscribers) {
-        Send(pr.first,
+        Send(
+            pr.first,
             new TEvLongTxService::TEvLockStatus(
-                lockId, nodeId,
-                NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
-            0, pr.second);
+                lockId, nodeId, NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE
+            ),
+            0,
+            pr.second
+        );
     }
 
     for (auto& pr : lock.NewSubscribers) {
-        Send(pr.first,
+        Send(
+            pr.first,
             new TEvLongTxService::TEvLockStatus(
-                lockId, nodeId,
-                NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
-            0, pr.second);
+                lockId, nodeId, NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE
+            ),
+            0,
+            pr.second
+        );
     }
 
     if (node.LockExpireQueue.Has(&lock)) {

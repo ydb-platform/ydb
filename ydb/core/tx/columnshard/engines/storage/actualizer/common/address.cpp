@@ -10,8 +10,9 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
-TRWAddress::TRWAddress(std::set<TString>&& readStorages, std::set<TString>&& writeStorages): ReadStorages(std::move(readStorages))
-, WriteStorages(std::move(writeStorages)) {
+TRWAddress::TRWAddress(std::set<TString>&& readStorages, std::set<TString>&& writeStorages)
+    : ReadStorages(std::move(readStorages))
+    , WriteStorages(std::move(writeStorages)) {
     AFL_VERIFY(!ReadStorages.contains(""));
     AFL_VERIFY(!WriteStorages.contains(""));
     if (WriteStorages.contains(NTiering::NCommon::DeleteTierName)) {
@@ -30,4 +31,4 @@ TString TRWAddress::DebugString() const {
     return "R:" + JoinSeq(",", ReadStorages) + ";W:" + JoinSeq(",", WriteStorages);
 }
 
-}
+} // namespace NKikimr::NOlap::NActualizer

@@ -14,9 +14,13 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-void DropPath(NIceDb::TNiceDb& db, TOperationContext& context,
-              TOperationId operationId, const TTxState& txState, TPath& path)
-{
+void DropPath(
+    NIceDb::TNiceDb& db,
+    TOperationContext& context,
+    TOperationId operationId,
+    const TTxState& txState,
+    TPath& path
+) {
     if (path->Dropped()) {
         // it might be dropped
         // when rolling update goes
@@ -58,16 +62,14 @@ private:
     TTxState::ETxState& NextState;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropTableIndex TPropose"
-            << ", operationId: " << OperationId;
+        return TStringBuilder() << "TDropTableIndex TPropose"
+                                << ", operationId: " << OperationId;
     }
 
 public:
     TPropose(TOperationId id, TTxState::ETxState& nextState)
         : OperationId(id)
-        , NextState(nextState)
-    {
+        , NextState(nextState) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -92,7 +94,6 @@ public:
         Y_VERIFY_S(context.SS->PathsById.contains(txState->TargetPathId), "Unknown pathId: " << txState->TargetPathId);
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         Y_ABORT_UNLESS(path.IsResolved());
-
 
         NextState = TTxState::WaitShadowPathPublication;
         context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
@@ -120,15 +121,13 @@ private:
     TPathId ActivePathId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropTableIndex TWaitRenamedPathPublication"
-                << " operationId: " << OperationId;
+        return TStringBuilder() << "TDropTableIndex TWaitRenamedPathPublication"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TWaitRenamedPathPublication(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvPrivate::TEvOperationPlan::EventType});
     }
 
@@ -189,16 +188,19 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropTableIndex TDeletePathBarrier"
-                << " operationId: " << OperationId;
+        return TStringBuilder() << "TDropTableIndex TDeletePathBarrier"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TDeletePathBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType,
+             TEvDataShard::TEvProposeTransactionResult::EventType,
+             TEvPrivate::TEvOperationPlan::EventType}
+        );
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
@@ -249,29 +251,29 @@ class TDropTableIndex: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return AfterPropose;
-        case TTxState::WaitShadowPathPublication:
-            return TTxState::DeletePathBarrier;
-        case TTxState::DeletePathBarrier:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return AfterPropose;
+            case TTxState::WaitShadowPathPublication:
+                return TTxState::DeletePathBarrier;
+            case TTxState::DeletePathBarrier:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, AfterPropose);
-        case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
-        case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeletePathBarrier>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId, AfterPropose);
+            case TTxState::WaitShadowPathPublication:
+                return MakeHolder<TWaitRenamedPathPublication>(OperationId);
+            case TTxState::DeletePathBarrier:
+                return MakeHolder<TDeletePathBarrier>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -291,7 +293,8 @@ public:
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasDrop()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Drop is not present");
@@ -299,13 +302,12 @@ public:
         }
 
         TPath index = Transaction.GetDrop().HasId()
-            ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
-            : TPath::Resolve(parentPathStr, context.SS).Dive(name);
+                          ? TPath::Init(context.SS->MakeLocalId(Transaction.GetDrop().GetId()), context.SS)
+                          : TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
         {
             TPath::TChecker checks = index.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -323,13 +325,9 @@ public:
         TPath parentTable = index.Parent();
         {
             TPath::TChecker checks = parentTable.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotDeleted()
-                .IsTable()
-                .IsUnderOperation()
-                .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+            checks.NotEmpty().IsResolved().NotDeleted().IsTable().IsUnderOperation().IsUnderTheSameOperation(
+                OperationId.GetTxId()
+            ); // allowed only as part of consistent operations
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -378,7 +376,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -390,7 +388,8 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
     return MakeSubOperation<TDropTableIndex>(id, state);
 }
 
-TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateDropIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
 
     auto dropOperation = tx.GetDrop();
@@ -398,35 +397,25 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
     const TString parentPathStr = tx.GetWorkingDir();
 
     TPath table = dropOperation.HasId()
-        ? TPath::Init(TPathId(context.SS->TabletID(), dropOperation.GetId()), context.SS)
-        : TPath::Resolve(parentPathStr, context.SS).Dive(dropOperation.GetName());
+                      ? TPath::Init(TPathId(context.SS->TabletID(), dropOperation.GetId()), context.SS)
+                      : TPath::Resolve(parentPathStr, context.SS).Dive(dropOperation.GetName());
 
     {
         TPath::TChecker checks = table.Check();
-        checks
-            .NotEmpty()
-            .IsResolved()
-            .NotDeleted();
+        checks.NotEmpty().IsResolved().NotDeleted();
 
         if (checks) {
             if (table.Base()->IsColumnTable()) {
-                checks
-                    .IsColumnTable()
-                    .NotUnderDeleting()
-                    .NotUnderOperation()
-                    .IsCommonSensePath();
+                checks.IsColumnTable().NotUnderDeleting().NotUnderOperation().IsCommonSensePath();
 
                 if (checks) {
                     // DROP TABLE statement has no info is it a drop of row or column table
                     return {CreateDropColumnTable(nextId, tx)};
                 }
             } else {
-                checks
-                    .IsTable()
-                    .NotUnderDeleting()
-                    .NotUnderOperation();
+                checks.IsTable().NotUnderDeleting().NotUnderOperation();
                 if (!table.Parent()->IsTableIndex() || !NTableIndex::IsBuildImplTable(table.LeafName())) {
-                    checks.IsCommonSensePath();                    
+                    checks.IsCommonSensePath();
                 }
             }
         }
@@ -434,7 +423,8 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
         if (!checks) {
             auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, 0, 0);
             result->SetError(checks.GetStatus(), checks.GetError());
-            if (table.IsResolved() && table.Base()->IsTable() && (table.Base()->PlannedToDrop() || table.Base()->Dropped())) {
+            if (table.IsResolved() && table.Base()->IsTable() &&
+                (table.Base()->PlannedToDrop() || table.Base()->Dropped())) {
                 result->SetPathDropTxId(ui64(table.Base()->DropTxId));
                 result->SetPathId(table.Base()->PathId.LocalPathId);
             }
@@ -452,4 +442,4 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -5,14 +5,20 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
-void TGranuleActualizationIndex::ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const {
+void TGranuleActualizationIndex::ExtractActualizationTasks(
+    TTieringProcessContext& tasksContext,
+    const NActualizer::TExternalTasksContext& externalContext
+) const {
     TInternalTasksContext internalContext;
     for (auto&& i : Actualizers) {
         i->ExtractTasks(tasksContext, externalContext, internalContext);
     }
 }
 
-void TGranuleActualizationIndex::AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context) {
+void TGranuleActualizationIndex::AddPortion(
+    const std::shared_ptr<TPortionInfo>& portion,
+    const TAddExternalContext& context
+) {
     for (auto&& i : Actualizers) {
         i->AddPortion(portion, context);
     }
@@ -24,7 +30,10 @@ void TGranuleActualizationIndex::RemovePortion(const std::shared_ptr<TPortionInf
     }
 }
 
-void TGranuleActualizationIndex::RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context) {
+void TGranuleActualizationIndex::RefreshTiering(
+    const std::optional<TTiering>& info,
+    const TAddExternalContext& context
+) {
     AFL_VERIFY(TieringActualizer);
     TieringActualizer->Refresh(info, context);
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshTiering();
@@ -38,8 +47,7 @@ void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& contex
 
 TGranuleActualizationIndex::TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
-    , VersionedIndex(versionedIndex)
-{
+    , VersionedIndex(versionedIndex) {
     Y_UNUSED(PathId);
 }
 
@@ -51,4 +59,4 @@ void TGranuleActualizationIndex::Start() {
     Actualizers.emplace_back(SchemeActualizer);
 }
 
-}
+} // namespace NKikimr::NOlap::NActualizer

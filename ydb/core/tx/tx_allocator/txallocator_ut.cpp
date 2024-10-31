@@ -28,8 +28,8 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
         AllocateAndCheck(runtime, capacity + 1, NKikimrTx::TEvTxAllocateResult::IMPOSIBLE);
         AllocateAndCheck(runtime, requestSize, NKikimrTx::TEvTxAllocateResult::SUCCESS);
         AllocateAndCheck(runtime, capacity - requestSize + 1, NKikimrTx::TEvTxAllocateResult::IMPOSIBLE);
-        AllocateAndCheck(runtime, 2*requestSize, NKikimrTx::TEvTxAllocateResult::SUCCESS);
-        AllocateAndCheck(runtime, capacity - 3*requestSize + 1, NKikimrTx::TEvTxAllocateResult::IMPOSIBLE);
+        AllocateAndCheck(runtime, 2 * requestSize, NKikimrTx::TEvTxAllocateResult::SUCCESS);
+        AllocateAndCheck(runtime, capacity - 3 * requestSize + 1, NKikimrTx::TEvTxAllocateResult::IMPOSIBLE);
     }
 
     Y_UNIT_TEST(TestAllocateAll) {
@@ -45,9 +45,9 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
         TTestEnv env(runtime);
         const ui64 capacity = NTxAllocator::TTxAllocator::MaxCapacity;
         const ui64 pieces = 1u << 5;
-        const ui64 requestSize = capacity/pieces;
+        const ui64 requestSize = capacity / pieces;
 
-        for (auto round: xrange(pieces)) {
+        for (auto round : xrange(pieces)) {
             Y_UNUSED(round);
             AllocateAndCheck(runtime, requestSize, NKikimrTx::TEvTxAllocateResult::SUCCESS);
         }
@@ -62,21 +62,21 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
         const ui64 rounds = 10;
         const ui64 useRangePerRound = 1000000;
         const ui64 pieces = 10;
-        const ui64 requestSize = useRangePerRound/pieces;
+        const ui64 requestSize = useRangePerRound / pieces;
 
         TIntersectionChecker inersections;
 
-        for (auto round: xrange(rounds)) {
+        for (auto round : xrange(rounds)) {
             Y_UNUSED(round);
-            for (auto request: xrange(pieces)) {
+            for (auto request : xrange(pieces)) {
                 Y_UNUSED(request);
                 AsyncAllocate(runtime, requestSize);
             }
 
-            for (auto request: xrange(pieces)) {
+            for (auto request : xrange(pieces)) {
                 Y_UNUSED(request);
                 auto result = GrabAnswer(runtime);
-                auto &event = result.first;
+                auto& event = result.first;
                 CheckExpectedStatus(NKikimrTx::TEvTxAllocateResult::SUCCESS, event.GetStatus());
                 ui64 cookie = result.second;
                 CheckExpectedCookie(event, cookie);
@@ -101,5 +101,4 @@ Y_UNIT_TEST_SUITE(TTxLocatorTest) {
         const bool restartsEnable = true;
         DoSignificantRequests(restartsEnable);
     }
-
 }

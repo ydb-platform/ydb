@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap {
 
-class IPortionColumnChunk : public IPortionDataChunk {
+class IPortionColumnChunk: public IPortionDataChunk {
 private:
     using TBase = IPortionDataChunk;
 
@@ -25,20 +25,26 @@ protected:
         return DoGetRecordsCountImpl();
     }
 
-    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const override;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo)
+        const override;
 
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver,
-        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver,
-        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(
+        const TColumnSaver& saver,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+        const std::vector<ui64>& splitSizes
+    ) const = 0;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(
+        const TColumnSaver& saver,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+        const std::vector<ui64>& splitSizes
+    ) const override;
     virtual bool DoIsSplittable() const override {
         return GetRecordsCount() > 1;
     }
 
 public:
     IPortionColumnChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
-        : TBase(entityId, chunkIdx) {
-    }
+        : TBase(entityId, chunkIdx) {}
     virtual ~IPortionColumnChunk() = default;
 
     TSimpleChunkMeta BuildSimpleChunkMeta() const {
@@ -59,11 +65,14 @@ private:
     std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> CurrentChunkArray;
     ui32 CurrentChunkIndex = 0;
     ui32 CurrentRecordIndex = 0;
+
 public:
-    TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
+    TChunkedColumnReader(
+        const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks,
+        const std::shared_ptr<TColumnLoader>& loader
+    )
         : Chunks(chunks)
-        , Loader(loader)
-    {
+        , Loader(loader) {
         Start();
     }
 
@@ -102,7 +111,9 @@ public:
 
     bool ReadNextChunk() {
         while (++CurrentChunkIndex < Chunks.size()) {
-            CurrentChunk = Loader->ApplyVerified(Chunks[CurrentChunkIndex]->GetData(), Chunks[CurrentChunkIndex]->GetRecordsCountVerified());
+            CurrentChunk = Loader->ApplyVerified(
+                Chunks[CurrentChunkIndex]->GetData(), Chunks[CurrentChunkIndex]->GetRecordsCountVerified()
+            );
             CurrentChunkArray.reset();
             CurrentRecordIndex = 0;
             if (CurrentRecordIndex < CurrentChunk->GetRecordsCount()) {
@@ -127,10 +138,10 @@ class TChunkedBatchReader {
 private:
     std::vector<TChunkedColumnReader> Columns;
     bool IsCorrectFlag = true;
+
 public:
     TChunkedBatchReader(const std::vector<TChunkedColumnReader>& columnReaders)
-        : Columns(columnReaders)
-    {
+        : Columns(columnReaders) {
         AFL_VERIFY(Columns.size());
         for (auto&& i : Columns) {
             AFL_VERIFY(i.IsCorrect());
@@ -184,4 +195,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

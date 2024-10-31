@@ -19,6 +19,7 @@ private:
 
     ui32 TtlUnitsInSecond;
     YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
+
 public:
     static TString GetTtlTierName() {
         return NTiering::NCommon::DeleteTierName;
@@ -28,8 +29,7 @@ public:
         : Name(tierName)
         , EvictColumnName(column)
         , EvictDuration(evictDuration)
-        , TtlUnitsInSecond(unitsInSecond)
-    {
+        , TtlUnitsInSecond(unitsInSecond) {
         Y_ABORT_UNLESS(!!Name);
         Y_ABORT_UNLESS(!!EvictColumnName);
     }
@@ -49,7 +49,8 @@ public:
 
     std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
-    static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
+    static std::shared_ptr<TTierInfo>
+    MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
         return std::make_shared<TTierInfo>(NTiering::NCommon::DeleteTierName, evictDuration, ttlColumn, unitsInSecond);
     }
 
@@ -69,12 +70,11 @@ public:
 class TTierRef {
 public:
     TTierRef(const std::shared_ptr<TTierInfo>& tierInfo)
-        : Info(tierInfo)
-    {
+        : Info(tierInfo) {
         Y_ABORT_UNLESS(tierInfo);
     }
 
-    bool operator < (const TTierRef& b) const {
+    bool operator<(const TTierRef& b) const {
         if (Info->GetEvictDuration() > b.Info->GetEvictDuration()) {
             return true;
         } else if (Info->GetEvictDuration() == b.Info->GetEvictDuration()) {
@@ -88,9 +88,8 @@ public:
         return false;
     }
 
-    bool operator == (const TTierRef& b) const {
-        return Info->GetEvictDuration() == b.Info->GetEvictDuration()
-            && Info->GetName() == b.Info->GetName();
+    bool operator==(const TTierRef& b) const {
+        return Info->GetEvictDuration() == b.Info->GetEvictDuration() && Info->GetName() == b.Info->GetName();
     }
 
     const TTierInfo& Get() const {
@@ -110,8 +109,8 @@ class TTiering {
     TTiersMap TierByName;
     TSet<TTierRef> OrderedTiers;
     std::optional<TString> TTLColumnName;
-public:
 
+public:
     class TTieringContext {
     private:
         YDB_READONLY_DEF(TString, CurrentTierName);
@@ -119,6 +118,7 @@ public:
 
         YDB_READONLY_DEF(std::optional<TString>, NextTierName);
         YDB_READONLY_DEF(std::optional<TDuration>, NextTierWaiting);
+
     public:
         TString DebugString() const {
             TStringBuilder sb;
@@ -129,12 +129,16 @@ public:
             return sb;
         }
 
-        TTieringContext(const TString& tierName, const TDuration waiting, const std::optional<TString>& nextTierName = {}, const std::optional<TDuration>& nextTierDuration = {})
+        TTieringContext(
+            const TString& tierName,
+            const TDuration waiting,
+            const std::optional<TString>& nextTierName = {},
+            const std::optional<TDuration>& nextTierDuration = {}
+        )
             : CurrentTierName(tierName)
             , CurrentTierLag(waiting)
             , NextTierName(nextTierName)
-            , NextTierWaiting(nextTierDuration)
-        {
+            , NextTierWaiting(nextTierDuration) {
             AFL_VERIFY(!nextTierName == !nextTierDuration);
         }
 
@@ -180,8 +184,9 @@ public:
             }
             TTLColumnName = tier->GetEvictColumnName();
         } else if (*TTLColumnName != tier->GetEvictColumnName()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect_tiering_metadata")("column_before", *TTLColumnName)
-                ("column_new", tier->GetEvictColumnName());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
+            ("problem",
+             "incorrect_tiering_metadata")("column_before", *TTLColumnName)("column_new", tier->GetEvictColumnName());
             return false;
         }
 
@@ -213,4 +218,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

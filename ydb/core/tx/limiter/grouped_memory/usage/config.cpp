@@ -17,4 +17,4 @@ TString TConfig::DebugString() const {
     return sb;
 }
 
-}
+} // namespace NKikimr::NOlap::NGroupedMemoryManager

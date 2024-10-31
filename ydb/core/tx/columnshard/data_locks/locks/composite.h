@@ -7,8 +7,10 @@ class TCompositeLock: public ILock {
 private:
     using TBase = ILock;
     std::vector<std::shared_ptr<ILock>> Locks;
+
 protected:
-    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks) const override {
+    virtual std::optional<TString> DoIsLocked(const TPortionInfo& portion, const THashSet<TString>& excludedLocks)
+        const override {
         for (auto&& i : Locks) {
             if (excludedLocks.contains(i->GetLockName())) {
                 continue;
@@ -19,7 +21,8 @@ protected:
         }
         return {};
     }
-    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks) const override {
+    virtual std::optional<TString> DoIsLocked(const TGranuleMeta& granule, const THashSet<TString>& excludedLocks)
+        const override {
         for (auto&& i : Locks) {
             if (excludedLocks.contains(i->GetLockName())) {
                 continue;
@@ -33,10 +36,14 @@ protected:
     bool DoIsEmpty() const override {
         return Locks.empty();
     }
+
 public:
-    TCompositeLock(const TString& lockName, const std::vector<std::shared_ptr<ILock>>& locks, const bool readOnly = false)
-        : TBase(lockName, readOnly)
-    {
+    TCompositeLock(
+        const TString& lockName,
+        const std::vector<std::shared_ptr<ILock>>& locks,
+        const bool readOnly = false
+    )
+        : TBase(lockName, readOnly) {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;
@@ -45,9 +52,12 @@ public:
         }
     }
 
-    TCompositeLock(const TString& lockName, std::initializer_list<std::shared_ptr<ILock>> locks, const bool readOnly = false)
-        : TBase(lockName, readOnly)
-    {
+    TCompositeLock(
+        const TString& lockName,
+        std::initializer_list<std::shared_ptr<ILock>> locks,
+        const bool readOnly = false
+    )
+        : TBase(lockName, readOnly) {
         for (auto&& l : locks) {
             if (!l || l->IsEmpty()) {
                 continue;
@@ -57,4 +67,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NDataLocks

@@ -4,14 +4,12 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 
-
 namespace NKikimr::NSchemeShard::NBSVState {
 
 // NBSVState::TConfigureParts
 //
 TConfigureParts::TConfigureParts(TOperationId id)
-    : OperationId(id)
-{
+    : OperationId(id) {
     IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
 }
 
@@ -123,13 +121,13 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
     return false;
 }
 
-
 // NBSVState::TPropose
 //
 TPropose::TPropose(TOperationId id)
-    : OperationId(id)
-{
-    IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvBlockStore::TEvUpdateVolumeConfigResponse::EventType});
+    : OperationId(id) {
+    IgnoreMessages(
+        DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvBlockStore::TEvUpdateVolumeConfigResponse::EventType}
+    );
 }
 
 bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) {
@@ -195,9 +193,8 @@ bool TPropose::ProgressState(TOperationContext& context) {
     Y_ABORT_UNLESS(txState);
     Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateBlockStoreVolume || txState->TxType == TTxState::TxAlterBlockStoreVolume);
 
-
     context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
     return false;
 }
 
-}  // NKikimr::NSchemeShard::NBSVState
+}  // namespace NKikimr::NSchemeShard::NBSVState

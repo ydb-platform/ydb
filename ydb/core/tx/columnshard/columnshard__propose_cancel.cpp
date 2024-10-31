@@ -3,14 +3,15 @@
 
 namespace NKikimr::NColumnShard {
 
-class TColumnShard::TTxProposeCancel : public TTransactionBase<TColumnShard> {
+class TColumnShard::TTxProposeCancel: public TTransactionBase<TColumnShard> {
 public:
     TTxProposeCancel(TColumnShard* self, TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev)
         : TTransactionBase(self)
-        , Ev(ev)
-    { }
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_PROPOSE_CANCEL; }
+    TTxType GetTxType() const override {
+        return TXTYPE_PROPOSE_CANCEL;
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         LOG_S_DEBUG("TTxProposeCancel.Execute");
@@ -38,4 +39,4 @@ void TColumnShard::Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev
     Execute(new TTxProposeCancel(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NColumnShard

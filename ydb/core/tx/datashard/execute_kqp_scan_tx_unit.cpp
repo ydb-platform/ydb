@@ -8,14 +8,12 @@ namespace NDataShard {
 using namespace NKqp;
 using namespace NMiniKQL;
 
-class TExecuteKqpScanTxUnit : public TExecutionUnit {
+class TExecuteKqpScanTxUnit: public TExecutionUnit {
 public:
     TExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::ExecuteKqpScanTx, false, dataShard, pipeline) {
-    }
+        : TExecutionUnit(EExecutionUnitKind::ExecuteKqpScanTx, false, dataShard, pipeline) {}
 
-    ~TExecuteKqpScanTxUnit() override {
-    }
+    ~TExecuteKqpScanTxUnit() override {}
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
         if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
@@ -44,8 +42,7 @@ public:
         return EExecutionStatus::Executed;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override {}
 };
 
 THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard& dataShard, TPipeline& pipeline) {

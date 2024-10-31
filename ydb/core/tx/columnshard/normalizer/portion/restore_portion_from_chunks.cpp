@@ -20,8 +20,7 @@ public:
 
     TPatchItem(const ui32 schemaVersion, TColumnChunkLoadContext&& chunkInfo)
         : SchemaVersion(schemaVersion)
-        , ChunkInfo(std::move(chunkInfo)) {
-    }
+        , ChunkInfo(std::move(chunkInfo)) {}
 };
 
 class TChanges: public INormalizerChanges {
@@ -30,9 +29,9 @@ private:
 
 public:
     TChanges(std::vector<TPatchItem>&& patches)
-        : Patches(std::move(patches)) {
-    }
-    virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
+        : Patches(std::move(patches)) {}
+    virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&)
+        const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Patches) {
@@ -43,13 +42,18 @@ public:
             const auto minSnapshotDeprecated = i.GetChunkInfo().GetMinSnapshotDeprecated();
             db.Table<IndexPortions>()
                 .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId())
-                .Update(NIceDb::TUpdate<IndexPortions::SchemaVersion>(i.GetSchemaVersion()), NIceDb::TUpdate<IndexPortions::ShardingVersion>(0),
-                    NIceDb::TUpdate<IndexPortions::CommitPlanStep>(0), NIceDb::TUpdate<IndexPortions::CommitTxId>(0),
-                    NIceDb::TUpdate<IndexPortions::InsertWriteId>(0), NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot.GetPlanStep()),
+                .Update(
+                    NIceDb::TUpdate<IndexPortions::SchemaVersion>(i.GetSchemaVersion()),
+                    NIceDb::TUpdate<IndexPortions::ShardingVersion>(0),
+                    NIceDb::TUpdate<IndexPortions::CommitPlanStep>(0),
+                    NIceDb::TUpdate<IndexPortions::CommitTxId>(0),
+                    NIceDb::TUpdate<IndexPortions::InsertWriteId>(0),
+                    NIceDb::TUpdate<IndexPortions::XPlanStep>(removeSnapshot.GetPlanStep()),
                     NIceDb::TUpdate<IndexPortions::XTxId>(removeSnapshot.GetTxId()),
                     NIceDb::TUpdate<IndexPortions::MinSnapshotPlanStep>(minSnapshotDeprecated.GetPlanStep()),
                     NIceDb::TUpdate<IndexPortions::MinSnapshotTxId>(minSnapshotDeprecated.GetTxId()),
-                    NIceDb::TUpdate<IndexPortions::Metadata>(metaProtoString));
+                    NIceDb::TUpdate<IndexPortions::Metadata>(metaProtoString)
+                );
         }
 
         return true;
@@ -60,8 +64,8 @@ public:
     }
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
-    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>>
+TNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -129,8 +133,12 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
     for (auto&& [_, chunkWithPortionData] : portionsToWrite) {
         package.emplace_back(
-            tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(chunkWithPortionData.GetMinSnapshotDeprecated())->GetVersion(),
-            std::move(chunkWithPortionData));
+            tablesManager.GetPrimaryIndexSafe()
+                .GetVersionedIndex()
+                .GetSchema(chunkWithPortionData.GetMinSnapshotDeprecated())
+                ->GetVersion(),
+            std::move(chunkWithPortionData)
+        );
         if (package.size() == 100) {
             std::vector<TPatchItem> local;
             local.swap(package);

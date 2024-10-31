@@ -9,10 +9,19 @@ class IActualizer {
 protected:
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) = 0;
     virtual void DoRemovePortion(const ui64 portionId) = 0;
-    virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) = 0;
+    virtual void DoExtractTasks(
+        TTieringProcessContext& tasksContext,
+        const TExternalTasksContext& externalContext,
+        TInternalTasksContext& internalContext
+    ) = 0;
+
 public:
     virtual ~IActualizer() = default;
-    void ExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) {
+    void ExtractTasks(
+        TTieringProcessContext& tasksContext,
+        const TExternalTasksContext& externalContext,
+        TInternalTasksContext& internalContext
+    ) {
         return DoExtractTasks(tasksContext, externalContext, internalContext);
     }
     void AddPortion(const std::shared_ptr<TPortionInfo>& info, const TAddExternalContext& context) {
@@ -27,4 +36,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

@@ -22,12 +22,11 @@ class TStartContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TSession>, SessionSelfPtr);
     YDB_READONLY_DEF(std::shared_ptr<ITabletAdapter>, Adapter);
+
 public:
-    TStartContext(const std::shared_ptr<TSession>& sessionSelfPtr,
-        const std::shared_ptr<ITabletAdapter>& adapter)
+    TStartContext(const std::shared_ptr<TSession>& sessionSelfPtr, const std::shared_ptr<ITabletAdapter>& adapter)
         : SessionSelfPtr(sessionSelfPtr)
-        , Adapter(adapter)
-    {
+        , Adapter(adapter) {
         AFL_VERIFY(!!SessionSelfPtr);
         AFL_VERIFY(!!Adapter);
     }
@@ -43,6 +42,7 @@ private:
     virtual TString DoSerializeStateToString() const = 0;
     virtual TString DoSerializeToString() const = 0;
     virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const TStartContext& context) const = 0;
+
 public:
     using TFactory = NObjectFactory::TObjectFactory<ISessionLogic, TString>;
 
@@ -50,8 +50,7 @@ public:
 
     virtual TString GetClassName() const = 0;
 
-    void CheckStatusCorrect() const {
-    }
+    void CheckStatusCorrect() const {}
 
     TConclusionStatus DeserializeProgressFromString(const TString& data) {
         return DoDeserializeProgressFromString(data);
@@ -96,11 +95,13 @@ protected:
     using TProtoProgress = TProtoProgressExt;
     using TProtoState = TProtoStateExt;
     using TProtoLogic = TProtoLogicExt;
+
 private:
     virtual TConclusionStatus DoDeserializeProgressFromProto(const TProtoProgress& proto) = 0;
     virtual TProtoProgress DoSerializeProgressToProto() const = 0;
     virtual TConclusionStatus DoDeserializeStateFromProto(const TProtoState& proto) = 0;
     virtual TProtoState DoSerializeStateToProto() const = 0;
+
 protected:
     virtual TConclusionStatus DoDeserializeProgressFromString(const TString& data) override final {
         TProtoProgress proto;
@@ -129,6 +130,7 @@ protected:
 class TSessionLogicContainer: public NBackgroundTasks::TInterfaceStringContainer<ISessionLogic> {
 private:
     using TBase = NBackgroundTasks::TInterfaceStringContainer<ISessionLogic>;
+
 public:
     using TBase::TBase;
 };
@@ -141,6 +143,7 @@ private:
     YDB_ACCESSOR_DEF(TString, StatusChannel);
     YDB_ACCESSOR_DEF(TString, Progress);
     YDB_ACCESSOR_DEF(TString, State);
+
 public:
 };
 
@@ -149,15 +152,14 @@ private:
     YDB_READONLY_DEF(TString, Identifier);
     YDB_READONLY_DEF(TString, ClassName);
     YDB_READONLY(bool, IsFinished, false);
+
 public:
     Ydb::Operations::Operation SerializeToProto() const;
 
     TSessionInfoReport(const TString& id, const TString& className, const bool isFinished)
         : Identifier(id)
         , ClassName(className)
-        , IsFinished(isFinished) {
-
-    }
+        , IsFinished(isFinished) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

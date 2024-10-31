@@ -7,6 +7,7 @@ namespace NKikimr::NOlap::NActualizer {
 class TPortionCategoryCounterAgents: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+
 public:
     const std::shared_ptr<NColumnShard::TValueAggregationAgent> RecordsCount;
     const std::shared_ptr<NColumnShard::TValueAggregationAgent> Count;
@@ -15,9 +16,7 @@ public:
         : TBase(base, "category", categoryName)
         , RecordsCount(TBase::GetValueAutoAggregations("ByGranule/Portions/RecordsCount"))
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
-        , Bytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Bytes"))
-    {
-    }
+        , Bytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Bytes")) {}
 };
 
 class TPortionCategoryCounters {
@@ -25,9 +24,9 @@ private:
     std::shared_ptr<NColumnShard::TValueAggregationClient> RecordsCount;
     std::shared_ptr<NColumnShard::TValueAggregationClient> Count;
     std::shared_ptr<NColumnShard::TValueAggregationClient> Bytes;
+
 public:
-    TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
-    {
+    TPortionCategoryCounters(TPortionCategoryCounterAgents& agents) {
         RecordsCount = agents.RecordsCount->GetClient();
         Count = agents.Count->GetClient();
         Bytes = agents.Bytes->GetClient();
@@ -54,11 +53,10 @@ private:
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsLatenessEviction;
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsLatenessDelete;
     std::shared_ptr<TPortionCategoryCounterAgents> PortionsToSyncSchema;
-public:
 
+public:
     TGlobalCounters()
-        : TBase("Actualizer")
-    {
+        : TBase("Actualizer") {
         PortionsWaitingEviction = std::make_shared<TPortionCategoryCounterAgents>(*this, "eviction_waiting");
         PortionsWaitingDelete = std::make_shared<TPortionCategoryCounterAgents>(*this, "delete_waiting");
         PortionsLatenessEviction = std::make_shared<TPortionCategoryCounterAgents>(*this, "eviction_lateness");
@@ -100,10 +98,7 @@ public:
         , PortionsWaitingDelete(TGlobalCounters::BuildPortionsWaitingDeleteAggregation())
         , PortionsLatenessEviction(TGlobalCounters::BuildPortionsLatenessEvictionAggregation())
         , PortionsLatenessDelete(TGlobalCounters::BuildPortionsLatenessDeleteAggregation())
-        , PortionsToSyncSchema(TGlobalCounters::BuildPortionsToSyncSchemaAggregation())
-    {
-    }
-
+        , PortionsToSyncSchema(TGlobalCounters::BuildPortionsToSyncSchemaAggregation()) {}
 };
 
-}
+} // namespace NKikimr::NOlap::NActualizer

@@ -9,7 +9,6 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
-
 using namespace NKikimr;
 using namespace NTxProxyUT;
 using namespace NHelpers;
@@ -37,11 +36,15 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         NTestLs::InSubdomain(env.GetClient().Ls("/dc-1/USER_0"), NKikimrSchemeOp::EPathTypeSubDomain);
     }
 
-    void CheckThatAllChannelsIsRightStoragePools(const NKikimrHive::TEvGetTabletStorageInfoResult& storageInfo, TStoragePools pools) {
+    void CheckThatAllChannelsIsRightStoragePools(
+        const NKikimrHive::TEvGetTabletStorageInfoResult& storageInfo, TStoragePools pools
+    ) {
         auto& info = storageInfo.GetInfo();
-        for (auto& channel: info.GetChannels()) {
+        for (auto& channel : info.GetChannels()) {
             TString poolName = channel.GetStoragePool();
-            auto it = std::find_if(pools.begin(), pools.end(), [&] (const TStoragePool& pool) {return pool.GetName() == poolName;});
+            auto it = std::find_if(pools.begin(), pools.end(), [&](const TStoragePool& pool) {
+                return pool.GetName() == poolName;
+            });
             UNIT_ASSERT(it != pools.end());
         }
     }
@@ -96,17 +99,21 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0"))
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePool), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain(
+                "/dc-1", GetSubDomainDefaultSetting("USER_0", storagePool), TDuration::MilliSeconds(500)
+            )
+        );
 
         env.GetTenants().Run("/dc-1/USER_0");
 
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc), NMsgBusProxy::MSTATUS_OK);
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
@@ -120,19 +127,29 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0"))
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain(
+                "/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools), TDuration::MilliSeconds(500)
+            )
+        );
 
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateTable("/dc-1/USER_0", tableDesc, TDuration::MilliSeconds(500)),
-                                 NMsgBusProxy::MSTATUS_INPROGRESS);
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetClient().CreateTable("/dc-1/USER_0", tableDesc, TDuration::MilliSeconds(500)),
+            NMsgBusProxy::MSTATUS_INPROGRESS
+        );
 
         env.GetTenants().Run("/dc-1/USER_0");
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().WaitCreateTx(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable", WaitTimeOut));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().WaitCreateTx(&env.GetRuntime(), "/dc-1/USER_0/SimpleTable", WaitTimeOut)
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/SimpleTable");
@@ -140,7 +157,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         }
 
         auto tablePortions = NTestLs::ExtractTablePartitions(env.GetClient().Ls("/dc-1/USER_0/SimpleTable"));
-        for (NKikimrSchemeOp::TTablePartition& portion: tablePortions) {
+        for (NKikimrSchemeOp::TTablePartition& portion : tablePortions) {
             auto tabletId = portion.GetDatashardId();
 
             UNIT_ASSERT(env.GetClient().TabletExistsInHive(&env.GetRuntime(), tabletId));
@@ -158,19 +175,26 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0"))
+        );
 
         auto storagePools = env.CreatePoolsForTenant("USER_0");
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain(
+                "/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools), TDuration::MilliSeconds(500)
+            )
+        );
 
         env.GetTenants().Run("/dc-1/USER_0");
 
         const ui32 partsCount = 4;
         const ui32 channelProfile = 2;
-        UNIT_ASSERT_VALUES_EQUAL(env.GetClient().CreateSolomon("/dc-1/USER_0", "Solomon", partsCount, channelProfile),
-                                 NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetClient().CreateSolomon("/dc-1/USER_0", "Solomon", partsCount, channelProfile),
+            NMsgBusProxy::MSTATUS_OK
+        );
 
         {
             auto ls = env.GetClient().Ls("/dc-1/USER_0/Solomon");
@@ -205,7 +229,6 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         env.GetTenants().Run("/dc-1/USER_0");
 
-
         {
             auto subdomain = GetSubDomainDefaultSetting("USER_0", storagePool);
             UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().AlterSubdomain("/dc-1", subdomain));
@@ -215,14 +238,18 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {
             auto tableDesc = GetTableSimpleDescription("table1");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir", tableDesc));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir", tableDesc)
+            );
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/table1");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
         }
 
         {
             auto tableDesc = GetTableSimpleDescription("table2");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir", tableDesc));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir", tableDesc)
+            );
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/table2");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
         }
@@ -232,7 +259,8 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {
             NKikimrMiniKQL::TResult result;
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(
+                "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_0/dir/table1 row0_ cols_))"
@@ -242,7 +270,9 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
                 "    (SetResult 'res1_ select1_)"
                 "))"
                 "(return ret_)"
-                ")", result);
+                ")",
+                result
+            );
         }
     }
 
@@ -252,11 +282,16 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0"))
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_INPROGRESS,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePool), TDuration::MilliSeconds(500)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_INPROGRESS,
+            env.GetClient().AlterSubdomain(
+                "/dc-1", GetSubDomainDefaultSetting("USER_0", storagePool), TDuration::MilliSeconds(500)
+            )
+        );
 
         env.GetTenants().Run("/dc-1/USER_0");
 
@@ -296,14 +331,18 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {
             auto tableDesc = GetTableSimpleDescription("table");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_0", tableDesc));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_0", tableDesc)
+            );
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/dir_0/table");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
         }
 
         {
             auto tableDesc = GetTableSimpleDescription("table");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_1", tableDesc));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0/dir/dir_1", tableDesc)
+            );
             auto ls = env.GetClient().Ls("/dc-1/USER_0/dir/dir_1/table");
             NTestLs::InSubdomain(ls, NKikimrSchemeOp::EPathTypeTable);
         }
@@ -313,7 +352,8 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {
             NKikimrMiniKQL::TResult result;
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(
+                "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_0/dir/dir_0/table row0_ cols_))"
@@ -323,13 +363,15 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
                 "    (SetResult 'res1_ select1_)"
                 "))"
                 "(return ret_)"
-                ")", result);
+                ")",
+                result
+            );
         }
     }
 
-    void CheckThatDSProxyReturnNoGroupIfTryBlock(TTestActorRuntime* runtime,
-                                                 const NKikimrHive::TEvGetTabletStorageInfoResult& storageInfo,
-                                                 ui32 nodeIdx = 0) {
+    void CheckThatDSProxyReturnNoGroupIfTryBlock(
+        TTestActorRuntime * runtime, const NKikimrHive::TEvGetTabletStorageInfoResult& storageInfo, ui32 nodeIdx = 0
+    ) {
         TIntrusivePtr<TTabletStorageInfo> info = TabletStorageInfoFromProto(storageInfo.GetInfo());
 
         TActorId edge = runtime->AllocateEdgeActor(nodeIdx);
@@ -337,14 +379,15 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         runtime->Register(x, nodeIdx);
 
 //        TAutoPtr<IEventHandle> handle;
-        TEvTabletBase::TEvBlockBlobStorageResult::TPtr response = runtime->GrabEdgeEventRethrow<TEvTabletBase::TEvBlockBlobStorageResult>(edge);
+        TEvTabletBase::TEvBlockBlobStorageResult::TPtr response =
+            runtime->GrabEdgeEventRethrow<TEvTabletBase::TEvBlockBlobStorageResult>(edge);
         Y_ABORT_UNLESS(response->Get()->TabletId == storageInfo.GetTabletID());
         UNIT_ASSERT_EQUAL(response->Get()->Status, NKikimrProto::NO_GROUP);
     }
 
-    void CheckThatDSProxyReturnNoGroupIfCollect(TTestActorRuntime* runtime,
-                                                const NKikimrHive::TEvGetTabletStorageInfoResult& storageInfo,
-                                                ui32 nodeIdx = 0) {
+    void CheckThatDSProxyReturnNoGroupIfCollect(
+        TTestActorRuntime * runtime, const NKikimrHive::TEvGetTabletStorageInfoResult& storageInfo, ui32 nodeIdx = 0
+    ) {
         auto& info = storageInfo.GetInfo();
         auto& channel = info.GetChannels(0);
         auto& lastEntry = *channel.GetHistory().rbegin();
@@ -354,23 +397,34 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         const ui32 generation = Max<ui32>();
         auto event = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(
-                    storageInfo.GetTabletID(),        // tabletId
-                    generation,                       // recordGeneration
-                    generation,                       // perGenerationCounter
-                    channel.GetChannel(),             // channel
-                    generation,                       // collectGeneration
-                    std::numeric_limits<ui32>::max(), // collectStep
-                    TInstant::Max());                 // deadline
+            storageInfo.GetTabletID(),        // tabletId
+            generation,                       // recordGeneration
+            generation,                       // perGenerationCounter
+            channel.GetChannel(),             // channel
+            generation,                       // collectGeneration
+            std::numeric_limits<ui32>::max(), // collectStep
+            TInstant::Max()
+        );                 // deadline
 
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(runtime->GetNodeId(nodeIdx));
-        runtime->Send(new IEventHandle(MakeBlobStorageProxyID(group), edge, event.Release(),
-                                       IEventHandle::FlagForwardOnNondelivery, 0, &nodeWarden), nodeIdx);
+        runtime->Send(
+            new IEventHandle(
+                MakeBlobStorageProxyID(group),
+                edge,
+                event.Release(),
+                IEventHandle::FlagForwardOnNondelivery,
+                0,
+                &nodeWarden
+            ),
+            nodeIdx
+        );
 
-        TEvBlobStorage::TEvCollectGarbageResult::TPtr response = runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(edge);
+        TEvBlobStorage::TEvCollectGarbageResult::TPtr response =
+            runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(edge);
         Y_ABORT_UNLESS(response->Get()->TabletId == storageInfo.GetTabletID());
         UNIT_ASSERT_EQUAL(response->Get()->Status, NKikimrProto::NO_GROUP);
     }
-    ui32 GetNodeIdx(TBaseTestEnv &env, ui32 nodeId) {
+    ui32 GetNodeIdx(TBaseTestEnv & env, ui32 nodeId) {
         ui32 nodeIdx = 0;
         for (ui32 idx = 0; idx < env.GetRuntime().GetNodeCount(); ++idx) {
             if (env.GetRuntime().GetNodeId(idx) == nodeId) {
@@ -386,11 +440,14 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
         auto storagePools = env.CreatePoolsForTenant("USER_0");
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0"))
+        );
         env.GetTenants().Run("/dc-1/USER_0", 1);
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools))
+        );
         env.GetTenants().Stop("/dc-1/USER_0");
 
         auto domaindescr = NTestLs::ExtractDomainDescription(env.GetClient().Ls("/dc-1/USER_0"));
@@ -406,7 +463,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         CheckThatAllChannelsIsRightStoragePools(storageInfo, storagePools);
 
-        for (auto& pool: storagePools) {
+        for (auto& pool : storagePools) {
             env.GetClient().RemoveStoragePool(pool.GetName());
         }
 
@@ -448,11 +505,14 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {// run and delete USER_0's pools
             auto storagePools = env.CreatePoolsForTenant("USER_0");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0")));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0"))
+            );
             env.GetTenants().Run("/dc-1/USER_0", 1);
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK,
+                env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools))
+            );
             env.GetTenants().Stop("/dc-1/USER_0");
             auto domaindescr = NTestLs::ExtractDomainDescription(env.GetClient().Ls("/dc-1/USER_0"));
 
@@ -468,7 +528,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
             env.GetTenants().Run("/dc-1/USER_0", 1);
             CheckTableBecomeAlive(env, coordinator);
 
-            for (auto& pool: storagePools) {
+            for (auto& pool : storagePools) {
                 env.GetClient().RemoveStoragePool(pool.GetName());
             }
 
@@ -477,11 +537,14 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {// run and check USER_1
             auto storagePools = env.CreatePoolsForTenant("USER_1");
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1")));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_1"))
+            );
             env.GetTenants().Run("/dc-1/USER_1", 1);
-            UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                     env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1", storagePools)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                NMsgBusProxy::MSTATUS_OK,
+                env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_1", storagePools))
+            );
             env.GetTenants().Stop("/dc-1/USER_1");
             auto domaindescr = NTestLs::ExtractDomainDescription(env.GetClient().Ls("/dc-1/USER_1"));
 
@@ -507,16 +570,17 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         UNIT_ASSERT_VALUES_EQUAL("/dc-1", env.GetRoot());
 
         auto storagePools = env.CreatePoolsForTenant("USER_0");
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateSubdomain("/dc-1", GetSubDomainDeclareSetting("USER_0"))
+        );
         env.GetTenants().Run("/dc-1/USER_0", 1);
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterSubdomain("/dc-1", GetSubDomainDefaultSetting("USER_0", storagePools))
+        );
 
         auto tableDesc = GetTableSimpleDescription("SimpleTable");
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CreateTable("/dc-1/USER_0", tableDesc));
-
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().CreateTable("/dc-1/USER_0", tableDesc));
 
         auto tablePortionsBefireSplit = NTestLs::ExtractTablePartitions(env.GetClient().Ls("/dc-1/USER_0/SimpleTable"));
         auto firstDataShardBefireSplit = tablePortionsBefireSplit.front().GetDatashardId();
@@ -531,10 +595,13 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
             CheckThatAllChannelsIsRightStoragePools(storageInfo, storagePools);
         }
 
-        env.GetClient().SplitTable("/dc-1/USER_0/SimpleTable", firstDataShardBefireSplit, 1000000, TDuration::MilliSeconds(1));
+        env.GetClient().SplitTable(
+            "/dc-1/USER_0/SimpleTable", firstDataShardBefireSplit, 1000000, TDuration::MilliSeconds(1)
+        );
 
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 env.GetClient().CopyTable("/dc-1/USER_0/", "copy", "/dc-1/USER_0/SimpleTable"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            NMsgBusProxy::MSTATUS_OK, env.GetClient().CopyTable("/dc-1/USER_0/", "copy", "/dc-1/USER_0/SimpleTable")
+        );
 
         auto tablePortionsAfterSplit = NTestLs::ExtractTablePartitions(env.GetClient().Ls("/dc-1/USER_0/SimpleTable"));
         auto firstDataShardAfterSplit = tablePortionsAfterSplit.front().GetDatashardId();
@@ -552,7 +619,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         }
 
         auto copyTablePortions = NTestLs::ExtractTablePartitions(env.GetClient().Ls("/dc-1/USER_0/copy"));
-        for (NKikimrSchemeOp::TTablePartition& portion: copyTablePortions) {
+        for (NKikimrSchemeOp::TTablePartition& portion : copyTablePortions) {
             auto tabletId = portion.GetDatashardId();
 
             UNIT_ASSERT(env.GetClient().TabletExistsInHive(&env.GetRuntime(), tabletId));

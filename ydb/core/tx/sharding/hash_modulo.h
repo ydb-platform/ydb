@@ -10,6 +10,7 @@ public:
     private:
         YDB_ACCESSOR(ui64, TabletId, 0);
         YDB_ACCESSOR_DEF(std::set<ui32>, AppropriateMods);
+
     public:
         bool operator<(const TModuloShardingTablet& item) const {
             AFL_VERIFY(AppropriateMods.size());
@@ -20,9 +21,7 @@ public:
         TModuloShardingTablet() = default;
         TModuloShardingTablet(const ui64 tabletId, const std::set<ui32>& mods)
             : TabletId(tabletId)
-            , AppropriateMods(mods) {
-
-        }
+            , AppropriateMods(mods) {}
 
         NKikimrSchemeOp::TModuloShardingTablet SerializeToProto() const {
             NKikimrSchemeOp::TModuloShardingTablet result;
@@ -41,6 +40,7 @@ public:
             return TConclusionStatus::Success();
         }
     };
+
 private:
     bool IndexConstructed = false;
     YDB_READONLY(ui32, PartsCount, 0);
@@ -51,10 +51,9 @@ private:
 public:
     TSpecificShardingInfo() = default;
     TSpecificShardingInfo(const std::vector<ui64>& shardIds)
-        : PartsCount(shardIds.size())
-    {
+        : PartsCount(shardIds.size()) {
         for (ui32 i = 0; i < shardIds.size(); ++i) {
-            TModuloShardingTablet info(shardIds[i], { i });
+            TModuloShardingTablet info(shardIds[i], {i});
             SpecialSharding.emplace_back(info);
         }
         BuildActivityIndex(Default<std::set<ui64>>(), Default<std::set<ui64>>()).Validate();
@@ -133,7 +132,8 @@ public:
             orderedTabletIdsLocal.emplace_back(i.GetTabletId());
             ++idx;
         }
-        AFL_VERIFY(orderedTabletIdsLocal.size() == summaryShardsCount)("ordered", orderedTabletIdsLocal.size())("summary", summaryShardsCount);
+        AFL_VERIFY(orderedTabletIdsLocal.size() == summaryShardsCount)
+        ("ordered", orderedTabletIdsLocal.size())("summary", summaryShardsCount);
         std::swap(orderedTabletIdsLocal, orderedShardIds);
         return true;
     }
@@ -172,18 +172,28 @@ public:
             }
         }
         if (modsRead.size() && modsRead.size() != PartsCount) {
-            return TConclusionStatus::Fail("incorrect sharding configuration read from proto (read): " + JoinSeq(", ", modsRead) + "; " + ::ToString(PartsCount));
+            return TConclusionStatus::Fail(
+                "incorrect sharding configuration read from proto (read): " + JoinSeq(", ", modsRead) + "; " +
+                ::ToString(PartsCount)
+            );
         }
         if (modsWrite.size() && modsWrite.size() != PartsCount) {
-            return TConclusionStatus::Fail("incorrect sharding configuration read from proto (write): " + JoinSeq(", ", modsWrite) + "; " + ::ToString(PartsCount));
+            return TConclusionStatus::Fail(
+                "incorrect sharding configuration read from proto (write): " + JoinSeq(", ", modsWrite) + "; " +
+                ::ToString(PartsCount)
+            );
         }
         IndexConstructed = true;
         return TConclusionStatus::Success();
     }
 
-    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto, const std::set<ui64>& closedWriteIds, const std::set<ui64>& closedReadIds) {
+    TConclusionStatus DeserializeFromProto(
+        const NKikimrSchemeOp::TColumnTableSharding& proto,
+        const std::set<ui64>& closedWriteIds,
+        const std::set<ui64>& closedReadIds
+    ) {
         IndexConstructed = false;
-        
+
         PartsCount = proto.GetHashSharding().GetModuloPartsCount();
         for (auto&& i : proto.GetHashSharding().GetTabletsForModulo()) {
             TModuloShardingTablet info;
@@ -220,7 +230,9 @@ public:
             return info.GetTabletId() == tabletId;
         };
         const ui32 sizeStart = SpecialSharding.size();
-        SpecialSharding.erase(std::remove_if(SpecialSharding.begin(), SpecialSharding.end(), pred), SpecialSharding.end());
+        SpecialSharding.erase(
+            std::remove_if(SpecialSharding.begin(), SpecialSharding.end(), pred), SpecialSharding.end()
+        );
 
         ActiveReadSpecialSharding.clear();
         ActiveWriteSpecialSharding.clear();
@@ -251,13 +263,15 @@ public:
     }
 };
 
-class THashShardingModuloN : public THashShardingImpl {
+class THashShardingModuloN: public THashShardingImpl {
 public:
     static TString GetClassNameStatic() {
         return "MODULO";
     }
+
 private:
     using TBase = THashShardingImpl;
+
 private:
     std::optional<TSpecificShardingInfo> SpecialShardingInfo;
 
@@ -284,9 +298,13 @@ private:
     virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 tabletId) const override;
 
 protected:
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildSplitShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const override;
 
-    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(const std::vector<ui64>& newTabletIds) const override;
+    virtual TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> DoBuildMergeShardsModifiers(
+        const std::vector<ui64>& newTabletIds
+    ) const override;
 
     virtual TConclusionStatus DoOnAfterModification() override;
     virtual TConclusionStatus DoOnBeforeModification() override {
@@ -302,9 +320,10 @@ protected:
         if (SpecialShardingInfo) {
             SpecialShardingInfo->SerializeToProto(proto);
         }
-        proto.MutableHashSharding()->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+        proto.MutableHashSharding()->SetFunction(
+            NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N
+        );
     }
-
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto) override;
 
@@ -315,20 +334,21 @@ protected:
         }
         return result;
     }
+
 public:
     using TBase::TBase;
 
     THashShardingModuloN() = default;
 
     THashShardingModuloN(const std::vector<ui64>& shardIds, const std::vector<TString>& columnNames, ui64 seed = 0)
-        : TBase(shardIds, columnNames, seed)
-    {}
+        : TBase(shardIds, columnNames, seed) {}
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
 
-    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch
+    ) const override;
 };
 
 class TGranuleSharding: public THashGranuleSharding {
@@ -336,14 +356,17 @@ public:
     static TString GetClassNameStatic() {
         return "MODULO";
     }
+
 private:
     using TBase = THashGranuleSharding;
     ui64 PartsCount = 0;
     TSpecificShardingInfo::TModuloShardingTablet Interval;
-    static const inline TFactory::TRegistrator<TGranuleSharding> Registrator = TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
+    static const inline TFactory::TRegistrator<TGranuleSharding> Registrator =
+        TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
 
 protected:
-    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table) const override {
+    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table
+    ) const override {
         const std::vector<ui64> hashes = CalcHashes(table);
         auto result = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
         const auto getter = [&](const ui32 index) {
@@ -351,7 +374,6 @@ protected:
         };
         result->ResetWithLambda(hashes.size(), getter);
         return result;
-
     }
     virtual void DoSerializeToProto(TProto& proto) const override {
         AFL_VERIFY(PartsCount);
@@ -379,10 +401,15 @@ protected:
 
         return TConclusionStatus::Success();
     }
+
 public:
     TGranuleSharding() = default;
 
-    TGranuleSharding(const std::vector<TString>& columnNames, const TSpecificShardingInfo::TModuloShardingTablet& interval, const ui64 partsCount)
+    TGranuleSharding(
+        const std::vector<TString>& columnNames,
+        const TSpecificShardingInfo::TModuloShardingTablet& interval,
+        const ui64 partsCount
+    )
         : TBase(columnNames)
         , PartsCount(partsCount)
         , Interval(interval) {
@@ -394,4 +421,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSharding::NModulo

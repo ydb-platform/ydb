@@ -22,7 +22,10 @@ struct TEvExportScan {
         EvEnd,
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)"
+    );
 
     struct TEvReset: public TEventLocal<TEvReset, EvReset> {};
     struct TEvReady: public TEventLocal<TEvReady, EvReady> {};
@@ -37,14 +40,11 @@ struct TEvExportScan {
 
         explicit TEvBuffer(TBuffer&& buffer, bool last)
             : Buffer(std::move(buffer))
-            , Last(last)
-        {
-        }
+            , Last(last) {}
 
         TString ToString() const override {
             return TStringBuilder() << this->ToStringHeader() << " {"
-                << " Last: " << Last
-            << " }";
+                                    << " Last: " << Last << " }";
         }
     };
 
@@ -56,15 +56,11 @@ struct TEvExportScan {
 
         explicit TEvFinish(bool success, const TString& error = TString())
             : Success(success)
-            , Error(error)
-        {
-        }
+            , Error(error) {}
 
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
-                << " Success: " << Success
-                << " Error: " << Error
-            << " }";
+                                    << " Success: " << Success << " Error: " << Error << " }";
         }
     };
 
@@ -86,9 +82,7 @@ struct TExportScanProduct: public IDestructable {
         : Outcome(outcome)
         , Error(std::move(error))
         , BytesRead(bytes)
-        , RowsRead(rows)
-    {
-    }
+        , RowsRead(rows) {}
 
 }; // TExportScanProduct
 
@@ -115,9 +109,10 @@ public:
     virtual TString GetError() const = 0;
 };
 
-} // NExportScan
+} // namespace NExportScan
 
-NTable::IScan* CreateExportScan(NExportScan::IBuffer::TPtr buffer, std::function<NActors::IActor*()>&& createUploaderFn);
+NTable::IScan*
+CreateExportScan(NExportScan::IBuffer::TPtr buffer, std::function<NActors::IActor*()>&& createUploaderFn);
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

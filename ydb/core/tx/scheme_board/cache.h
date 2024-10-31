@@ -8,4 +8,4 @@ namespace NKikimr {
 
 IActor* CreateSchemeBoardSchemeCache(NSchemeCache::TSchemeCacheConfig* config);
 
-} // NKikimr
+} // namespace NKikimr

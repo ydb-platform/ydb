@@ -11,9 +11,13 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
         case arrow::Type::UINT16: // YQL Date
             return TInstant::Days(std::static_pointer_cast<arrow::UInt16Scalar>(scalar)->value);
         case arrow::Type::UINT32: // YQL Datetime or Uint32
-            return TInstant::MicroSeconds(std::static_pointer_cast<arrow::UInt32Scalar>(scalar)->value / (1.0 * unitsInSeconds / 1000000));
+            return TInstant::MicroSeconds(
+                std::static_pointer_cast<arrow::UInt32Scalar>(scalar)->value / (1.0 * unitsInSeconds / 1000000)
+            );
         case arrow::Type::UINT64:
-            return TInstant::MicroSeconds(std::static_pointer_cast<arrow::UInt64Scalar>(scalar)->value / (1.0 * unitsInSeconds / 1000000));
+            return TInstant::MicroSeconds(
+                std::static_pointer_cast<arrow::UInt64Scalar>(scalar)->value / (1.0 * unitsInSeconds / 1000000)
+            );
         default:
             return {};
     }
@@ -30,7 +34,12 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
         const TInstant maxTieringPortionInstant = *mpiOpt;
         const TDuration dWaitLocal = maxTieringPortionInstant - tierInfo.GetEvictInstant(now);
         if (!dWaitLocal) {
-            return TTieringContext(tierInfo.GetName(), tierInfo.GetEvictInstant(now) - maxTieringPortionInstant, nextTierName, nextTierDuration);
+            return TTieringContext(
+                tierInfo.GetName(),
+                tierInfo.GetEvictInstant(now) - maxTieringPortionInstant,
+                nextTierName,
+                nextTierDuration
+            );
         } else {
             nextTierName = tierInfo.GetName();
             nextTierDuration = dWaitLocal;
@@ -39,4 +48,4 @@ TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::S
     return TTieringContext(IStoragesManager::DefaultStorageId, TDuration::Zero(), nextTierName, nextTierDuration);
 }
 
-}
+} // namespace NKikimr::NOlap

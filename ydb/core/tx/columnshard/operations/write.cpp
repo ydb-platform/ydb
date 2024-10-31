@@ -13,9 +13,17 @@
 
 namespace NKikimr::NColumnShard {
 
-TWriteOperation::TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
-    const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
-    const NEvWrite::EModificationType mType, const bool writePortions)
+TWriteOperation::TWriteOperation(
+    const ui64 pathId,
+    const TOperationWriteId writeId,
+    const ui64 lockId,
+    const ui64 cookie,
+    const EOperationStatus& status,
+    const TInstant createdAt,
+    const std::optional<ui32> granuleShardingVersionId,
+    const NEvWrite::EModificationType mType,
+    const bool writePortions
+)
     : PathId(pathId)
     , Status(status)
     , CreatedAt(createdAt)
@@ -24,27 +32,41 @@ TWriteOperation::TWriteOperation(const ui64 pathId, const TOperationWriteId writ
     , Cookie(cookie)
     , GranuleShardingVersionId(granuleShardingVersionId)
     , ModificationType(mType)
-    , WritePortions(writePortions) {
-}
+    , WritePortions(writePortions) {}
 
 void TWriteOperation::Start(
-    TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context) {
+    TColumnShard& owner,
+    const NEvWrite::IDataContainer::TPtr& data,
+    const NActors::TActorId& source,
+    const NOlap::TWritingContext& context
+) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
     NEvWrite::TWriteMeta writeMeta((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId);
     writeMeta.SetLockId(LockId);
     writeMeta.SetModificationType(ModificationType);
-    NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
-        owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR), WritePortions);
-    std::shared_ptr<NConveyor::ITask> task =
-        std::make_shared<NOlap::TBuildBatchesTask>(owner.BufferizationWriteActorId, std::move(writeData), owner.GetLastTxSnapshot(), context);
+    NEvWrite::TWriteData writeData(
+        writeMeta,
+        data,
+        owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
+        owner.StoragesManager->GetInsertOperator()->StartWritingAction(
+            NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR
+        ),
+        WritePortions
+    );
+    std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(
+        owner.BufferizationWriteActorId, std::move(writeData), owner.GetLastTxSnapshot(), context
+    );
     NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
 
     Status = EOperationStatus::Started;
 }
 
 void TWriteOperation::CommitOnExecute(
-    TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
+    TColumnShard& owner,
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const NOlap::TSnapshot& snapshot
+) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
@@ -55,11 +77,14 @@ void TWriteOperation::CommitOnExecute(
         auto pathExists = [&](ui64 pathId) {
             return owner.TablesManager.HasTable(pathId);
         };
-        const auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), insertWriteIds, pathExists);
+        const auto counters =
+            owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), insertWriteIds, pathExists);
         owner.Counters.GetTabletCounters()->OnWriteCommitted(counters);
     } else {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).CommitPortionOnExecute(txc, i, snapshot);
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).CommitPortionOnExecute(
+                txc, i, snapshot
+            );
         }
     }
 }
@@ -71,13 +96,17 @@ void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapsh
     } else {
         for (auto&& i : InsertWriteIds) {
             owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).CommitPortionOnComplete(
-                i, owner.MutableIndexAs<NOlap::TColumnEngineForLogs>());
+                i, owner.MutableIndexAs<NOlap::TColumnEngineForLogs>()
+            );
         }
     }
 }
 
 void TWriteOperation::OnWriteFinish(
-    NTabletFlatExecutor::TTransactionContext& txc, const std::vector<TInsertWriteId>& insertWriteIds, const bool ephemeralFlag) {
+    NTabletFlatExecutor::TTransactionContext& txc,
+    const std::vector<TInsertWriteId>& insertWriteIds,
+    const bool ephemeralFlag
+) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Started);
     Status = EOperationStatus::Prepared;
     InsertWriteIds = insertWriteIds;
@@ -95,10 +124,14 @@ void TWriteOperation::OnWriteFinish(
 
     db.Table<Schema::Operations>()
         .Key((ui64)WriteId)
-        .Update(NIceDb::TUpdate<Schema::Operations::Status>((ui32)Status), NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()),
-            NIceDb::TUpdate<Schema::Operations::Metadata>(metadata), NIceDb::TUpdate<Schema::Operations::LockId>(LockId),
+        .Update(
+            NIceDb::TUpdate<Schema::Operations::Status>((ui32)Status),
+            NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()),
+            NIceDb::TUpdate<Schema::Operations::Metadata>(metadata),
+            NIceDb::TUpdate<Schema::Operations::LockId>(LockId),
             NIceDb::TUpdate<Schema::Operations::Cookie>(Cookie),
-            NIceDb::TUpdate<Schema::Operations::GranuleShardingVersionId>(GranuleShardingVersionId.value_or(0)));
+            NIceDb::TUpdate<Schema::Operations::GranuleShardingVersionId>(GranuleShardingVersionId.value_or(0))
+        );
 }
 
 void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
@@ -136,7 +169,9 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
         owner.InsertTable->Abort(dbTable, writeIds);
     } else {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(txc, i);
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(
+                txc, i
+            );
         }
     }
 }
@@ -145,7 +180,8 @@ void TWriteOperation::AbortOnComplete(TColumnShard& owner) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
     if (WritePortions) {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnComplete(i);
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnComplete(i
+            );
         }
     }
 }

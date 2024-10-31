@@ -2,10 +2,9 @@
 #include <ydb/core/tx/locks/locks_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 
-
 namespace NKikimr::NColumnShard {
 
-class TColumnShardLocksDb : public NLocks::TShardLocksDb<TColumnShard, NColumnShard::Schema> {
+class TColumnShardLocksDb: public NLocks::TShardLocksDb<TColumnShard, NColumnShard::Schema> {
 private:
     using TBase = NLocks::TShardLocksDb<TColumnShard, NColumnShard::Schema>;
 
@@ -21,7 +20,6 @@ public:
     bool MayAddLock(ui64) override {
         return true;
     }
-
 };
 
-}
+} // namespace NKikimr::NColumnShard

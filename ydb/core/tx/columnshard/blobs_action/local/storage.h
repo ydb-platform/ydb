@@ -12,8 +12,8 @@ protected:
     virtual const NSplitter::TSplitSettings& DoGetBlobSplitSettings() const override {
         return SplitSettings;
     }
-    virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction(
-        const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& /*counters*/) override;
+    virtual std::shared_ptr<IBlobsDeclareRemovingAction>
+    DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& /*counters*/) override;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override {
         AFL_VERIFY(false)("problem", "unimplemented method");
         return nullptr;
@@ -22,7 +22,8 @@ protected:
         AFL_VERIFY(false)("problem", "unimplemented method");
         return nullptr;
     };
-    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& /*counters*/) const override {
+    virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& /*counters*/)
+        const override {
         return nullptr;
     }
     virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& /*action*/) const override {
@@ -36,7 +37,10 @@ protected:
     };
 
 public:
-    TOperator(const TString& storageId, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
+    TOperator(
+        const TString& storageId,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager
+    );
 
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         return Default<TTabletsByBlob>();
@@ -47,7 +51,6 @@ public:
     virtual bool HasToDelete(const TUnifiedBlobId& /*blobId*/, const TTabletId /*tabletId*/) const override {
         return false;
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NLocal

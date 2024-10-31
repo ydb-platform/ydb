@@ -17,4 +17,4 @@ public:
     virtual void CheckRequestAndInit(TTransactionContext& txc, const TActorContext& ctx) = 0;
 };
 
-} // NKikimr::NDataShard
+} // namespace NKikimr::NDataShard

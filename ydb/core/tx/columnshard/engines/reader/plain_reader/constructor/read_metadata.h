@@ -12,7 +12,7 @@ class TLockSharingInfo;
 namespace NKikimr::NOlap::NReader::NPlain {
 
 // Holds all metadata that is needed to perform read/scan
-struct TReadMetadata : public TReadMetadataBase {
+struct TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
@@ -28,8 +28,7 @@ private:
     public:
         TWriteIdInfo(const ui64 lockId, const std::shared_ptr<TAtomicCounter>& counter)
             : LockId(lockId)
-            , Conflicts(counter) {
-        }
+            , Conflicts(counter) {}
 
         ui64 GetLockId() const {
             return LockId;
@@ -49,7 +48,8 @@ private:
 
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const override;
-    virtual void DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const override;
+    virtual void DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData)
+        const override;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
@@ -115,18 +115,26 @@ public:
     std::vector<TCommittedBlob> CommittedBlobs;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
+    TReadMetadata(
+        const ui64 pathId,
+        const std::shared_ptr<TVersionedIndex> info,
+        const TSnapshot& snapshot,
+        const ESorting sorting,
+        const TProgramContainer& ssaProgram
+    )
         : TBase(info, sorting, ssaProgram, info->GetSchema(snapshot), snapshot)
         , PathId(pathId)
-        , ReadStats(std::make_shared<TReadStats>())
-    {
-    }
+        , ReadStats(std::make_shared<TReadStats>()) {}
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
-    TConclusionStatus Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor);
+    TConclusionStatus Init(
+        const NColumnShard::TColumnShard* owner,
+        const TReadDescription& readDescription,
+        const TDataStorageAccessor& dataAccessor
+    );
 
     std::vector<std::string> GetColumnsOrder() const {
         auto schema = GetResultSchema();
@@ -153,8 +161,8 @@ public:
     std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
-        out << " index blobs: " << NumIndexedBlobs()
-            << " committed blobs: " << CommittedBlobs.size()
+        out << " index blobs: " << NumIndexedBlobs() << " committed blobs: "
+            << CommittedBlobs.size()
       //      << " with program steps: " << (Program ? Program->Steps.size() : 0)
             << " at snapshot: " << GetRequestSnapshot().DebugString();
         TBase::Dump(out);
@@ -164,10 +172,10 @@ public:
         }
     }
 
-    friend IOutputStream& operator << (IOutputStream& out, const TReadMetadata& meta) {
+    friend IOutputStream& operator<<(IOutputStream& out, const TReadMetadata& meta) {
         meta.Dump(out);
         return out;
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

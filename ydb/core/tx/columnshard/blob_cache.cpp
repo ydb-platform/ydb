@@ -26,7 +26,7 @@ private:
         bool Cache{false};
     };
 
-    struct TReadItem : public TReadBlobRangeOptions {
+    struct TReadItem: public TReadBlobRangeOptions {
         enum class EReadVariant {
             FAST = 0,
             DEFAULT,
@@ -37,8 +37,7 @@ private:
 
         TReadItem(const TReadBlobRangeOptions& opts, const TBlobRange& blobRange)
             : TReadBlobRangeOptions(opts)
-            , BlobRange(blobRange)
-        {
+            , BlobRange(blobRange) {
             Y_ABORT_UNLESS(blobRange.BlobId.IsValid());
         }
 
@@ -47,15 +46,12 @@ private:
         }
 
         static NKikimrBlobStorage::EGetHandleClass ReadClass(EReadVariant readVar) {
-            return (readVar == EReadVariant::FAST)
-                ? NKikimrBlobStorage::FastRead
-                : NKikimrBlobStorage::AsyncRead;
+            return (readVar == EReadVariant::FAST) ? NKikimrBlobStorage::FastRead : NKikimrBlobStorage::AsyncRead;
         }
 
         EReadVariant ReadVariant() const {
-            return IsBackgroud
-                ? (WithDeadline ? EReadVariant::DEFAULT : EReadVariant::DEFAULT_NO_DEADLINE)
-                : EReadVariant::FAST;
+            return IsBackgroud ? (WithDeadline ? EReadVariant::DEFAULT : EReadVariant::DEFAULT_NO_DEADLINE)
+                               : EReadVariant::FAST;
         }
 
         // Blobs with same tagret can be read in a single request
@@ -102,16 +98,16 @@ private:
 
     TControlWrapper MaxCacheDataSize;
     TControlWrapper MaxInFlightDataSize;
-    i64 CacheDataSize;              // Current size of all blobs in cache
+    i64 CacheDataSize; // Current size of all blobs in cache
     ui64 ReadCookie;
-    THashMap<ui64, std::vector<TBlobRange>> CookieToRange;  // All in-flight requests
-    THashMap<TBlobRange, TReadInfo> OutstandingReads;   // All in-flight and enqueued reads
-    TDeque<TReadItem> ReadQueue;    // Reads that are waiting to be sent
-                                    // TODO: Consider making per-group queues
-    i64 InFlightDataSize;           // Current size of all in-flight blobs
+    THashMap<ui64, std::vector<TBlobRange>> CookieToRange; // All in-flight requests
+    THashMap<TBlobRange, TReadInfo> OutstandingReads; // All in-flight and enqueued reads
+    TDeque<TReadItem> ReadQueue; // Reads that are waiting to be sent
+        // TODO: Consider making per-group queues
+    i64 InFlightDataSize; // Current size of all in-flight blobs
 
-    THashMap<ui64, TActorId> ShardPipes;    // TabletId -> PipeClient for small blob read requests
-    THashMap<ui64, THashSet<ui64>> InFlightTabletRequests;  // TabletId -> list to read cookies
+    THashMap<ui64, TActorId> ShardPipes; // TabletId -> PipeClient for small blob read requests
+    THashMap<ui64, THashSet<ui64>> InFlightTabletRequests; // TabletId -> list to read cookies
 
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
     const TCounterPtr SizeBytes;
@@ -168,8 +164,7 @@ public:
         , SizeBytesInFlight(counters->GetCounter("SizeBytesInFlight"))
         , SizeBlobsInFlight(counters->GetCounter("SizeBlobsInFlight"))
         , ReadRequests(counters->GetCounter("ReadRequests", true))
-        , ReadsInQueue(counters->GetCounter("ReadsInQueue"))
-    {}
+        , ReadsInQueue(counters->GetCounter("ReadsInQueue")) {}
 
     void Bootstrap(const TActorContext& ctx) {
         auto& icb = AppData(ctx)->Icb;
@@ -195,11 +190,11 @@ private:
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-        default:
-            LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
+            default:
+                LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
-            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
-            break;
+                Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
+                break;
         };
     }
 
@@ -209,7 +204,7 @@ private:
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        Evict(ctx);         // Max cache size might have changed
+        Evict(ctx); // Max cache size might have changed
         ScheduleWakeup();
     }
 
@@ -334,9 +329,13 @@ private:
         CachedRanges.erase(begin, end);
     }
 
-    void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie,
-        ui32 dsGroup, TReadItem::EReadVariant readVariant, const TActorContext& ctx)
-    {
+    void SendBatchReadRequestToDS(
+        const std::vector<TBlobRange>& blobRanges,
+        const ui64 cookie,
+        ui32 dsGroup,
+        TReadItem::EReadVariant readVariant,
+        const TActorContext& ctx
+    ) {
         LOG_S_DEBUG("Sending read from BlobCache: group: " << dsGroup
             << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
             << " cookie: " << cookie);
@@ -349,10 +348,9 @@ private:
 
         NKikimrBlobStorage::EGetHandleClass readClass = TReadItem::ReadClass(readVariant);
         TInstant deadline = ReadDeadline(readVariant);
-        SendToBSProxy(ctx,
-                dsGroup,
-                new TEvBlobStorage::TEvGet(queires, blobRanges.size(), deadline, readClass, false),
-                cookie);
+        SendToBSProxy(
+            ctx, dsGroup, new TEvBlobStorage::TEvGet(queires, blobRanges.size(), deadline, readClass, false), cookie
+        );
 
         ReadRequests->Inc();
     }
@@ -424,8 +422,14 @@ private:
         }
     }
 
-    void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status,
-                    const TString& data, const TActorContext& ctx, const bool fromCache = false) {
+    void SendResult(
+        const TActorId& to,
+        const TBlobRange& blobRange,
+        NKikimrProto::EReplyStatus status,
+        const TString& data,
+        const TActorContext& ctx,
+        const bool fromCache = false
+    ) {
         LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status);
 
         ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, fromCache));
@@ -466,9 +470,13 @@ private:
         MakeReadRequests(ctx);
     }
 
-    void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie,
-        ui32 status, const TString& data, const TActorContext& ctx) noexcept
-    {
+    void ProcessSingleRangeResult(
+        const TBlobRange& blobRange,
+        const ui64 readCookie,
+        ui32 status,
+        const TString& data,
+        const TActorContext& ctx
+    ) noexcept {
         AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange);
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt == OutstandingReads.end()) {
@@ -499,7 +507,8 @@ private:
             ReadRangeFailedCount->Add(1);
         }
 
-        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange)("send_replies", readIt->second.Waiting.size());
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)
+        ("ProcessSingleRangeResult", blobRange)("send_replies", readIt->second.Waiting.size());
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
             SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, ctx);
@@ -602,12 +611,14 @@ NActors::IActor* CreateBlobCache(ui64 maxBytes, TIntrusivePtr<::NMonitoring::TDy
 
 void AddRangeToCache(const TBlobRange& blobRange, const TString& data) {
     TlsActivationContext->Send(
-        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvCacheBlobRange(blobRange, data))
+    );
 }
 
 void ForgetBlob(const TUnifiedBlobId& blobId) {
     TlsActivationContext->Send(
-        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId)));
+        new IEventHandle(MakeBlobCacheServiceId(), TActorId(), new TEvBlobCache::TEvForgetBlob(blobId))
+    );
 }
 
-}
+} // namespace NKikimr::NBlobCache

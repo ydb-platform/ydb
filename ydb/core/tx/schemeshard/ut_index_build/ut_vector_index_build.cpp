@@ -13,31 +13,34 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
-    Y_UNIT_TEST (BaseCase) {
+Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
+    Y_UNIT_TEST(BaseCase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot",
-                               "Name: \"ResourceDB\"");
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
-                              "StoragePools { "
-                              "  Name: \"pool-1\" "
-                              "  Kind: \"pool-kind-1\" "
-                              "} "
-                              "StoragePools { "
-                              "  Name: \"pool-2\" "
-                              "  Kind: \"pool-kind-2\" "
-                              "} "
-                              "PlanResolution: 50 "
-                              "Coordinators: 1 "
-                              "Mediators: 1 "
-                              "TimeCastBucketsPerMediator: 2 "
-                              "ExternalSchemeShard: true "
-                              "Name: \"ResourceDB\"");
+        TestAlterExtSubDomain(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            "StoragePools { "
+            "  Name: \"pool-1\" "
+            "  Kind: \"pool-kind-1\" "
+            "} "
+            "StoragePools { "
+            "  Name: \"pool-2\" "
+            "  Kind: \"pool-kind-2\" "
+            "} "
+            "PlanResolution: 50 "
+            "Coordinators: 1 "
+            "Mediators: 1 "
+            "TimeCastBucketsPerMediator: 2 "
+            "ExternalSchemeShard: true "
+            "Name: \"ResourceDB\""
+        );
         env.TestWaitNotification(runtime, txId);
 
         const auto attrs = AlterUserAttrs({
@@ -46,35 +49,44 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             {"database_id", "DATABASE_ID_VAL"},
         });
 
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateExtSubDomain(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
                 PathId: 2
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )",
+                TTestTxConfig::SchemeShard
+            ),
+            attrs
+        );
         env.TestWaitNotification(runtime, txId);
 
-        TString alterData = TStringBuilder()
-                            << "PlanResolution: 50 "
-                            << "Coordinators: 1 "
-                            << "Mediators: 1 "
-                            << "TimeCastBucketsPerMediator: 2 "
-                            << "ExternalSchemeShard: true "
-                            << "ExternalHive: false "
-                            << "Name: \"ServerLessDB\" "
-                            << "StoragePools { "
-                            << "  Name: \"pool-1\" "
-                            << "  Kind: \"pool-kind-1\" "
-                            << "} ";
+        TString alterData = TStringBuilder() << "PlanResolution: 50 "
+                                             << "Coordinators: 1 "
+                                             << "Mediators: 1 "
+                                             << "TimeCastBucketsPerMediator: 2 "
+                                             << "ExternalSchemeShard: true "
+                                             << "ExternalHive: false "
+                                             << "Name: \"ServerLessDB\" "
+                                             << "StoragePools { "
+                                             << "  Name: \"pool-1\" "
+                                             << "  Kind: \"pool-kind-1\" "
+                                             << "} ";
         TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", alterData);
         env.TestWaitNotification(runtime, txId);
 
         ui64 tenantSchemeShard = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLessDB"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("ServerLessDB"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/ServerLessDB"),
+            {NLs::PathExist, NLs::IsExternalSubDomain("ServerLessDB"), NLs::ExtractTenantSchemeshard(&tenantSchemeShard)
+            }
+        );
 
         // Just create main table
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
@@ -86,13 +98,18 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         auto fnWriteRow = [&](ui64 tabletId, ui32 key, TString embedding, const char* table) {
-            TString writeQuery = Sprintf(R"(
+            TString writeQuery = Sprintf(
+                R"(
                 (
                     (let key   '( '('key       (Uint32 '%u ) ) ) )
                     (let row   '( '('embedding (String '%s ) ) ) )
                     (return (AsList (UpdateRow '__user__%s key row) ))
                 )
-            )", key, embedding.c_str(), table);
+            )",
+                key,
+                embedding.c_str(),
+                table
+            );
             NKikimrMiniKQL::TResult result;
             TString err;
             NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
@@ -106,18 +123,28 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(3)});
+        TestDescribeResult(
+            DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)}
+        );
 
         TStringBuilder meteringMessages;
-        auto observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
-            Cerr << "grabMeteringMessage has happened" << Endl;
-            meteringMessages << event->Get()->MeteringJson;
-        });
+        auto observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>(
+            [&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
+                Cerr << "grabMeteringMessage has happened" << Endl;
+                meteringMessages << event->Get()->MeteringJson;
+            }
+        );
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
+        TestBuildVectorIndex(
+            runtime,
+            ++txId,
+            tenantSchemeShard,
+            "/MyRoot/ServerLessDB",
+            "/MyRoot/ServerLessDB/Table",
+            "index1",
+            "embedding"
+        );
         ui64 buildIndexId = txId;
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -128,18 +155,21 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":2,"quantity":330,"finish":2,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-404-3486-404-3486","cloud_id":"CLOUD_ID_VAL","source_wt":2,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
+        const TString meteringData =
+            R"({"usage":{"start":2,"quantity":330,"finish":2,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-404-3486-404-3486","cloud_id":"CLOUD_ID_VAL","source_wt":2,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})"
+            "\n";
 
         UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
 
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(1),
-                            NLs::PathVersionEqual(6)});
+        TestDescribeResult(
+            DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)}
+        );
 
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
-                           {NLs::PathExist,
-                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+        TestDescribeResult(
+            DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)}
+        );
 
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexId);
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -153,10 +183,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
 
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(8)});
+        TestDescribeResult(
+            DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)}
+        );
 
         // Test that index build succeeds on recreated columns
 
@@ -172,31 +202,42 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding");
+        TestBuildVectorIndex(
+            runtime,
+            ++txId,
+            tenantSchemeShard,
+            "/MyRoot/ServerLessDB",
+            "/MyRoot/ServerLessDB/Table",
+            "index2",
+            "embedding"
+        );
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // CommonDB
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot",
-                               "Name: \"CommonDB\"");
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", "Name: \"CommonDB\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
-                              "StoragePools { "
-                              "  Name: \"pool-3\" "
-                              "  Kind: \"pool-kind-3\" "
-                              "} "
-                              "PlanResolution: 50 "
-                              "Coordinators: 1 "
-                              "Mediators: 1 "
-                              "TimeCastBucketsPerMediator: 2 "
-                              "ExternalSchemeShard: true "
-                              "Name: \"CommonDB\"");
+        TestAlterExtSubDomain(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            "StoragePools { "
+            "  Name: \"pool-3\" "
+            "  Kind: \"pool-kind-3\" "
+            "} "
+            "PlanResolution: 50 "
+            "Coordinators: 1 "
+            "Mediators: 1 "
+            "TimeCastBucketsPerMediator: 2 "
+            "ExternalSchemeShard: true "
+            "Name: \"CommonDB\""
+        );
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/CommonDB"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("CommonDB"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/CommonDB"),
+            {NLs::PathExist, NLs::IsExternalSubDomain("CommonDB"), NLs::ExtractTenantSchemeshard(&tenantSchemeShard)}
+        );
 
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB", R"(
               Name: "Table"
@@ -211,11 +252,15 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         TVector<TString> billRecords;
-        observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>([&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
-            billRecords.push_back(event->Get()->MeteringJson);
-        });
+        observerHolder = runtime.AddObserver<NMetering::TEvMetering::TEvWriteMeteringJson>(
+            [&](NMetering::TEvMetering::TEvWriteMeteringJson::TPtr& event) {
+                billRecords.push_back(event->Get()->MeteringJson);
+            }
+        );
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", "embedding");
+        TestBuildVectorIndex(
+            runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", "embedding"
+        );
         buildIndexId = txId;
 
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
@@ -246,7 +291,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
         {
             Ydb::Table::GlobalIndexSettings proto;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                R"(
                 partition_at_keys {
                     split_points {
                         type { tuple_type { elements { optional_type { item { type_id: UINT32 } } } } }
@@ -261,18 +307,23 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                     min_partitions_count: 3
                     max_partitions_count: 3
                 }
-            )", &proto));
+            )",
+                &proto
+            ));
             globalIndexSettings = NYdb::NTable::TGlobalIndexSettings::FromProto(proto);
         }
 
         std::unique_ptr<NYdb::NTable::TVectorIndexSettings> vectorIndexSettings;
         {
             Ydb::Table::VectorIndexSettings proto;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
+                R"(
                 metric: DISTANCE_COSINE,
                 vector_type: VECTOR_TYPE_FLOAT,
                 vector_dimension: 1024
-            )", &proto));
+            )",
+                &proto
+            ));
             using T = NYdb::NTable::TVectorIndexSettings;
             vectorIndexSettings = std::make_unique<T>(T::FromProto(proto));
         }
@@ -283,10 +334,21 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
 
         const ui64 buildIndexTx = ++txId;
-        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
-            "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, { "embedding" }, { "covered" },
-            { globalIndexSettings, globalIndexSettings }, std::move(vectorIndexSettings)
-        });
+        TestBuildIndex(
+            runtime,
+            buildIndexTx,
+            TTestTxConfig::SchemeShard,
+            "/MyRoot",
+            "/MyRoot/vectors",
+            TBuildIndexConfig{
+                "by_embedding",
+                NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree,
+                {"embedding"},
+                {"covered"},
+                {globalIndexSettings, globalIndexSettings},
+                std::move(vectorIndexSettings)
+            }
+        );
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
@@ -295,37 +357,41 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
         UNIT_ASSERT_VALUES_EQUAL_C(
-            buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            buildIndexOperation.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE,
             buildIndexOperation.DebugString()
         );
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
-            NLs::PathExist,
-            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
-            NLs::IndexKeys({"embedding"}),
-            NLs::IndexDataColumns({"covered"}),
-            NLs::VectorIndexDescription(
-                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                1024
-            )
-        });
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"),
+            {NLs::PathExist,
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+             NLs::IndexKeys({"embedding"}),
+             NLs::IndexDataColumns({"covered"}),
+             NLs::VectorIndexDescription(
+                 Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                 Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                 1024
+             )}
+        );
 
         using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
-        TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true), {
-            NLs::IsTable,
-            NLs::PartitionCount(3),
-            NLs::MinPartitionsCountEqual(3),
-            NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui32>({12345, 54321})
-        });
-        TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PostingTable), true, true), {
-            NLs::IsTable,
-            NLs::PartitionCount(3),
-            NLs::MinPartitionsCountEqual(3),
-            NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui32>({12345, 54321})
-        });
+        TestDescribeResult(
+            DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true),
+            {NLs::IsTable,
+             NLs::PartitionCount(3),
+             NLs::MinPartitionsCountEqual(3),
+             NLs::MaxPartitionsCountEqual(3),
+             NLs::SplitBoundaries<ui32>({12345, 54321})}
+        );
+        TestDescribeResult(
+            DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PostingTable), true, true),
+            {NLs::IsTable,
+             NLs::PartitionCount(3),
+             NLs::MinPartitionsCountEqual(3),
+             NLs::MaxPartitionsCountEqual(3),
+             NLs::SplitBoundaries<ui32>({12345, 54321})}
+        );
     }
 }

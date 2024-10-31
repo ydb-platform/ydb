@@ -17,9 +17,7 @@ namespace NInternalEvents {
 
 template <typename T>
 TStringBuilder& PrintOwnerGeneration(TStringBuilder& out, const T& record) {
-    return out
-        << " Owner: " << record.GetOwner()
-        << " Generation: " << record.GetGeneration();
+    return out << " Owner: " << record.GetOwner() << " Generation: " << record.GetGeneration();
 }
 
 template <typename T>
@@ -62,15 +60,11 @@ struct TEvRequestDescribe: public TEventLocal<TEvRequestDescribe, TSchemeBoardEv
 
     explicit TEvRequestDescribe(const TPathId pathId, const TActorId& replica)
         : PathId(pathId)
-        , Replica(replica)
-    {
-    }
+        , Replica(replica) {}
 
     TString ToString() const override {
         return TStringBuilder() << ToStringHeader() << " {"
-            << " PathId: " << PathId
-            << " Replica: " << Replica
-        << " }";
+                                << " PathId: " << PathId << " Replica: " << Replica << " }";
     }
 };
 
@@ -84,36 +78,28 @@ struct TEvDescribeResult: public TEventLocal<TEvDescribeResult, TSchemeBoardEven
     TEvDescribeResult() = default;
 
     explicit TEvDescribeResult(const bool commit)
-        : Commit(commit)
-    {
-    }
+        : Commit(commit) {}
 
     explicit TEvDescribeResult(TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd)
         : Commit(false)
         , DeletedPathBegin(deletedPathBegin)
-        , DeletedPathEnd(deletedPathEnd)
-    {
-    }
+        , DeletedPathEnd(deletedPathEnd) {}
 
     explicit TEvDescribeResult(
-            TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd,
-            const TOpaquePathDescription& description)
+        TLocalPathId deletedPathBegin,
+        TLocalPathId deletedPathEnd,
+        const TOpaquePathDescription& description
+    )
         : Commit(false)
         , DeletedPathBegin(deletedPathBegin)
         , DeletedPathEnd(deletedPathEnd)
-        , Description(description)
-    {
-    }
+        , Description(description) {}
 
-    explicit TEvDescribeResult(
-            TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd,
-            TLocalPathId migratedPathId)
+    explicit TEvDescribeResult(TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd, TLocalPathId migratedPathId)
         : Commit(false)
         , DeletedPathBegin(deletedPathBegin)
         , DeletedPathEnd(deletedPathEnd)
-        , MigratedPathId(migratedPathId)
-    {
-    }
+        , MigratedPathId(migratedPathId) {}
 
     bool HasDeletedLocalPathIds() const {
         return DeletedPathBegin != 0;
@@ -129,16 +115,12 @@ struct TEvDescribeResult: public TEventLocal<TEvDescribeResult, TSchemeBoardEven
 
     TString ToString() const override {
         auto builder = TStringBuilder() << ToStringHeader() << " {"
-            << " Commit: " << (Commit ? "true" : "false")
-            << " DeletedPathBegin: " << DeletedPathBegin
-            << " DeletedPathEnd: " << DeletedPathEnd
-        ;
+                                        << " Commit: " << (Commit ? "true" : "false")
+                                        << " DeletedPathBegin: " << DeletedPathBegin
+                                        << " DeletedPathEnd: " << DeletedPathEnd;
         if (HasDescription()) {
-            builder << " { Path: " << Description.Path
-                << " PathId: " << Description.PathId
-                << " PathVersion: " << Description.PathVersion
-                << " }"
-            ;
+            builder << " { Path: " << Description.Path << " PathId: " << Description.PathId
+                    << " PathVersion: " << Description.PathVersion << " }";
         }
         builder << " }";
         return builder;
@@ -151,19 +133,17 @@ struct TEvRequestUpdate: public TEventLocal<TEvRequestUpdate, TSchemeBoardEvents
     TEvRequestUpdate() = default;
 
     explicit TEvRequestUpdate(const TPathId pathId)
-        : PathId(pathId)
-    {
-    }
+        : PathId(pathId) {}
 
     TString ToString() const override {
         return TStringBuilder() << ToStringHeader() << " {"
-            << " PathId: " << PathId
-        << " }";
+                                << " PathId: " << PathId << " }";
     }
 };
 
 // replica <--> populator events
-struct TEvHandshakeRequest: public TEventPB<TEvHandshakeRequest, NKikimrSchemeBoard::TEvHandshake, TSchemeBoardEvents::EvHandshakeRequest> {
+struct TEvHandshakeRequest
+    : public TEventPB<TEvHandshakeRequest, NKikimrSchemeBoard::TEvHandshake, TSchemeBoardEvents::EvHandshakeRequest> {
     TEvHandshakeRequest() = default;
 
     explicit TEvHandshakeRequest(const ui64 owner, const ui64 generation) {
@@ -176,7 +156,8 @@ struct TEvHandshakeRequest: public TEventPB<TEvHandshakeRequest, NKikimrSchemeBo
     }
 };
 
-struct TEvHandshakeResponse: public TEventPB<TEvHandshakeResponse, NKikimrSchemeBoard::TEvHandshake, TSchemeBoardEvents::EvHandshakeResponse> {
+struct TEvHandshakeResponse
+    : public TEventPB<TEvHandshakeResponse, NKikimrSchemeBoard::TEvHandshake, TSchemeBoardEvents::EvHandshakeResponse> {
     TEvHandshakeResponse() = default;
 
     explicit TEvHandshakeResponse(const ui64 owner, const ui64 generation) {
@@ -200,10 +181,7 @@ struct TEvUpdate: public TEventPreSerializedPB<TEvUpdate, NKikimrSchemeBoard::TE
             return TPathId();
         }
 
-        return TPathId(
-            Record.HasPathOwnerId() ? Record.GetPathOwnerId() : Record.GetOwner(),
-            Record.GetLocalPathId()
-        );
+        return TPathId(Record.HasPathOwnerId() ? Record.GetPathOwnerId() : Record.GetOwner(), Record.GetLocalPathId());
     }
 
     TOpaquePathDescription ExtractPathDescription();
@@ -234,7 +212,8 @@ struct TEvUpdateBuilder: public TEvUpdate {
 // Defined in schemeshard interface events_schemeshard.h:
 // struct TEvUpdateAck
 
-struct TEvCommitRequest: public TEventPB<TEvCommitRequest, NKikimrSchemeBoard::TEvCommitGeneration, TSchemeBoardEvents::EvCommitRequest> {
+struct TEvCommitRequest
+    : public TEventPB<TEvCommitRequest, NKikimrSchemeBoard::TEvCommitGeneration, TSchemeBoardEvents::EvCommitRequest> {
     TEvCommitRequest() = default;
 
     explicit TEvCommitRequest(const ui64 owner, const ui64 generation) {
@@ -247,7 +226,11 @@ struct TEvCommitRequest: public TEventPB<TEvCommitRequest, NKikimrSchemeBoard::T
     }
 };
 
-struct TEvCommitResponse: public TEventPB<TEvCommitResponse, NKikimrSchemeBoard::TEvCommitGeneration, TSchemeBoardEvents::EvCommitResponse> {
+struct TEvCommitResponse
+    : public TEventPB<
+          TEvCommitResponse,
+          NKikimrSchemeBoard::TEvCommitGeneration,
+          TSchemeBoardEvents::EvCommitResponse> {
     TEvCommitResponse() = default;
 
     explicit TEvCommitResponse(const ui64 owner, const ui64 generation) {
@@ -288,7 +271,8 @@ struct TEvSubscribe: public TEventPB<TEvSubscribe, NKikimrSchemeBoard::TEvSubscr
     }
 };
 
-struct TEvUnsubscribe: public TEventPB<TEvUnsubscribe, NKikimrSchemeBoard::TEvUnsubscribe, TSchemeBoardEvents::EvUnsubscribe> {
+struct TEvUnsubscribe
+    : public TEventPB<TEvUnsubscribe, NKikimrSchemeBoard::TEvUnsubscribe, TSchemeBoardEvents::EvUnsubscribe> {
     TEvUnsubscribe() = default;
 
     explicit TEvUnsubscribe(const TString& path) {
@@ -337,12 +321,15 @@ struct TEvNotifyAck: public TEventPB<TEvNotifyAck, NKikimrSchemeBoard::TEvNotify
 
     TString ToString() const override {
         return TStringBuilder() << ToStringHeader() << " {"
-            << " Version: " << Record.GetVersion()
-        << " }";
+                                << " Version: " << Record.GetVersion() << " }";
     }
 };
 
-struct TEvSyncVersionRequest: public TEventPB<TEvSyncVersionRequest, NKikimrSchemeBoard::TEvSyncVersionRequest, TSchemeBoardEvents::EvSyncVersionRequest> {
+struct TEvSyncVersionRequest
+    : public TEventPB<
+          TEvSyncVersionRequest,
+          NKikimrSchemeBoard::TEvSyncVersionRequest,
+          TSchemeBoardEvents::EvSyncVersionRequest> {
     TEvSyncVersionRequest() = default;
 
     explicit TEvSyncVersionRequest(const TString& path) {
@@ -359,7 +346,11 @@ struct TEvSyncVersionRequest: public TEventPB<TEvSyncVersionRequest, NKikimrSche
     }
 };
 
-struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSchemeBoard::TEvSyncVersionResponse, TSchemeBoardEvents::EvSyncVersionResponse> {
+struct TEvSyncVersionResponse
+    : public TEventPB<
+          TEvSyncVersionResponse,
+          NKikimrSchemeBoard::TEvSyncVersionResponse,
+          TSchemeBoardEvents::EvSyncVersionResponse> {
     TEvSyncVersionResponse() = default;
 
     explicit TEvSyncVersionResponse(const ui64 version, const bool partial = false) {
@@ -369,9 +360,7 @@ struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSc
 
     TString ToString() const override {
         return TStringBuilder() << ToStringHeader() << " {"
-            << " Version: " << Record.GetVersion()
-            << " Partial: " << Record.GetPartial()
-        << " }";
+                                << " Version: " << Record.GetVersion() << " Partial: " << Record.GetPartial() << " }";
     }
 };
 
@@ -381,8 +370,7 @@ struct TEvSyncVersionResponse: public TEventPB<TEvSyncVersionResponse, NKikimrSc
 // struct TEvNotifyUpdate
 // struct TEvNotifyDelete
 
-struct TEvSyncRequest: public TEventLocal<TEvSyncRequest, TSchemeBoardEvents::EvSyncRequest> {
-};
+struct TEvSyncRequest: public TEventLocal<TEvSyncRequest, TSchemeBoardEvents::EvSyncRequest> {};
 
 struct TEvSyncResponse: public TEventLocal<TEvSyncResponse, TSchemeBoardEvents::EvSyncResponse> {
     TString Path;
@@ -393,25 +381,18 @@ struct TEvSyncResponse: public TEventLocal<TEvSyncResponse, TSchemeBoardEvents::
 
     explicit TEvSyncResponse(const TString& path, const bool partial = false)
         : Path(path)
-        , Partial(partial)
-    {
-    }
+        , Partial(partial) {}
 
     explicit TEvSyncResponse(const TPathId& pathId, const bool partial = false)
         : PathId(pathId)
-        , Partial(partial)
-    {
-    }
+        , Partial(partial) {}
 
     TString ToString() const override {
         return TStringBuilder() << ToStringHeader() << " {"
-            << " Path: " << Path
-            << " PathId: " << PathId
-            << " Partial: " << Partial
-        << " }";
+                                << " Path: " << Path << " PathId: " << PathId << " Partial: " << Partial << " }";
     }
 };
 
-}  // NInternalEvents
+}  // namespace NInternalEvents
 
-}  // NKikimr::NSchemeBoard
+}  // namespace NKikimr::NSchemeBoard

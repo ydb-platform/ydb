@@ -12,9 +12,7 @@ class TController::TTxDiscoveryTargetsResult: public TTxBase {
 public:
     explicit TTxDiscoveryTargetsResult(TController* self, TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev)
         : TTxBase("TxDiscoveryTargetsResult", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_DISCOVERY_RESULT;
@@ -66,11 +64,13 @@ public:
                 << ", error# " << error);
         }
 
-        db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
-            NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue()),
-            NIceDb::TUpdate<Schema::Replications::NextTargetId>(Replication->GetNextTargetId())
-        );
+        db.Table<Schema::Replications>()
+            .Key(Replication->GetId())
+            .Update(
+                NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+                NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue()),
+                NIceDb::TUpdate<Schema::Replications::NextTargetId>(Replication->GetNextTargetId())
+            );
 
         return true;
     }
@@ -85,8 +85,11 @@ public:
 
 }; // TTxDiscoveryTargetsResult
 
-void TController::RunTxDiscoveryTargetsResult(TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev, const TActorContext& ctx) {
+void TController::RunTxDiscoveryTargetsResult(
+    TEvPrivate::TEvDiscoveryTargetsResult::TPtr& ev,
+    const TActorContext& ctx
+) {
     Execute(new TTxDiscoveryTargetsResult(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

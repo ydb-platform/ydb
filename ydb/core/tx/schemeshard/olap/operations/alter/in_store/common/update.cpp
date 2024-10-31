@@ -16,11 +16,13 @@ NKikimr::TConclusionStatus TInStoreTableUpdate::DoStartImpl(const TUpdateStartCo
 
     // Sequentially chain operations in the same olap store
     if (context.GetSSOperationContext()->SS->Operations.contains(storePath.Base()->LastTxId)) {
-        context.GetSSOperationContext()->OnComplete.Dependence(storePath.Base()->LastTxId, (*context.GetObjectPath())->LastTxId);
+        context.GetSSOperationContext()->OnComplete.Dependence(
+            storePath.Base()->LastTxId, (*context.GetObjectPath())->LastTxId
+        );
     }
     storePath.Base()->LastTxId = (*context.GetObjectPath())->LastTxId;
     context.GetSSOperationContext()->SS->PersistLastTxId(*context.GetDB(), storePath.Base());
     return DoStartInStoreImpl(context);
 }
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

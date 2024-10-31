@@ -12,7 +12,7 @@ void ExpectEqualQueryTexts(const NKikimrScheme::TEvDescribeSchemeResult& describ
     UNIT_ASSERT_VALUES_EQUAL(describeResult.GetPathDescription().GetViewDescription().GetQueryText(), queryText);
 }
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
     Y_UNIT_TEST(CreateView) {
@@ -23,14 +23,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestCreateView(runtime, txId++, "/MyRoot", R"(
                 Name: "MyView"
                 QueryText: "Some query"
-            )"
-        );
+            )");
         env.TestWaitNotification(runtime, txId);
         const auto describeResult = DescribePath(runtime, "/MyRoot/MyView");
-        TestDescribeResult(describeResult,
-                           {NLs::Finished,
-                            NLs::IsView}
-        );
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsView});
         ExpectEqualQueryTexts(describeResult, "Some query");
     }
 
@@ -42,8 +38,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestCreateView(runtime, txId++, "/MyRoot", R"(
                 Name: "MyView"
                 QueryText: "Some query"
-            )"
-        );
+            )");
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/MyView", false, NLs::PathExist);
 
@@ -61,13 +56,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         AsyncCreateView(runtime, ++txId, "/MyRoot/SomeDir", R"(
                 Name: "FirstView"
                 QueryText: "First query"
-            )"
-        );
+            )");
         AsyncCreateView(runtime, ++txId, "/MyRoot/SomeDir", R"(
                 Name: "SecondView"
                 QueryText: "Second query"
-            )"
-        );
+            )");
 
         TestModificationResult(runtime, txId - 2);
         TestModificationResult(runtime, txId - 1);
@@ -77,18 +70,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/SomeDir"), {NLs::Finished});
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/SomeDir/FirstView");
-            TestDescribeResult(describeResult,
-                               {NLs::Finished,
-                                NLs::IsView}
-            );
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsView});
             ExpectEqualQueryTexts(describeResult, "First query");
         }
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/SomeDir/SecondView");
-            TestDescribeResult(describeResult,
-                               {NLs::Finished,
-                                NLs::IsView}
-            );
+            TestDescribeResult(describeResult, {NLs::Finished, NLs::IsView});
             ExpectEqualQueryTexts(describeResult, "Second query");
         }
     }
@@ -107,19 +94,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         AsyncCreateView(runtime, ++txId, "/MyRoot", viewConfig);
         AsyncCreateView(runtime, ++txId, "/MyRoot", viewConfig);
 
-        const TVector<TExpectedResult> expectedResults = {EStatus::StatusAccepted,
-                                                          EStatus::StatusMultipleModifications,
-                                                          EStatus::StatusAlreadyExists};
+        const TVector<TExpectedResult> expectedResults = {
+            EStatus::StatusAccepted, EStatus::StatusMultipleModifications, EStatus::StatusAlreadyExists
+        };
         TestModificationResults(runtime, txId - 2, expectedResults);
         TestModificationResults(runtime, txId - 1, expectedResults);
         TestModificationResults(runtime, txId, expectedResults);
 
         env.TestWaitNotification(runtime, {txId - 2, txId - 1, txId});
         const auto describeResult = DescribePath(runtime, "/MyRoot/MyView");
-        TestDescribeResult(describeResult,
-                           {NLs::Finished,
-                            NLs::IsView}
-        );
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsView});
         ExpectEqualQueryTexts(describeResult, "Some query");
     }
 
@@ -131,8 +115,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestCreateView(runtime, ++txId, "/MyRoot", R"(
                 Name: "MyView"
                 QueryText: "Some query"
-            )"
-        );
+            )");
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/MyView", false, NLs::PathExist);
 
@@ -140,9 +123,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         AsyncDropView(runtime, ++txId, "/MyRoot", "MyView");
         AsyncDropView(runtime, ++txId, "/MyRoot", "MyView");
 
-        const TVector<TExpectedResult> expectedResults = {EStatus::StatusAccepted,
-                                                          EStatus::StatusMultipleModifications,
-                                                          EStatus::StatusPathDoesNotExist};
+        const TVector<TExpectedResult> expectedResults = {
+            EStatus::StatusAccepted, EStatus::StatusMultipleModifications, EStatus::StatusPathDoesNotExist
+        };
         TestModificationResults(runtime, txId - 2, expectedResults);
         TestModificationResults(runtime, txId - 1, expectedResults);
         TestModificationResults(runtime, txId, expectedResults);
@@ -159,8 +142,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestCreateView(runtime, ++txId, "/MyRoot", R"(
                 Name: "FirstView"
                 QueryText: "Some query"
-            )"
-        );
+            )");
 
         SetSchemeshardReadOnlyMode(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
@@ -168,12 +150,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
 
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/FirstView"),
-                           {NLs::Finished,
-                            NLs::IsView}
-        );
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/FirstView"), {NLs::Finished, NLs::IsView});
 
-        TestCreateView(runtime, ++txId, "/MyRoot", R"(
+        TestCreateView(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
                 Name: "SecondView"
                 QueryText: "Some query"
             )",
@@ -187,8 +170,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestCreateView(runtime, ++txId, "/MyRoot", R"(
                 Name: "ThirdView"
                 QueryText: "Some query"
-            )"
-        );
+            )");
     }
 
     Y_UNIT_TEST(EmptyName) {
@@ -196,7 +178,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateView(runtime, ++txId, "/MyRoot", R"(
+        TestCreateView(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
                 Name: ""
                 QueryText: "Some query"
             )",
@@ -212,7 +198,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestCreateView(runtime, ++txId, "/MyRoot", R"(
                 Name: "MyView"
                 QueryText: ""
-            )"
-        );
+            )");
     }
 }

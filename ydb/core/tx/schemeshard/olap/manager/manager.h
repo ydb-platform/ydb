@@ -15,6 +15,7 @@ private:
     void OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object);
     void OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object);
     TColumnTableInfo::TPtr ExtractPtr(const TPathId& id);
+
 public:
     std::unordered_set<TPathId> GetAllPathIds() const;
 
@@ -25,14 +26,14 @@ public:
     class TTableReadGuard {
     protected:
         TColumnTableInfo::TPtr Object;
+
     public:
         bool operator!() const {
             return !Object;
         }
 
         TTableReadGuard(TColumnTableInfo::TPtr object)
-            : Object(object) {
-        }
+            : Object(object) {}
         const TColumnTableInfo* operator->() const {
             Y_DEBUG_ABORT_UNLESS(Object);
             return Object.get();
@@ -46,14 +47,18 @@ public:
     class TTableCreateOperator: public TTableReadGuard {
     private:
         using TBase = TTableReadGuard;
+
     public:
         using TBase::TBase;
     };
 
-    class TTableCreatedGuard: public TTableCreateOperator, TMoveOnly {
+    class TTableCreatedGuard
+        : public TTableCreateOperator
+        , TMoveOnly {
     protected:
         const TPathId PathId;
         TTablesStorage& Owner;
+
     public:
         TTableCreatedGuard(TTablesStorage& owner, const TPathId& id, TColumnTableInfo::TPtr object)
             : TTableCreateOperator(object)
@@ -89,10 +94,15 @@ public:
     class TTableExtractedGuard: public TTableCreatedGuard {
     private:
         void UseAlterDataVerified();
+
     public:
-        TTableExtractedGuard(TTablesStorage& owner, const TPathId& id, TColumnTableInfo::TPtr object, const bool extractAlter)
-            : TTableCreatedGuard(owner, id, object)
-        {
+        TTableExtractedGuard(
+            TTablesStorage& owner,
+            const TPathId& id,
+            TColumnTableInfo::TPtr object,
+            const bool extractAlter
+        )
+            : TTableCreatedGuard(owner, id, object) {
             Owner.OnRemoveObject(PathId, object);
             if (extractAlter) {
                 UseAlterDataVerified();
@@ -118,4 +128,4 @@ public:
     size_t Drop(const TPathId& id);
 };
 
-}
+} // namespace NKikimr::NSchemeShard

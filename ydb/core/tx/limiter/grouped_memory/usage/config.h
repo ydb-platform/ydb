@@ -10,7 +10,6 @@ private:
     YDB_READONLY(ui64, MemoryLimit, ui64(3) << 30);
 
 public:
-
     static TConfig BuildDisabledConfig() {
         TConfig result;
         result.Enabled = false;
@@ -24,4 +23,4 @@ public:
     TString DebugString() const;
 };
 
-}
+} // namespace NKikimr::NOlap::NGroupedMemoryManager

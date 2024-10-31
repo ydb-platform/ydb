@@ -15,11 +15,13 @@ private:
 
 public:
     TTableStatsBuilder(
-        TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor, NOlap::IColumnEngine& columnEngine)
+        TCountersManager& counters,
+        const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor,
+        NOlap::IColumnEngine& columnEngine
+    )
         : Counters(counters)
         , Executor(*executor)
-        , ColumnEngine(columnEngine) {
-    }
+        , ColumnEngine(columnEngine) {}
 
     void FillTableStats(ui64 pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTableStats(pathId, tableStats);

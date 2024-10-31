@@ -40,14 +40,14 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
             const auto& entry = result.GetEntry();
             switch (entry.Type) {
-            case NYdb::NScheme::ESchemeEntryType::SubDomain:
-            case NYdb::NScheme::ESchemeEntryType::Directory:
-                Pending.erase(it);
-                return ListDirectory(path);
-            case NYdb::NScheme::ESchemeEntryType::Table:
-                return DescribeTable(ev->Cookie);
-            default:
-                break;
+                case NYdb::NScheme::ESchemeEntryType::SubDomain:
+                case NYdb::NScheme::ESchemeEntryType::Directory:
+                    Pending.erase(it);
+                    return ListDirectory(path);
+                case NYdb::NScheme::ESchemeEntryType::Table:
+                    return DescribeTable(ev->Cookie);
+                default:
+                    break;
             }
 
             LOG_W("Unsupported entry type"
@@ -106,17 +106,18 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
                 switch (index.GetIndexType()) {
-                case NYdb::NTable::EIndexType::GlobalSync:
-                case NYdb::NTable::EIndexType::GlobalUnique:
-                    break;
-                default:
-                    continue;
+                    case NYdb::NTable::EIndexType::GlobalSync:
+                    case NYdb::NTable::EIndexType::GlobalUnique:
+                        break;
+                    default:
+                        continue;
                 }
 
                 const auto& target = ToAdd.emplace_back(
                     CanonizePath(ChildPath(SplitPath(path.first), index.GetIndexName())),
                     CanonizePath(ChildPath(SplitPath(path.second), {index.GetIndexName(), "indexImplTable"})),
-                    TReplication::ETargetKind::IndexTable);
+                    TReplication::ETargetKind::IndexTable
+                );
                 LOG_I("Add target"
                     << ": srcPath# " << target.SrcPath
                     << ", dstPath# " << target.DstPath
@@ -170,10 +171,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             return false;
         }
 
-        return entry.Name.StartsWith("~")
-            || entry.Name.StartsWith(".sys")
-            || entry.Name.StartsWith(".metadata")
-            || entry.Name.StartsWith("export-");
+        return entry.Name.StartsWith("~") || entry.Name.StartsWith(".sys") || entry.Name.StartsWith(".metadata") ||
+               entry.Name.StartsWith("export-");
     }
 
     void Handle(TEvYdbProxy::TEvListDirectoryResponse::TPtr& ev) {
@@ -194,22 +193,19 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
             for (const auto& child : result.GetChildren()) {
                 switch (child.Type) {
-                case NYdb::NScheme::ESchemeEntryType::SubDomain:
-                case NYdb::NScheme::ESchemeEntryType::Directory:
-                    if (!IsSystemObject(child)) {
-                        ListDirectory(std::make_pair(
-                            path.first  + '/' + child.Name,
-                            path.second + '/' + child.Name));
-                    }
-                    break;
-                case NYdb::NScheme::ESchemeEntryType::Table:
-                    Paths.emplace_back(
-                        path.first  + '/' + child.Name,
-                        path.second + '/' + child.Name);
-                    DescribeTable(Paths.size() - 1);
-                    break;
-                default:
-                    break;
+                    case NYdb::NScheme::ESchemeEntryType::SubDomain:
+                    case NYdb::NScheme::ESchemeEntryType::Directory:
+                        if (!IsSystemObject(child)) {
+                            ListDirectory(std::make_pair(path.first + '/' + child.Name, path.second + '/' + child.Name)
+                            );
+                        }
+                        break;
+                    case NYdb::NScheme::ESchemeEntryType::Table:
+                        Paths.emplace_back(path.first + '/' + child.Name, path.second + '/' + child.Name);
+                        DescribeTable(Paths.size() - 1);
+                        break;
+                    default:
+                        break;
                 }
             }
         } else {
@@ -263,14 +259,17 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_TARGET_DISCOVERER;
     }
 
-    explicit TTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy, TVector<std::pair<TString, TString>>&& paths)
+    explicit TTargetDiscoverer(
+        const TActorId& parent,
+        ui64 rid,
+        const TActorId& proxy,
+        TVector<std::pair<TString, TString>>&& paths
+    )
         : Parent(parent)
         , ReplicationId(rid)
         , YdbProxy(proxy)
         , Paths(std::move(paths))
-        , LogPrefix("TargetDiscoverer", ReplicationId)
-    {
-    }
+        , LogPrefix("TargetDiscoverer", ReplicationId) {}
 
     void Bootstrap() {
         for (ui32 i = 0; i < Paths.size(); ++i) {
@@ -308,10 +307,13 @@ private:
 
 }; // TTargetDiscoverer
 
-IActor* CreateTargetDiscoverer(const TActorId& parent, ui64 rid, const TActorId& proxy,
-    TVector<std::pair<TString, TString>>&& specificPaths)
-{
+IActor* CreateTargetDiscoverer(
+    const TActorId& parent,
+    ui64 rid,
+    const TActorId& proxy,
+    TVector<std::pair<TString, TString>>&& specificPaths
+) {
     return new TTargetDiscoverer(parent, rid, proxy, std::move(specificPaths));
 }
 
-}
+} // namespace NKikimr::NReplication::NController

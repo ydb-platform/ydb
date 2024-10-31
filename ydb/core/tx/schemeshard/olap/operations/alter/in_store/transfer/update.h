@@ -41,4 +41,4 @@ private:
 public:
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

@@ -29,7 +29,11 @@ private:
     YDB_READONLY(ui64, ProcessId, 0);
 
 public:
-    TProcessGuard(const NActors::TActorId& actorId, const ui64 processId, const std::vector<std::shared_ptr<TStageFeatures>>& stages);
+    TProcessGuard(
+        const NActors::TActorId& actorId,
+        const ui64 processId,
+        const std::vector<std::shared_ptr<TStageFeatures>>& stages
+    );
 
     ~TProcessGuard();
 };
@@ -56,13 +60,18 @@ private:
     bool Released = false;
 
 public:
-    TAllocationGuard(const ui64 processId, const ui64 scopeId, const ui64 allocationId, const NActors::TActorId actorId, const ui64 memory)
+    TAllocationGuard(
+        const ui64 processId,
+        const ui64 scopeId,
+        const ui64 allocationId,
+        const NActors::TActorId actorId,
+        const ui64 memory
+    )
         : ActorId(actorId)
         , ProcessId(processId)
         , ScopeId(scopeId)
         , AllocationId(allocationId)
-        , Memory(memory) {
-    }
+        , Memory(memory) {}
 
     void Release() {
         AFL_VERIFY(!Released);
@@ -115,12 +124,15 @@ public:
     }
 
     TStageFeatures(
-        const TString& name, const ui64 limit, const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
+        const TString& name,
+        const ui64 limit,
+        const std::shared_ptr<TStageFeatures>& owner,
+        const std::shared_ptr<TStageCounters>& counters
+    )
         : Name(name)
         , Limit(limit)
         , Owner(owner)
-        , Counters(counters) {
-    }
+        , Counters(counters) {}
 
     void Allocate(const ui64 volume) {
         Waiting.Sub(volume);
@@ -200,13 +212,14 @@ private:
     YDB_READONLY(ui64, Memory, 0);
     bool Allocated = false;
     virtual bool DoOnAllocated(
-        std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) = 0;
+        std::shared_ptr<TAllocationGuard>&& guard,
+        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation
+    ) = 0;
 
 public:
     virtual ~IAllocation() = default;
     IAllocation(const ui64 mem)
-        : Memory(mem) {
-    }
+        : Memory(mem) {}
 
     void ResetAllocation() {
         Allocated = false;
@@ -217,7 +230,9 @@ public:
     }
 
     [[nodiscard]] bool OnAllocated(
-        std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation);
+        std::shared_ptr<TAllocationGuard>&& guard,
+        const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation
+    );
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

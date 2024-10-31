@@ -15,7 +15,9 @@ void TManager::AllocateNext() {
         UsedCount += waitRequest.GetSize();
         it->second.MutableCount() += waitRequest.GetSize();
         it->second.SetLastPriority(std::nullopt);
-        waitRequest.GetRequest()->OnAllocated(std::make_shared<TAllocationGuard>(ServiceActorId, waitRequest.GetClientId(), waitRequest.GetSize()));
+        waitRequest.GetRequest()->OnAllocated(
+            std::make_shared<TAllocationGuard>(ServiceActorId, waitRequest.GetClientId(), waitRequest.GetSize())
+        );
         WaitingQueue.erase(WaitingQueue.begin());
     }
     Counters->QueueSize->Set(WaitingQueue.size());
@@ -50,13 +52,23 @@ TManager::TClientStatus& TManager::GetClientVerified(const ui64 clientId) {
     return it->second;
 }
 
-void TManager::Ask(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority) {
+void TManager::Ask(
+    const ui64 clientId,
+    const ui32 count,
+    const std::shared_ptr<IRequest>& request,
+    const ui64 extPriority
+) {
     AFL_VERIFY(request);
     Counters->Ask->Inc();
     AskImpl(GetClientVerified(clientId), extPriority, TAskRequest(clientId, request, count));
 }
 
-void TManager::AskMax(const ui64 clientId, const ui32 count, const std::shared_ptr<IRequest>& request, const ui64 extPriority) {
+void TManager::AskMax(
+    const ui64 clientId,
+    const ui32 count,
+    const std::shared_ptr<IRequest>& request,
+    const ui64 extPriority
+) {
     AFL_VERIFY(request);
     Counters->AskMax->Inc();
     auto& client = GetClientVerified(clientId);
@@ -93,7 +105,11 @@ void TManager::UnregisterClient(const ui64 clientId) {
     Counters->Clients->Set(Clients.size());
 }
 
-TManager::TManager(const std::shared_ptr<TCounters>& counters, const TConfig& config, const NActors::TActorId& serviceActorId)
+TManager::TManager(
+    const std::shared_ptr<TCounters>& counters,
+    const TConfig& config,
+    const NActors::TActorId& serviceActorId
+)
     : Counters(counters)
     , Config(config)
     , ServiceActorId(serviceActorId) {

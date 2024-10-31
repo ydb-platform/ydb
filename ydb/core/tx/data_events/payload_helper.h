@@ -7,15 +7,13 @@ namespace NKikimr::NEvWrite {
 class IPayloadReader {
 public:
     virtual TString GetDataFromPayload(const ui64 index) const = 0;
-    virtual ~IPayloadReader() {
-    }
+    virtual ~IPayloadReader() {}
 };
 
 class IPayloadWriter {
 public:
     virtual ui64 AddDataToPayload(TString&& blobData) = 0;
-    virtual ~IPayloadWriter() {
-    }
+    virtual ~IPayloadWriter() {}
 };
 
 template <class TEvent>
@@ -24,9 +22,7 @@ class TPayloadReader: public IPayloadReader {
 
 public:
     TPayloadReader(const TEvent& ev)
-        : Event(ev)
-    {
-    }
+        : Event(ev) {}
 
     TString GetDataFromPayload(const ui64 index) const override {
         TRope rope = Event.GetPayload(index);
@@ -42,9 +38,7 @@ class TPayloadWriter: public IPayloadWriter {
 
 public:
     TPayloadWriter(TEvent& ev)
-        : Event(ev)
-    {
-    }
+        : Event(ev) {}
 
     ui64 AddDataToPayload(TString&& blobData) override {
         TRope rope;
@@ -52,4 +46,4 @@ public:
         return Event.AddPayload(std::move(rope));
     }
 };
-}
+} // namespace NKikimr::NEvWrite

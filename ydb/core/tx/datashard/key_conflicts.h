@@ -6,8 +6,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-bool HasKeyConflict(const NMiniKQL::IEngineFlat::TValidationInfo& infoA,
-                    const NMiniKQL::IEngineFlat::TValidationInfo& infoB);
+bool HasKeyConflict(
+    const NMiniKQL::IEngineFlat::TValidationInfo& infoA,
+    const NMiniKQL::IEngineFlat::TValidationInfo& infoB
+);
 
 } // namespace NDataShard
 } // namespace NKikimr

@@ -27,4 +27,4 @@ void TSchemeShard::Handle(TEvBackup::TEvDeleteBackupCollectionRequest::TPtr& ev,
     ctx.Send(ev->Sender, new TEvBackup::TEvDeleteBackupCollectionResponse(), 0, ev->Cookie);
 }
 
-} // namespace NKikimr::NSchemeshard
+} // namespace NKikimr::NSchemeShard

@@ -36,8 +36,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void HeadObject(const TString& key) {
-        auto request = Model::HeadObjectRequest()
-            .WithKey(key);
+        auto request = Model::HeadObjectRequest().WithKey(key);
 
         Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
@@ -64,8 +63,8 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        if (result.GetError().GetErrorType() == S3Errors::RESOURCE_NOT_FOUND
-            || result.GetError().GetErrorType() == S3Errors::NO_SUCH_KEY) {
+        if (result.GetError().GetErrorType() == S3Errors::RESOURCE_NOT_FOUND ||
+            result.GetError().GetErrorType() == S3Errors::NO_SUCH_KEY) {
             Reply(); // permissions are optional
             return;
         } else if (!CheckResult(result, "HeadObject")) {
@@ -77,9 +76,9 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
-        auto request = Model::GetObjectRequest()
-            .WithKey(key)
-            .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
+        auto request = Model::GetObjectRequest().WithKey(key).WithRange(
+            TStringBuilder() << "bytes=" << range.first << "-" << range.second
+        );
 
         Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
@@ -216,9 +215,7 @@ public:
         , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx))
         , PermissionsKey(PermissionsKeyFromSettings(importInfo->Settings, itemIdx))
         , Retries(importInfo->Settings.number_of_retries())
-        , NeedDownloadPermissions(!importInfo->Settings.no_acl())
-    {
-    }
+        , NeedDownloadPermissions(!importInfo->Settings.no_acl()) {}
 
     void Bootstrap() {
         DownloadScheme();
@@ -270,5 +267,5 @@ IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo
     return new TSchemeGetter(replyTo, importInfo, itemIdx);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

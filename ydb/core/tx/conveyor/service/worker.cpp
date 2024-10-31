@@ -31,4 +31,4 @@ void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     }
 }
 
-}
+} // namespace NKikimr::NConveyor

@@ -8,13 +8,8 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    TImportInfo::TPtr importInfo,
-    ui32 itemIdx,
-    TString& error
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+CreateTablePropose(TSchemeShard* ss, TTxId txId, TImportInfo::TPtr importInfo, ui32 itemIdx, TString& error) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
@@ -44,7 +39,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         return nullptr;
     }
 
-    for(const auto& column: item.Scheme.columns()) {
+    for (const auto& column : item.Scheme.columns()) {
         switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromSequence: {
                 const auto& fromSequence = column.from_sequence();
@@ -59,7 +54,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             case Ydb::Table::ColumnMeta::kFromLiteral: {
                 break;
             }
-            default: break;
+            default:
+                break;
         }
     }
 
@@ -75,12 +71,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    TImportInfo::TPtr importInfo,
-    ui32 itemIdx
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+CreateTablePropose(TSchemeShard* ss, TTxId txId, TImportInfo::TPtr importInfo, ui32 itemIdx) {
     TString unused;
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
@@ -95,10 +87,8 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
     return record.GetPathDescription().GetTable();
 }
 
-static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
-    const NKikimrSchemeOp::TTableDescription& src,
-    const Ydb::Table::CreateTableRequest& scheme
-) {
+static NKikimrSchemeOp::TTableDescription
+RebuildTableDescription(const NKikimrSchemeOp::TTableDescription& src, const Ydb::Table::CreateTableRequest& scheme) {
     NKikimrSchemeOp::TTableDescription tableDesc;
     tableDesc.MutableKeyColumnNames()->CopyFrom(src.GetKeyColumnNames());
 
@@ -118,12 +108,8 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
     return tableDesc;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    TImportInfo::TPtr importInfo,
-    ui32 itemIdx
-) {
+THolder<TEvSchemeShard::TEvModifySchemeTransaction>
+RestorePropose(TSchemeShard* ss, TTxId txId, TImportInfo::TPtr importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
@@ -143,8 +129,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), item.Scheme);
 
     switch (importInfo->Kind) {
-    case TImportInfo::EKind::S3:
-        {
+        case TImportInfo::EKind::S3: {
             task.SetNumberOfRetries(importInfo->Settings.number_of_retries());
             auto& restoreSettings = *task.MutableS3Settings();
             restoreSettings.SetEndpoint(importInfo->Settings.endpoint());
@@ -155,30 +140,26 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
             switch (importInfo->Settings.scheme()) {
-            case Ydb::Import::ImportFromS3Settings::HTTP:
-                restoreSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-                break;
-            case Ydb::Import::ImportFromS3Settings::HTTPS:
-                restoreSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTPS);
-                break;
-            default:
-                Y_ABORT("Unknown scheme");
+                case Ydb::Import::ImportFromS3Settings::HTTP:
+                    restoreSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+                    break;
+                case Ydb::Import::ImportFromS3Settings::HTTPS:
+                    restoreSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTPS);
+                    break;
+                default:
+                    Y_ABORT("Unknown scheme");
             }
 
             if (const auto region = importInfo->Settings.region()) {
                 restoreSettings.SetRegion(region);
             }
-        }
-        break;
+        } break;
     }
 
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
-    TImportInfo::TPtr importInfo,
-    TTxId restoreTxId
-) {
+THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(TImportInfo::TPtr importInfo, TTxId restoreTxId) {
     auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>();
 
     auto& record = propose->Record;
@@ -188,13 +169,8 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
     return propose;
 }
 
-THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    TImportInfo::TPtr importInfo,
-    ui32 itemIdx,
-    const TString& uid
-) {
+THolder<TEvIndexBuilder::TEvCreateRequest>
+BuildIndexPropose(TSchemeShard* ss, TTxId txId, TImportInfo::TPtr importInfo, ui32 itemIdx, const TString& uid) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
@@ -211,20 +187,20 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     }
 
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
-    auto propose = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
+    auto propose =
+        MakeHolder<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
     (*propose->Record.MutableOperationParams()->mutable_labels())["uid"] = uid;
 
     return propose;
 }
 
-THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
-    TSchemeShard* ss,
-    TImportInfo::TPtr importInfo,
-    TTxId indexBuildId
-) {
+THolder<TEvIndexBuilder::TEvCancelRequest>
+CancelIndexBuildPropose(TSchemeShard* ss, TImportInfo::TPtr importInfo, TTxId indexBuildId) {
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
-    return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
+    return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(
+        ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId)
+    );
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

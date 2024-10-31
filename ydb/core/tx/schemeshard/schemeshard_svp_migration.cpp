@@ -5,7 +5,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TTabletMigrator : public TActorBootstrapped<TTabletMigrator> {
+class TTabletMigrator: public TActorBootstrapped<TTabletMigrator> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SCHEMESHARD_TABLET_MIGRATOR;
@@ -14,8 +14,7 @@ public:
     TTabletMigrator(ui64 ssTabletId, TActorId ssActorId, std::queue<TMigrationInfo>&& migrations)
         : SSTabletId(ssTabletId)
         , SSActorId(ssActorId)
-        , Queue(std::move(migrations))
-    {}
+        , Queue(std::move(migrations)) {}
 
     void Bootstrap() {
         Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
@@ -23,16 +22,20 @@ public:
     }
 
     STFUNC(StateWork) {
-        switch(ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvWakeup, Handle);
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle)
-            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+                hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             IgnoreFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTabletMigrator StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                LOG_CRIT(
+                    *TlsActivationContext,
+                    NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTabletMigrator StateWork unexpected event 0x%08" PRIx32,
+                    ev->GetTypeRewrite()
+                );
         }
     }
 
@@ -134,22 +137,22 @@ private:
             << ", at schemeshard: " << SSTabletId);
 
         switch (status) {
-        case NKikimrScheme::StatusSuccess:
-            StartNextMigration();
-            break;
-        case NKikimrScheme::StatusAccepted:
-            SubscribeToCompletion(record.GetTxId());
-            break;
-        default:
-            LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            case NKikimrScheme::StatusSuccess:
+                StartNextMigration();
+                break;
+            case NKikimrScheme::StatusAccepted:
+                SubscribeToCompletion(record.GetTxId());
+                break;
+            default:
+                LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TabletMigrator - migration failed"
                 << ", status: " << status
                 << ", reason: " << record.GetReason()
                 << ", txId: " << txId
                 << ", at schemeshard: " << SSTabletId);
 
-            StartNextMigration();
-            break;
+                StartNextMigration();
+                break;
         }
     }
 
@@ -169,9 +172,7 @@ private:
     TMigrationInfo Current;
 };
 
-THolder<IActor> CreateTabletMigrator(ui64 ssTabletId, TActorId ssActorId,
-    std::queue<TMigrationInfo>&& migrations)
-{
+THolder<IActor> CreateTabletMigrator(ui64 ssTabletId, TActorId ssActorId, std::queue<TMigrationInfo>&& migrations) {
     return MakeHolder<TTabletMigrator>(ssTabletId, ssActorId, std::move(migrations));
 }
 

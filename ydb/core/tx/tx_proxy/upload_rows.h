@@ -2,7 +2,7 @@
 #include "defs.h"
 
 namespace Ydb {
-    class Type;
+class Type;
 }
 
 namespace NKikimr {
@@ -20,11 +20,13 @@ enum class EUploadRowsMode {
 using TUploadTypes = TVector<std::pair<TString, Ydb::Type>>;
 using TUploadRows = TVector<std::pair<TSerializedCellVec, TString>>;
 
-IActor* CreateUploadRowsInternal(const TActorId& sender,
-                                 const TString& table,
-                                 std::shared_ptr<TUploadTypes> types,
-                                 std::shared_ptr<TUploadRows> rows,
-                                 EUploadRowsMode mode = EUploadRowsMode::Normal,
-                                 bool writeToPrivateTable = false);
+IActor* CreateUploadRowsInternal(
+    const TActorId& sender,
+    const TString& table,
+    std::shared_ptr<TUploadTypes> types,
+    std::shared_ptr<TUploadRows> rows,
+    EUploadRowsMode mode = EUploadRowsMode::Normal,
+    bool writeToPrivateTable = false
+);
 } // namespace NTxProxy
 } // namespace NKikimr

@@ -7,4 +7,4 @@ TString TBlobAddress::DebugString() const {
     return TStringBuilder() << "g=" << GroupId << ";c=" << ChannelId << ";";
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

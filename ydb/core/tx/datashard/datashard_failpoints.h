@@ -51,8 +51,7 @@ struct TCancelTxFailPoint {
         ui64 failTxId = AtomicGet(TxId);
         i64 failCount = AtomicGet(FailAtCount);
 
-        if ((tabletId != failTabletId && failTabletId != (ui64)-1) ||
-            (txId != failTxId && failTxId != (ui64)-1)) {
+        if ((tabletId != failTabletId && failTabletId != (ui64)-1) || (txId != failTxId && failTxId != (ui64)-1)) {
             return false;
         }
 
@@ -160,9 +159,9 @@ struct TSkipReadIteratorResultFailPoint {
     }
 };
 
-
 extern TCancelTxFailPoint gCancelTxFailPoint;
 extern TSkipRepliesFailPoint gSkipRepliesFailPoint;
 extern TSkipReadIteratorResultFailPoint gSkipReadIteratorResultFailPoint;
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

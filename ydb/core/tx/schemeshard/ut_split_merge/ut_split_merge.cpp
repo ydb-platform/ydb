@@ -9,8 +9,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
-    Y_UNIT_TEST(Test) {
-    }
+    Y_UNIT_TEST(Test) {}
 
     Y_UNIT_TEST(ConcurrentSplitOneShard) {
         TTestBasicRuntime runtime;
@@ -29,8 +28,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                             KeyColumnNames: ["Key", "Value"]
                             )");
         env.TestWaitNotification(runtime, txId);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionKeys({""})});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionKeys({""})});
 
         TVector<THolder<IEventHandle>> suppressed;
         auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
@@ -45,25 +43,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
-        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+        TestSplitTable(
+            runtime,
+            ++txId,
+            "/MyRoot/Table",
+            R"(
                         SourceTabletId: 72075186233409546
                         SplitBoundary {
                             KeyPrefix {
                                 Tuple { Optional { Text: "A" } }
                             }
                         })",
-                       {NKikimrScheme::StatusMultipleModifications});
+            {NKikimrScheme::StatusMultipleModifications}
+        );
 
         WaitForSuppressed(runtime, suppressed, 4, prevObserver);
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
-        env.TestWaitNotification(runtime, {txId-1, txId});
+        env.TestWaitNotification(runtime, {txId - 1, txId});
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets); //delete src
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionKeys({"A", ""})});
-
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionKeys({"A", ""})});
     }
 
     Y_UNIT_TEST(Split10Shards) {
@@ -84,7 +85,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_CRIT);
 
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
                         Columns { Name: "key"       Type: "Uint64"}
@@ -94,26 +94,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto fnWriteRow = [&] (ui64 tabletId, ui64 key) {
-            TString writeQuery = Sprintf(R"(
+        auto fnWriteRow = [&](ui64 tabletId, ui64 key) {
+            TString writeQuery = Sprintf(
+                R"(
                 (
                     (let key '( '('key (Uint64 '%lu)) ) )
                     (let value '('('value (Utf8 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)) ) )
                     (return (AsList (UpdateRow '__user__Table key value) ))
                 )
-            )", key);;
+            )",
+                key
+            );
+            ;
             NKikimrMiniKQL::TResult result;
             TString err;
             NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            ;
         };
         for (ui64 key = 0; key < 1000; ++key) {
-            fnWriteRow(TTestTxConfig::FakeHiveTablets, key* 1'000'000);
+            fnWriteRow(TTestTxConfig::FakeHiveTablets, key * 1'000'000);
         }
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionCount(1)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionCount(1)});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -133,24 +137,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         while (true) {
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
+            auto prevObserver =
+                SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvGetTableStatsResult::EventType);
 
             WaitForSuppressed(runtime, suppressed, 1, prevObserver);
-            for (auto &msg : suppressed) {
+            for (auto& msg : suppressed) {
                 runtime.Send(msg.Release());
             }
             suppressed.clear();
 
             bool itIsEnough = false;
 
-            NLs::TCheckFunc checkPartitionCount = [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            NLs::TCheckFunc checkPartitionCount = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
                 if (record.GetPathDescription().TablePartitionsSize() >= 10) {
                     itIsEnough = true;
                 }
             };
 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                               {checkPartitionCount});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {checkPartitionCount});
 
             if (itIsEnough) {
                 return;
@@ -176,7 +180,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_CRIT);
 
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
                         Columns { Name: "key"       Type: "Uint64"}
@@ -188,17 +191,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         {
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+            auto prevObserver =
+                SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
             WaitForSuppressed(runtime, suppressed, 1000, prevObserver);
-            for (auto &msg : suppressed) {
+            for (auto& msg : suppressed) {
                 runtime.Send(msg.Release());
             }
             suppressed.clear();
         }
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionCount(1000)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionCount(1000)});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -213,23 +216,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         {
             TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+            auto prevObserver =
+                SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
-            WaitForSuppressed(runtime, suppressed, 5*1000, prevObserver);
-            for (auto &msg : suppressed) {
+            WaitForSuppressed(runtime, suppressed, 5 * 1000, prevObserver);
+            for (auto& msg : suppressed) {
                 runtime.Send(msg.Release());
             }
             suppressed.clear();
         }
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionCount(1000)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionCount(1000)});
 
+        env.TestWaitTabletDeletion(
+            runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1000)
+        );
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1000));
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionCount(1)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionCount(1)});
     }
 
     Y_UNIT_TEST(Merge111Shards) {
@@ -254,8 +257,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                           {NLs::PartitionCount(111)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionCount(111)});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                         Name: "Table"
@@ -269,12 +271,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         env.TestWaitNotification(runtime, txId);
 
         WaitForSuppressed(runtime, suppressed, suppressed.size(), prevObserver);
-        for (auto &msg : suppressed) {
+        for (auto& msg : suppressed) {
             runtime.Send(msg.Release());
         }
         suppressed.clear();
 
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+111));
+        env.TestWaitTabletDeletion(
+            runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 111)
+        );
         // test requires more txids than cached at start
     }
 
@@ -305,12 +309,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                         SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } } } }
                     }
                 }
-            )"
-        );
+            )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true),
-            { NLs::PartitionCount(4) }
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true), {NLs::PartitionCount(4)}
         );
 
         statsBlocker.Stop().Unblock();
@@ -328,9 +331,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         // wait until all index impl table shards are merged into one
         while (true) {
-            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true), {
-                shardCollector
-            });
+            TestDescribeResult(
+                DescribePrivatePath(runtime, "/MyRoot/Table/ByValue/indexImplTable", true), {shardCollector}
+            );
             if (indexShards.size() > 1) {
                 // If a merge happens, old shards are deleted and replaced with a new one.
                 // That is why we need to wait for * all * the shards to be deleted.
@@ -343,10 +346,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
     Y_UNIT_TEST(AutoMergeInOne) {
         TTestWithReboots t;
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            {
-                TInactiveZone inactive(activeZone);
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+        t.Run(
+            [&](TTestActorRuntime& runtime, bool& activeZone) {
+                {
+                    TInactiveZone inactive(activeZone);
+                    TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                                 Name: "Table"
                                 Columns { Name: "key1"       Type: "Utf8"}
                                 Columns { Name: "key2"       Type: "Uint32"}
@@ -354,18 +358,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
                                 )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                                   {NLs::PartitionKeys({"A", ""})});
-            }
+                    TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionKeys({"A", ""})});
+                }
 
-            TVector<THolder<IEventHandle>> suppressed;
-            auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
+                TVector<THolder<IEventHandle>> suppressed;
+                auto prevObserver =
+                    SetSuppressObserver(runtime, suppressed, TEvDataShard::TEvPeriodicTableStats::EventType);
 
-            {
-                TInactiveZone inactive(activeZone);
-                TestAlterTable(runtime, ++t.TxId, "/MyRoot", R"(
+                {
+                    TInactiveZone inactive(activeZone);
+                    TestAlterTable(runtime, ++t.TxId, "/MyRoot", R"(
                                 Name: "Table"
                                 PartitionConfig {
                                     PartitioningPolicy {
@@ -374,45 +378,62 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                                     }
                                 }
                             )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            }
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                               {NLs::PartitionKeys({"A", ""})});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionKeys({"A", ""})});
 
-            WaitForSuppressed(runtime, suppressed, 1, prevObserver);
+                WaitForSuppressed(runtime, suppressed, 1, prevObserver);
 
-            t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1));
+                t.TestEnv->TestWaitTabletDeletion(
+                    runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1)
+                );
 
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
-                               {NLs::PartitionKeys({""})});
-
-        }, true);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {NLs::PartitionKeys({""})});
+            },
+            true
+        );
     }
 
-    void TryMergeWithInflyLimit(TTestActorRuntime &runtime, TTestEnv &env, const ui64 mergeNum, const ui64 remainMergeNum, const ui64 acceptedMergeNum, ui64 &txId) {
+    void TryMergeWithInflyLimit(
+        TTestActorRuntime & runtime,
+        TTestEnv & env,
+        const ui64 mergeNum,
+        const ui64 remainMergeNum,
+        const ui64 acceptedMergeNum,
+        ui64& txId
+    ) {
         const ui64 shardsNum = mergeNum * 2;
         const ui64 startMergePart = mergeNum - remainMergeNum;
         TSet<ui64> txIds;
         ui64 startTxId = txId;
         for (ui64 i = startMergePart * 2; i < shardsNum; i += 2) {
-            AsyncSplitTable(runtime, txId, "/MyRoot/Table",
-                                Sprintf(R"(
+            AsyncSplitTable(
+                runtime,
+                txId,
+                "/MyRoot/Table",
+                Sprintf(
+                    R"(
                                     SourceTabletId: %lu
                                     SourceTabletId: %lu
-                                )", TTestTxConfig::FakeHiveTablets + i, TTestTxConfig::FakeHiveTablets + i + 1));
+                                )",
+                    TTestTxConfig::FakeHiveTablets + i,
+                    TTestTxConfig::FakeHiveTablets + i + 1
+                )
+            );
             txIds.insert(txId++);
         }
 
-        for (ui64 i = startTxId; i < startTxId + acceptedMergeNum ; i++)
+        for (ui64 i = startTxId; i < startTxId + acceptedMergeNum; i++)
             TestModificationResult(runtime, i, NKikimrScheme::StatusAccepted);
         for (ui64 i = startTxId + acceptedMergeNum; i < txId; i++)
             TestModificationResult(runtime, i, NKikimrScheme::StatusResourceExhausted);
 
         env.TestWaitNotification(runtime, txIds);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-                            NLs::ShardsInsideDomain(mergeNum + remainMergeNum - acceptedMergeNum)
-                        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table"),
+            {NLs::ShardsInsideDomain(mergeNum + remainMergeNum - acceptedMergeNum)}
+        );
     };
 
     void AsyncMergeWithInflyLimit(const ui64 mergeNum, const ui64 mergeLimit) {
@@ -423,14 +444,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         auto& appData = runtime.GetAppData();
 
         // set batching only by timeout
-        NKikimrConfig::TSchemeShardConfig_TInFlightCounterConfig *inFlightCounter = appData.SchemeShardConfig.AddInFlightCounterConfig();
+        NKikimrConfig::TSchemeShardConfig_TInFlightCounterConfig* inFlightCounter =
+            appData.SchemeShardConfig.AddInFlightCounterConfig();
         inFlightCounter->SetType(NKikimr::NSchemeShard::ESimpleCounters::COUNTER_IN_FLIGHT_OPS_TxSplitTablePartition);
         inFlightCounter->SetInFlightLimit(mergeLimit);
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        TestCreateTable(runtime, txId++, "/MyRoot", Sprintf(R"(
+        TestCreateTable(
+            runtime,
+            txId++,
+            "/MyRoot",
+            Sprintf(
+                R"(
                         Name: "Table"
                         Columns { Name: "key"       Type: "Uint64"}
                         Columns { Name: "value"      Type: "Utf8"}
@@ -440,19 +467,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
                             PartitioningPolicy {
                                 MinPartitionsCount: 0
                             }
-                        })", shardsNum));
+                        })",
+                shardsNum
+            )
+        );
 
         env.TestWaitNotification(runtime, txId - 1);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
-                           {NLs::IsTable,
-                            NLs::ShardsInsideDomain(shardsNum)});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::IsTable, NLs::ShardsInsideDomain(shardsNum)});
         ui64 remainMergeNum = mergeNum;
 
-        while (remainMergeNum > 0)
-        {
-            ui64 acceptedMergeNum = mergeLimit == 0
-                ? remainMergeNum
-                : std::min(remainMergeNum, mergeLimit);
+        while (remainMergeNum > 0) {
+            ui64 acceptedMergeNum = mergeLimit == 0 ? remainMergeNum : std::min(remainMergeNum, mergeLimit);
             TryMergeWithInflyLimit(runtime, env, mergeNum, remainMergeNum, acceptedMergeNum, txId);
             remainMergeNum -= acceptedMergeNum;
         }
@@ -469,7 +494,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
     Y_UNIT_TEST(Make20MergeOperationsWithoutLimit) {
         AsyncMergeWithInflyLimit(20, 0);
     }
-
 }
 
 namespace {
@@ -522,8 +546,7 @@ struct TLoadAndSplitSimulator {
     ui64 SplitReqCount = 0;
 
     TLoadAndSplitSimulator(ui64 tableLocalPathId, ui64 initialDatashardId, ui64 targetCpuLoadPercent)
-        : TableLocalPathId(tableLocalPathId)
-    {
+        : TableLocalPathId(tableLocalPathId) {
         MetricsPatch.SetCPU(CpuLoadMicroseconds(targetCpuLoadPercent));
 
         //NOTE: histogram must have at least 3 buckets with different keys to be able to produce split key
@@ -534,9 +557,8 @@ struct TLoadAndSplitSimulator {
 
         DatashardsKeyRanges[initialDatashardId] = std::make_pair(0, 1000000);
 
-        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-            << ", target CPU load " << targetCpuLoadPercent << "%"
-            << Endl;
+        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId << ", target CPU load "
+             << targetCpuLoadPercent << "%" << Endl;
     }
 
     void ChangeEvent(TAutoPtr<IEventHandle>& ev) {
@@ -556,9 +578,8 @@ struct TLoadAndSplitSimulator {
                     auto newCPU = record.GetTabletMetrics().GetCPU();
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvPeriodicTableStats, from datashard " << record.GetDatashardId()
-                        << ", patch CPU: " << prevCPU << "->" << newCPU
-                        << Endl;
+                         << ", intercept EvPeriodicTableStats, from datashard " << record.GetDatashardId()
+                         << ", patch CPU: " << prevCPU << "->" << newCPU << Endl;
 
                     ++PeriodicTableStatsCount;
                 }
@@ -599,14 +620,19 @@ struct TLoadAndSplitSimulator {
                         end = 1000000;
                     }
                     ui64 splitPoint = (end - start) / 2;
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
+                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(
+                        ToSerialized(splitPoint - 1)
+                    );
+                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(
+                        ToSerialized(splitPoint)
+                    );
+                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(
+                        ToSerialized(splitPoint + 1)
+                    );
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvGetTableStatsResult, from datashard " << record.GetDatashardId()
-                        << ", patch KeyAccessSample: split point " << splitPoint
-                        << Endl;
+                         << ", intercept EvGetTableStatsResult, from datashard " << record.GetDatashardId()
+                         << ", patch KeyAccessSample: split point " << splitPoint << Endl;
                 }
                 break;
             case TEvDataShard::EvSplit:
@@ -630,11 +656,9 @@ struct TLoadAndSplitSimulator {
                     }
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvSplit, to datashard " << record.GetSplitDescription().GetSourceRanges(0).GetTabletID()
-                        << ", event:"
-                        << Endl
-                        << record.DebugString()
-                        << Endl;
+                         << ", intercept EvSplit, to datashard "
+                         << record.GetSplitDescription().GetSourceRanges(0).GetTabletID() << ", event:" << Endl
+                         << record.DebugString() << Endl;
 
                     ++SplitReqCount;
                 }
@@ -650,9 +674,8 @@ struct TLoadAndSplitSimulator {
                     LastSplitAckTime = now;
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvSplitAck, from datashard " << record.GetTabletId()
-                        << ", " << elapsed << " since last split ack"
-                        << Endl;
+                         << ", intercept EvSplitAck, from datashard " << record.GetTabletId() << ", " << elapsed
+                         << " since last split ack" << Endl;
 
                     ++SplitAckCount;
                 }
@@ -661,7 +684,7 @@ struct TLoadAndSplitSimulator {
     };
 };
 
-TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
+TTestEnv SetupEnv(TTestBasicRuntime& runtime) {
     TTestEnvOptions opts;
     opts.EnableBackgroundCompaction(false);
 
@@ -691,11 +714,10 @@ TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
     return env;
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
-
-    void SplitByLoad(TTestBasicRuntime &runtime, const TString &tablePath, ui32 targetCpuLoadPercent) {
+    void SplitByLoad(TTestBasicRuntime & runtime, const TString& tablePath, ui32 targetCpuLoadPercent) {
         auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
         Cerr << "TEST table initial state:" << Endl << tableInfo.DebugString() << Endl;
 
@@ -715,17 +737,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
                 // Cerr << "TEST SplitByLoad, CustomFinalCondition, SplitAckCount " << simulator.SplitAckCount << ", " << (now - simulator.LastSplitAckTime) << " since last split" << Endl;
                 return simulator.SplitAckCount > 0 && (now - simulator.LastSplitAckTime) > TDuration::Seconds(3);
             };
-            runtime.DispatchEvents(opts/*, TDuration::Seconds(120)*/);
+            runtime.DispatchEvents(opts /*, TDuration::Seconds(120)*/);
         }
         Cerr << "TEST SplitByLoad, splitted " << simulator.SplitAckCount << " times"
-            << ", datashard count " << simulator.DatashardsKeyRanges.size()
-            << Endl;
+             << ", datashard count " << simulator.DatashardsKeyRanges.size() << Endl;
         // Cerr << "TEST SplitByLoad, PeriodicTableStats " << simulator.PeriodicTableStatsCount << Endl;
         // Cerr << "TEST SplitByLoad, KeyAccessSampleReq " << simulator.KeyAccessSampleReqCount << Endl;
         // Cerr << "TEST SplitByLoad, SplitReq " << simulator.SplitReqCount << Endl;
     }
 
-    void NoSplitByLoad(TTestBasicRuntime &runtime, const TString &tablePath, ui32 targetCpuLoadPercent) {
+    void NoSplitByLoad(TTestBasicRuntime & runtime, const TString& tablePath, ui32 targetCpuLoadPercent) {
         auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
         Cerr << "TEST table initial state:" << Endl << tableInfo.DebugString() << Endl;
 
@@ -747,8 +768,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             runtime.DispatchEvents(opts, TDuration::Seconds(60));
         }
         Cerr << "TEST SplitByLoad, splitted " << simulator.SplitAckCount << " times"
-            << ", datashard count " << simulator.DatashardsKeyRanges.size()
-            << Endl;
+             << ", datashard count " << simulator.DatashardsKeyRanges.size() << Endl;
         // Cerr << "TEST SplitByLoad, PeriodicTableStats " << simulator.PeriodicTableStatsCount << Endl;
         // Cerr << "TEST SplitByLoad, KeyAccessSampleReq " << simulator.KeyAccessSampleReqCount << Endl;
         // Cerr << "TEST SplitByLoad, SplitReq " << simulator.SplitReqCount << Endl;
@@ -759,8 +779,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         auto env = SetupEnv(runtime);
 
         const ui32 expectedPartitionCount = 5;
-        const ui32 cpuLoadThreshold = 1;    // percents
-        const ui64 cpuLoadSimulated = 100;  // percents
+        const ui32 cpuLoadThreshold = 1; // percents
+        const ui64 cpuLoadSimulated = 100; // percents
 
         const auto tableScheme = Sprintf(
             R"(
@@ -803,8 +823,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         auto env = SetupEnv(runtime);
 
         const ui32 expectedPartitionCount = 5;
-        const ui32 cpuLoadThreshold = 1;    // percents
-        const ui64 cpuLoadSimulated = 100;  // percents
+        const ui32 cpuLoadThreshold = 1; // percents
+        const ui64 cpuLoadSimulated = 100; // percents
 
         const auto mainTableScheme = Sprintf(
             R"(
@@ -852,8 +872,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         TTestBasicRuntime runtime;
         auto env = SetupEnv(runtime);
 
-        const ui32 cpuLoadThreshold = 1;    // percents
-        const ui64 cpuLoadSimulated = 100;  // percents
+        const ui32 cpuLoadThreshold = 1; // percents
+        const ui64 cpuLoadSimulated = 100; // percents
 
         const auto mainTableScheme = Sprintf(
             R"(

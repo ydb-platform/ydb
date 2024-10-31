@@ -50,13 +50,15 @@ bool CheckColumnTypesConstraints(NKikimrSchemeOp::TTableDescription& desc, TStri
     return true;
 }
 
-bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
-                      const NScheme::TTypeRegistry* typeRegistry,
-                      const TVector<ui32>& keyColIds,
-                      const TVector<NScheme::TTypeInfo>& keyColTypeIds,
-                      TString& errStr,
-                      TVector<TTableShardInfo>& partitions,
-                      const TSchemeLimits& limits) {
+bool InitPartitioning(
+    const NKikimrSchemeOp::TTableDescription& op,
+    const NScheme::TTypeRegistry* typeRegistry,
+    const TVector<ui32>& keyColIds,
+    const TVector<NScheme::TTypeInfo>& keyColTypeIds,
+    TString& errStr,
+    TVector<TTableShardInfo>& partitions,
+    const TSchemeLimits& limits
+) {
     ui32 partitionCount = 1;
     if (op.HasUniformPartitionsCount()) {
         partitionCount = op.GetUniformPartitionsCount();
@@ -73,7 +75,9 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
     if (op.HasUniformPartitionsCount()) {
         Y_ABORT_UNLESS(!keyColIds.empty());
         auto firstKeyColType = keyColTypeIds[0];
-        if (!TSchemeShard::FillUniformPartitioning(rangeEnds, keyColIds.size(), firstKeyColType, partitionCount, typeRegistry, errStr)) {
+        if (!TSchemeShard::FillUniformPartitioning(
+                rangeEnds, keyColIds.size(), firstKeyColType, partitionCount, typeRegistry, errStr
+            )) {
             return false;
         }
     } else {
@@ -102,12 +106,14 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
     return true;
 }
 
-bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
-                        const NKikimrSchemeOp::TTableDescription& op,
-                        const NScheme::TTypeRegistry* typeRegistry,
-                        TString& errStr,
-                        TVector<TTableShardInfo>& partitions,
-                        const TSchemeLimits& limits) {
+bool DoInitPartitioning(
+    TTableInfo::TPtr tableInfo,
+    const NKikimrSchemeOp::TTableDescription& op,
+    const NScheme::TTypeRegistry* typeRegistry,
+    TString& errStr,
+    TVector<TTableShardInfo>& partitions,
+    const TSchemeLimits& limits
+) {
     const TVector<ui32>& keyColIds = tableInfo->KeyColumnIds;
     if (keyColIds.size() == 0) {
         errStr = Sprintf("No key columns specified");
@@ -119,8 +125,9 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
         auto type = tableInfo->Columns[ki].PType;
 
         if (!IsAllowedKeyType(type)) {
-            errStr = Sprintf("Column %s has wrong key type %s",
-                tableInfo->Columns[ki].Name.c_str(), NScheme::TypeName(type).c_str());
+            errStr = Sprintf(
+                "Column %s has wrong key type %s", tableInfo->Columns[ki].Name.c_str(), NScheme::TypeName(type).c_str()
+            );
             return false;
         }
 
@@ -134,13 +141,15 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
     return true;
 }
 
-void ApplyPartitioning(TTxId txId,
-                       const TPathId& pathId,
-                       TTableInfo::TPtr tableInfo,
-                       TTxState& txState,
-                       const TChannelsBindings& bindedChannels,
-                       TSchemeShard* ss,
-                       TVector<TTableShardInfo>& partitions) {
+void ApplyPartitioning(
+    TTxId txId,
+    const TPathId& pathId,
+    TTableInfo::TPtr tableInfo,
+    TTxState& txState,
+    const TChannelsBindings& bindedChannels,
+    TSchemeShard* ss,
+    TVector<TTableShardInfo>& partitions
+) {
     TShardInfo datashardInfo = TShardInfo::DataShardInfo(txId, pathId);
     datashardInfo.BindedChannels = bindedChannels;
 
@@ -155,21 +164,18 @@ void ApplyPartitioning(TTxId txId,
     ss->SetPartitioning(pathId, tableInfo, std::move(partitions));
 }
 
-
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateTable TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateTable TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -183,7 +189,7 @@ public:
                     DebugHint() << " HandleReply TEvProposeTransactionResult"
                                 << " message: " << ev->Get()->Record.ShortDebugString());
 
-         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -218,7 +224,9 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
             context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc);
 
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            auto event = context.SS->MakeDataShardProposal(
+                txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx
+            );
             if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
                 event->Record.SetSubDomainPathId(subDomainPathId);
             }
@@ -242,16 +250,17 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateTable TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateTable TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -357,35 +366,35 @@ class TCreateTable: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -426,19 +435,18 @@ public:
                         << ", schema: " << schema.ShortDebugString()
                         << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (AppData()->DataShardConfig.GetDisabledOnSchemeShard()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "OLTP schema operations are not supported");
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "OLTP schema operations are not supported");
             return result;
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -454,13 +462,11 @@ public:
                     // Not build index impl tables can be created only as part of create index
                     // build index impl tables created multiple times during index construction
                     if (!NTableIndex::IsBuildImplTable(name)) {
-                        checks
-                            .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                        checks.IsUnderCreating(NKikimrScheme::StatusNameConflict)
                             .IsUnderTheSameOperation(OperationId.GetTxId());
                     }
                 } else if (!Transaction.GetAllowAccessToPrivatePaths()) {
-                    checks.IsCommonSensePath()
-                          .IsLikeDirectory();
+                    checks.IsCommonSensePath().IsLikeDirectory();
                 }
             }
 
@@ -478,14 +484,11 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeTable, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeTable, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
@@ -493,8 +496,7 @@ public:
                     checks.DepthLimit();
                 }
 
-                checks
-                    .IsValidLeafName()
+                checks.IsValidLeafName()
                     .PathsLimit()
                     .DirChildrenLimit()
                     .ShardsLimit(shardsToCreate)
@@ -513,7 +515,9 @@ public:
         }
 
         if (schema.GetIsBackup()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create table with explicit 'IsBackup' property");
+            result->SetError(
+                NKikimrScheme::StatusInvalidParameter, "Cannot create table with explicit 'IsBackup' property"
+            );
             return result;
         }
 
@@ -539,7 +543,9 @@ public:
             transactionSupport |= domainInfo->GetAlter()->IsSupportTransactions();
         }
         if (!transactionSupport) {
-            result->SetError(NKikimrScheme::StatusNameConflict, "Inclusive subDomain do not support shared transactions");
+            result->SetError(
+                NKikimrScheme::StatusNameConflict, "Inclusive subDomain do not support shared transactions"
+            );
             return result;
         }
 
@@ -553,8 +559,16 @@ public:
         }
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData()), schema.GetPartitionConfig(), AppData(), errStr)
-            || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
+        if (!TPartitionConfigMerger::ApplyChanges(
+                compilationPartitionConfig,
+                TPartitionConfigMerger::DefaultConfig(AppData()),
+                schema.GetPartitionConfig(),
+                AppData(),
+                errStr
+            ) ||
+            !TPartitionConfigMerger::VerifyCreateParams(
+                compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr
+            )) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -573,14 +587,8 @@ public:
             .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
-            nullptr,
-            schema,
-            *typeRegistry,
-            limits,
-            *domainInfo,
-            featureFlags,
-            errStr,
-            LocalSequences);
+            nullptr, schema, *typeRegistry, limits, *domainInfo, featureFlags, errStr, LocalSequences
+        );
 
         if (!alterData.Get()) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
@@ -607,8 +615,19 @@ public:
             TVector<TStorageRoom> storageRooms;
             THashMap<ui32, ui32> familyRooms;
             storageRooms.emplace_back(0);
-            if (!context.SS->GetBindingsRooms(dstPath.GetPathIdForDomain(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
-                errStr = TString("database doesn't have required storage pools to create tablet with storage config, details: ") + errStr;
+            if (!context.SS->GetBindingsRooms(
+                    dstPath.GetPathIdForDomain(),
+                    tableInfo->PartitionConfig(),
+                    storageRooms,
+                    familyRooms,
+                    channelsBinding,
+                    errStr
+                )) {
+                errStr =
+                    TString(
+                        "database doesn't have required storage pools to create tablet with storage config, details: "
+                    ) +
+                    errStr;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
@@ -638,8 +657,7 @@ public:
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
         const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();
         if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateTable, userAttrsDetails, errStr) ||
-            !userAttrs->CheckLimits(errStr))
-        {
+            !userAttrs->CheckLimits(errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -658,7 +676,9 @@ public:
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateTable, newTable->PathId);
 
-        ApplyPartitioning(OperationId.GetTxId(), newTable->PathId, tableInfo, txState, channelsBinding, context.SS, partitions);
+        ApplyPartitioning(
+            OperationId.GetTxId(), newTable->PathId, tableInfo, txState, channelsBinding, context.SS, partitions
+        );
 
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
 
@@ -674,8 +694,10 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
         context.SS->IncrementPathDbRefCount(newTable->PathId, "new path created");
 
-        if ((parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) && parentPath.Base()->HasActiveChanges()) {
-            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+        if ((parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) &&
+            parentPath.Base()->HasActiveChanges()) {
+            TTxId parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -698,7 +720,9 @@ public:
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
             auto tabletType = context.SS->ShardInfos[shard.ShardIdx].TabletType;
             const auto& bindedChannels = context.SS->ShardInfos[shard.ShardIdx].BindedChannels;
-            context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType);
+            context.SS->PersistShardMapping(
+                db, shard.ShardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType
+            );
             context.SS->PersistChannelsBinding(db, shard.ShardIdx, bindedChannels);
 
             if (storePerShardConfig) {
@@ -743,7 +767,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -771,4 +795,4 @@ ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxStat
     return obj;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

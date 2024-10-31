@@ -16,6 +16,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TInstant>, First);
     YDB_ACCESSOR_DEF(std::optional<TInstant>, Last);
     YDB_ACCESSOR_DEF(std::optional<TInstant>, ActualStart);
+
 public:
     TStatInfo() = default;
 
@@ -87,6 +88,7 @@ private:
     }
 
     NJson::TJsonValue ToJsonImpl(THashSet<TString>& readyIds) const;
+
 public:
     void SetType(const TString& value) {
         AFL_VERIFY(!Type || Type == value);
@@ -101,8 +103,7 @@ public:
 
     TTraceClient(const TString& id, const TString& parentId)
         : ClientId(id)
-        , ParentId(parentId)
-    {
+        , ParentId(parentId) {
         ActualStat.Start(TInstant::Now());
     }
 
@@ -133,6 +134,7 @@ public:
         TTraceClient* Owner = nullptr;
         const TString Id;
         TStatInfo* Stat;
+
     public:
         TDurationGuard(TTraceClient& owner, const TString& id);
         TDurationGuard(const TString& id);
@@ -159,12 +161,10 @@ public:
 class TTraceClientGuard: public TNonCopyable {
 private:
     std::shared_ptr<TTraceClient> Client;
+
 public:
     TTraceClientGuard(const std::shared_ptr<TTraceClient>& client)
-        : Client(client)
-    {
-
-    }
+        : Client(client) {}
 
     ~TTraceClientGuard() {
         Client->Finish();
@@ -179,4 +179,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NTracing

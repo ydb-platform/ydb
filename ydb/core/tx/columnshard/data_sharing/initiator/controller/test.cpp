@@ -1,4 +1,3 @@
 #include "test.h"
 
-namespace NKikimr::NOlap::NDataSharing {
-}
+namespace NKikimr::NOlap::NDataSharing {}

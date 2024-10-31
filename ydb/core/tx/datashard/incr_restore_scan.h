@@ -28,18 +28,20 @@ struct TEvIncrementalRestoreScan {
     struct TEvNoMoreData: public TEventLocal<TEvNoMoreData, EvNoMoreData> {};
     struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {
         TEvFinished() = default;
-        TEvFinished(ui64 txId) : TxId(txId) {}
+        TEvFinished(ui64 txId)
+            : TxId(txId) {}
         ui64 TxId;
     };
 };
 
 THolder<NTable::IScan> CreateIncrementalRestoreScan(
-        NActors::TActorId parent,
-        std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
-        const TPathId& sourcePathId,
-        TUserTable::TCPtr table,
-        const TPathId& targetPathId,
-        ui64 txId,
-        NStreamScan::TLimits limits);
+    NActors::TActorId parent,
+    std::function<TActorId(const TActorContext& ctx, TActorId parent)> changeSenderFactory,
+    const TPathId& sourcePathId,
+    TUserTable::TCPtr table,
+    const TPathId& targetPathId,
+    ui64 txId,
+    NStreamScan::TLimits limits
+);
 
 } // namespace NKikimr::NDataShard

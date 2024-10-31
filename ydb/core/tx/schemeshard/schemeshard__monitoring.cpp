@@ -23,36 +23,37 @@ struct TCgi {
         const TStringBuf Name;
 
         inline TParam(const TStringBuf name) noexcept
-            : Name(name)
-        {}
+            : Name(name) {}
 
-        operator TStringBuf () const {
+        operator TStringBuf() const {
             return Name;
         }
 
-        operator TString () const {
+        operator TString() const {
             return ToString(Name);
         }
 
         template <class TDefVal>
         TString AsHiddenInput(const TDefVal value) const {
-            return TStringBuilder()
-                << "<input type=\"hidden\" id=\"" << Name << "\" name=\"" << Name << "\" value=\"" << value << "\"/>";
+            return TStringBuilder() << "<input type=\"hidden\" id=\"" << Name << "\" name=\"" << Name << "\" value=\""
+                                    << value << "\"/>";
         }
 
         template <class TDefVal>
         TString AsInput(const TDefVal defValue) const {
-            return TStringBuilder()
-                << "<div class=\"col-md-4\">"
-                << "<label for=\"" << Name << "\"> " << Name << ": <input type=\"text\" class=\"form-control\" id=\"" << Name << "\" name=\"" << Name << "\" value=\"" << defValue << "\" /> </label>"
-                << "</div>";
+            return TStringBuilder() << "<div class=\"col-md-4\">"
+                                    << "<label for=\"" << Name << "\"> " << Name
+                                    << ": <input type=\"text\" class=\"form-control\" id=\"" << Name << "\" name=\""
+                                    << Name << "\" value=\"" << defValue << "\" /> </label>"
+                                    << "</div>";
         }
 
         TString AsInput() const {
-            return TStringBuilder()
-                << "<div class=\"col-md-4\">"
-                << "<label for=\"" << Name << "\"> " << Name << ": <input type=\"text\" class=\"form-control\" id=\"" << Name << "\" name=\"" << Name << "\" /> </label>"
-                << "</div>";
+            return TStringBuilder() << "<div class=\"col-md-4\">"
+                                    << "<label for=\"" << Name << "\"> " << Name
+                                    << ": <input type=\"text\" class=\"form-control\" id=\"" << Name << "\" name=\""
+                                    << Name << "\" /> </label>"
+                                    << "</div>";
         }
 
         template <class TVal>
@@ -112,8 +113,7 @@ const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
 
-
-class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
+class TUpdateCoordinatorsConfigActor: public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
 public:
     struct TItem {
         TPathId PathId;
@@ -127,8 +127,7 @@ public:
     TUpdateCoordinatorsConfigActor(TVector<TItem> items, TCallback callback, bool dryRun)
         : Items(std::move(items))
         , Callback(std::move(callback))
-        , DryRun(dryRun)
-    { }
+        , DryRun(dryRun) {}
 
 public:
     void Bootstrap(const TActorContext& ctx) {
@@ -158,10 +157,11 @@ public:
                 }
                 bool inserted = InFlight.emplace(coordinator, &item).second;
                 if (inserted) {
-                    ctx.Send(Services.LeaderPipeCache, new TEvPipeCache::TEvForward(
-                            new TEvSubDomain::TEvConfigure(item.Params),
-                            coordinator, true),
-                        IEventHandle::FlagTrackDelivery);
+                    ctx.Send(
+                        Services.LeaderPipeCache,
+                        new TEvPipeCache::TEvForward(new TEvSubDomain::TEvConfigure(item.Params), coordinator, true),
+                        IEventHandle::FlagTrackDelivery
+                    );
                 }
             }
         }
@@ -180,7 +180,8 @@ public:
         }
 
         const auto* item = it->second;
-        Log << item->PathString << " (" << tabletId << ") " << NKikimrTx::TEvSubDomainConfigurationAck::EStatus_Name(status) << Endl;
+        Log << item->PathString << " (" << tabletId << ") "
+            << NKikimrTx::TEvSubDomainConfigurationAck::EStatus_Name(status) << Endl;
         InFlight.erase(it);
 
         if (!InFlight) {
@@ -231,25 +232,23 @@ private:
     THashMap<ui64, const TItem*> InFlight;
 };
 
-struct TSchemeShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+struct TSchemeShard::TTxMonitoring: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
     TStringStream Answer;
 
 public:
-    TTxMonitoring(TSchemeShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
+    TTxMonitoring(TSchemeShard* self, NMon::TEvRemoteHttpInfo::TPtr ev)
         : TBase(self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
-    bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
 
         const TCgiParameters& cgi = Ev->Get()->Cgi();
 
         const TString page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
 
-        if (page ==  TCgi::TPages::AdminRequest) {
+        if (page == TCgi::TPages::AdminRequest) {
             NIceDb::TNiceDb db(txc.DB);
             db.NoMoreReadsForTx();
 
@@ -265,52 +264,40 @@ public:
 
         LinkToMain(Answer);
 
-        if (page == TCgi::TPages::TransactionList)
-        {
+        if (page == TCgi::TPages::TransactionList) {
             OutputTxListPage(Answer);
-        }
-        else if (page == TCgi::TPages::TransactionInfo)
-        {
+        } else if (page == TCgi::TPages::TransactionInfo) {
             auto txId = TTxId(FromStringWithDefault<ui64>(cgi.Get(TCgi::TxId), ui64(InvalidTxId)));
             auto partId = cgi.Has(TCgi::PartId)
-                ? TSubTxId(FromStringWithDefault<ui64>(cgi.Get(TCgi::PartId), ui64(InvalidSubTxId)))
-                : FirstSubTxId;
+                              ? TSubTxId(FromStringWithDefault<ui64>(cgi.Get(TCgi::PartId), ui64(InvalidSubTxId)))
+                              : FirstSubTxId;
             OutputTxInfoPage(TOperationId(txId, partId), Answer);
-        }
-        else if (page == TCgi::TPages::ShardInfoByTabletId)
-        {
+        } else if (page == TCgi::TPages::ShardInfoByTabletId) {
             TTabletId tabletId = TTabletId(TryParseTabletId(cgi.Get(TCgi::ShardID)));
             OutputShardInfoPageByShardID(tabletId, Answer);
-        }
-        else if (page == TCgi::TPages::ShardInfoByShardIdx)
-        {
+        } else if (page == TCgi::TPages::ShardInfoByShardIdx) {
             auto shardIdx = TShardIdx(
                 FromStringWithDefault<ui64>(cgi.Get(TCgi::OwnerShardIdx), InvalidOwnerId),
                 TLocalShardIdx(FromStringWithDefault<ui64>(cgi.Get(TCgi::LocalShardIdx), ui64(InvalidLocalShardIdx)))
-                );
+            );
             OutputShardInfoPageByShardIdx(shardIdx, Answer);
-        }
-        else if (page == TCgi::TPages::PathInfo)
-        {
+        } else if (page == TCgi::TPages::PathInfo) {
             TLocalPathId ownerPathId = FromStringWithDefault<ui64>(cgi.Get(TCgi::OwnerPathId), InvalidOwnerId);
             TLocalPathId localPathId = FromStringWithDefault<ui64>(cgi.Get(TCgi::LocalPathId), InvalidLocalPathId);
             TPathId pathId(ownerPathId, localPathId);
             OutputPathInfoPage(pathId, Answer);
-        }
-        else if (page == TCgi::TPages::AdminPage)
-        {
+        } else if (page == TCgi::TPages::AdminPage) {
             OutputAdminPage(Answer);
-        }
-        else if (page == TCgi::TPages::BuildIndexInfo)
-        {
-            auto id = TIndexBuildId(FromStringWithDefault<ui64>(cgi.Get(TCgi::BuildIndexId), ui64(InvalidIndexBuildId)));
+        } else if (page == TCgi::TPages::BuildIndexInfo) {
+            auto id =
+                TIndexBuildId(FromStringWithDefault<ui64>(cgi.Get(TCgi::BuildIndexId), ui64(InvalidIndexBuildId)));
             BuildIndexInfoPage(id, Answer);
         }
 
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         if (Answer) {
             ctx.Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(Answer.Str()));
         }
@@ -318,35 +305,40 @@ public:
 
 private:
     void LinkToMain(TStringStream& str) const {
-        str << "<a href='app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
-                               << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::MainPage) << "'>";
+        str << "<a href='app?" << TCgi::TabletID.AsCgiParam(Self->TabletID()) << "&"
+            << TCgi::Page.AsCgiParam(TCgi::TPages::MainPage) << "'>";
         str << "Back to main scheme shard page";
         str << "</a><br>";
     }
 
-    void OutputAdminRequestPage(TStringStream& str, NIceDb::TNiceDb& db, const TCgiParameters& cgi, const TActorContext& ctx) const {
+    void OutputAdminRequestPage(
+        TStringStream& str,
+        NIceDb::TNiceDb& db,
+        const TCgiParameters& cgi,
+        const TActorContext& ctx
+    ) const {
         if (cgi.Has(TCgi::IsReadOnlyMode)) {
             TString rowStr = cgi.Get(TCgi::IsReadOnlyMode);
             auto value = FromStringWithDefault<ui64>(rowStr, ui64(0));
-            auto valueStr =  ToString(value);
+            auto valueStr = ToString(value);
 
             TStringBuilder debug;
-            debug << "IsReadOnlyMode changed from " << ToString(Self->IsReadOnlyMode)
-                  << " to " << valueStr;
+            debug << "IsReadOnlyMode changed from " << ToString(Self->IsReadOnlyMode) << " to " << valueStr;
 
             LOG_EMERG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TSchemeShard::TTxMonitoring AdminRequest " << debug);
             str << debug;
 
-            db.Table<Schema::SysParams>().Key(Schema::SysParam_IsReadOnlyMode).Update(
-                    NIceDb::TUpdate<Schema::SysParams::Value>(valueStr));
+            db.Table<Schema::SysParams>()
+                .Key(Schema::SysParam_IsReadOnlyMode)
+                .Update(NIceDb::TUpdate<Schema::SysParams::Value>(valueStr));
             Self->IsReadOnlyMode = value;
         }
 
         if (cgi.Has(TCgi::UpdateAccessDatabaseRights)) {
             TString rowDryRunStr = cgi.Get(TCgi::UpdateAccessDatabaseRightsDryRun);
             auto valueDryRun = FromStringWithDefault<ui64>(rowDryRunStr, ui64(1));
-            auto valueDryRunStr =  ToString(valueDryRun);
+            auto valueDryRunStr = ToString(valueDryRun);
 
             TStringBuilder debug;
             debug << "Triggered UpdateAccessDatabaseRights with DryRunVal: " << valueDryRunStr;
@@ -360,25 +352,33 @@ private:
 
             OutputAdminPage(templateAnswer);
 
-            auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
+            auto func = [templateAnswer](const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
                 TStringStream str = templateAnswer;
                 HTML(str) {
                     TABLE_SORTABLE_CLASS("table") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() {str << "DomainId";}
-                                TABLEH() {str << "Sid";}
+                                TABLEH() {
+                                    str << "DomainId";
+                                }
+                                TABLEH() {
+                                    str << "Sid";
+                                }
                             }
                             str << "\n";
                         }
 
-                        for (const auto& item: done) {
+                        for (const auto& item : done) {
                             const TPathId& domainId = item.first;
 
-                            for (const auto& sid: item.second) {
+                            for (const auto& sid : item.second) {
                                 TABLER() {
-                                    TABLED() { str << domainId; }
-                                    TABLED() { str << sid; }
+                                    TABLED() {
+                                        str << domainId;
+                                    }
+                                    TABLED() {
+                                        str << sid;
+                                    }
                                 }
                                 str << "\n";
                             }
@@ -397,7 +397,7 @@ private:
         if (cgi.Has(TCgi::FixAccessDatabaseInheritance)) {
             TString rowDryRunStr = cgi.Get(TCgi::FixAccessDatabaseInheritanceDryRun);
             auto valueDryRun = FromStringWithDefault<ui64>(rowDryRunStr, ui64(1));
-            auto valueDryRunStr =  ToString(valueDryRun);
+            auto valueDryRunStr = ToString(valueDryRun);
 
             TStringBuilder debug;
             debug << "Triggered FixAccessDatabaseInheritance with DryRunVal: " << valueDryRunStr;
@@ -411,25 +411,33 @@ private:
 
             OutputAdminPage(templateAnswer);
 
-            auto func = [templateAnswer] (const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
+            auto func = [templateAnswer](const TMap<TPathId, TSet<TString>>& done) -> NActors::IEventBase* {
                 TStringStream str = templateAnswer;
                 HTML(str) {
                     TABLE_SORTABLE_CLASS("table") {
                         TABLEHEAD() {
                             TABLER() {
-                                TABLEH() {str << "DomainId";}
-                                TABLEH() {str << "Sid";}
+                                TABLEH() {
+                                    str << "DomainId";
+                                }
+                                TABLEH() {
+                                    str << "Sid";
+                                }
                             }
                             str << "\n";
                         }
 
-                        for (const auto& item: done) {
+                        for (const auto& item : done) {
                             const TPathId& domainId = item.first;
 
-                            for (const auto& sid: item.second) {
+                            for (const auto& sid : item.second) {
                                 TABLER() {
-                                    TABLED() { str << domainId; }
-                                    TABLED() { str << sid; }
+                                    TABLED() {
+                                        str << domainId;
+                                    }
+                                    TABLED() {
+                                        str << sid;
+                                    }
                                 }
                                 str << "\n";
                             }
@@ -473,7 +481,8 @@ private:
                 }
                 auto params = subDomain->GetProcessingParams();
                 if (params.GetVersion() <= 0) {
-                    str << "Skipping " << pathString << ": processing params version is " << params.GetVersion() << Endl;
+                    str << "Skipping " << pathString << ": processing params version is " << params.GetVersion()
+                        << Endl;
                     continue;
                 }
                 auto& item = items.emplace_back();
@@ -485,7 +494,8 @@ private:
             str << "</pre>";
             OutputAdminPage(str);
 
-            auto callback = [sender = Ev->Sender, str = std::move(str)] (const TString& log, const TActorContext& ctx) mutable {
+            auto callback = [sender = Ev->Sender,
+                             str = std::move(str)](const TString& log, const TActorContext& ctx) mutable {
                 str << "<pre>" << log << "</pre>";
 
                 ctx.Send(sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
@@ -500,8 +510,8 @@ private:
     }
 
     TString SubmitButton(const TStringBuf value) const {
-        return TStringBuilder()
-            << "<div class=\"col-md-4\"><input class=\"btn btn-default\" type=\"submit\" value=\"" << value << "\"></div>" << Endl;
+        return TStringBuilder() << "<div class=\"col-md-4\"><input class=\"btn btn-default\" type=\"submit\" value=\""
+                                << value << "\"></div>" << Endl;
     }
 
     void OutputAdminPage(TStringStream& str) const {
@@ -541,7 +551,9 @@ private:
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\" class=\"form-group\">" << Endl;
+            str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" "
+                   "name=\"tblMonSSFrmUpdateCoordinatorsConfig\" class=\"form-group\">"
+                << Endl;
             str << "<legend> Send configuration update to all coordinators: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
@@ -556,14 +568,14 @@ private:
 
     void OutputMainPage(TStringStream& str) const {
         HTML(str) {
-            TAG(TH3) {str << "SchemeShard main page:";}
+            TAG(TH3) {
+                str << "SchemeShard main page:";
+            }
 
             {
                 str << "<legend>";
-                str << "<a href='app?"
-                    << TCgi::TabletID.AsCgiParam(Self->TabletID())
-                    << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage)
-                    << "'> Administration settings </a>";
+                str << "<a href='app?" << TCgi::TabletID.AsCgiParam(Self->TabletID()) << "&"
+                    << TCgi::Page.AsCgiParam(TCgi::TPages::AdminPage) << "'> Administration settings </a>";
                 str << "</legend>";
             }
 
@@ -634,23 +646,29 @@ private:
 
             {
                 str << "<legend>";
-                TAG(TH3) {str << "Transactions in flight:"; }
+                TAG(TH3) {
+                    str << "Transactions in flight:";
+                }
                 str << "</legend>";
                 TableTxInfly(str);
             }
 
             {
                 str << "<legend>";
-                TAG(TH3) {str << "Active Build Indexes in flight:"; }
+                TAG(TH3) {
+                    str << "Active Build Indexes in flight:";
+                }
                 str << "</legend>";
-                BuildIndexesInfly(str, /*forActive=*/ true);
+                BuildIndexesInfly(str, /*forActive=*/true);
             }
 
             {
                 str << "<legend>";
-                TAG(TH3) {str << "Finished Build Indexes:"; }
+                TAG(TH3) {
+                    str << "Finished Build Indexes:";
+                }
                 str << "</legend>";
-                BuildIndexesInfly(str, /*forActive=*/ false);
+                BuildIndexesInfly(str, /*forActive=*/false);
             }
         }
     }
@@ -660,8 +678,12 @@ private:
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "Id";}
-                        TABLEH() {str << "State";}
+                        TABLEH() {
+                            str << "Id";
+                        }
+                        TABLEH() {
+                            str << "State";
+                        }
                     }
                     str << "\n";
                 }
@@ -680,11 +702,14 @@ private:
                     if (print) {
                         TABLER() {
                             TABLED() {
-                                str << "<a href='app?" << TCgi::Page.AsCgiParam(TCgi::TPages::BuildIndexInfo)
-                                    << "&" << TCgi::TabletID.AsCgiParam(Self->TabletID())
-                                    << "&" << TCgi::BuildIndexId.AsCgiParam(ui64(buildIndexId))
-                                    << "'>" << buildIndexId << "</a>"; }
-                            TABLED() { str << info.State; }
+                                str << "<a href='app?" << TCgi::Page.AsCgiParam(TCgi::TPages::BuildIndexInfo) << "&"
+                                    << TCgi::TabletID.AsCgiParam(Self->TabletID()) << "&"
+                                    << TCgi::BuildIndexId.AsCgiParam(ui64(buildIndexId)) << "'>" << buildIndexId
+                                    << "</a>";
+                            }
+                            TABLED() {
+                                str << info.State;
+                            }
                         }
                         str << "\n";
                     }
@@ -695,7 +720,9 @@ private:
 
     void BuildIndexInfoPage(TIndexBuildId buildIndexId, TStringStream& str) const {
         HTML(str) {
-            TAG(TH3) {str << "Build index id " << buildIndexId;}
+            TAG(TH3) {
+                str << "Build index id " << buildIndexId;
+            }
 
             const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(buildIndexId);
             if (!indexInfoPtr) {
@@ -705,8 +732,10 @@ private:
                 return;
             }
             const auto& info = *indexInfoPtr->Get();
-            TAG(TH4) {str << "Fields";}
-            PRE () {
+            TAG(TH4) {
+                str << "Fields";
+            }
+            PRE() {
                 str << "BuildInfoId:                   " << info.Id << Endl
                     << "Uid:                           " << info.Uid << Endl
 
@@ -726,19 +755,20 @@ private:
                     << "TablePathId:                   " << LinkToPathInfo(info.TablePathId) << Endl
                     << "TablePath:                     " << TPath::Init(info.TablePathId, Self).PathString() << Endl
 
-                    << "IndexType:                     " <<  NKikimrSchemeOp::EIndexType_Name(info.IndexType) << Endl
+                    << "IndexType:                     " << NKikimrSchemeOp::EIndexType_Name(info.IndexType) << Endl
 
                     << "IndexName:                     " << info.IndexName << Endl;
 
-                    for (const auto& column: info.IndexColumns) {
-                        str << "IndexColumns:          " << column << Endl;
-                    }
+                for (const auto& column : info.IndexColumns) {
+                    str << "IndexColumns:          " << column << Endl;
+                }
 
                 str << "Subscribers.size:             " << info.Subscribers.size() << Endl
 
                     << "AlterMainTableTxId:            " << info.AlterMainTableTxId << Endl
-                    << "AlterMainTableTxStatus:        " << NKikimrScheme::EStatus_Name(info.AlterMainTableTxStatus) << Endl
-                    << "AlterMainTableTxDone:          " << (info.AlterMainTableTxDone ? "DONE": "not done") << Endl
+                    << "AlterMainTableTxStatus:        " << NKikimrScheme::EStatus_Name(info.AlterMainTableTxStatus)
+                    << Endl << "AlterMainTableTxDone:          " << (info.AlterMainTableTxDone ? "DONE" : "not done")
+                    << Endl
 
                     << "LockTxId:                      " << info.LockTxId << Endl
                     << "LockTxStatus:                  " << NKikimrScheme::EStatus_Name(info.LockTxStatus) << Endl
@@ -761,32 +791,53 @@ private:
 
                     << "Processed:                     " << info.Processed << Endl
                     << "Billed:                        " << info.Billed << Endl;
-
             }
 
             TVector<NScheme::TTypeInfo> keyTypes;
             if (Self->Tables.contains(info.TablePathId)) {
                 TTableInfo::TPtr tableInfo = Self->Tables.at(info.TablePathId);
-                for (ui32 keyPos: tableInfo->KeyColumnIds) {
+                for (ui32 keyPos : tableInfo->KeyColumnIds) {
                     keyTypes.push_back(tableInfo->Columns.at(keyPos).PType);
                 }
             }
 
             {
-                TAG(TH3) {str << "Shards : " << info.Shards.size() << "\n";}
+                TAG(TH3) {
+                    str << "Shards : " << info.Shards.size() << "\n";
+                }
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
-                            TABLEH() {str << "ShardIdx";}
-                            TABLEH() {str << "DatashardId";}
-                            TABLEH() {str << "Range";}
-                            TABLEH() {str << "LastKeyAck";}
-                            TABLEH() {str << "Status";}
-                            TABLEH() {str << "UploadStatus";}
-                            TABLEH() {str << "DebugMessage";}
-                            TABLEH() {str << "SeqNo";}
-                            TABLEH() {str << "Processed";}
-                            TABLEH() {str << "Billed";}
+                            TABLEH() {
+                                str << "ShardIdx";
+                            }
+                            TABLEH() {
+                                str << "DatashardId";
+                            }
+                            TABLEH() {
+                                str << "Range";
+                            }
+                            TABLEH() {
+                                str << "LastKeyAck";
+                            }
+                            TABLEH() {
+                                str << "Status";
+                            }
+                            TABLEH() {
+                                str << "UploadStatus";
+                            }
+                            TABLEH() {
+                                str << "DebugMessage";
+                            }
+                            TABLEH() {
+                                str << "SeqNo";
+                            }
+                            TABLEH() {
+                                str << "Processed";
+                            }
+                            TABLEH() {
+                                str << "Billed";
+                            }
                         }
                     }
                     for (auto item : info.Shards) {
@@ -805,7 +856,9 @@ private:
                             }
                             TABLED() {
                                 if (keyTypes) {
-                                    str << DebugPrintRange(keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry);
+                                    str << DebugPrintRange(
+                                        keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry
+                                    );
                                 } else {
                                     str << "table has been dropped";
                                 }
@@ -847,10 +900,18 @@ private:
             TABLE_SORTABLE_CLASS("table") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "OpId";}
-                        TABLEH() {str << "Type";}
-                        TABLEH() {str << "State";}
-                        TABLEH() {str << "Shards in progress";}
+                        TABLEH() {
+                            str << "OpId";
+                        }
+                        TABLEH() {
+                            str << "Type";
+                        }
+                        TABLEH() {
+                            str << "State";
+                        }
+                        TABLEH() {
+                            str << "Shards in progress";
+                        }
                     }
                     str << "\n";
                 }
@@ -859,14 +920,21 @@ private:
                     TOperationId opId = tx.first;
                     const TTxState txState = tx.second;
                     TABLER() {
-                        TABLED() { str << "<a href='app?" << TCgi::Page.AsCgiParam(TCgi::TPages::TransactionInfo)
-                                                          << "&" << TCgi::TabletID.AsCgiParam(Self->TabletID())
-                                                          << "&" << TCgi::TxId.AsCgiParam(opId.GetTxId())
-                                                          << "&" << TCgi::PartId.AsCgiParam(opId.GetSubTxId())
-                                            << "'>" << opId << "</a>"; }
-                        TABLED() { str << TTxState::TypeName(txState.TxType); }
-                        TABLED() { str << TTxState::StateName(txState.State); }
-                        TABLED() { str << txState.ShardsInProgress.size(); }
+                        TABLED() {
+                            str << "<a href='app?" << TCgi::Page.AsCgiParam(TCgi::TPages::TransactionInfo) << "&"
+                                << TCgi::TabletID.AsCgiParam(Self->TabletID()) << "&"
+                                << TCgi::TxId.AsCgiParam(opId.GetTxId()) << "&"
+                                << TCgi::PartId.AsCgiParam(opId.GetSubTxId()) << "'>" << opId << "</a>";
+                        }
+                        TABLED() {
+                            str << TTxState::TypeName(txState.TxType);
+                        }
+                        TABLED() {
+                            str << TTxState::StateName(txState.State);
+                        }
+                        TABLED() {
+                            str << txState.ShardsInProgress.size();
+                        }
                     }
                     str << "\n";
                 }
@@ -876,7 +944,9 @@ private:
 
     void OutputTxListPage(TStringStream& str) const {
         HTML(str) {
-            TAG(TH3) {str << "Transactions in flight:";}
+            TAG(TH3) {
+                str << "Transactions in flight:";
+            }
 
             TableTxInfly(str);
         }
@@ -884,7 +954,9 @@ private:
 
     void OutputTxInfoPage(TOperationId operationId, TStringStream& str) const {
         HTML(str) {
-            TAG(TH3) {str << "Transaction " << operationId;}
+            TAG(TH3) {
+                str << "Transaction " << operationId;
+            }
 
             auto txInfo = Self->FindTx(operationId);
             if (!txInfo) {
@@ -893,30 +965,37 @@ private:
                 }
             } else {
                 const TTxState txState = *txInfo;
-                TAG(TH3) {str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";}
+                TAG(TH3) {
+                    str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";
+                }
                 TABLE_SORTABLE_CLASS("table") {
                     TABLEHEAD() {
                         TABLER() {
-                            TABLEH() {str << "OwnerShardIdx";}
-                            TABLEH() {str << "LocalShardIdx";}
-                            TABLEH() {str << "TabletId";}
+                            TABLEH() {
+                                str << "OwnerShardIdx";
+                            }
+                            TABLEH() {
+                                str << "LocalShardIdx";
+                            }
+                            TABLEH() {
+                                str << "TabletId";
+                            }
                         }
                     }
-                    for (auto shardIdx :  txState.ShardsInProgress) {
+                    for (auto shardIdx : txState.ShardsInProgress) {
                         TABLER() {
                             TABLED() {
-                                str << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
-                                    << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::ShardInfoByShardIdx)
-                                    << "&" << TCgi::OwnerShardIdx.AsCgiParam(shardIdx.GetOwnerId())
-                                    << "&" << TCgi::LocalShardIdx.AsCgiParam(shardIdx.GetLocalId())
-                                    << "'>" << shardIdx <<"</a>";
+                                str << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID()) << "&"
+                                    << TCgi::Page.AsCgiParam(TCgi::TPages::ShardInfoByShardIdx) << "&"
+                                    << TCgi::OwnerShardIdx.AsCgiParam(shardIdx.GetOwnerId()) << "&"
+                                    << TCgi::LocalShardIdx.AsCgiParam(shardIdx.GetLocalId()) << "'>" << shardIdx
+                                    << "</a>";
                             }
                             TABLED() {
                                 if (Self->ShardInfos.contains(shardIdx)) {
                                     TTabletId tabletId = Self->ShardInfos.FindPtr(shardIdx)->TabletID;
-                                    str << "<a href='../tablets?"
-                                        << TCgi::TabletID.AsCgiParam(tabletId)
-                                        << "'>" << tabletId <<"</a>";
+                                    str << "<a href='../tablets?" << TCgi::TabletID.AsCgiParam(tabletId) << "'>"
+                                        << tabletId << "</a>";
                                 } else {
                                     str << "UNKNOWN_TABLET!";
                                 }
@@ -940,27 +1019,39 @@ private:
 
             const TShardInfo& shard = Self->ShardInfos.at(shardIdx);
 
-            TAG(TH4) {str << "Shard idx " << shardIdx << "</a>";}
-            PRE () {
-                str << "TabletID:                     " << shard.TabletID<< Endl
+            TAG(TH4) {
+                str << "Shard idx " << shardIdx << "</a>";
+            }
+            PRE() {
+                str << "TabletID:                     " << shard.TabletID << Endl
                     << "CurrentTxId:                  " << shard.CurrentTxId << Endl
                     << "PathId:                       " << LinkToPathInfo(shard.PathId) << Endl
                     << "TabletType:                   " << TTabletTypes::TypeToStr(shard.TabletType) << Endl;
             }
 
-            TAG(TH4) {str << "BindedChannels for shard idx " << shardIdx << "</a>";}
+            TAG(TH4) {
+                str << "BindedChannels for shard idx " << shardIdx << "</a>";
+            }
             TABLE_SORTABLE_CLASS("BindedChannels") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ChannelId";}
-                        TABLEH() {str << "PoolName";}
+                        TABLEH() {
+                            str << "ChannelId";
+                        }
+                        TABLEH() {
+                            str << "PoolName";
+                        }
                     }
                 }
                 ui32 channelId = 0;
-                for (auto& bind: shard.BindedChannels) {
+                for (auto& bind : shard.BindedChannels) {
                     TABLER() {
-                        TABLED() { str << channelId; }
-                        TABLED() { str << bind.GetStoragePoolName(); }
+                        TABLED() {
+                            str << channelId;
+                        }
+                        TABLED() {
+                            str << bind.GetStoragePoolName();
+                        }
                     }
                     ++channelId;
                 }
@@ -969,33 +1060,26 @@ private:
     }
 
     TString LinkToPathInfo(TPathId pathId) const {
-        return TStringBuilder()
-            << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
-            << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::PathInfo)
-            << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
-            << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
-            << "'>" << pathId <<"</a>";
+        return TStringBuilder() << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID()) << "&"
+                                << TCgi::Page.AsCgiParam(TCgi::TPages::PathInfo) << "&"
+                                << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId) << "&"
+                                << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId) << "'>" << pathId << "</a>";
     }
 
     TString LinkToShardInfo(TShardIdx shardIdx) const {
-        return TStringBuilder()
-            << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
-            << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::ShardInfoByShardIdx)
-            << "&" << TCgi::OwnerShardIdx.AsCgiParam(shardIdx.GetOwnerId())
-            << "&" << TCgi::LocalShardIdx.AsCgiParam(shardIdx.GetLocalId())
-             << "'>" << shardIdx <<"</a>";
+        return TStringBuilder() << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID()) << "&"
+                                << TCgi::Page.AsCgiParam(TCgi::TPages::ShardInfoByShardIdx) << "&"
+                                << TCgi::OwnerShardIdx.AsCgiParam(shardIdx.GetOwnerId()) << "&"
+                                << TCgi::LocalShardIdx.AsCgiParam(shardIdx.GetLocalId()) << "'>" << shardIdx << "</a>";
     }
 
     TString LinkToTablet(TShardIdx shardIdx) const {
         if (Self->ShardInfos.contains(shardIdx)) {
             TTabletId tabletId = Self->ShardInfos.FindPtr(shardIdx)->TabletID;
-            return TStringBuilder()
-                << "<a href='../tablets?"
-                << TCgi::TabletID.AsCgiParam(tabletId)
-                << "'>" << tabletId <<"</a>";
+            return TStringBuilder() << "<a href='../tablets?" << TCgi::TabletID.AsCgiParam(tabletId) << "'>" << tabletId
+                                    << "</a>";
         } else {
-            return TStringBuilder()
-                    << "UNKNOWN_TABLET!";
+            return TStringBuilder() << "UNKNOWN_TABLET!";
         }
     }
 
@@ -1011,16 +1095,18 @@ private:
             auto& path = Self->PathsById.at(pathId);
 
             auto localACL = TSecurityObject(path->Owner, path->ACL, path->IsContainer());
-            auto effectiveACL = TSecurityObject(path->Owner, path->CachedEffectiveACL.GetForSelf(), path->IsContainer());
+            auto effectiveACL =
+                TSecurityObject(path->Owner, path->CachedEffectiveACL.GetForSelf(), path->IsContainer());
 
-            TAG(TH4) {str << "Path info " << pathId << "</a>";}
-            PRE () {
+            TAG(TH4) {
+                str << "Path info " << pathId << "</a>";
+            }
+            PRE() {
                 str << "Path:                     " << Self->PathToString(path) << Endl
                     << "PathId:                   " << pathId << Endl
                     << "Parent Path Id:           " << LinkToPathInfo(path->ParentPathId) << Endl
-                    << "Name:                     " << path->Name << Endl
-                    << "Owner:                    " << path->Owner << Endl
-                    << "ACL:                      " << localACL.ToString() << Endl
+                    << "Name:                     " << path->Name << Endl << "Owner:                    " << path->Owner
+                    << Endl << "ACL:                      " << localACL.ToString() << Endl
                     << "ACLVersion:               " << path->ACLVersion << Endl
                     << "EffectiveACL:             " << effectiveACL.ToString() << Endl
                     << "Path Type:                " << NKikimrSchemeOp::EPathType_Name(path->PathType) << Endl
@@ -1033,46 +1119,65 @@ private:
                     << "Has PreSerializedChildrenListing: " << !path->PreSerializedChildrenListing.empty() << Endl
                     << "Children count:           " << path->GetChildren().size() << Endl
                     << "Alive children count:     " << path->GetAliveChildren() << Endl
-                    << "Dir alter version:        " << path->DirAlterVersion << Endl
-                    << "User attrs alter version  " << path->UserAttrs->AlterVersion << Endl
-                    << "User attrs count          " << path->UserAttrs->Attrs.size() << Endl
-                    << "DbRefCount count          " << path->DbRefCount << Endl
+                    << "Dir alter version:        " << path->DirAlterVersion << Endl << "User attrs alter version  "
+                    << path->UserAttrs->AlterVersion << Endl << "User attrs count          "
+                    << path->UserAttrs->Attrs.size() << Endl << "DbRefCount count          " << path->DbRefCount << Endl
                     << "ShardsInside count        " << path->GetShardsInside() << Endl;
             }
 
             if (path->UserAttrs->Attrs) {
-                TAG(TH4) {str << "UserAttrs for pathId " << pathId << "</a>";}
+                TAG(TH4) {
+                    str << "UserAttrs for pathId " << pathId << "</a>";
+                }
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
-                            TABLEH() {str << "Name";}
-                            TABLEH() {str << "Value";}
+                            TABLEH() {
+                                str << "Name";
+                            }
+                            TABLEH() {
+                                str << "Value";
+                            }
                         }
                     }
-                    for (auto& item: path->UserAttrs->Attrs) {
+                    for (auto& item : path->UserAttrs->Attrs) {
                         TABLER() {
-                            TABLED() { str << item.first; }
-                            TABLED() { str << item.second; }
+                            TABLED() {
+                                str << item.first;
+                            }
+                            TABLED() {
+                                str << item.second;
+                            }
                         }
                     }
                 }
             }
 
             if (path->GetChildren().size()) {
-                TAG(TH4) {str << "Childrens for pathId " << pathId << "</a>";}
+                TAG(TH4) {
+                    str << "Childrens for pathId " << pathId << "</a>";
+                }
                 TABLE_SORTABLE_CLASS("UserAttrs") {
                     TABLEHEAD() {
                         TABLER() {
-                            TABLEH() {str << "Name";}
-                            TABLEH() {str << "PathId";}
-                            TABLEH() {str << "IsAlive";}
+                            TABLEH() {
+                                str << "Name";
+                            }
+                            TABLEH() {
+                                str << "PathId";
+                            }
+                            TABLEH() {
+                                str << "IsAlive";
+                            }
                         }
                     }
-                    for (auto& item: path->GetChildren()) {
+                    for (auto& item : path->GetChildren()) {
                         auto& child = Self->PathsById.at(item.second);
 
                         TABLER() {
-                            TABLED() { str << item.first; }
+                            TABLED() {
+                                str << item.first;
+                            }
                             TABLED() {
                                 str << LinkToPathInfo(item.second);
                             }
@@ -1086,19 +1191,27 @@ private:
 
             auto shards = Self->CollectAllShards({pathId});
 
-            TAG(TH4) {str << "Shards for pathId " << pathId << "</a>";}
+            TAG(TH4) {
+                str << "Shards for pathId " << pathId << "</a>";
+            }
             TABLE_SORTABLE_CLASS("ShardForPath") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ShardIdx";}
-                        TABLEH() {str << "TableId";}
-                        TABLEH() {str << "IsActive";}
+                        TABLEH() {
+                            str << "ShardIdx";
+                        }
+                        TABLEH() {
+                            str << "TableId";
+                        }
+                        TABLEH() {
+                            str << "IsActive";
+                        }
                     }
                 }
 
                 TPath path_ = TPath::Init(pathId, Self);
 
-                for (const auto& shardIdx: shards) {
+                for (const auto& shardIdx : shards) {
                     TABLER() {
                         TABLED() {
                             str << LinkToShardInfo(shardIdx);
@@ -1148,9 +1261,10 @@ private:
 
             const TTxState& txState = Self->TxInFlight.at(opId);
 
-
-            TAG(TH4) {str << "TxState info " << opId << "</a>";}
-            PRE () {
+            TAG(TH4) {
+                str << "TxState info " << opId << "</a>";
+            }
+            PRE() {
                 str << "TxType:                                  " << TTxState::TypeName(txState.TxType) << Endl
                     << "TargetPathId:                            " << LinkToPathInfo(txState.TargetPathId) << Endl
                     << "SourcePathId:                            " << LinkToPathInfo(txState.SourcePathId) << Endl
@@ -1159,123 +1273,196 @@ private:
                     << "ReadyForNotifications:                   " << txState.ReadyForNotifications << Endl
                     << "DataTotalSize:                           " << txState.DataTotalSize << Endl
                     << "TxShardsListFinalized:                   " << txState.TxShardsListFinalized << Endl
-                    << "SchemeOpSeqNo:                           " << txState.SchemeOpSeqNo.Generation << ":" << txState.SchemeOpSeqNo.Round << Endl
+                    << "SchemeOpSeqNo:                           " << txState.SchemeOpSeqNo.Generation << ":"
+                    << txState.SchemeOpSeqNo.Round << Endl
                     << "StartTime:                               " << txState.StartTime << Endl
                     << "Shards count:                            " << txState.Shards.size() << Endl
                     << "Shards in progress count:                " << txState.ShardsInProgress.size() << Endl
-                    << "SchemeChangeNotificationReceived count:  " << txState.SchemeChangeNotificationReceived.size() << Endl
-                    << "SplitDescription:                        " << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
+                    << "SchemeChangeNotificationReceived count:  " << txState.SchemeChangeNotificationReceived.size()
+                    << Endl << "SplitDescription:                        "
+                    << (txState.SplitDescription ? txState.SplitDescription->ShortDebugString() : "") << Endl
                     << "Dependent operations count:              " << operation->DependentOperations.size() << Endl
                     << "Wait operations count:                   " << operation->WaitOperations.size() << Endl;
             }
 
-            TAG(TH4) {str << "Dependent operations for txId " << opId.GetTxId() << "</a>";}
+            TAG(TH4) {
+                str << "Dependent operations for txId " << opId.GetTxId() << "</a>";
+            }
             TABLE_SORTABLE_CLASS("DependentTxId") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "TxId";}
+                        TABLEH() {
+                            str << "TxId";
+                        }
                     }
                 }
-                for (auto& txId: operation->DependentOperations) {
+                for (auto& txId : operation->DependentOperations) {
                     TABLER() {
-                        TABLED() { str << txId; }
+                        TABLED() {
+                            str << txId;
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "Wait operations for txId " << opId.GetTxId() << "</a>";}
+            TAG(TH4) {
+                str << "Wait operations for txId " << opId.GetTxId() << "</a>";
+            }
             TABLE_SORTABLE_CLASS("WaitTxId") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "TxId";}
+                        TABLEH() {
+                            str << "TxId";
+                        }
                     }
                 }
-                for (auto& txId: operation->WaitOperations) {
+                for (auto& txId : operation->WaitOperations) {
                     TABLER() {
-                        TABLED() { str << txId; }
+                        TABLED() {
+                            str << txId;
+                        }
                     }
                 }
             }
 
-
-            TAG(TH4) {str << "Shards for opId " << opId << "</a>";}
+            TAG(TH4) {
+                str << "Shards for opId " << opId << "</a>";
+            }
             TABLE_SORTABLE_CLASS("Shards") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ShardId";}
-                        TABLEH() {str << "TabletType";}
-                        TABLEH() {str << "Operation";}
-                        TABLEH() {str << "RangeEnd";}
+                        TABLEH() {
+                            str << "ShardId";
+                        }
+                        TABLEH() {
+                            str << "TabletType";
+                        }
+                        TABLEH() {
+                            str << "Operation";
+                        }
+                        TABLEH() {
+                            str << "RangeEnd";
+                        }
                     }
                 }
                 ui32 maxItems = 100;
-                for (auto& item: txState.Shards) {
-                    if (0 == maxItems) { break; }
+                for (auto& item : txState.Shards) {
+                    if (0 == maxItems) {
+                        break;
+                    }
                     --maxItems;
                     TABLER() {
-                        TABLED() { str << item.Idx; }
-                        TABLED() { str << TTabletTypes::TypeToStr(item.TabletType); }
-                        TABLED() { str << TTxState::StateName(item.Operation); }
-                        TABLED() { str << item.RangeEnd; }
+                        TABLED() {
+                            str << item.Idx;
+                        }
+                        TABLED() {
+                            str << TTabletTypes::TypeToStr(item.TabletType);
+                        }
+                        TABLED() {
+                            str << TTxState::StateName(item.Operation);
+                        }
+                        TABLED() {
+                            str << item.RangeEnd;
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "Shards in progress for opId " << opId << "</a>";}
+            TAG(TH4) {
+                str << "Shards in progress for opId " << opId << "</a>";
+            }
             TABLE_SORTABLE_CLASS("Shards") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ShardId";}
+                        TABLEH() {
+                            str << "ShardId";
+                        }
                     }
                 }
                 ui32 maxItems = 100;
-                for (auto& shardId: txState.ShardsInProgress) {
-                    if (0 == maxItems) { break; }
+                for (auto& shardId : txState.ShardsInProgress) {
+                    if (0 == maxItems) {
+                        break;
+                    }
                     --maxItems;
                     TABLER() {
-                        TABLED() { str << shardId; }
+                        TABLED() {
+                            str << shardId;
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "SchemeChangeNotificationReceived for opId " << opId << "</a>";}
+            TAG(TH4) {
+                str << "SchemeChangeNotificationReceived for opId " << opId << "</a>";
+            }
             TABLE_SORTABLE_CLASS("SchemeChangeNotificationReceived") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ShardId";}
+                        TABLEH() {
+                            str << "ShardId";
+                        }
                     }
                 }
                 ui32 maxItems = 100;
-                for (auto& item: txState.SchemeChangeNotificationReceived) {
-                    if (0 == maxItems) { break; }
+                for (auto& item : txState.SchemeChangeNotificationReceived) {
+                    if (0 == maxItems) {
+                        break;
+                    }
                     --maxItems;
                     TABLER() {
-                        TABLED() { str << item.first; }
+                        TABLED() {
+                            str << item.first;
+                        }
                     }
                 }
             }
 
-            TAG(TH4) {str << "ShardStatuses for opId " << opId << "</a>";}
+            TAG(TH4) {
+                str << "ShardStatuses for opId " << opId << "</a>";
+            }
             TABLE_SORTABLE_CLASS("ShardStatuses") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ShardId";}
-                        TABLEH() {str << "Success";}
-                        TABLEH() {str << "Error";}
-                        TABLEH() {str << "BytesProcessed";}
-                        TABLEH() {str << "RowsProcessed";}
+                        TABLEH() {
+                            str << "ShardId";
+                        }
+                        TABLEH() {
+                            str << "Success";
+                        }
+                        TABLEH() {
+                            str << "Error";
+                        }
+                        TABLEH() {
+                            str << "BytesProcessed";
+                        }
+                        TABLEH() {
+                            str << "RowsProcessed";
+                        }
                     }
                 }
                 ui32 maxItems = 10;
-                for (auto& item: txState.ShardStatuses) {
-                    if (0 == maxItems) { break; }
+                for (auto& item : txState.ShardStatuses) {
+                    if (0 == maxItems) {
+                        break;
+                    }
                     --maxItems;
                     TABLER() {
-                        TABLED() { str << item.first; }
-                        TABLED() { str << item.second.Success; }
-                        TABLED() { str << item.second.Error; }
-                        TABLED() { str << item.second.BytesProcessed; }
-                        TABLED() { str << item.second.RowsProcessed; }
+                        TABLED() {
+                            str << item.first;
+                        }
+                        TABLED() {
+                            str << item.second.Success;
+                        }
+                        TABLED() {
+                            str << item.second.Error;
+                        }
+                        TABLED() {
+                            str << item.second.BytesProcessed;
+                        }
+                        TABLED() {
+                            str << item.second.RowsProcessed;
+                        }
                     }
                 }
             }
@@ -1361,10 +1548,12 @@ private:
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+    TTxType GetTxType() const override {
+        return TXTYPE_MONITORING;
+    }
 };
 
-bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
+bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive)
         return false;
 
@@ -1377,4 +1566,5 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     return true;
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

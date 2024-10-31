@@ -26,45 +26,59 @@ struct TEvTxCoordinator {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COORDINATOR)"
+    );
 
-    struct TEvCoordinatorStep : public TEventPB<TEvCoordinatorStep, NKikimrTx::TEvCoordinatorStep, EvCoordinatorStep> {
-        TEvCoordinatorStep()
-        {}
+    struct TEvCoordinatorStep: public TEventPB<TEvCoordinatorStep, NKikimrTx::TEvCoordinatorStep, EvCoordinatorStep> {
+        TEvCoordinatorStep() {}
 
         TEvCoordinatorStep(ui64 step, ui64 prevStep, ui64 mediatorId, ui64 coordinatorId, ui64 activeGeneration);
     };
 
-    struct TEvCoordinatorStepResult : public TEventPB<TEvCoordinatorStepResult, NKikimrTx::TEvCoordinatorStepResult, EvCoordinatorStepResult> {
-        TEvCoordinatorStepResult()
-        {}
+    struct TEvCoordinatorStepResult
+        : public TEventPB<TEvCoordinatorStepResult, NKikimrTx::TEvCoordinatorStepResult, EvCoordinatorStepResult> {
+        TEvCoordinatorStepResult() {}
 
-        TEvCoordinatorStepResult(NKikimrTx::TEvCoordinatorStepResult::EStatus status, ui64 step, ui64 completeStep, ui64 latestKnown, ui64 subjectiveTime, ui64 mediator, ui64 coordinator);
+        TEvCoordinatorStepResult(
+            NKikimrTx::TEvCoordinatorStepResult::EStatus status,
+            ui64 step,
+            ui64 completeStep,
+            ui64 latestKnown,
+            ui64 subjectiveTime,
+            ui64 mediator,
+            ui64 coordinator
+        );
     };
 
-    struct TEvCoordinatorSync : public TEventPB<TEvCoordinatorSync, NKikimrTx::TEvCoordinatorSync, EvCoordinatorSync> {
-        TEvCoordinatorSync()
-        {}
+    struct TEvCoordinatorSync: public TEventPB<TEvCoordinatorSync, NKikimrTx::TEvCoordinatorSync, EvCoordinatorSync> {
+        TEvCoordinatorSync() {}
 
         TEvCoordinatorSync(ui64 cookie, ui64 mediator, ui64 coordinator);
     };
 
-    struct TEvCoordinatorSyncResult : public TEventPB<TEvCoordinatorSyncResult, NKikimrTx::TEvCoordinatorSyncResult, EvCoordinatorSyncResult> {
-
-        TEvCoordinatorSyncResult()
-        {}
+    struct TEvCoordinatorSyncResult
+        : public TEventPB<TEvCoordinatorSyncResult, NKikimrTx::TEvCoordinatorSyncResult, EvCoordinatorSyncResult> {
+        TEvCoordinatorSyncResult() {}
 
         TEvCoordinatorSyncResult(NKikimrProto::EReplyStatus status, ui64 cookie);
 
-        TEvCoordinatorSyncResult(ui64 cookie, ui64 completeStep, ui64 latestKnown, ui64 subjectiveTime, ui64 mediator, ui64 coordinator);
-
+        TEvCoordinatorSyncResult(
+            ui64 cookie,
+            ui64 completeStep,
+            ui64 latestKnown,
+            ui64 subjectiveTime,
+            ui64 mediator,
+            ui64 coordinator
+        );
     };
 
     struct TEvCoordinatorStateRequest
-        : public TEventPB<TEvCoordinatorStateRequest,
-                          NKikimrTxCoordinator::TEvCoordinatorStateRequest,
-                          EvCoordinatorStateRequest>
-    {
+        : public TEventPB<
+              TEvCoordinatorStateRequest,
+              NKikimrTxCoordinator::TEvCoordinatorStateRequest,
+              EvCoordinatorStateRequest> {
         TEvCoordinatorStateRequest() = default;
 
         explicit TEvCoordinatorStateRequest(ui32 generation, const TString& continuationToken = {}) {
@@ -76,13 +90,12 @@ struct TEvTxCoordinator {
     };
 
     struct TEvCoordinatorStateResponse
-        : public TEventPB<TEvCoordinatorStateResponse,
-                          NKikimrTxCoordinator::TEvCoordinatorStateResponse,
-                          EvCoordinatorStateResponse>
-    {
+        : public TEventPB<
+              TEvCoordinatorStateResponse,
+              NKikimrTxCoordinator::TEvCoordinatorStateResponse,
+              EvCoordinatorStateResponse> {
         TEvCoordinatorStateResponse() = default;
     };
-
 };
 
 } // namespace NKikimr

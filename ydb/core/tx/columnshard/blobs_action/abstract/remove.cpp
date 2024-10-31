@@ -15,4 +15,4 @@ void IBlobsDeclareRemovingAction::DeclareSelfRemove(const TUnifiedBlobId& blobId
     DeclareRemove(SelfTabletId, blobId);
 }
 
-}
+} // namespace NKikimr::NOlap

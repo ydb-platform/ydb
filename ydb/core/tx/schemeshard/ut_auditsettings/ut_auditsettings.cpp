@@ -13,7 +13,11 @@ T MessageFromText(const TString& text) {
     return msg;
 }
 
-bool AuditSettingsCompare(TString* diff, const NKikimrSubDomains::TAuditSettings& a, const NKikimrSubDomains::TAuditSettings& b) {
+bool AuditSettingsCompare(
+    TString* diff,
+    const NKikimrSubDomains::TAuditSettings& a,
+    const NKikimrSubDomains::TAuditSettings& b
+) {
     google::protobuf::util::MessageDifferencer d;
     d.ReportDifferencesToString(diff);
     d.TreatAsSet(NKikimrSubDomains::TAuditSettings::GetDescriptor()->FindFieldByName("ExpectedSubjects"));
@@ -23,7 +27,6 @@ bool AuditSettingsCompare(TString* diff, const NKikimrSubDomains::TAuditSettings
 }   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
-
     const std::vector<TString> CreateTestParams = {
         R"()",
         R"(AuditSettings { EnableDmlAudit: false })",
@@ -39,22 +42,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
         ui64 txId = 100;
 
         auto test = [&](const TStringBuf& auditSettingsFragment, const NKikimrSubDomains::TAuditSettings& expected) {
-            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", TString::Join(
-                R"(
+            TestCreateExtSubDomain(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                TString::Join(
+                    R"(
                     Name: "USER_0"
                 )",
-                auditSettingsFragment
-            ));
+                    auditSettingsFragment
+                )
+            );
             env.TestWaitNotification(runtime, txId);
 
-            auto actual = DescribePath(runtime, "/MyRoot/USER_0")
-                .GetPathDescription()
-                .GetDomainDescription()
-                .GetAuditSettings()
-            ;
+            auto actual =
+                DescribePath(runtime, "/MyRoot/USER_0").GetPathDescription().GetDomainDescription().GetAuditSettings();
 
             TString diff;
-            UNIT_ASSERT_C(AuditSettingsCompare(&diff, expected, actual), "FAILED for '" << auditSettingsFragment << "': " << diff);
+            UNIT_ASSERT_C(
+                AuditSettingsCompare(&diff, expected, actual), "FAILED for '" << auditSettingsFragment << "': " << diff
+            );
 
             TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
             env.TestWaitNotification(runtime, txId);
@@ -73,22 +80,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
         ui64 txId = 100;
 
         auto test = [&](const TStringBuf& auditSettingsFragment, const NKikimrSubDomains::TAuditSettings& expected) {
-            TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TString::Join(
-                R"(
+            TestCreateSubDomain(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                TString::Join(
+                    R"(
                     Name: "USER_0"
                 )",
-                auditSettingsFragment
-            ));
+                    auditSettingsFragment
+                )
+            );
             env.TestWaitNotification(runtime, txId);
 
-            auto actual = DescribePath(runtime, "/MyRoot/USER_0")
-                .GetPathDescription()
-                .GetDomainDescription()
-                .GetAuditSettings()
-            ;
+            auto actual =
+                DescribePath(runtime, "/MyRoot/USER_0").GetPathDescription().GetDomainDescription().GetAuditSettings();
 
             TString diff;
-            UNIT_ASSERT_C(AuditSettingsCompare(&diff, expected, actual), "FAILED for '" << auditSettingsFragment << "': " << diff);
+            UNIT_ASSERT_C(
+                AuditSettingsCompare(&diff, expected, actual), "FAILED for '" << auditSettingsFragment << "': " << diff
+            );
 
             TestForceDropSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
             env.TestWaitNotification(runtime, txId);
@@ -262,36 +273,55 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
             )";
         }
 
-        auto test = [&](const TStringBuf& atCreate, const TStringBuf& atAlter, const NKikimrSubDomains::TAuditSettings& expected) {
-            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", TString::Join(
-                R"(
+        auto test = [&](const TStringBuf& atCreate,
+                        const TStringBuf& atAlter,
+                        const NKikimrSubDomains::TAuditSettings& expected) {
+            TestCreateExtSubDomain(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                TString::Join(
+                    R"(
                     Name: "USER_0"
                 )",
-                atCreate
-            ));
-            TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", TString::Join(
-                R"(
+                    atCreate
+                )
+            );
+            TestAlterExtSubDomain(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                TString::Join(
+                    R"(
                     Name: "USER_0"
                 )",
-                externalSchemeshard,
-                atAlter
-            ));
+                    externalSchemeshard,
+                    atAlter
+                )
+            );
             env.TestWaitNotification(runtime, {txId, txId - 1});
 
             const auto& describe = DescribePath(runtime, "/MyRoot/USER_0");
 
             auto actual = describe.GetPathDescription().GetDomainDescription().GetAuditSettings();
             TString diff;
-            UNIT_ASSERT_C(AuditSettingsCompare(&diff, expected, actual), "(at root) FAILED for '" << atCreate << "' + '" << atAlter << "': " << diff);
+            UNIT_ASSERT_C(
+                AuditSettingsCompare(&diff, expected, actual),
+                "(at root) FAILED for '" << atCreate << "' + '" << atAlter << "': " << diff
+            );
 
             if (ExternalSchemeShard) {
                 // check auditSettings at tenant schemeshard also
-                ui64 tenantSchemeShard = describe.GetPathDescription().GetDomainDescription().GetProcessingParams().GetSchemeShard();
+                ui64 tenantSchemeShard =
+                    describe.GetPathDescription().GetDomainDescription().GetProcessingParams().GetSchemeShard();
                 const auto& describe = DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0");
 
                 auto actual = describe.GetPathDescription().GetDomainDescription().GetAuditSettings();
                 TString diff;
-                UNIT_ASSERT_C(AuditSettingsCompare(&diff, expected, actual), "(at tenant) FAILED for '" << atCreate << "' + '" << atAlter << "': " << diff);
+                UNIT_ASSERT_C(
+                    AuditSettingsCompare(&diff, expected, actual),
+                    "(at tenant) FAILED for '" << atCreate << "' + '" << atAlter << "': " << diff
+                );
             }
 
             TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
@@ -301,7 +331,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
         // for all variations match actual returned TAuditSettings to expected
         for (const auto& [atCreate, atAlter, expected] : AlterTestParams) {
             Cerr << "TEST AlterExtSubdomain, '" << atCreate << "' + '" << atAlter << "'" << Endl;
-            test(atCreate, atAlter, MessageFromText<NKikimrSubDomains::TDomainDescription>(expected).GetAuditSettings());
+            test(
+                atCreate, atAlter, MessageFromText<NKikimrSubDomains::TDomainDescription>(expected).GetAuditSettings()
+            );
         }
     }
 
@@ -310,26 +342,41 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        auto test = [&](const TStringBuf& atCreate, const TStringBuf& atAlter, const NKikimrSubDomains::TAuditSettings& expected) {
-            TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TString::Join(
-                R"(
+        auto test = [&](const TStringBuf& atCreate,
+                        const TStringBuf& atAlter,
+                        const NKikimrSubDomains::TAuditSettings& expected) {
+            TestCreateSubDomain(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                TString::Join(
+                    R"(
                     Name: "USER_0"
                 )",
-                atCreate
-            ));
-            TestAlterSubDomain(runtime, ++txId,  "/MyRoot", TString::Join(
-                R"(
+                    atCreate
+                )
+            );
+            TestAlterSubDomain(
+                runtime,
+                ++txId,
+                "/MyRoot",
+                TString::Join(
+                    R"(
                     Name: "USER_0"
                 )",
-                atAlter
-            ));
+                    atAlter
+                )
+            );
             env.TestWaitNotification(runtime, {txId, txId - 1});
 
             const auto& describe = DescribePath(runtime, "/MyRoot/USER_0");
 
             auto actual = describe.GetPathDescription().GetDomainDescription().GetAuditSettings();
             TString diff;
-            UNIT_ASSERT_C(AuditSettingsCompare(&diff, expected, actual), "(at root) FAILED for '" << atCreate << "' + '" << atAlter << "': " << diff);
+            UNIT_ASSERT_C(
+                AuditSettingsCompare(&diff, expected, actual),
+                "(at root) FAILED for '" << atCreate << "' + '" << atAlter << "': " << diff
+            );
 
             TestForceDropSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
             env.TestWaitNotification(runtime, txId);
@@ -338,7 +385,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardAuditSettings) {
         // for all variations match actual returned TAuditSettings to expected
         for (const auto& [atCreate, atAlter, expected] : AlterTestParams) {
             Cerr << "TEST AlterSubdomain, '" << atCreate << "' + '" << atAlter << "'" << Endl;
-            test(atCreate, atAlter, MessageFromText<NKikimrSubDomains::TDomainDescription>(expected).GetAuditSettings());
+            test(
+                atCreate, atAlter, MessageFromText<NKikimrSubDomains::TDomainDescription>(expected).GetAuditSettings()
+            );
         }
     }
 }

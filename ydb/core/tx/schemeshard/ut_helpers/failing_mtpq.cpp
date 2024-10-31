@@ -3,6 +3,7 @@
 class TFailingMtpQueue: public TSimpleThreadPool {
 private:
     bool FailOnAdd_ = false;
+
 public:
     void SetFailOnAdd(bool fail = true) {
         FailOnAdd_ = fail;
@@ -16,13 +17,10 @@ public:
     }
     TFailingMtpQueue() = default;
     TFailingMtpQueue(IThreadFactory* pool)
-        : TSimpleThreadPool(pool)
-    {
-    }
+        : TSimpleThreadPool(pool) {}
 };
 
-using TFailingServerMtpQueue =
-    TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
+using TFailingServerMtpQueue = TThreadPoolBinder<TFailingMtpQueue, THttpServer::ICallBack>;
 
 namespace NSchemeShardUT_Private {
 
@@ -30,4 +28,4 @@ TSimpleSharedPtr<IThreadPool> CreateFailingServerMtpQueue(THttpServer::ICallBack
     return new TFailingServerMtpQueue(serverCB, SystemThreadFactory());
 }
 
-}
+} // namespace NSchemeShardUT_Private

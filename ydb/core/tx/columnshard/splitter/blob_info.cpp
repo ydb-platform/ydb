@@ -6,4 +6,4 @@ void TSplittedBlob::Take(const std::shared_ptr<IPortionDataChunk>& chunk) {
     Chunks.emplace_back(chunk);
     Size += chunk->GetPackedSize();
 }
-}
+} // namespace NKikimr::NOlap

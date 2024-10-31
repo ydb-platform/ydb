@@ -6,12 +6,9 @@ namespace NDataShard {
 using namespace NTabletFlatExecutor;
 
 /// Get
-TDataShard::TTxGetS3DownloadInfo::TTxGetS3DownloadInfo(
-    TDataShard* ds,
-    TEvDataShard::TEvGetS3DownloadInfo::TPtr ev)
+TDataShard::TTxGetS3DownloadInfo::TTxGetS3DownloadInfo(TDataShard* ds, TEvDataShard::TEvGetS3DownloadInfo::TPtr ev)
     : TBase(ds)
-    , Ev(std::move(ev))
-{ }
+    , Ev(std::move(ev)) {}
 
 bool TDataShard::TTxGetS3DownloadInfo::Execute(TTransactionContext& txc, const TActorContext&) {
     txc.DB.NoMoreReadsForTx();
@@ -34,10 +31,10 @@ void TDataShard::TTxGetS3DownloadInfo::Complete(const TActorContext& ctx) {
 /// Store
 TDataShard::TTxStoreS3DownloadInfo::TTxStoreS3DownloadInfo(
     TDataShard* ds,
-    TEvDataShard::TEvStoreS3DownloadInfo::TPtr ev)
+    TEvDataShard::TEvStoreS3DownloadInfo::TPtr ev
+)
     : TBase(ds)
-    , Ev(std::move(ev))
-{ }
+    , Ev(std::move(ev)) {}
 
 bool TDataShard::TTxStoreS3DownloadInfo::Execute(TTransactionContext& txc, const TActorContext&) {
     txc.DB.NoMoreReadsForTx();

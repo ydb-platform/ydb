@@ -17,10 +17,7 @@ private:
 public:
     TInsertedDataInstant(const TInsertedData& data)
         : Data(&data)
-        , WriteTime(Data->GetMeta().GetDirtyWriteTime())
-    {
-
-    }
+        , WriteTime(Data->GetMeta().GetDirtyWriteTime()) {}
 
     const TInsertedData& GetData() const {
         return *Data;

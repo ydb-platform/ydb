@@ -11,11 +11,12 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
+class TSchemeShard::TIndexBuilder::TTxCreate
+    : public TSchemeShard::TIndexBuilder::
+          TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
 public:
     explicit TTxCreate(TSelf* self, TEvIndexBuilder::TEvCreateRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_CREATE_INDEX_BUILD)
-    {}
+        : TTxSimple(self, ev, TXTYPE_CREATE_INDEX_BUILD) {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& request = Request->Get()->Record;
@@ -26,21 +27,23 @@ public:
 
         const auto id = TIndexBuildId(request.GetTxId());
         if (Self->IndexBuilds.contains(id)) {
-            return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
-                << "Index build with id '" << id << "' already exists");
+            return Reply(
+                Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder() << "Index build with id '" << id << "' already exists"
+            );
         }
 
         const TString& uid = GetUid(request.GetOperationParams());
         if (uid && Self->IndexBuildsByUid.contains(uid)) {
-            return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
-                << "Index build with uid '" << uid << "' already exists");
+            return Reply(
+                Ydb::StatusIds::ALREADY_EXISTS,
+                TStringBuilder() << "Index build with uid '" << uid << "' already exists"
+            );
         }
 
         const auto domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
         {
             const auto checks = domainPath.Check();
-            checks
-                .IsAtLocalSchemeShard()
+            checks.IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
@@ -61,15 +64,16 @@ public:
         Self->PersistSubDomainSchemeQuotas(db, subDomainPathId, *subDomainInfo);
 
         if (!quotaAcquired) {
-            return Reply(Ydb::StatusIds::OVERLOADED,
-                "Request exceeded a limit on the number of schema operations, try again later.");
+            return Reply(
+                Ydb::StatusIds::OVERLOADED,
+                "Request exceeded a limit on the number of schema operations, try again later."
+            );
         }
 
         const auto tablePath = TPath::Resolve(settings.source_path(), Self);
         {
             const auto checks = tablePath.Check();
-            checks
-                .IsAtLocalSchemeShard()
+            checks.IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
@@ -87,7 +91,7 @@ public:
         buildInfo->DomainPathId = domainPath.Base()->PathId;
         buildInfo->TablePathId = tablePath.Base()->PathId;
 
-        auto makeReply = [&] (std::string_view explain) {
+        auto makeReply = [&](std::string_view explain) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: " << explain);
         };
         if (settings.has_index() && settings.has_column_build_operation()) {
@@ -96,26 +100,21 @@ public:
             const auto& indexPath = tablePath.Child(settings.index().name());
             {
                 const auto checks = indexPath.Check();
-                checks
-                    .IsAtLocalSchemeShard();
+                checks.IsAtLocalSchemeShard();
 
                 if (indexPath.IsResolved()) {
-                    checks
-                        .IsResolved()
-                        .NotUnderDeleting()
-                        .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, settings.if_not_exist());
+                    checks.IsResolved().NotUnderDeleting().FailOnExist(
+                        TPathElement::EPathType::EPathTypeTableIndex, settings.if_not_exist()
+                    );
                 } else {
-                    checks
-                        .NotEmpty()
-                        .NotResolved();
+                    checks.NotEmpty().NotResolved();
                 }
 
                 if (settings.pg_mode()) {
                     checks.IsNameUniqGrandParentLevel();
                 }
 
-                checks
-                    .IsValidLeafName()
+                checks.IsValidLeafName()
                     .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit()
                     .ShardsLimit(1); // impl-table
@@ -128,19 +127,16 @@ public:
             auto tableInfo = Self->Tables.at(tablePath.Base()->PathId);
             auto domainInfo = tablePath.DomainInfo();
 
-            const ui64 aliveIndices = Self->GetAliveChildren(
-                tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
+            const ui64 aliveIndices = Self->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
 
-            if (aliveIndices + 1 >
-                domainInfo->GetSchemeLimits().MaxTableIndices) {
+            if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
                 return Reply(
                     Ydb::StatusIds::PRECONDITION_FAILED,
-                    TStringBuilder()
-                        << "indexes count has reached maximum value in the table, "
-                           "children limit for dir in domain: "
-                        << domainInfo->GetSchemeLimits().MaxTableIndices
-                        << ", intention to create new children: "
-                        << aliveIndices + 1);
+                    TStringBuilder() << "indexes count has reached maximum value in the table, "
+                                        "children limit for dir in domain: "
+                                     << domainInfo->GetSchemeLimits().MaxTableIndices
+                                     << ", intention to create new children: " << aliveIndices + 1
+                );
             }
 
             TString explain;
@@ -151,9 +147,7 @@ public:
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;
             buildInfo->SerializeToProto(Self, &tmpConfig);
             const auto indexDesc = tmpConfig.GetIndex();
-            if (!NTableIndex::CommonCheck(tableInfo, indexDesc,
-                                          domainInfo->GetSchemeLimits(),
-                                          explain)) {
+            if (!NTableIndex::CommonCheck(tableInfo, indexDesc, domainInfo->GetSchemeLimits(), explain)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
             }
         } else if (settings.has_column_build_operation()) {
@@ -161,13 +155,13 @@ public:
             // put some validation here for the build operation
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
-            for(int i = 0; i < settings.column_build_operation().column_size(); i++) {
+            for (int i = 0; i < settings.column_build_operation().column_size(); i++) {
                 const auto& colInfo = settings.column_build_operation().column(i);
                 bool notNull = colInfo.HasNotNull() && colInfo.GetNotNull();
                 TString familyName = colInfo.HasFamily() ? colInfo.GetFamily() : "";
-                buildInfo->BuildColumns.push_back(
-                    TIndexBuildInfo::TColumnBuildInfo(
-                        colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));
+                buildInfo->BuildColumns.push_back(TIndexBuildInfo::TColumnBuildInfo(
+                    colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName
+                ));
             }
         } else {
             return makeReply("missing index or column to build");
@@ -207,33 +201,35 @@ public:
     void DoComplete(const TActorContext&) override {}
 
 private:
-    bool Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
+    bool
+    Prepare(TIndexBuildInfo& buildInfo, const NKikimrIndexBuilder::TIndexBuildSettings& settings, TString& explain) {
         Y_ASSERT(settings.has_index());
         const auto& index = settings.index();
 
         switch (index.type_case()) {
-        case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
-            break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
-            break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            explain = "unsupported index type to build";
-            return false;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
-            NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
-            *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
-            buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            break;
-        }
-        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
-            explain = "invalid or unset index type";
-            return false;
+            case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
+                break;
+            case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
+                break;
+            case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
+                explain = "unsupported index type to build";
+                return false;
+            case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildVectorIndex;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+                NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
+                *vectorIndexKmeansTreeDescription.MutableSettings() =
+                    index.global_vector_kmeans_tree_index().vector_settings();
+                buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
+                break;
+            }
+            case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
+                explain = "invalid or unset index type";
+                return false;
         };
 
         buildInfo.IndexName = index.name();
@@ -252,4 +248,4 @@ ITransaction* TSchemeShard::CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TP
     return new TIndexBuilder::TTxCreate(this, ev);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

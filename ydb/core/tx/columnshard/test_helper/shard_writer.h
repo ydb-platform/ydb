@@ -25,9 +25,7 @@ public:
         , TabletId(tabletId)
         , PathId(pathId)
         , LockId(lockId)
-        , Sender(Runtime.AllocateEdgeActor())
-    {
-    }
+        , Sender(Runtime.AllocateEdgeActor()) {}
 
     const TActorId& GetSender() const {
         return Sender;
@@ -36,8 +34,8 @@ public:
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus StartCommit(const ui64 txId);
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Abort(const ui64 txId);
 
-    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Write(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId);
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus
+    Write(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId);
 };
 
 }   // namespace NKikimr::NTxUT

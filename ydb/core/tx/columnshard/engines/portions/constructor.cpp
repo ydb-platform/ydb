@@ -146,10 +146,17 @@ const TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord
     return Records.back();
 }
 
-void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
+void TPortionInfoConstructor::AddMetadata(
+    const ISnapshotSchema& snapshotSchema,
+    const std::shared_ptr<arrow::RecordBatch>& batch
+) {
     Y_ABORT_UNLESS(batch->num_rows() == GetRecordsCount());
-    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch), IIndexInfo::CalcDeletions(batch, false),
-        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
+    MetaConstructor.FillMetaInfo(
+        NArrow::TFirstLastSpecialKeys(batch),
+        IIndexInfo::CalcDeletions(batch, false),
+        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()),
+        snapshotSchema.GetIndexInfo()
+    );
 }
 
 }   // namespace NKikimr::NOlap

@@ -9,9 +9,7 @@ class TController::TTxCreateStreamResult: public TTxBase {
 public:
     explicit TTxCreateStreamResult(TController* self, TEvPrivate::TEvCreateStreamResult::TPtr& ev)
         : TTxBase("TxCreateStreamResult", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CREATE_STREAM_RESULT;
@@ -56,12 +54,15 @@ public:
             const auto& status = Ev->Get()->Status;
 
             target->SetStreamState(TReplication::EStreamState::Error);
-            target->SetIssue(TStringBuilder() << "Create stream error"
-                << ": " << status.GetStatus()
-                << ", " << status.GetIssues().ToOneLineString());
+            target->SetIssue(
+                TStringBuilder() << "Create stream error"
+                                 << ": " << status.GetStatus() << ", " << status.GetIssues().ToOneLineString()
+            );
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            Replication->SetState(
+                TReplication::EState::Error,
+                TStringBuilder() << "Error in target #" << target->GetId() << ": " << target->GetIssue()
+            );
 
             CLOG_E(ctx, "Create stream error"
                 << ": rid# " << rid
@@ -95,4 +96,4 @@ void TController::RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPt
     Execute(new TTxCreateStreamResult(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

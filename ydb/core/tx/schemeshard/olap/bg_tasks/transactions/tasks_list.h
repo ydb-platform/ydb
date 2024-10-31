@@ -15,6 +15,7 @@ private:
     const ui64 RequestCookie;
     const TString DatabaseName;
     NKikimrSchemeShardTxBackgroundProto::TEvListResponse ProtoResponse;
+
 public:
     explicit TTxTasksList(TSelf* self, TEvListRequest::TPtr& ev);
 
@@ -23,4 +24,4 @@ public:
     virtual void Complete(const TActorContext&) override;
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NBackground

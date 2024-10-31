@@ -12,4 +12,4 @@ Ydb::Operations::Operation TSessionInfoReport::SerializeToProto() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

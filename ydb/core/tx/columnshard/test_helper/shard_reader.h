@@ -32,6 +32,7 @@ private:
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);
+
 public:
     ui64 GetReadStat(const TString& paramName) const {
         AFL_VERIFY(IsCorrectlyFinished());
@@ -76,9 +77,7 @@ public:
         : Runtime(runtime)
         , TabletId(tabletId)
         , PathId(pathId)
-        , Snapshot(snapshot) {
-
-    }
+        , Snapshot(snapshot) {}
 
     bool IsFinished() const {
         return !!Finished;
@@ -97,7 +96,8 @@ public:
         const TActorId sender = Runtime.AllocateEdgeActor();
         ForwardToTablet(Runtime, TabletId, sender, BuildStartEvent().release());
         TAutoPtr<IEventHandle> handle;
-        auto event = Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle);
+        auto event =
+            Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle);
         if (auto* evSuccess = std::get<0>(event)) {
             AFL_VERIFY(evSuccess);
             auto& msg = evSuccess->Record;
@@ -121,7 +121,8 @@ public:
     bool Receive() {
         AFL_VERIFY(!Finished);
         TAutoPtr<IEventHandle> handle;
-        auto event = Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanData, NKqp::TEvKqpCompute::TEvScanError>(handle);
+        auto event =
+            Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanData, NKqp::TEvKqpCompute::TEvScanError>(handle);
         if (auto* evData = std::get<0>(event)) {
             auto b = evData->ArrowBatch;
             if (b) {

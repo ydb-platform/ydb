@@ -6,4 +6,4 @@ class TLimits {
 public:
     static constexpr ui64 MemoryInFlightWriting = (ui64)1 << 30;
 };
-}
+} // namespace NKikimr::NTxProxy

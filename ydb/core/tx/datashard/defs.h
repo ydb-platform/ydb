@@ -9,7 +9,7 @@ namespace NKikimr {
 class TNoOpDestroy {
 public:
     template <typename T>
-    static inline void Destroy(const T &) noexcept {}
+    static inline void Destroy(const T&) noexcept {}
 };
 
-}
+} // namespace NKikimr

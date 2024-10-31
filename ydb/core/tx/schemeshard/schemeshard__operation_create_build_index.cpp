@@ -13,7 +13,8 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+TVector<ISubOperation::TPtr>
+CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
     const auto& op = tx.GetInitiateColumnBuild();
@@ -23,7 +24,9 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
 
     // altering version of the table.
     {
-        auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
+        auto outTx = TransactionTemplate(
+            table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable
+        );
         *outTx.MutableLockGuard() = tx.GetLockGuard();
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
@@ -45,23 +48,16 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const auto index = table.Child(indexDesc.GetName());
     {
         const auto checks = index.Check();
-        checks
-            .IsAtLocalSchemeShard();
+        checks.IsAtLocalSchemeShard();
 
         if (index.IsResolved()) {
-            checks
-                .IsResolved()
-                .NotUnderDeleting()
-                .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, false);
+            checks.IsResolved().NotUnderDeleting().FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, false);
         } else {
-            checks
-                .NotEmpty()
-                .NotResolved();
+            checks.NotEmpty().NotResolved();
         }
 
         // TODO(mbkkt) less than necessary for vector index
-        checks
-            .IsValidLeafName()
+        checks.IsValidLeafName()
             .PathsLimit(2) // index and impl-table
             .DirChildrenLimit()
             .ShardsLimit(1); // impl-table
@@ -76,23 +72,29 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
     if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
-            << "indexes count has reached maximum value in the table"
-            << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
-            << ", intention to create new children: " << aliveIndices + 1)};
+        return {CreateReject(
+            opId,
+            NKikimrScheme::EStatus::StatusPreconditionFailed,
+            TStringBuilder() << "indexes count has reached maximum value in the table"
+                             << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
+                             << ", intention to create new children: " << aliveIndices + 1
+        )};
     }
 
     NTableIndex::TTableColumns implTableColumns;
     NKikimrScheme::EStatus status;
     TString errStr;
-    if (!NTableIndex::CommonCheck(tableInfo, indexDesc, domainInfo->GetSchemeLimits(), false, implTableColumns, status, errStr)) {
+    if (!NTableIndex::CommonCheck(
+            tableInfo, indexDesc, domainInfo->GetSchemeLimits(), false, implTableColumns, status, errStr
+        )) {
         return {CreateReject(opId, status, errStr)};
     }
 
     TVector<ISubOperation::TPtr> result;
 
     {
-        auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
+        auto outTx =
+            TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
         outTx.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
@@ -105,7 +107,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     {
-        auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
+        auto outTx = TransactionTemplate(
+            table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable
+        );
         *outTx.MutableLockGuard() = tx.GetLockGuard();
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
@@ -117,7 +121,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         implTableDesc.MutablePartitionConfig()->SetShadowData(true);
 
-        auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
+        auto outTx = TransactionTemplate(
+            index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable
+        );
         *outTx.MutableCreateTable() = std::move(implTableDesc);
 
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
@@ -130,12 +136,28 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
         }
-        result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
+        result.push_back(
+            createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc))
+        );
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(
+            tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc
+        )));
         // TODO Maybe better to use partition from main table
         // This tables are temporary and handled differently in apply_build_index
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::BuildPostingTableSuffix0)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc, NTableVectorKmeansTreeIndex::BuildPostingTableSuffix1)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(
+            tableInfo,
+            tableInfo->PartitionConfig(),
+            implTableColumns,
+            indexPostingTableDesc,
+            NTableVectorKmeansTreeIndex::BuildPostingTableSuffix0
+        )));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(
+            tableInfo,
+            tableInfo->PartitionConfig(),
+            implTableColumns,
+            indexPostingTableDesc,
+            NTableVectorKmeansTreeIndex::BuildPostingTableSuffix1
+        )));
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;
         // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
@@ -151,4 +173,4 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

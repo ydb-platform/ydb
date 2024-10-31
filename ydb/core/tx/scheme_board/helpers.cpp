@@ -40,7 +40,7 @@ ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record) {
 // DescribeSchemeResult.PathOwnerId should be used.
 // DescribeSchemeResult.PathDescription.Self.SchemeshardId is deprecated.
 // DescribeSchemeResult.PathOwnerId takes preference.
-TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
+TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     if (record.HasPathId() && record.HasPathOwnerId()) {
         return TPathId(record.GetPathOwnerId(), record.GetPathId());
     }
@@ -60,7 +60,7 @@ TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     return TPathId(self.GetSchemeshardId(), self.GetPathId());
 }
 
-TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
+TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     if (!record.HasPathDescription()) {
         return TDomainId();
     }
@@ -75,7 +75,7 @@ TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
     return TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId());
 }
 
-TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult &record) {
+TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     if (!record.HasPathDescription()) {
         return {};
     }
@@ -96,8 +96,7 @@ ui64 GetPathVersion(const NKikimrSchemeBoard::TEvUpdate& record) {
 
 TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvUpdate& record) {
     return TSet<ui64>(
-        record.GetPathAbandonedTenantsSchemeShards().begin(),
-        record.GetPathAbandonedTenantsSchemeShards().end()
+        record.GetPathAbandonedTenantsSchemeShards().begin(), record.GetPathAbandonedTenantsSchemeShards().end()
     );
 }
 
@@ -114,8 +113,7 @@ NSchemeBoard::TDomainId GetDomainId(const NKikimrSchemeBoard::TEvNotify& record)
 
 TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrSchemeBoard::TEvNotify& record) {
     return TSet<ui64>(
-        record.GetPathAbandonedTenantsSchemeShards().begin(),
-        record.GetPathAbandonedTenantsSchemeShards().end()
+        record.GetPathAbandonedTenantsSchemeShards().begin(), record.GetPathAbandonedTenantsSchemeShards().end()
     );
 }
 
@@ -127,12 +125,16 @@ TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev) {
     return serializer.Release(ev->CreateSerializationInfo());
 }
 
-void MultiSend(const TVector<const TActorId*>& recipients, const TActorId& sender, TAutoPtr<IEventBase> ev, ui32 flags, ui64 cookie) {
+void MultiSend(
+    const TVector<const TActorId*>& recipients,
+    const TActorId& sender,
+    TAutoPtr<IEventBase> ev,
+    ui32 flags,
+    ui64 cookie
+) {
     auto buffer = SerializeEvent(ev.Get());
     for (const TActorId* recipient : recipients) {
-        TlsActivationContext->Send(new IEventHandle(
-            ev->Type(), flags, *recipient, sender, buffer, cookie
-        ));
+        TlsActivationContext->Send(new IEventHandle(ev->Type(), flags, *recipient, sender, buffer, cookie));
     }
 }
 
@@ -145,7 +147,10 @@ TString SerializeDescribeSchemeResult(const NKikimrScheme::TEvDescribeSchemeResu
     return serialized;
 }
 
-TString SerializeDescribeSchemeResult(const TString& preSerializedPart, const NKikimrScheme::TEvDescribeSchemeResult& protoPart) {
+TString SerializeDescribeSchemeResult(
+    const TString& preSerializedPart,
+    const NKikimrScheme::TEvDescribeSchemeResult& protoPart
+) {
     return Join("", preSerializedPart, SerializeDescribeSchemeResult(protoPart));
 }
 
@@ -155,7 +160,8 @@ NKikimrScheme::TEvDescribeSchemeResult DeserializeDescribeSchemeResult(const TSt
     return result;
 }
 
-NKikimrScheme::TEvDescribeSchemeResult* DeserializeDescribeSchemeResult(const TString& serialized, google::protobuf::Arena* arena) {
+NKikimrScheme::TEvDescribeSchemeResult*
+DeserializeDescribeSchemeResult(const TString& serialized, google::protobuf::Arena* arena) {
     auto* proto = google::protobuf::Arena::CreateMessage<NKikimrScheme::TEvDescribeSchemeResult>(arena);
     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*proto, serialized));
     return proto;
@@ -176,5 +182,5 @@ TString JsonFromDescribeSchemeResult(const TString& serialized) {
     return json;
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

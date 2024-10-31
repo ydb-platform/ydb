@@ -12,14 +12,14 @@ Y_UNIT_TEST_SUITE(TRUCalculatorTests) {
     Y_UNIT_TEST(TestReadTable) {
         const ui64 costPerMB = 128; // 1 MB = 128 RU
 
-        UNIT_ASSERT_VALUES_EQUAL(0  * costPerMB, TRUCalculator::ReadTable(0));
-        UNIT_ASSERT_VALUES_EQUAL(1  * costPerMB, TRUCalculator::ReadTable(1));
+        UNIT_ASSERT_VALUES_EQUAL(0 * costPerMB, TRUCalculator::ReadTable(0));
+        UNIT_ASSERT_VALUES_EQUAL(1 * costPerMB, TRUCalculator::ReadTable(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(1  * costPerMB, TRUCalculator::ReadTable(1_MB - 1));
-        UNIT_ASSERT_VALUES_EQUAL(1  * costPerMB, TRUCalculator::ReadTable(1_MB));
-        UNIT_ASSERT_VALUES_EQUAL(2  * costPerMB, TRUCalculator::ReadTable(1_MB + 1));
+        UNIT_ASSERT_VALUES_EQUAL(1 * costPerMB, TRUCalculator::ReadTable(1_MB - 1));
+        UNIT_ASSERT_VALUES_EQUAL(1 * costPerMB, TRUCalculator::ReadTable(1_MB));
+        UNIT_ASSERT_VALUES_EQUAL(2 * costPerMB, TRUCalculator::ReadTable(1_MB + 1));
 
-        UNIT_ASSERT_VALUES_EQUAL(2  * costPerMB, TRUCalculator::ReadTable(2_MB));
+        UNIT_ASSERT_VALUES_EQUAL(2 * costPerMB, TRUCalculator::ReadTable(2_MB));
         UNIT_ASSERT_VALUES_EQUAL(10 * costPerMB, TRUCalculator::ReadTable(10_MB));
     }
 
@@ -45,4 +45,4 @@ Y_UNIT_TEST_SUITE(TRUCalculatorTests) {
     }
 }
 
-} // NKikimr
+} // namespace NKikimr

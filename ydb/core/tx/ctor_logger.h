@@ -25,8 +25,7 @@
 namespace NKikimr {
 
 template <NKikimrServices::EServiceKikimr Component>
-class TCtorLogger
-{
+class TCtorLogger {
     const NActors::TActivationContext& Ctx;
     NActors::NLog::EPriority Priority;
     std::optional<TStringBuilder> StrStream;
@@ -34,9 +33,7 @@ class TCtorLogger
 public:
     TCtorLogger(const NActors::TActivationContext& ctx, NActors::NLog::EPriority priority)
         : Ctx(ctx)
-        , Priority(priority)
-    {
-    }
+        , Priority(priority) {}
 
     operator bool() const {
         return IS_LOG_PRIORITY_ENABLED(Priority, Component);
@@ -52,4 +49,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr

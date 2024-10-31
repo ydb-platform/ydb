@@ -92,4 +92,4 @@ NKikimrScheme::TSchemeLimits TSchemeLimits::AsProto() const {
     return result;
 }
 
-}
+} // namespace NKikimr::NSchemeShard

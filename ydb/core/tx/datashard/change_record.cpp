@@ -72,9 +72,7 @@ i64 TChangeRecord::GetSeqNo() const {
 }
 
 TInstant TChangeRecord::GetApproximateCreationDateTime() const {
-    return GetGroup()
-        ? TInstant::MicroSeconds(GetGroup())
-        : TInstant::MilliSeconds(GetStep());
+    return GetGroup() ? TInstant::MicroSeconds(GetGroup()) : TInstant::MilliSeconds(GetStep());
 }
 
 bool TChangeRecord::IsBroadcast() const {
@@ -92,27 +90,16 @@ void TChangeRecord::Accept(NChangeExchange::IVisitor& visitor) const {
 
 void TChangeRecord::Out(IOutputStream& out) const {
     out << "{"
-        << " Order: " << Order
-        << " Group: " << Group
-        << " Step: " << Step
-        << " TxId: " << TxId
-        << " PathId: " << PathId
-        << " Kind: " << Kind
-        << " Source: " << Source
-        << " Body: " << Body.size() << "b"
-        << " TableId: " << TableId
-        << " SchemaVersion: " << SchemaVersion
-        << " LockId: " << LockId
-        << " LockOffset: " << LockOffset
-    << " }";
+        << " Order: " << Order << " Group: " << Group << " Step: " << Step << " TxId: " << TxId << " PathId: " << PathId
+        << " Kind: " << Kind << " Source: " << Source << " Body: " << Body.size() << "b"
+        << " TableId: " << TableId << " SchemaVersion: " << SchemaVersion << " LockId: " << LockId
+        << " LockOffset: " << LockOffset << " }";
 }
 
 class TDefaultPartitionResolver final: public NChangeExchange::TBasePartitionResolver {
 public:
     TDefaultPartitionResolver(const NKikimr::TKeyDesc& keyDesc)
-        : KeyDesc(keyDesc)
-    {
-    }
+        : KeyDesc(keyDesc) {}
 
     void Visit(const TChangeRecord& record) override {
         SetPartitionId(NChangeExchange::ResolveSchemaBoundaryPartitionId(KeyDesc, record.GetKey()));
@@ -126,4 +113,4 @@ NChangeExchange::IPartitionResolverVisitor* CreateDefaultPartitionResolver(const
     return new TDefaultPartitionResolver(keyDesc);
 }
 
-}
+} // namespace NKikimr::NDataShard

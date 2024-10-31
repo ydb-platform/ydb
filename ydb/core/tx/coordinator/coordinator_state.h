@@ -7,7 +7,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
 class TTxCoordinator;
 
-class TCoordinatorStateActor : public TActor<TCoordinatorStateActor> {
+class TCoordinatorStateActor: public TActor<TCoordinatorStateActor> {
 public:
     TCoordinatorStateActor(TTxCoordinator* owner, const TActorId& prevStateActorId);
     ~TCoordinatorStateActor();

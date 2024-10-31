@@ -20,19 +20,18 @@ private:
             return it->second;
         }
     }
-public:
 
+public:
     class TGuard {
     private:
         class TLineGuard {
         private:
             NMonitoring::TDynamicCounters::TCounterPtr Counter;
             i64 Value = 0;
+
         public:
             TLineGuard(NMonitoring::TDynamicCounters::TCounterPtr counter)
-                : Counter(counter) {
-
-            }
+                : Counter(counter) {}
 
             ~TLineGuard() {
                 Sub(Value);
@@ -61,6 +60,7 @@ public:
                 return it->second;
             }
         }
+
     public:
         TGuard(const TIncrementalHistogram& owner)
             : PlusInf(owner.PlusInf) {
@@ -81,10 +81,19 @@ public:
         return std::make_shared<TGuard>(*this);
     }
 
-    TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::set<i64>& values);
+    TIncrementalHistogram(
+        const TString& moduleId,
+        const TString& metricId,
+        const TString& category,
+        const std::set<i64>& values
+    );
 
-    TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::map<i64, TString>& values);
-
+    TIncrementalHistogram(
+        const TString& moduleId,
+        const TString& metricId,
+        const TString& category,
+        const std::map<i64, TString>& values
+    );
 };
 
 class TDeriviativeHistogram: public TCommonCountersOwner {
@@ -101,18 +110,25 @@ private:
             return it->second;
         }
     }
-public:
 
+public:
     void Collect(const i64 volume, const ui32 count = 1) const {
         GetQuantile(volume)->Add(count);
-
     }
 
-    TDeriviativeHistogram(const TString& moduleId, const TString& signalName, const TString& category, const std::set<i64>& values);
+    TDeriviativeHistogram(
+        const TString& moduleId,
+        const TString& signalName,
+        const TString& category,
+        const std::set<i64>& values
+    );
 
-    TDeriviativeHistogram(const TString& moduleId, const TString& signalName, const TString& category, const std::map<i64, TString>& values);
-
+    TDeriviativeHistogram(
+        const TString& moduleId,
+        const TString& signalName,
+        const TString& category,
+        const std::map<i64, TString>& values
+    );
 };
 
-
-}
+} // namespace NKikimr::NColumnShard

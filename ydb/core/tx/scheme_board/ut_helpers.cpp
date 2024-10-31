@@ -3,12 +3,8 @@
 namespace NKikimr {
 namespace NSchemeBoard {
 
-NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
-    const TString& path,
-    TPathId pathId,
-    ui64 version,
-    TDomainId domainId
-) {
+NKikimrScheme::TEvDescribeSchemeResult
+GenerateDescribe(const TString& path, TPathId pathId, ui64 version, TDomainId domainId) {
     NKikimrScheme::TEvDescribeSchemeResult describeSchemeResult;
 
     describeSchemeResult.SetPath(path);
@@ -25,12 +21,8 @@ NKikimrScheme::TEvDescribeSchemeResult GenerateDescribe(
     return describeSchemeResult;
 }
 
-NInternalEvents::TEvUpdate* GenerateUpdate(
-    const NKikimrScheme::TEvDescribeSchemeResult& describe,
-    ui64 owner,
-    ui64 generation,
-    bool isDeletion
-) {
+NInternalEvents::TEvUpdate*
+GenerateUpdate(const NKikimrScheme::TEvDescribeSchemeResult& describe, ui64 owner, ui64 generation, bool isDeletion) {
     const auto& pathDescription = MakeOpaquePathDescription("", describe);
     auto* update = new NInternalEvents::TEvUpdateBuilder(owner, generation, pathDescription, isDeletion);
 
@@ -44,36 +36,21 @@ NInternalEvents::TEvUpdate* GenerateUpdate(
 TVector<TCombinationsArgs> GenerateCombinationsDomainRoot(TString path, ui64 gssOwnerID, TVector<ui64> tenantsOwners) {
     TVector<TCombinationsArgs> combinations;
 
-    for (ui64 tssOwnerId: tenantsOwners) {
+    for (ui64 tssOwnerId : tenantsOwners) {
         const ui64 domainLocalPathId = FindIndex(tenantsOwners, tssOwnerId) + 2;
         const TPathId domainId = TPathId(gssOwnerID, domainLocalPathId);
         const TPathId tenantRoot = TPathId(tssOwnerId, 1);
 
         //firts
-        combinations.emplace_back(
-                    TCombinationsArgs{
-                        path, domainId, 1, domainId,
-                        gssOwnerID, 1, false});
-        combinations.push_back(
-                    TCombinationsArgs{
-                        path, tenantRoot, 1, domainId,
-                        tssOwnerId, 1, false});
+        combinations.emplace_back(TCombinationsArgs{path, domainId, 1, domainId, gssOwnerID, 1, false});
+        combinations.push_back(TCombinationsArgs{path, tenantRoot, 1, domainId, tssOwnerId, 1, false});
 
         //update it
-        combinations.push_back(
-                    TCombinationsArgs{
-                        path, domainId, 2, domainId,
-                        gssOwnerID, 1, false});
-        combinations.push_back(
-                    TCombinationsArgs{
-                        path, tenantRoot, 2, domainId,
-                        tssOwnerId, 1, false});
+        combinations.push_back(TCombinationsArgs{path, domainId, 2, domainId, gssOwnerID, 1, false});
+        combinations.push_back(TCombinationsArgs{path, tenantRoot, 2, domainId, tssOwnerId, 1, false});
 
         //delte it
-        combinations.push_back(
-                    TCombinationsArgs{
-                        path, domainId, Max<ui64>(), domainId,
-                        gssOwnerID, 1, true});
+        combinations.push_back(TCombinationsArgs{path, domainId, Max<ui64>(), domainId, gssOwnerID, 1, true});
         //    fromTss.push_back( // we do not delete tenants from cache
         //        GenerateUpdate(
         //            path, tenantRoot, Max<ui64>, tenantRoot,
@@ -83,38 +60,29 @@ TVector<TCombinationsArgs> GenerateCombinationsDomainRoot(TString path, ui64 gss
     return combinations;
 }
 
-TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(TString path,
-                                                            ui64 gssID, TVector<ui64> tssIDs,
-                                                            ui64 gssLocalPathId, ui64 tssLocalPathId)
-{
+TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(
+    TString path,
+    ui64 gssID,
+    TVector<ui64> tssIDs,
+    ui64 gssLocalPathId,
+    ui64 tssLocalPathId
+) {
     TVector<TCombinationsArgs> combinations;
 
     TPathId domainId = TPathId(gssID, 2);
     auto migratedPath = TPathId(gssID, gssLocalPathId);
 
     //migratedPath from GSS
-    combinations.emplace_back(
-        TCombinationsArgs{
-            path, migratedPath, 1, domainId,
-            tssIDs[0], 1, false});
+    combinations.emplace_back(TCombinationsArgs{path, migratedPath, 1, domainId, tssIDs[0], 1, false});
 
     //migratedPath from TSS
-    combinations.push_back(
-        TCombinationsArgs{
-            path, migratedPath, 2, domainId,
-            tssIDs[0], 1, false});
+    combinations.push_back(TCombinationsArgs{path, migratedPath, 2, domainId, tssIDs[0], 1, false});
 
     //update it on TSS
-    combinations.push_back(
-        TCombinationsArgs{
-            path, migratedPath, 3, domainId,
-            tssIDs[0], 1, false});
+    combinations.push_back(TCombinationsArgs{path, migratedPath, 3, domainId, tssIDs[0], 1, false});
 
     //remove it on TSS
-    combinations.push_back(
-        TCombinationsArgs{
-            path, migratedPath, Max<ui64>(), domainId,
-            tssIDs[0], 1, true});
+    combinations.push_back(TCombinationsArgs{path, migratedPath, Max<ui64>(), domainId, tssIDs[0], 1, true});
 
     for (size_t i = 0; i < tssIDs.size(); ++i) {
         auto tssID = tssIDs[i];
@@ -122,22 +90,13 @@ TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(TString path,
         auto recreatedPath = TPathId(tssID, tssLocalPathId);
 
         //recreate it on TSS
-        combinations.push_back(
-            TCombinationsArgs{
-                path, recreatedPath, 1, domainId,
-                tssID, 1, false});
+        combinations.push_back(TCombinationsArgs{path, recreatedPath, 1, domainId, tssID, 1, false});
 
         //update it on TSS
-        combinations.push_back(
-            TCombinationsArgs{
-                path, recreatedPath, 2, domainId,
-                tssID, 1, false});
+        combinations.push_back(TCombinationsArgs{path, recreatedPath, 2, domainId, tssID, 1, false});
 
         //remove it on TSS
-        combinations.push_back(
-            TCombinationsArgs{
-                path, recreatedPath, Max<ui64>(), domainId,
-                tssID, 1, true});
+        combinations.push_back(TCombinationsArgs{path, recreatedPath, Max<ui64>(), domainId, tssID, 1, true});
 
         domainId.LocalPathId += 331;
     }
@@ -145,5 +104,5 @@ TVector<TCombinationsArgs> GenerateCombinationsMigratedPath(TString path,
     return combinations;
 }
 
-} // NSchemeBoard
-} // NKikimr
+} // namespace NSchemeBoard
+} // namespace NKikimr

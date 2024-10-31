@@ -42,7 +42,8 @@ void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
         }
     }
     {
-        auto conclusion = control.GetLogicControlContainer()->Apply(Session->GetLogicContainer().GetObjectPtrVerified());
+        auto conclusion =
+            control.GetLogicControlContainer()->Apply(Session->GetLogicContainer().GetObjectPtrVerified());
         if (conclusion.IsFail()) {
             control.GetChannelContainer()->OnFail(conclusion.GetErrorMessage());
             return;
@@ -51,4 +52,4 @@ void TSessionActor::Handle(TEvSessionControl::TPtr& ev) {
     SaveSessionState();
 }
 
-}
+} // namespace NKikimr::NOlap::NBackground

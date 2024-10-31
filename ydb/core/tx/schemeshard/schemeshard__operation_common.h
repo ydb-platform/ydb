@@ -14,29 +14,57 @@ class TSchemeShard;
 
 TSet<ui32> AllIncomingEvents();
 
-void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
+void IncParentDirAlterVersionWithRepublishSafeWithUndo(
+    const TOperationId& opId,
+    const TPath& path,
+    TSchemeShard* ss,
+    TSideEffects& onComplete
+);
 void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext& context);
 
 NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
+THolder<TEvHive::TEvCreateTablet>
+CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
 
 void AbortUnsafeDropOperation(const TOperationId& operationId, const TTxId& txId, TOperationContext& context);
 
 namespace NTableState {
 
-bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context);
-bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context);
-bool CollectSchemaChanged(const TOperationId& operationId, const TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context);
+bool CollectProposeTransactionResults(
+    const TOperationId& operationId,
+    const TEvDataShard::TEvProposeTransactionResult::TPtr& ev,
+    TOperationContext& context
+);
+bool CollectProposeTransactionResults(
+    const TOperationId& operationId,
+    const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev,
+    TOperationContext& context
+);
+bool CollectSchemaChanged(
+    const TOperationId& operationId,
+    const TEvDataShard::TEvSchemaChanged::TPtr& ev,
+    TOperationContext& context
+);
 
-void SendSchemaChangedNotificationAck(const TOperationId& operationId, TActorId ackTo, TShardIdx shardIdx, TOperationContext& context);
+void SendSchemaChangedNotificationAck(
+    const TOperationId& operationId,
+    TActorId ackTo,
+    TShardIdx shardIdx,
+    TOperationContext& context
+);
 void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOperationContext& context);
 
 bool CheckPartitioningChangedForTableModification(TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForTableModification(TOperationId txId, TTxState& txState, TOperationContext& context);
 
-TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo& templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState& txState, TSchemeShard* ss);
+TVector<TTableShardInfo> ApplyPartitioningCopyTable(
+    const TShardInfo& templateDatashardInfo,
+    TTableInfo::TPtr srcTableInfo,
+    TTxState& txState,
+    TSchemeShard* ss
+);
 
 bool SourceTablePartitioningChangedForCopyTable(const TTxState& txState, TOperationContext& context);
 void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState& txState, TOperationContext& context);
@@ -47,9 +75,8 @@ private:
     const TTxState::ETxState NextState;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "NTableState::TProposedWaitParts"
-                << " operationId# " << OperationId;
+        return TStringBuilder() << "NTableState::TProposedWaitParts"
+                                << " operationId# " << OperationId;
     }
 
 public:
@@ -66,7 +93,7 @@ class TCreateParts: public TSubOperationState {
 
     TString DebugHint() const override {
         return TStringBuilder() << "TCreateParts"
-            << " opId# " << OperationId;
+                                << " opId# " << OperationId;
     }
 
     THolder<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context);
@@ -86,7 +113,7 @@ protected:
 
     TString DebugHint() const override {
         return TStringBuilder() << "TDeleteParts"
-            << " opId# " << OperationId << " ";
+                                << " opId# " << OperationId << " ";
     }
 
     void DeleteShards(TOperationContext& context);
@@ -110,7 +137,7 @@ protected:
 
     TString DebugHint() const override {
         return TStringBuilder() << "TDone"
-            << " opId# " << OperationId;
+                                << " opId# " << OperationId;
     }
 
 public:
@@ -121,16 +148,19 @@ public:
 
 namespace NPQState {
 
-bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context);
+bool CollectProposeTransactionResults(
+    const TOperationId& operationId,
+    const TEvPersQueue::TEvProposeTransactionResult::TPtr& ev,
+    TOperationContext& context
+);
 
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "NPQState::TConfigureParts"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "NPQState::TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
@@ -146,9 +176,8 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "NPQState::TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "NPQState::TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
@@ -160,13 +189,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override;
 
 private:
-    bool CanPersistState(const TTxState& txState,
-                         TOperationContext& context);
-    void PersistState(const TTxState& txState,
-                      TOperationContext& context) const;
+    bool CanPersistState(const TTxState& txState, TOperationContext& context);
+    void PersistState(const TTxState& txState, TOperationContext& context) const;
     bool TryPersistState(TOperationContext& context);
-    void SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet,
-                                        TOperationContext& context);
+    void SendEvProposeTransactionAttach(TShardIdx shard, TTabletId tablet, TOperationContext& context);
 
     void PrepareShards(TTxState& txState, TSet<TTabletId>& shardSet, TOperationContext& context);
 
@@ -174,7 +200,7 @@ private:
     TPathElement::TPtr Path;
 };
 
-} // NPQState
+} // namespace NPQState
 
 namespace NBSVState {
 
@@ -183,9 +209,8 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "NBSVState::TConfigureParts"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "NBSVState::TConfigureParts"
+                                << " operationId: " << OperationId;
     }
 
 public:
@@ -200,9 +225,8 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-                << "NBSVState::TPropose"
-                << " operationId#" << OperationId;
+        return TStringBuilder() << "NBSVState::TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
@@ -212,19 +236,22 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override;
 };
 
-} // NBSVState
+} // namespace NBSVState
 
 namespace NCdcStreamState {
 
 class TConfigurePartsAtTable: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "NCdcStreamState::TConfigurePartsAtTable"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "NCdcStreamState::TConfigurePartsAtTable"
+                                << " operationId: " << OperationId;
     }
 
 protected:
-    virtual void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const = 0;
+    virtual void FillNotice(
+        const TPathId& pathId,
+        NKikimrTxDataShard::TFlatSchemeTransaction& tx,
+        TOperationContext& context
+    ) const = 0;
 
 public:
     explicit TConfigurePartsAtTable(TOperationId id);
@@ -238,9 +265,8 @@ private:
 
 class TProposeAtTable: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "NCdcStreamState::TProposeAtTable"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "NCdcStreamState::TProposeAtTable"
+                                << " operationId: " << OperationId;
     }
 
 public:
@@ -261,12 +287,17 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override;
 }; // TProposeAtTableDropSnapshot
 
-} // NCdcStreamState
+} // namespace NCdcStreamState
 
 namespace NForceDrop {
 
 void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPathId>& paths, TOperationContext& context);
-void CollectShards(const THashSet<TPathId>& paths, TOperationId operationId, TTxState* txState, TOperationContext& context);
+void CollectShards(
+    const THashSet<TPathId>& paths,
+    TOperationId operationId,
+    TTxState* txState,
+    TOperationContext& context
+);
 
 } // namespace NForceDrop
 

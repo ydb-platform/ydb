@@ -23,10 +23,9 @@ namespace NKikimr::NOlap {
 
 using NKikimrTxColumnShard::TEvictMetadata;
 
-
 // A batch of blobs that are written by a single task.
 // The batch is later saved or discarded as a whole.
-class TBlobBatch : public TMoveOnly {
+class TBlobBatch: public TMoveOnly {
     friend class TBlobManager;
 
     struct TBatchInfo;
@@ -36,13 +35,19 @@ class TBlobBatch : public TMoveOnly {
 private:
     explicit TBlobBatch(std::unique_ptr<TBatchInfo> batchInfo);
 
-    void SendWriteRequest(const TActorContext& ctx, ui32 groupId, const TLogoBlobID& logoBlobId,
-        const TString& data, ui64 cookie, TInstant deadline);
+    void SendWriteRequest(
+        const TActorContext& ctx,
+        ui32 groupId,
+        const TLogoBlobID& logoBlobId,
+        const TString& data,
+        ui64 cookie,
+        TInstant deadline
+    );
 
 public:
     TBlobBatch();
     TBlobBatch(TBlobBatch&& other);
-    TBlobBatch& operator = (TBlobBatch&& other);
+    TBlobBatch& operator=(TBlobBatch&& other);
     ~TBlobBatch();
 
     bool operator!() const {
@@ -50,7 +55,12 @@ public:
     }
 
     // Write new blob as a part of this batch
-    void SendWriteBlobRequest(const TString& blobData, const TUnifiedBlobId& blobId, TInstant deadline, const TActorContext& ctx);
+    void SendWriteBlobRequest(
+        const TString& blobData,
+        const TUnifiedBlobId& blobId,
+        TInstant deadline,
+        const TActorContext& ctx
+    );
 
     TUnifiedBlobId AllocateNextBlobId(const TString& blobData);
 
@@ -75,6 +85,7 @@ class IBlobManager {
 protected:
     virtual void DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) = 0;
     virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) = 0;
+
 public:
     virtual ~IBlobManager() = default;
 
@@ -105,12 +116,11 @@ public:
 
 // A ref-counted object to keep track when GC barrier can be moved to some step.
 // This means that all needed blobs below this step have been KeepFlag-ed and Ack-ed
-struct TAllocatedGenStep : public TThrRefBase {
+struct TAllocatedGenStep: public TThrRefBase {
     const TGenStep GenStep;
 
     explicit TAllocatedGenStep(const TGenStep& genStep)
-        : GenStep(genStep)
-    {}
+        : GenStep(genStep) {}
 
     bool Finished() const {
         return RefCount() == 1;
@@ -132,7 +142,9 @@ struct TBlobManagerCounters {
 };
 
 // The implementation of BlobManager that hides all GC-related details
-class TBlobManager : public IBlobManager, public TCommonBlobsTracker {
+class TBlobManager
+    : public IBlobManager
+    , public TCommonBlobsTracker {
 private:
     using TBlobAddress = NBlobOperations::NBlobStorage::TBlobAddress;
     class TGCContext;
@@ -159,7 +171,8 @@ private:
     // The barrier in the current in-flight GC request(s)
     bool FirstGC = true;
 
-    const NColumnShard::TBlobsManagerCounters BlobsManagerCounters = NColumnShard::TBlobsManagerCounters("BlobsManager");
+    const NColumnShard::TBlobsManagerCounters BlobsManagerCounters =
+        NColumnShard::TBlobsManagerCounters("BlobsManager");
 
     // Stores counter updates since last call to GetCountersUpdate()
     // Then the counters are reset and start accumulating new delta
@@ -171,6 +184,7 @@ private:
     virtual void DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) override;
     void DrainDeleteTo(const TGenStep& dest, TGCContext& gcContext);
     [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
+
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
 
@@ -208,9 +222,12 @@ public:
     bool LoadState(IBlobManagerDb& db, const TTabletId selfTabletId);
 
     // Prepares Keep/DontKeep lists and GC barrier
-    std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(const TString& storageId,
-        const std::shared_ptr<TBlobManager>& manager, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
-        const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters) noexcept;
+    std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> BuildGCTask(
+        const TString& storageId,
+        const std::shared_ptr<TBlobManager>& manager,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobsInfo,
+        const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters
+    ) noexcept;
 
     void OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db);
     void OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep);
@@ -226,8 +243,10 @@ public:
 
     // Implementation of IBlobManager interface
     TBlobBatch StartBlobBatch() override;
-    virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
+    virtual void DeleteBlobOnExecute(const TTabletId tabletId, const TUnifiedBlobId& blobId, IBlobManagerDb& db)
+        override;
     virtual void DeleteBlobOnComplete(const TTabletId tabletId, const TUnifiedBlobId& blobId) override;
+
 private:
     std::deque<TGenStep> FindNewGCBarriers();
     void PopGCBarriers(const TGenStep gs);
@@ -240,4 +259,4 @@ private:
     }
 };
 
-}
+} // namespace NKikimr::NOlap

@@ -9,9 +9,7 @@ class TController::TTxCreateDstResult: public TTxBase {
 public:
     explicit TTxCreateDstResult(TController* self, TEvPrivate::TEvCreateDstResult::TPtr& ev)
         : TTxBase("TxCreateDstResult", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CREATE_DST_RESULT;
@@ -56,12 +54,15 @@ public:
                 << ", pathId# " << Ev->Get()->DstPathId);
         } else {
             target->SetDstState(TReplication::EDstState::Error);
-            target->SetIssue(TStringBuilder() << "Create dst error"
-                << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
-                << ", " << Ev->Get()->Error);
+            target->SetIssue(
+                TStringBuilder() << "Create dst error"
+                                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status) << ", " << Ev->Get()->Error
+            );
 
-            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
-                << ": " << target->GetIssue());
+            Replication->SetState(
+                TReplication::EState::Error,
+                TStringBuilder() << "Error in target #" << target->GetId() << ": " << target->GetIssue()
+            );
 
             CLOG_E(ctx, "Create dst error"
                 << ": rid# " << rid
@@ -99,4 +100,4 @@ void TController::RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev,
     Execute(new TTxCreateDstResult(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

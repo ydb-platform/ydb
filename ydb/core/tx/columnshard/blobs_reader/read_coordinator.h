@@ -15,6 +15,7 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 class TBlobsForRead {
 private:
     THashMap<TString, THashMap<TBlobRange, std::vector<std::shared_ptr<ITask>>>> BlobTasks;
+
 public:
     std::vector<std::shared_ptr<ITask>> ExtractTasksAll() {
         THashMap<ui64, std::shared_ptr<ITask>> tasks;
@@ -59,6 +60,7 @@ private:
     ui64 TabletId;
     NActors::TActorId Parent;
     TBlobsForRead BlobTasks;
+
 public:
     TReadCoordinatorActor(ui64 tabletId, const TActorId& parent);
 
@@ -70,7 +72,9 @@ public:
     }
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent));
+        TLogContextGuard gLogging(
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent)
+        );
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvStartReadTask, Handle);
@@ -83,4 +87,4 @@ public:
     ~TReadCoordinatorActor();
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NRead

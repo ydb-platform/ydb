@@ -31,7 +31,10 @@ public:
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
-        explicit TChecker(const TPath& path, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
+        explicit TChecker(
+            const TPath& path,
+            const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()
+        );
 
         explicit operator bool() const;
         EStatus GetStatus() const;
@@ -51,7 +54,8 @@ public:
         const TChecker& NotUnderOperation(EStatus status = EStatus::StatusMultipleModifications) const;
         const TChecker& IsUnderCreating(EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& IsUnderOperation(EStatus status = EStatus::StatusMultipleModifications) const;
-        const TChecker& IsUnderTheSameOperation(TTxId txId, EStatus status = EStatus::StatusMultipleModifications) const;
+        const TChecker& IsUnderTheSameOperation(TTxId txId, EStatus status = EStatus::StatusMultipleModifications)
+            const;
         const TChecker& NotUnderTheSameOperation(TTxId txId, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& NoOlapStore(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& HasOlapStore(EStatus status = EStatus::StatusInvalidParameter) const;
@@ -100,7 +104,10 @@ public:
         // Check there are no uncles or cousins with same name
         const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
-        const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
+        const TChecker& FailOnRestrictedCreateInTempZone(
+            bool allowCreateInTemporaryDir = false,
+            EStatus status = EStatus::StatusPreconditionFailed
+        ) const;
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
     };
@@ -112,10 +119,10 @@ public:
     TPath(const TPath& path) = default;
     TPath(TPath&& path) = default;
 
-    TPath& operator = (TPath&& another) = default;
+    TPath& operator=(TPath&& another) = default;
 
-    bool operator ==(const TPath& another) const;
-    bool operator !=(const TPath& another) const;
+    bool operator==(const TPath& another) const;
+    bool operator!=(const TPath& another) const;
 
     explicit operator bool() const;
 
@@ -163,9 +170,7 @@ public:
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
-    bool IsTableIndex(
-        const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
-        bool failOnUnresolved = true) const;
+    bool IsTableIndex(const TMaybe<NKikimrSchemeOp::EIndexType>& type = {}, bool failOnUnresolved = true) const;
     bool IsBackupTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;
@@ -191,4 +196,4 @@ private:
     TPathId GetPathIdSafe() const;
 };
 
-}
+} // namespace NKikimr::NSchemeShard

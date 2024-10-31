@@ -9,13 +9,17 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-class TPlainReadData: public IDataReader, TNonCopyable, NColumnShard::TMonitoringObjectsCounter<TPlainReadData> {
+class TPlainReadData
+    : public IDataReader
+    , TNonCopyable
+    , NColumnShard::TMonitoringObjectsCounter<TPlainReadData> {
 private:
     using TBase = IDataReader;
     std::shared_ptr<TScanHead> Scanner;
     std::shared_ptr<TSpecialReadContext> SpecialReadContext;
     std::vector<std::shared_ptr<TPartialReadResult>> PartialResults;
     ui32 ReadyResultsCount = 0;
+
 protected:
     virtual TConclusionStatus DoStart() override {
         return Scanner->Start();
@@ -30,7 +34,8 @@ protected:
         return sb;
     }
 
-    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
+    virtual std::vector<std::shared_ptr<TPartialReadResult>> DoExtractReadyResults(const int64_t maxRowsInBatch
+    ) override;
     virtual TConclusion<bool> DoReadNextInterval() override;
 
     virtual void DoAbort() override {
@@ -42,6 +47,7 @@ protected:
     virtual bool DoIsFinished() const override {
         return (Scanner->IsFinished() && PartialResults.empty());
     }
+
 public:
     virtual void OnSentDataFromInterval(const ui32 intervalIdx) const override {
         Scanner->OnSentDataFromInterval(intervalIdx);
@@ -73,4 +79,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NReader::NPlain

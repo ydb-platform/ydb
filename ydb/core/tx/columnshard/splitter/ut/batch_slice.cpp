@@ -8,8 +8,12 @@
 
 namespace NKikimr::NOlap {
 
-TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
-    std::shared_ptr<NColumnShard::TSplitterCounters> counters, const NSplitter::TSplitSettings& settings)
+TBatchSerializedSlice::TBatchSerializedSlice(
+    const std::shared_ptr<arrow::RecordBatch>& batch,
+    NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
+    std::shared_ptr<NColumnShard::TSplitterCounters> counters,
+    const NSplitter::TSplitSettings& settings
+)
     : TBase(TValidator::CheckNotNull(batch)->num_rows(), schema, counters)
     , Batch(batch) {
     Y_ABORT_UNLESS(batch);
@@ -28,11 +32,22 @@ TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::Record
         splitter.SetStats(stats);
         std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
         for (auto&& i : splitter.Split(i, Schema->GetField(c.GetEntityId()), settings.GetMaxBlobSize())) {
-            NOlap::TSimpleColumnInfo columnInfo(c.GetEntityId(), Schema->GetField(c.GetEntityId()),
-                Schema->GetColumnSaver(c.GetEntityId()).GetSerializer(), true, false, true, nullptr, std::nullopt);
-            chunks.emplace_back(std::make_shared<NOlap::NChunks::TChunkPreparation>(i.GetSerializedChunk(),
-                std::make_shared<NArrow::NAccessor::TTrivialArray>(i.GetSlicedBatch()->column(0)), TChunkAddress(c.GetEntityId(), 0),
-                columnInfo));
+            NOlap::TSimpleColumnInfo columnInfo(
+                c.GetEntityId(),
+                Schema->GetField(c.GetEntityId()),
+                Schema->GetColumnSaver(c.GetEntityId()).GetSerializer(),
+                true,
+                false,
+                true,
+                nullptr,
+                std::nullopt
+            );
+            chunks.emplace_back(std::make_shared<NOlap::NChunks::TChunkPreparation>(
+                i.GetSerializedChunk(),
+                std::make_shared<NArrow::NAccessor::TTrivialArray>(i.GetSlicedBatch()->column(0)),
+                TChunkAddress(c.GetEntityId(), 0),
+                columnInfo
+            ));
         }
         c.SetChunks(chunks);
         Size += c.GetSize();
@@ -40,9 +55,12 @@ TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::Record
     }
 }
 
-std::vector<TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const NSplitter::TSplitSettings& settings, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
-    const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schemaInfo) {
+std::vector<TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(
+    const std::shared_ptr<arrow::RecordBatch>& batch,
+    const NSplitter::TSplitSettings& settings,
+    const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
+    const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schemaInfo
+) {
     std::vector<TBatchSerializedSlice> slices;
     auto stats = schemaInfo->GetBatchSerializationStats(batch);
     ui32 recordsCount = settings.GetMinRecordsCount();
@@ -50,10 +68,12 @@ std::vector<TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(cons
         const ui32 recordsCountForMinSize =
             stats->PredictOptimalPackRecordsCount(batch->num_rows(), settings.GetMinBlobSize()).value_or(recordsCount);
         const ui32 recordsCountForMaxPortionSize =
-            stats->PredictOptimalPackRecordsCount(batch->num_rows(), settings.GetMaxPortionSize()).value_or(recordsCount);
+            stats->PredictOptimalPackRecordsCount(batch->num_rows(), settings.GetMaxPortionSize())
+                .value_or(recordsCount);
         recordsCount = std::min(recordsCountForMaxPortionSize, std::max(recordsCount, recordsCountForMinSize));
     }
-    auto linearSplitInfo = NKikimr::NArrow::NSplitter::TSimpleSplitter::GetOptimalLinearSplitting(batch->num_rows(), recordsCount);
+    auto linearSplitInfo =
+        NKikimr::NArrow::NSplitter::TSimpleSplitter::GetOptimalLinearSplitting(batch->num_rows(), recordsCount);
     for (auto it = linearSplitInfo.StartIterator(); it.IsValid(); it.Next()) {
         std::shared_ptr<arrow::RecordBatch> current = batch->Slice(it.GetPosition(), it.GetCurrentPackSize());
         TBatchSerializedSlice slice(current, schemaInfo, counters, settings);

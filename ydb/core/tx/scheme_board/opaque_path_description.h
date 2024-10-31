@@ -6,7 +6,6 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 
-
 namespace NKikimr::NSchemeBoard {
 
 struct TOpaquePathDescription {
@@ -40,7 +39,8 @@ struct TOpaquePathDescription {
 
 struct TTwoPartDescription;
 
-TOpaquePathDescription MakeOpaquePathDescription(const TString& preSerializedPart, const NKikimrScheme::TEvDescribeSchemeResult& protoPart);
+TOpaquePathDescription
+MakeOpaquePathDescription(const TString& preSerializedPart, const NKikimrScheme::TEvDescribeSchemeResult& protoPart);
 TOpaquePathDescription MakeOpaquePathDescription(const TTwoPartDescription& twoPartDescription);
 
-}  // NKikimr::NSchemeBoard
+} // namespace NKikimr::NSchemeBoard

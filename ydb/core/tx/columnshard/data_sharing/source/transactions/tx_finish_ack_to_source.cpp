@@ -12,4 +12,4 @@ void TTxFinishAckToSource::DoComplete(const TActorContext& /*ctx*/) {
     Self->SharingSessionsManager->RemoveSourceSession(Session->GetSessionId());
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

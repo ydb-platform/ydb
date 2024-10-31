@@ -11,7 +11,7 @@ enum class EModificationType {
     Delete
 };
 
-}
+} // namespace NKikimr::NEvWrite
 
 namespace NKikimr {
 
@@ -64,7 +64,9 @@ public:
         }
     }
 
-    static std::optional<NEvWrite::EModificationType> DeserializeFromProto(const NKikimrDataEvents::TEvWrite::TOperation::EOperationType value) {
+    static std::optional<NEvWrite::EModificationType> DeserializeFromProto(
+        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType value
+    ) {
         switch (value) {
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED:
                 return {};
@@ -81,7 +83,9 @@ public:
         }
     }
 
-    static NEvWrite::EModificationType DeserializeFromProto(const NKikimrTxColumnShard::TEvWrite::EModificationType value) {
+    static NEvWrite::EModificationType DeserializeFromProto(
+        const NKikimrTxColumnShard::TEvWrite::EModificationType value
+    ) {
         switch (value) {
             case NKikimrTxColumnShard::TEvWrite::OPERATION_UPSERT:
                 return NEvWrite::EModificationType::Upsert;
@@ -97,4 +101,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr

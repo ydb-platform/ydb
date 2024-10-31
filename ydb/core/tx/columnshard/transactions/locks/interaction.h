@@ -214,8 +214,7 @@ private:
 
     TIntervalPoint(const NArrow::TReplaceKey& primaryKey, const int includeState)
         : IncludeState(includeState)
-        , PrimaryKey(primaryKey) {
-    }
+        , PrimaryKey(primaryKey) {}
 
     TIntervalPoint(const std::shared_ptr<NArrow::TReplaceKey>& primaryKey, const int includeState)
         : IncludeState(includeState) {
@@ -350,7 +349,8 @@ public:
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)
+        ("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
         for (ui32 i = 0; i < writtenPrimaryKeys->num_rows();) {
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;
@@ -429,7 +429,8 @@ public:
             it->second.AddIntervalTx(txId);
         }
         itTo->second.AddFinish(txId, to.IsIncluded());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 
     void RemoveInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
@@ -456,7 +457,8 @@ public:
         if (intervals.IsEmpty()) {
             ReadIntervalsByPathId.erase(itIntervals);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_interval")("interactions_info", DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "remove_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 };
 

@@ -22,4 +22,4 @@ NKikimr::NOlap::TBlobWriteInfo& IWriteController::AddWriteTask(NOlap::TBlobWrite
     return WriteTasks.back();
 }
 
-}
+} // namespace NKikimr::NColumnShard

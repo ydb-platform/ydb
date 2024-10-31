@@ -50,10 +50,15 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     GranuleMeta->OnCompactionStarted();
 }
 
-void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+void TCompactColumnEngineChanges::DoWriteIndexOnComplete(
+    NColumnShard::TColumnShard* self,
+    TWriteIndexCompleteContext& context
+) {
     TBase::DoWriteIndexOnComplete(self, context);
     if (self) {
-        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
+        self->Counters.GetTabletCounters()->IncCounter(
+            NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds()
+        );
     }
 }
 
@@ -69,7 +74,10 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
 }
 
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(
-    std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext)
+    std::shared_ptr<TGranuleMeta> granule,
+    const std::vector<TPortionDataAccessor>& portions,
+    const TSaverContext& saverContext
+)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
     , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);

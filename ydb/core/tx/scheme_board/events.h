@@ -56,38 +56,27 @@ struct TSchemeBoardEvents {
 
         TEvNotifyUpdate() = default;
 
-        explicit TEvNotifyUpdate(
-            const TString& path,
-            TDescribeSchemeResult&& describeSchemeResult)
+        explicit TEvNotifyUpdate(const TString& path, TDescribeSchemeResult&& describeSchemeResult)
             : Path(path)
-            , DescribeSchemeResult(std::move(describeSchemeResult))
-        {
-        }
+            , DescribeSchemeResult(std::move(describeSchemeResult)) {}
 
-        explicit TEvNotifyUpdate(
-            const TPathId& pathId,
-            TDescribeSchemeResult&& describeSchemeResult)
+        explicit TEvNotifyUpdate(const TPathId& pathId, TDescribeSchemeResult&& describeSchemeResult)
             : PathId(pathId)
-            , DescribeSchemeResult(std::move(describeSchemeResult))
-        {
-        }
+            , DescribeSchemeResult(std::move(describeSchemeResult)) {}
 
         explicit TEvNotifyUpdate(
             const TString& path,
             const TPathId& pathId,
-            TDescribeSchemeResult&& describeSchemeResult)
+            TDescribeSchemeResult&& describeSchemeResult
+        )
             : Path(path)
             , PathId(pathId)
-            , DescribeSchemeResult(std::move(describeSchemeResult))
-        {
-        }
+            , DescribeSchemeResult(std::move(describeSchemeResult)) {}
 
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
-                << " Path: " << Path
-                << " PathId: " << PathId
-                << " DescribeSchemeResult: " << DescribeSchemeResult.ShortDebugString()
-            << " }";
+                                    << " Path: " << Path << " PathId: " << PathId
+                                    << " DescribeSchemeResult: " << DescribeSchemeResult.ShortDebugString() << " }";
         }
     };
 
@@ -100,32 +89,23 @@ struct TSchemeBoardEvents {
 
         explicit TEvNotifyDelete(const TString& path, bool strong)
             : Path(path)
-            , Strong(strong)
-        {
-        }
+            , Strong(strong) {}
 
         explicit TEvNotifyDelete(const TPathId& pathId, bool strong)
             : PathId(pathId)
-            , Strong(strong)
-        {
-        }
+            , Strong(strong) {}
 
         explicit TEvNotifyDelete(const TString& path, const TPathId& pathId, bool strong)
             : Path(path)
             , PathId(pathId)
-            , Strong(strong)
-        {
-        }
+            , Strong(strong) {}
 
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
-                << " Path: " << Path
-                << " PathId: " << PathId
-                << " Strong: " << Strong
-            << " }";
+                                    << " Path: " << Path << " PathId: " << PathId << " Strong: " << Strong << " }";
         }
     };
 
 }; // TSchemeBoardEvents
 
-} // NKikimr
+} // namespace NKikimr

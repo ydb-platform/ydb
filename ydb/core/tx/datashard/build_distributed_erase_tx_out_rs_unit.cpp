@@ -14,10 +14,9 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
-    static TVector<NTable::TTag> MakeTags(const TVector<NTable::TTag>& conditionTags,
-            const google::protobuf::RepeatedField<ui32>& indexColumnIds) {
-
+class TBuildDistributedEraseTxOutRSUnit: public TExecutionUnit {
+    static TVector<NTable::TTag>
+    MakeTags(const TVector<NTable::TTag>& conditionTags, const google::protobuf::RepeatedField<ui32>& indexColumnIds) {
         Y_ABORT_UNLESS(conditionTags.size() == 1, "Multi-column conditions are not supported");
         TVector<NTable::TTag> tags = conditionTags;
 
@@ -31,9 +30,11 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
         return tags;
     }
 
-    static TVector<TCell> ExtractIndexCells(const NTable::TRowState& row, const TVector<NTable::TTag>& tags,
-            const google::protobuf::RepeatedField<ui32>& indexColumnIds) {
-
+    static TVector<TCell> ExtractIndexCells(
+        const NTable::TRowState& row,
+        const TVector<NTable::TTag>& tags,
+        const google::protobuf::RepeatedField<ui32>& indexColumnIds
+    ) {
         THashMap<ui32, ui32> tagToPos;
         for (ui32 pos = 0; pos < tags.size(); ++pos) {
             const auto tag = tags.at(pos);
@@ -56,7 +57,10 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
         return result;
     }
 
-    static bool CompareCells(const TVector<std::pair<NScheme::TTypeInfo, TRawTypeValue>>& expectedValue, const TVector<TCell>& actualValue) {
+    static bool CompareCells(
+        const TVector<std::pair<NScheme::TTypeInfo, TRawTypeValue>>& expectedValue,
+        const TVector<TCell>& actualValue
+    ) {
         Y_ABORT_UNLESS(expectedValue.size() == actualValue.size());
 
         for (ui32 pos = 0; pos < expectedValue.size(); ++pos) {
@@ -72,9 +76,7 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
 
 public:
     TBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::BuildDistributedEraseTxOutRS, true, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::BuildDistributedEraseTxOutRS, true, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
         return !op->HasRuntimeConflicts();
@@ -106,7 +108,9 @@ public:
         auto now = TAppData::TimeProvider->Now();
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
         NMiniKQL::TEngineHostCounters engineHostCounters;
-        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, now);
+        TDataShardUserDb userDb(
+            DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, now
+        );
         bool pageFault = false;
 
         TDynBitMap confirmedRows;
@@ -148,19 +152,20 @@ public:
             }
 
             switch (ready) {
-            case NTable::EReady::Page:
-                pageFault = true;
-                break;
-            case NTable::EReady::Gone:
-                confirmedRows.Reset(i);
-                break;
-            case NTable::EReady::Data:
-                if (!condition->Check(row) || !CompareCells(indexTypedVals, ExtractIndexCells(row, tags, eraseTx->GetIndexColumnIds()))) {
+                case NTable::EReady::Page:
+                    pageFault = true;
+                    break;
+                case NTable::EReady::Gone:
                     confirmedRows.Reset(i);
-                } else {
-                    confirmedRows.Set(i);
-                }
-                break;
+                    break;
+                case NTable::EReady::Data:
+                    if (!condition->Check(row) ||
+                        !CompareCells(indexTypedVals, ExtractIndexCells(row, tags, eraseTx->GetIndexColumnIds()))) {
+                        confirmedRows.Reset(i);
+                    } else {
+                        confirmedRows.Set(i);
+                    }
+                    break;
             }
         }
 
@@ -192,8 +197,7 @@ public:
         return EExecutionStatus::Executed;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-    }
+    void Complete(TOperation::TPtr, const TActorContext&) override {}
 };
 
 THolder<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline) {

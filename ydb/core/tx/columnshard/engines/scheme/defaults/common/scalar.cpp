@@ -47,8 +47,7 @@ NKikimrColumnShardColumnDefaults::TColumnDefault TColumnDefaultScalarValue::Seri
         case arrow::Type::FLOAT:
             resultScalar.SetFloat(static_cast<const arrow::FloatScalar&>(scalar).value);
             break;
-        case arrow::Type::TIMESTAMP:
-        {
+        case arrow::Type::TIMESTAMP: {
             auto* ts = resultScalar.MutableTimestamp();
             ts->SetValue(static_cast<const arrow::TimestampScalar&>(scalar).value);
             ts->SetUnit(static_cast<const arrow::TimestampType&>(*scalar.type).unit());
@@ -65,7 +64,9 @@ NKikimrColumnShardColumnDefaults::TColumnDefault TColumnDefaultScalarValue::Seri
     return result;
 }
 
-NKikimr::TConclusionStatus TColumnDefaultScalarValue::DeserializeFromProto(const NKikimrColumnShardColumnDefaults::TColumnDefault& proto) {
+NKikimr::TConclusionStatus TColumnDefaultScalarValue::DeserializeFromProto(
+    const NKikimrColumnShardColumnDefaults::TColumnDefault& proto
+) {
     const auto& protoScalar = proto.GetScalar();
     Value = nullptr;
     if (protoScalar.HasBool()) {
@@ -92,14 +93,17 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::DeserializeFromProto(const
         Value = std::make_shared<arrow::FloatScalar>(protoScalar.GetFloat());
     } else if (protoScalar.HasTimestamp()) {
         arrow::TimeUnit::type unit = arrow::TimeUnit::type(protoScalar.GetTimestamp().GetUnit());
-        Value = std::make_shared<arrow::TimestampScalar>(protoScalar.GetTimestamp().GetValue(), std::make_shared<arrow::TimestampType>(unit));
+        Value = std::make_shared<arrow::TimestampScalar>(
+            protoScalar.GetTimestamp().GetValue(), std::make_shared<arrow::TimestampType>(unit)
+        );
     } else if (protoScalar.HasString()) {
         Value = std::make_shared<arrow::StringScalar>(protoScalar.GetString());
     }
     return TConclusionStatus::Success();
 }
 
-NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromString(const TString& value, const NScheme::TTypeInfo& dataType) {
+NKikimr::TConclusionStatus
+TColumnDefaultScalarValue::ParseFromString(const TString& value, const NScheme::TTypeInfo& dataType) {
     const auto dType = NArrow::GetArrowType(dataType);
     if (!dType.ok()) {
         return NKikimr::TConclusionStatus::Fail(dType.status().ToString());
@@ -113,7 +117,9 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromString(const TStr
             using ScalarType = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
             const TMaybe<CType> castResult = TryFromString<CType>(value);
             if (!castResult) {
-                result = NKikimr::TConclusionStatus::Fail("cannot parse from string: '" + value + "' to " + (*dType)->ToString());
+                result = NKikimr::TConclusionStatus::Fail(
+                    "cannot parse from string: '" + value + "' to " + (*dType)->ToString()
+                );
             } else {
                 val = std::make_shared<ScalarType>(*castResult);
             }
@@ -126,7 +132,9 @@ NKikimr::TConclusionStatus TColumnDefaultScalarValue::ParseFromString(const TStr
                 return true;
             }
         }
-        result = NKikimr::TConclusionStatus::Fail("cannot made default value from '" + value + "' for " + (*dType)->ToString());
+        result = NKikimr::TConclusionStatus::Fail(
+            "cannot made default value from '" + value + "' for " + (*dType)->ToString()
+        );
         return true;
     });
     if (result.IsSuccess()) {
@@ -142,4 +150,4 @@ TString TColumnDefaultScalarValue::DebugString() const {
     return TStringBuilder() << Value->ToString();
 }
 
-}
+} // namespace NKikimr::NOlap

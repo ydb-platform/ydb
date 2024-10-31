@@ -37,7 +37,8 @@ public:
         if (txKind == NKikimrTxColumnShard::TX_KIND_TTL) {
             auto proposeResult = ProposeTtlDeprecated(txBody);
             auto reply = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
-                Self->TabletID(), txKind, txId, proposeResult.GetStatus(), proposeResult.GetStatusMessage());
+                Self->TabletID(), txKind, txId, proposeResult.GetStatus(), proposeResult.GetStatusMessage()
+            );
             ctx.Send(Ev->Sender, reply.release());
             return true;
         }
@@ -80,8 +81,10 @@ public:
         AFL_VERIFY(!!TxOperator);
         AFL_VERIFY(!!TxInfo);
         const ui64 txId = record.GetTxId();
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("tablet_id", Self->TabletID())(
-            "request_tx", TxInfo->DebugString())("this", (ui64)this)("op_tx", TxOperator->GetTxInfo().DebugString());
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::
+            Build()("tablet_id", Self->TabletID())("request_tx", TxInfo->DebugString())("this", (ui64)this)(
+                "op_tx", TxOperator->GetTxInfo().DebugString()
+            );
 
         Self->TryRegisterMediatorTimeCast();
 
@@ -95,7 +98,9 @@ public:
             return;
         }
         NActors::TLogContextGuard lGuardTx =
-            NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString())("int_this", (ui64)internalOp.get());
+            NActors::TLogContextBuilder::Build()("int_op_tx", internalOp->GetTxInfo().DebugString())(
+                "int_this", (ui64)internalOp.get()
+            );
         if (!internalOp->CheckTxInfoForReply(*TxInfo)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "deprecated tx operator");
             return;
@@ -107,7 +112,6 @@ public:
         } else {
             Self->GetProgressTxController().FinishProposeOnComplete(*internalOp, ctx);
         }
-
     }
 
     TTxType GetTxType() const override {
@@ -125,7 +129,9 @@ private:
 
         NKikimrTxColumnShard::TTtlTxBody ttlBody;
         if (!ttlBody.ParseFromString(txBody)) {
-            return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx cannot be parsed");
+            return TTxController::TProposeResult(
+                NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx cannot be parsed"
+            );
         }
 
         // If no paths trigger schema defined TTL
@@ -133,16 +139,22 @@ private:
         if (!ttlBody.GetPathIds().empty()) {
             auto unixTime = TInstant::Seconds(ttlBody.GetUnixTimeSeconds());
             if (!unixTime) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong timestamp");
+                return TTxController::TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong timestamp"
+                );
             }
 
             TString columnName = ttlBody.GetTtlColumnName();
             if (columnName.empty()) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column ''");
+                return TTxController::TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column ''"
+                );
             }
 
             if (!Self->TablesManager.HasPrimaryIndex()) {
-                return TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL");
+                return TTxController::TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No primary index for TTL"
+                );
             }
 
             auto schemaSnapshot = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
@@ -150,7 +162,8 @@ private:
             auto index = schemaSnapshot->GetColumnIdOptional(columnName);
             if (!index) {
                 return TTxController::TProposeResult(
-                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'");
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TTL tx wrong TTL column '" + columnName + "'"
+                );
             }
             auto ttlColumn = schemaSnapshot->GetFieldByColumnIdVerified(*index);
 

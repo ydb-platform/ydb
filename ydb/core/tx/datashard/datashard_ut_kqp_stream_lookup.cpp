@@ -6,23 +6,22 @@ using namespace Tests;
 using namespace NDataShard::NKqpHelpers;
 
 namespace {
-    TString FillTableQuery() {
-        TStringBuilder sql;
-        sql << "UPSERT INTO `/Root/TestTable` (key, value) VALUES ";
-        for (size_t i = 0; i < 1000; ++i) {
-            sql << " (" << i << ", " << i << i << "),";
-        }
-        sql << " (10000, 10000);";
-        return sql;
+TString FillTableQuery() {
+    TStringBuilder sql;
+    sql << "UPSERT INTO `/Root/TestTable` (key, value) VALUES ";
+    for (size_t i = 0; i < 1000; ++i) {
+        sql << " (" << i << ", " << i << i << "),";
     }
+    sql << " (10000, 10000);";
+    return sql;
 }
+} // namespace
 
 Y_UNIT_TEST_SUITE(KqpStreamLookup) {
     Y_UNIT_TEST(ReadTableDuringSplit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto runtime = server->GetRuntime();
@@ -39,9 +38,10 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
         ExecSQL(server, sender, FillTableQuery());
 
         bool readReceived = false;
-        auto captureEvents = [&](TTestActorRuntimeBase &, TAutoPtr <IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                Cerr << "Captured TEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
+                Cerr << "Captured TEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to "
+                     << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
                 if (runtime->FindActorName(ev->Sender) == "KQP_STREAM_LOOKUP_ACTOR") {
                     if (!readReceived) {
                         auto senderSplit = runtime->AllocateEdgeActor();
@@ -77,8 +77,7 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
     Y_UNIT_TEST(ReadTableWithIndexDuringSplit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto runtime = server->GetRuntime();
@@ -89,26 +88,25 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
         // Split would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);
 
-        CreateShardedTable(server, sender, "/Root", "TestTable",
-            TShardedTableOptions()
-                .Indexes({
-                    TShardedTableOptions::TIndex{
-                        "by_value",
-                        {"value"},
-                        {},
-                        NKikimrSchemeOp::EIndexTypeGlobal
-                    }
-                })
-            );
+        CreateShardedTable(
+            server,
+            sender,
+            "/Root",
+            "TestTable",
+            TShardedTableOptions().Indexes(
+                {TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobal}}
+            )
+        );
 
         auto shards = GetTableShards(server, sender, "/Root/TestTable");
 
         ExecSQL(server, sender, FillTableQuery());
 
         bool readReceived = false;
-        auto captureEvents = [&](TTestActorRuntimeBase &, TAutoPtr <IEventHandle> &ev) {
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                Cerr << "Captured TEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
+                Cerr << "Captured TEvDataShard::TEvRead from " << runtime->FindActorName(ev->Sender) << " to "
+                     << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
                 if (runtime->FindActorName(ev->Sender) == "KQP_STREAM_LOOKUP_ACTOR") {
                     if (!readReceived) {
                         auto senderSplit = runtime->AllocateEdgeActor();

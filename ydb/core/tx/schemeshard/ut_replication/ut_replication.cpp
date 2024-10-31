@@ -5,7 +5,8 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TReplicationTests) {
     static TString DefaultScheme(const TString& name) {
-        return Sprintf(R"(
+        return Sprintf(
+            R"(
             Name: "%s"
             Config {
               SrcConnectionParams {
@@ -21,10 +22,12 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
                 }
               }
             }
-        )", name.c_str());
+        )",
+            name.c_str()
+        );
     }
 
-    void SetupLogging(TTestActorRuntimeBase& runtime) {
+    void SetupLogging(TTestActorRuntimeBase & runtime) {
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NActors::NLog::PRI_TRACE);
     }
@@ -46,10 +49,13 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TestCreateReplication(runtime, ++txId, "/MyRoot", DefaultScheme("Replication"));
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
-            NLs::PathExist,
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Replication"),
+            {
+                NLs::PathExist,
+                NLs::ReplicationState(NKikimrReplication::TReplicationState::kStandBy),
+            }
+        );
     }
 
     Y_UNIT_TEST(CreateSequential) {
@@ -67,10 +73,13 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             env.TestWaitNotification(runtime, txId);
 
             const auto desc = DescribePath(runtime, "/MyRoot/" + name);
-            TestDescribeResult(desc, {
-                NLs::PathExist,
-                NLs::Finished,
-            });
+            TestDescribeResult(
+                desc,
+                {
+                    NLs::PathExist,
+                    NLs::Finished,
+                }
+            );
 
             controllerIds.insert(ExtractControllerId(desc.GetPathDescription()));
         }
@@ -102,10 +111,13 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             env.TestWaitNotification(runtime, txIds);
             for (const auto& name : names) {
                 const auto desc = DescribePath(runtime, "/MyRoot/" + name);
-                TestDescribeResult(desc, {
-                    NLs::PathExist,
-                    NLs::Finished,
-                });
+                TestDescribeResult(
+                    desc,
+                    {
+                        NLs::PathExist,
+                        NLs::Finished,
+                    }
+                );
 
                 controllerIds.insert(ExtractControllerId(desc.GetPathDescription()));
             }
@@ -182,13 +194,19 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             TestDescribeResult(desc, {NLs::PathExist});
         }
 
-        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+        TestAlterReplication(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "Replication"
             State {
               Paused {
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )",
+            {NKikimrScheme::StatusInvalidParameter}
+        );
 
         TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
             Name: "Replication"
@@ -200,18 +218,27 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
-            NLs::PathExist,
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kDone),
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Replication"),
+            {
+                NLs::PathExist,
+                NLs::ReplicationState(NKikimrReplication::TReplicationState::kDone),
+            }
+        );
 
-        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+        TestAlterReplication(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "Replication"
             State {
               StandBy {
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )",
+            {NKikimrScheme::StatusInvalidParameter}
+        );
     }
 
     Y_UNIT_TEST(Describe) {
@@ -227,12 +254,19 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         UNIT_ASSERT(!params.GetStaticCredentials().HasPassword());
     }
 
-    void CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode, const TUserAttrs& attrs) {
+    void CreateReplicatedTable(
+        NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode, const TUserAttrs& attrs
+    ) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            Sprintf(
+                R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "value" Type: "Uint64" }
@@ -240,25 +274,36 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             ReplicationConfig {
               Mode: %s
             }
-        )", NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(mode).c_str()));
+        )",
+                NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode_Name(mode).c_str()
+            )
+        );
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::ReplicationMode(mode),
-            NLs::UserAttrsEqual(attrs),
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table"),
+            {
+                NLs::ReplicationMode(mode),
+                NLs::UserAttrsEqual(attrs),
+            }
+        );
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::ReplicationMode(mode),
-            NLs::UserAttrsEqual(attrs),
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table"),
+            {
+                NLs::ReplicationMode(mode),
+                NLs::UserAttrsEqual(attrs),
+            }
+        );
     }
 
     Y_UNIT_TEST(CreateReplicatedTable) {
         CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE, {});
-        CreateReplicatedTable(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY, {{"__async_replica", "true"}});
+        CreateReplicatedTable(
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY, {{"__async_replica", "true"}}
+        );
     }
 
     Y_UNIT_TEST(CannotAddReplicationConfig) {
@@ -274,12 +319,18 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "Table"
             ReplicationConfig {
               Mode: REPLICATION_MODE_READ_ONLY
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )",
+            {NKikimrScheme::StatusInvalidParameter}
+        );
     }
 
     Y_UNIT_TEST(CannotSetAsyncReplicaAttribute) {
@@ -287,12 +338,19 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "value" Type: "Uint64" }
             KeyColumnNames: ["key"]
-        )", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs({{"__async_replica", "true"}}));
+        )",
+            {NKikimrScheme::StatusInvalidParameter},
+            AlterUserAttrs({{"__async_replica", "true"}})
+        );
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -305,15 +363,30 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::UserAttrsHas({{"__async_replica", "true"}}),
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table"),
+            {
+                NLs::UserAttrsHas({{"__async_replica", "true"}}),
+            }
+        );
 
-        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
-            AlterUserAttrs({{"__async_replica", "true"}}, {}));
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            "Table",
+            {NKikimrScheme::StatusInvalidParameter},
+            AlterUserAttrs({{"__async_replica", "true"}}, {})
+        );
 
-        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", {NKikimrScheme::StatusInvalidParameter},
-            AlterUserAttrs({}, {"__async_replica"}));
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            "Table",
+            {NKikimrScheme::StatusInvalidParameter},
+            AlterUserAttrs({}, {"__async_replica"})
+        );
     }
 
     Y_UNIT_TEST(AlterReplicatedTable) {
@@ -332,22 +405,42 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+        TestAlterTable(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             Name: "Table"
             DropColumns { Name: "value" }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+        TestCreateCdcStream(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
               Format: ECdcStreamFormatProto
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )",
+            {NKikimrScheme::StatusSchemeError}
+        );
 
-        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "by_value", {"value"},
-            Ydb::StatusIds::BAD_REQUEST);
+        TestBuildIndex(
+            runtime,
+            ++txId,
+            TTestTxConfig::SchemeShard,
+            "/MyRoot",
+            "/MyRoot/Table",
+            "by_value",
+            {"value"},
+            Ydb::StatusIds::BAD_REQUEST
+        );
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", R"(
             Name: "Table"
@@ -367,10 +460,13 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
-            NLs::UserAttrsEqual({}),
-        });
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/Table"),
+            {
+                NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+                NLs::UserAttrsEqual({}),
+            }
+        );
     }
 
     Y_UNIT_TEST(AlterReplicatedIndexTable) {
@@ -378,7 +474,8 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(CreateIndexedTableRequest(++txId, "/MyRoot", R"(
+        AsyncSend(
+            runtime, TTestTxConfig::SchemeShard, InternalTransaction(CreateIndexedTableRequest(++txId, "/MyRoot", R"(
             TableDescription {
               Name: "Table"
               Columns { Name: "key" Type: "Uint64" }
@@ -397,26 +494,37 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
                 }
               } ]
             }
-        )")));
+        )"))
+        );
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {
-            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
-        });
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"),
+            {
+                NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+            }
+        );
 
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot/Table/Index", R"(
+        AsyncSend(
+            runtime,
+            TTestTxConfig::SchemeShard,
+            InternalTransaction(AlterTableRequest(++txId, "/MyRoot/Table/Index", R"(
             Name: "indexImplTable"
             ReplicationConfig {
               Mode: REPLICATION_MODE_NONE
             }
-        )")));
+        )"))
+        );
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"), {
-            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
-        });
+        TestDescribeResult(
+            DescribePrivatePath(runtime, "/MyRoot/Table/Index/indexImplTable"),
+            {
+                NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE),
+            }
+        );
     }
 
     Y_UNIT_TEST(CopyReplicatedTable) {

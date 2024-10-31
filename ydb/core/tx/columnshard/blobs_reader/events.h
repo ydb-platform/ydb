@@ -12,13 +12,10 @@ class ITask;
 class TEvStartReadTask: public NActors::TEventLocal<TEvStartReadTask, NColumnShard::TEvPrivate::EEv::EvStartReadTask> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<ITask>, Task);
+
 public:
-
     explicit TEvStartReadTask(std::shared_ptr<ITask> task)
-        : Task(task) {
-    }
-
+        : Task(task) {}
 };
 
-
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NRead

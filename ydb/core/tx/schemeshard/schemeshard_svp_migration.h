@@ -13,7 +13,7 @@ struct TMigrationInfo {
     bool CreateBCT = false;
 };
 
-THolder<NActors::IActor> CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,
-    std::queue<TMigrationInfo>&& migrations);
+THolder<NActors::IActor>
+CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId, std::queue<TMigrationInfo>&& migrations);
 
 } // namespace NKikimr::NSchemeShard

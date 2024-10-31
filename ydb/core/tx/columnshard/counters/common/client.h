@@ -15,6 +15,7 @@ class TValueAggregationClient: TNonCopyable {
 private:
     std::atomic<i64> Value;
     std::optional<TInstant> DeadlineActuality;
+
 public:
     TValueAggregationClient() {
         Value = 0;
@@ -47,4 +48,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

@@ -18,11 +18,14 @@ public:
         YDB_READONLY_DEF(TString, IssueGeneralText);
 
     public:
-        TYdbStatusInfo(const Ydb::StatusIds::StatusCode code, const NYql::TIssuesIds::EIssueCode issueCode, const TString& issueMessage)
+        TYdbStatusInfo(
+            const Ydb::StatusIds::StatusCode code,
+            const NYql::TIssuesIds::EIssueCode issueCode,
+            const TString& issueMessage
+        )
             : YdbStatusCode(code)
             , IssueCode(issueCode)
-            , IssueGeneralText(issueMessage) {
-        }
+            , IssueGeneralText(issueMessage) {}
     };
 
     static TConclusion<TYdbStatusInfo> GetStatusInfo(const NKikimrDataEvents::TEvWriteResult::EStatus value);

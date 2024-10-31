@@ -21,7 +21,8 @@ struct TBackup {
         return tx.GetBackup().GetTableName();
     }
 
-    static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context, TVirtualTimestamp snapshotTime) {
+    static void
+    ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context, TVirtualTimestamp snapshotTime) {
         const auto& pathId = txState.TargetPathId;
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
@@ -114,5 +115,5 @@ ISubOperation::TPtr CreateBackup(TOperationId id, TTxState::ETxState state) {
     );
 }
 
-}
-}
+} // namespace NSchemeShard
+} // namespace NKikimr

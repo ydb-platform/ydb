@@ -13,7 +13,8 @@ namespace NKikimr::NSchemeShard {
 
 // Concept for TEventBase::TPtr
 template <class TEvPtr>
-concept EventBasePtr = requires { typename TEvPtr::TValueType; } && std::is_base_of_v<IEventHandle, typename TEvPtr::TValueType>;
+concept EventBasePtr =
+    requires { typename TEvPtr::TValueType; } && std::is_base_of_v<IEventHandle, typename TEvPtr::TValueType>;
 
 // Deduce TEventType from its own TEventType::TPtr.
 template <EventBasePtr TEvPtr>
@@ -26,13 +27,13 @@ struct EventTypeFromTEvPtr {
 
 struct TSchemeLimits {
     // Used for backward compatability in case of old databases without explicit limits
-    static constexpr ui64 MaxPathsCompat = 200*1000;
-    static constexpr ui64 MaxObjectsInBackup = 10*1000;
+    static constexpr ui64 MaxPathsCompat = 200 * 1000;
+    static constexpr ui64 MaxObjectsInBackup = 10 * 1000;
 
     // path
     ui64 MaxDepth = 32;
     ui64 MaxPaths = MaxObjectsInBackup;
-    ui64 MaxChildrenInDir = 100*1000;
+    ui64 MaxChildrenInDir = 100 * 1000;
     ui64 MaxAclBytesSize = 10 << 10;
     ui64 MaxPathElementLength = 255;
     TString ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
@@ -44,8 +45,8 @@ struct TSchemeLimits {
     ui64 MaxTableKeyColumns = 20;
     ui64 MaxTableIndices = 20;
     ui64 MaxTableCdcStreams = 5;
-    ui64 MaxShards = 200*1000; // In each database
-    ui64 MaxShardsInPath = 35*1000; // In each path in database
+    ui64 MaxShards = 200 * 1000; // In each database
+    ui64 MaxShardsInPath = 35 * 1000; // In each path in database
     ui64 MaxConsistentCopyTargets = MaxObjectsInBackup;
 
     // pq group
@@ -61,20 +62,17 @@ struct TSchemeLimits {
 
 using ETabletType = TTabletTypes;
 
-struct TVirtualTimestamp
-    : public TRowVersion
-{
+struct TVirtualTimestamp: public TRowVersion {
     using TRowVersion::TRowVersion;
 
     TVirtualTimestamp(TStepId step, TTxId txId)
-        : TRowVersion(step.GetValue(), txId.GetValue())
-    {}
+        : TRowVersion(step.GetValue(), txId.GetValue()) {}
 
     bool Empty() const {
         return !bool(Step);
     }
 
-    explicit operator bool () const {
+    explicit operator bool() const {
         return !Empty();
     }
 
@@ -105,8 +103,7 @@ struct TVirtualTimestamp
             return "unset";
         }
 
-        return TStringBuilder()
-                << "[" << Step << ":" <<  TxId << "]";
+        return TStringBuilder() << "[" << Step << ":" << TxId << "]";
     }
 };
 
@@ -140,7 +137,6 @@ enum class EAttachChildResult : ui32 {
 using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
 
 struct TTempDirsState {
-
     struct TRetryState {
         bool IsScheduled = false;
         NMonotonic::TMonotonic LastRetryAt = TMonotonic::Zero();
@@ -163,4 +159,4 @@ struct TTempDirInfo {
     TActorId TempDirOwnerActorId;
 };
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -30,5 +30,5 @@ public:
     virtual void Shutdown() = 0;
 };
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

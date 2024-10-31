@@ -17,13 +17,9 @@ using NClient::TValue;
 
 namespace {
 
-TString GetTablePath(TTestActorRuntime &runtime,
-                     TActorId sender,
-                     ui64 tableId,
-                     ui64 shard)
-{
+TString GetTablePath(TTestActorRuntime& runtime, TActorId sender, ui64 tableId, ui64 shard) {
     auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
-    const char *miniKQL =   R"___((
+    const char* miniKQL = R"___((
         (let row '('('Tid (Uint64 '%lu))))
         (let select '('Schema))
         (let pgmReturn (AsList
@@ -37,7 +33,7 @@ TString GetTablePath(TTestActorRuntime &runtime,
 
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(handle);
-    auto &res = reply->Record.GetExecutionEngineEvaluatedResponse();
+    auto& res = reply->Record.GetExecutionEngineEvaluatedResponse();
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), 0);
     TValue value = TValue::Create(res.GetValue(), res.GetType());
     TString schema = value["myRes"]["Schema"];
@@ -48,16 +44,17 @@ TString GetTablePath(TTestActorRuntime &runtime,
     return desc.GetPath();
 }
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
-
     Y_UNIT_TEST(TestGetShardStateAfterInitialization) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::DataShard), &CreateDataShard);
+        CreateTestBootstrapper(
+            runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::DataShard), &CreateDataShard
+        );
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -72,15 +69,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT_EQUAL(event->GetState(), NDataShard::TShardState::WaitScheme);
     }
 
-    void TestTablePath(bool oldCreate, bool restart)
-    {
+    void TestTablePath(bool oldCreate, bool restart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
-        auto &runtime = *server->GetRuntime();
+        auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
@@ -92,9 +87,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         bool sawResolve = false;
         bool dropResolve = restart;
         // Remove table path from propose.
-        auto captureTableId = [&](TAutoPtr<IEventHandle> &event) -> auto {
+        auto captureTableId = [&](TAutoPtr<IEventHandle>& event) -> auto {
             if (event->GetTypeRewrite() == TEvDataShard::EvProposeTransaction) {
-                auto &rec = event->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                auto& rec = event->Get<TEvDataShard::TEvProposeTransaction>()->Record;
                 if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
                     TString body = rec.GetTxBody();
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
@@ -102,7 +97,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                     if (tx.HasCreateTable()) {
                         tableId = tx.GetCreateTable().GetId_Deprecated();
                         if (tx.GetCreateTable().HasPathId()) {
-                            UNIT_ASSERT_EQUAL(ChangeStateStorage(Tests::SchemeRoot, serverSettings.Domain), tx.GetCreateTable().GetPathId().GetOwnerId());
+                            UNIT_ASSERT_EQUAL(
+                                ChangeStateStorage(Tests::SchemeRoot, serverSettings.Domain),
+                                tx.GetCreateTable().GetPathId().GetOwnerId()
+                            );
                             tableId = tx.GetCreateTable().GetPathId().GetLocalId();
                         }
                         if (oldCreate) {
@@ -113,7 +111,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                     }
                 }
             } else if (event->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
-                auto &rec = event->Get<TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
+                auto& rec = event->Get<TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
                 const bool hasPartitioning = rec.GetPathDescription().TablePartitionsSize();
                 // there are few in-flight TEvDescribeSchemeResult msgs, we need one with no partitioning
                 if (!hasPartitioning && rec.GetPathDescription().GetSelf().GetPathId() == tableId) {
@@ -157,4 +155,4 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
     }
 }
 
-}
+} // namespace NKikimr

@@ -6,7 +6,9 @@
 namespace NKikimr::NEvWrite {
 
 NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::DoSplitData(
-    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+    const IEvWriteDataAccessor& data
+) {
     if (schemeEntry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an column table");
     }
@@ -38,12 +40,15 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
         batch = NArrow::DeserializeBatch(data.GetSerializedData(), arrowScheme);
         if (!batch) {
             return TYdbConclusionStatus::Fail(
-                Ydb::StatusIds::SCHEME_ERROR, TString("cannot deserialize batch with schema ") + arrowScheme->ToString());
+                Ydb::StatusIds::SCHEME_ERROR, TString("cannot deserialize batch with schema ") + arrowScheme->ToString()
+            );
         }
 
         auto res = batch->ValidateFull();
         if (!res.ok()) {
-            return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, TString("deserialize batch is not valid: ") + res.ToString());
+            return TYdbConclusionStatus::Fail(
+                Ydb::StatusIds::SCHEME_ERROR, TString("deserialize batch is not valid: ") + res.ToString()
+            );
         }
     }
 
@@ -58,12 +63,17 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
 }
 
 NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::SplitImpl(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding) {
+    const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::shared_ptr<NSharding::IShardingBase>& sharding
+) {
     Y_ABORT_UNLESS(batch);
 
-    auto split = sharding->SplitByShards(batch, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()
-                                                    ? NOlap::NSplitter::TSplitSettings().GetExpectedPortionSize()
-                                                    : NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+    auto split = sharding->SplitByShards(
+        batch,
+        AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()
+            ? NOlap::NSplitter::TSplitSettings().GetExpectedPortionSize()
+            : NColumnShard::TLimits::GetMaxBlobSize() * 0.875
+    );
     if (split.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, split.GetErrorMessage());
     }
@@ -72,8 +82,15 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     const TString schemaString = NArrow::SerializeSchema(*batch->schema());
     for (auto&& [shardId, chunks] : split.GetResult()) {
         for (auto&& c : chunks) {
-            result.AddShardInfo(shardId, std::make_shared<TShardInfo>(schemaString, c.GetData(), c.GetRowsCount(),
-                                             sharding->GetShardInfoVerified(shardId).GetShardingVersion()));
+            result.AddShardInfo(
+                shardId,
+                std::make_shared<TShardInfo>(
+                    schemaString,
+                    c.GetData(),
+                    c.GetRowsCount(),
+                    sharding->GetShardInfoVerified(shardId).GetShardingVersion()
+                )
+            );
         }
     }
 
@@ -82,11 +99,14 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     return TYdbConclusionStatus::Success();
 }
 
-std::shared_ptr<arrow::Schema> TColumnShardShardsSplitter::ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+std::shared_ptr<arrow::Schema> TColumnShardShardsSplitter::ExtractArrowSchema(
+    const NKikimrSchemeOp::TColumnTableSchema& schema
+) {
     TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
     for (auto& col : schema.GetColumns()) {
         Y_ABORT_UNLESS(col.HasTypeId());
-        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
+        auto typeInfoMod =
+            NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
         columns.emplace_back(col.GetName(), typeInfoMod.TypeInfo);
     }
     return NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(columns));

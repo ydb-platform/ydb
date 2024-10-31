@@ -14,6 +14,7 @@ class TFilteredSnapshotSchema: public ISnapshotSchema {
 
 protected:
     virtual TString DoDebugString() const override;
+
 public:
     TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds);
     TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds);
@@ -34,4 +35,4 @@ public:
     ui64 GetVersion() const override;
 };
 
-}
+} // namespace NKikimr::NOlap

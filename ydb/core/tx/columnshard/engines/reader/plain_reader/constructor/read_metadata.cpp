@@ -10,11 +10,16 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
-    return std::make_unique<TColumnShardScanIterator>(readContext, readContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>());
+    return std::make_unique<TColumnShardScanIterator>(
+        readContext, readContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()
+    );
 }
 
 TConclusionStatus TReadMetadata::Init(
-    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
+    const NColumnShard::TColumnShard* owner,
+    const TReadDescription& readDescription,
+    const TDataStorageAccessor& dataAccessor
+) {
     SetPKRangesFilter(readDescription.PKRangesFilter);
     InitShardingInfo(readDescription.PathId);
     TxId = readDescription.TxId;
@@ -29,8 +34,9 @@ TConclusionStatus TReadMetadata::Init(
     /// It's expected that we have only one version on 'foo' in blob and could split them by schema {planStep:txId}.
     /// So '1:foo' would be omitted in blob records for the column in new snapshots. And '2:foo' - in old ones.
     /// It's not possible for blobs with several columns. There should be a special logic for them.
-    CommittedBlobs =
-        dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), LockId, GetRequestSnapshot());
+    CommittedBlobs = dataAccessor.GetCommitedBlobs(
+        readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), LockId, GetRequestSnapshot()
+    );
 
     if (LockId) {
         for (auto&& i : CommittedBlobs) {
@@ -50,7 +56,9 @@ TConclusionStatus TReadMetadata::Init(
             if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
                 if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
                 } else {
-                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified());
+                    auto op =
+                        owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified()
+                        );
                     AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLockId());
                 }
             }
@@ -88,7 +96,9 @@ std::shared_ptr<IDataReader> TReadMetadata::BuildReader(const std::shared_ptr<TR
 }
 
 NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
-    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
+    return NArrow::NMerger::TSortableBatchPosition(
+        key.ToBatch(GetReplaceKey()), 0, GetReplaceKey()->field_names(), {}, IsDescSorted()
+    );
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
@@ -113,11 +123,13 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
         return;
     }
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(
-        PathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
+        PathId, GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds()
+    );
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
 }
 
-void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const {
+void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData)
+    const {
     if (LockSharingInfo) {
         NKikimrDataEvents::TLock lockInfo;
         lockInfo.SetLockId(LockSharingInfo->GetLockId());
@@ -141,4 +153,4 @@ bool TReadMetadata::IsMyUncommitted(const TInsertWriteId writeId) const {
     return it->second.GetLockId() == LockSharingInfo->GetLockId();
 }
 
-}   // namespace NKikimr::NOlap::NReader::NPlain
+} // namespace NKikimr::NOlap::NReader::NPlain

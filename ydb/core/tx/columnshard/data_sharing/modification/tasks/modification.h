@@ -29,12 +29,11 @@ class TBlobOwnerRemap {
 private:
     YDB_READONLY_DEF(TTabletId, From);
     YDB_READONLY_DEF(TTabletId, To);
+
 public:
     TBlobOwnerRemap(const TTabletId from, const TTabletId to)
         : From(from)
-        , To(to) {
-
-    }
+        , To(to) {}
 
     bool operator==(const TBlobOwnerRemap& item) const {
         return From == item.From && To == item.To;
@@ -49,12 +48,11 @@ private:
     TTabletByBlob InitOwner;
     TTabletsByBlob AddSharingLinks;
     TTabletsByBlob RemoveSharingLinks;
+
 public:
     TStorageTabletTask(const TString& storageId, const TTabletId tabletId)
         : TabletId(tabletId)
-        , StorageId(storageId) {
-
-    }
+        , StorageId(storageId) {}
 
     NKikimrColumnShardDataSharingProto::TStorageTabletTask SerializeToProto() const {
         NKikimrColumnShardDataSharingProto::TStorageTabletTask result;
@@ -111,7 +109,10 @@ public:
         return TConclusionStatus::Success();
     }
 
-    void ApplyForDB(NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TStorageSharedBlobsManager>& manager) const;
+    void ApplyForDB(
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const std::shared_ptr<TStorageSharedBlobsManager>& manager
+    ) const;
 
     void ApplyForRuntime(const std::shared_ptr<TStorageSharedBlobsManager>& manager) const;
 
@@ -161,11 +162,10 @@ class TTaskForTablet {
 private:
     YDB_READONLY(TTabletId, TabletId, (TTabletId)0);
     THashMap<TString, TStorageTabletTask> TasksByStorage;
+
 public:
     TTaskForTablet(const TTabletId tabletId)
-        : TabletId(tabletId) 
-    {
-    }
+        : TabletId(tabletId) {}
 
     void Merge(const TTaskForTablet& from) {
         for (auto&& i : from.TasksByStorage) {
@@ -178,7 +178,8 @@ public:
         }
     }
 
-    void ApplyForDB(NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TSharedBlobsManager>& manager) const;
+    void ApplyForDB(NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TSharedBlobsManager>& manager)
+        const;
 
     void ApplyForRuntime(const std::shared_ptr<TSharedBlobsManager>& manager) const;
 
@@ -224,9 +225,13 @@ public:
         return TConclusionStatus::Success();
     }
 
-    TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> BuildModificationTransaction(NColumnShard::TColumnShard* self, const TTabletId initiator,
-        const TString& sessionId, const ui64 packIdx, const std::shared_ptr<TTaskForTablet>& selfPtr);
-
+    TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> BuildModificationTransaction(
+        NColumnShard::TColumnShard* self,
+        const TTabletId initiator,
+        const TString& sessionId,
+        const ui64 packIdx,
+        const std::shared_ptr<TTaskForTablet>& selfPtr
+    );
 };
 
 class TBlobSharing {
@@ -235,13 +240,11 @@ private:
     TUnifiedBlobId BlobId;
     std::optional<TTabletId> Borrowed;
     THashSet<TTabletId> Shared;
+
 public:
     TBlobSharing(const TString& storageId, const TUnifiedBlobId& blobId)
         : StorageId(storageId)
-        , BlobId(blobId)
-    {
-
-    }
+        , BlobId(blobId) {}
     void AddShared(const TTabletId tabletId) {
         AFL_VERIFY(Shared.emplace(tabletId).second);
     }
@@ -250,7 +253,11 @@ public:
         Borrowed = tabletId;
     }
 
-    THashMap<TTabletId, TStorageTabletTask> BuildTabletTasksOnCopy(const TTransferContext& context, const TTabletId selfTabletId, const TString& storageId) const {
+    THashMap<TTabletId, TStorageTabletTask> BuildTabletTasksOnCopy(
+        const TTransferContext& context,
+        const TTabletId selfTabletId,
+        const TString& storageId
+    ) const {
         auto toTabletId = context.GetDestinationTabletId();
         THashMap<TTabletId, TStorageTabletTask> result;
         const TTabletId ownerTabletId = Borrowed.value_or(selfTabletId);
@@ -273,7 +280,11 @@ public:
         return result;
     }
 
-    THashMap<TTabletId, TStorageTabletTask> BuildTabletTasksOnMove(const TTransferContext& context, const TTabletId selfTabletId, const TString& storageId) const {
+    THashMap<TTabletId, TStorageTabletTask> BuildTabletTasksOnMove(
+        const TTransferContext& context,
+        const TTabletId selfTabletId,
+        const TString& storageId
+    ) const {
         THashMap<TTabletId, TStorageTabletTask> result;
         auto& movedTabletId = context.GetSourceTabletIds();
         auto toTabletId = context.GetDestinationTabletId();
@@ -364,4 +375,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

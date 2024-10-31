@@ -5,25 +5,21 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TProtectSchemeEchoesUnit : public TExecutionUnit {
+class TProtectSchemeEchoesUnit: public TExecutionUnit {
 public:
-    TProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline)
-        : TExecutionUnit(EExecutionUnitKind::ProtectSchemeEchoes, false, dataShard, pipeline)
-    { }
+    TProtectSchemeEchoesUnit(TDataShard& dataShard, TPipeline& pipeline)
+        : TExecutionUnit(EExecutionUnitKind::ProtectSchemeEchoes, false, dataShard, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;
     }
 
-    EExecutionStatus Execute(TOperation::TPtr op,
-                             TTransactionContext &txc,
-                             const TActorContext &) override
-    {
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) override {
         Y_ABORT_UNLESS(op->IsSchemeTx());
 
-        TActiveTransaction *activeTx = dynamic_cast<TActiveTransaction*>(op.Get());
+        TActiveTransaction* activeTx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_VERIFY_S(activeTx, "cannot cast operation of kind " << op->GetKind());
-        const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
+        const NKikimrTxDataShard::TFlatSchemeTransaction& tx = activeTx->GetSchemeTx();
 
         TSchemeOpSeqNo seqNo(tx.GetSeqNo());
         TSchemeOpSeqNo lastSeqNo = DataShard.GetLastSchemeOpSeqNo();
@@ -46,9 +42,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline) {
+THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TProtectSchemeEchoesUnit(dataShard, pipeline));
 }
 
-} // namespace NlatterDataShard
+} // namespace NDataShard
 } // namespace NKikimr

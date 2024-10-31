@@ -19,10 +19,7 @@ public:
     TPortionInfoStat(const TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo)
         , MinRawBytes(TPortionDataAccessor(PortionInfo).GetMinMemoryForReadColumns({}))
-        , BlobBytes(PortionInfo->GetTotalBlobBytes())
-    {
-
-    }
+        , BlobBytes(PortionInfo->GetTotalBlobBytes()) {}
 
     const TPortionInfo& GetPortionInfoVerified() const {
         AFL_VERIFY(PortionInfo);
@@ -137,10 +134,7 @@ public:
     }
 
     TIntervalMemoryMonitoring(const NColumnShard::TIntervalMemoryCounters& counters)
-        : Counters(counters)
-    {
-    
-    }
+        : Counters(counters) {}
 
     ui64 GetMax() const {
         if (CountMemoryUsages.size()) {
@@ -186,10 +180,7 @@ public:
     TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& counters)
         : RawMemoryUsage(counters.RawBytes)
         , BlobMemoryUsage(counters.BlobBytes)
-        , Owner(owner)
-    {
-
-    }
+        , Owner(owner) {}
 
     ui64 GetMinRawMemoryRead() const {
         return RawMemoryUsage.GetMax();
@@ -210,6 +201,7 @@ public:
     class TPortionIntervals {
     private:
         YDB_READONLY_DEF(std::vector<NArrow::TReplaceKeyInterval>, ExcludedIntervals);
+
     public:
         void Add(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) {
             if (ExcludedIntervals.empty() || ExcludedIntervals.back().GetFinish() != from) {
@@ -223,5 +215,4 @@ public:
     TPortionIntervals GetIntervalFeatures(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const;
 };
 
-
-}
+} // namespace NKikimr::NOlap::NGranule::NPortionsIndex

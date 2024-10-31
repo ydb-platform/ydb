@@ -7,6 +7,7 @@ namespace NKikimr::NSharding {
 class THashGranuleSharding: public IGranuleShardingLogic {
 private:
     std::optional<NArrow::NHash::TXX64> HashCalcer;
+
 protected:
     std::vector<ui64> CalcHashes(const std::shared_ptr<arrow::Table>& table) const {
         AFL_VERIFY(!!HashCalcer);
@@ -38,14 +39,12 @@ protected:
         HashCalcer.emplace(columnNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 0);
         return TConclusionStatus::Success();
     }
+
 public:
     THashGranuleSharding() = default;
 
     THashGranuleSharding(const std::vector<TString>& columnNames)
-        : HashCalcer(NArrow::NHash::TXX64(columnNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 0))
-    {
-
-    }
+        : HashCalcer(NArrow::NHash::TXX64(columnNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 0)) {}
 };
 
 class THashShardingImpl: public IShardingBase {
@@ -54,6 +53,7 @@ private:
     ui64 Seed = 0;
     std::optional<NArrow::NHash::TXX64> HashCalcer;
     YDB_READONLY_DEF(std::vector<TString>, ShardingColumns);
+
 protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TColumnTableSharding& proto) const override {
         for (auto&& i : ShardingColumns) {
@@ -74,6 +74,7 @@ protected:
         HashCalcer.emplace(ShardingColumns, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, Seed);
         return TConclusionStatus::Success();
     }
+
 public:
     THashShardingImpl() = default;
 
@@ -98,7 +99,6 @@ public:
         static_assert(std::is_arithmetic<T>::value);
         return XXH64(&value, sizeof(value), seed);
     }
-
 };
 
-}
+} // namespace NKikimr::NSharding

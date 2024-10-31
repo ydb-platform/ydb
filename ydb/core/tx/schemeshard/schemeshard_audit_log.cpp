@@ -28,7 +28,7 @@ const TString SchemeshardComponentName = "schemeshard";
 const TString EmptyValue = "{none}";
 
 TString GeneralStatus(NKikimrScheme::EStatus actualStatus) {
-    switch(actualStatus) {
+    switch (actualStatus) {
         case NKikimrScheme::EStatus::StatusAlreadyExists:
         case NKikimrScheme::EStatus::StatusSuccess:
             return "SUCCESS";
@@ -48,25 +48,21 @@ TString RenderList(const TVector<TString>& list) {
     return result;
 }
 
-std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath &databasePath) {
+std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath& databasePath) {
     if (databasePath.IsEmpty()) {
         return {};
     }
     Y_ABORT_UNLESS(databasePath->IsDomainRoot());
-    auto getAttr = [&databasePath](const TString &name) -> TString {
+    auto getAttr = [&databasePath](const TString& name) -> TString {
         if (databasePath.Base()->UserAttrs->Attrs.contains(name)) {
             return databasePath.Base()->UserAttrs->Attrs.at(name);
         }
         return {};
     };
-    return std::make_tuple(
-        getAttr("cloud_id"),
-        getAttr("folder_id"),
-        getAttr("database_id")
-    );
+    return std::make_tuple(getAttr("cloud_id"), getAttr("folder_id"), getAttr("database_id"));
 }
 
-TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) {
+TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString& opWorkingDir) {
     auto databasePath = TPath::Resolve(opWorkingDir, SS);
     if (!databasePath.IsResolved()) {
         databasePath.RiseUntilFirstResolvedParent();
@@ -81,7 +77,12 @@ TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) 
 
 }  // anonymous namespace
 
-void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
+void AuditLogModifySchemeTransaction(
+    const NKikimrScheme::TEvModifySchemeTransaction& request,
+    const NKikimrScheme::TEvModifySchemeTransactionResult& response,
+    TSchemeShard* SS,
+    const TString& userSID
+) {
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     for (const auto& operation : request.GetTransaction()) {
@@ -92,18 +93,17 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
         auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
 
         AUDIT_LOG(
-            AUDIT_PART("component", SchemeshardComponentName)
-            AUDIT_PART("tx_id", std::to_string(request.GetTxId()))
-            AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
-            AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
-            AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
-            AUDIT_PART("operation", logEntry.Operation)
-            AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
-            AUDIT_PART("status", GeneralStatus(response.GetStatus()))
-            AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(response.GetStatus()))
-            AUDIT_PART("reason", response.GetReason(), response.HasReason())
+            AUDIT_PART("component", SchemeshardComponentName) AUDIT_PART("tx_id", std::to_string(request.GetTxId()))
+                AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue)) AUDIT_PART(
+                    "subject", (!userSID.empty() ? userSID : EmptyValue)
+                ) AUDIT_PART("database", (!databasePath.IsEmpty() ? databasePath.GetDomainPathString() : EmptyValue))
+                    AUDIT_PART("operation", logEntry.Operation)
+                        AUDIT_PART("paths", RenderList(logEntry.Paths), !logEntry.Paths.empty())
+                            AUDIT_PART("status", GeneralStatus(response.GetStatus()))
+                                AUDIT_PART("detailed_status", NKikimrScheme::EStatus_Name(response.GetStatus()))
+                                    AUDIT_PART("reason", response.GetReason(), response.HasReason())
 
-            AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty());
+                                        AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty());
             AUDIT_PART("folder_id", folder_id, !folder_id.empty());
             AUDIT_PART("resource_id", database_id, !database_id.empty());
 
@@ -136,7 +136,12 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
 
 //NOTE: Resurrected a way to log audit records into the common log.
 // This should be dropped again as soon as auditlog consumers will switch to a proper way.
-void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
+void AuditLogModifySchemeTransactionDeprecated(
+    const NKikimrScheme::TEvModifySchemeTransaction& request,
+    const NKikimrScheme::TEvModifySchemeTransactionResult& response,
+    TSchemeShard* SS,
+    const TString& userSID
+) {
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     for (const auto& operation : request.GetTransaction()) {
@@ -201,31 +206,25 @@ struct TXxportRecord {
 };
 
 void AuditLogXxport(TXxportRecord&& record) {
-    AUDIT_LOG(
-        AUDIT_PART("component", SchemeshardComponentName)
+    AUDIT_LOG(AUDIT_PART("component", SchemeshardComponentName)
 
-        AUDIT_PART("id", std::to_string(record.Id))
-        AUDIT_PART("uid", record.Uid);
-        AUDIT_PART("remote_address", (!record.RemoteAddress.empty() ? record.RemoteAddress : EmptyValue))
-        AUDIT_PART("subject", (!record.UserSID.empty() ? record.UserSID : EmptyValue))
-        AUDIT_PART("database", (!record.DatabasePath.empty() ? record.DatabasePath : EmptyValue))
-        AUDIT_PART("operation", record.OperationName)
-        AUDIT_PART("status", record.Status)
-        AUDIT_PART("detailed_status", Ydb::StatusIds::StatusCode_Name(record.DetailedStatus))
-        AUDIT_PART("reason", record.Reason)
+                  AUDIT_PART("id", std::to_string(record.Id)) AUDIT_PART("uid", record.Uid);
+              AUDIT_PART("remote_address", (!record.RemoteAddress.empty() ? record.RemoteAddress : EmptyValue))
+                  AUDIT_PART("subject", (!record.UserSID.empty() ? record.UserSID : EmptyValue))
+                      AUDIT_PART("database", (!record.DatabasePath.empty() ? record.DatabasePath : EmptyValue))
+                          AUDIT_PART("operation", record.OperationName) AUDIT_PART("status", record.Status)
+                              AUDIT_PART("detailed_status", Ydb::StatusIds::StatusCode_Name(record.DetailedStatus))
+                                  AUDIT_PART("reason", record.Reason)
 
-        // all parts are considered required, so all empty values are replaced with a special stub
-        for (const auto& [name, value] : record.AdditionalParts) {
-            AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
-        }
+              // all parts are considered required, so all empty values are replaced with a special stub
+              for (const auto& [name, value]
+                   : record.AdditionalParts){AUDIT_PART(name, (!value.empty() ? value : EmptyValue))}
 
-        AUDIT_PART("start_time", record.StartTime)
-        AUDIT_PART("end_time", record.EndTime)
+              AUDIT_PART("start_time", record.StartTime) AUDIT_PART("end_time", record.EndTime)
 
-        AUDIT_PART("cloud_id", record.CloudId);
-        AUDIT_PART("folder_id", record.FolderId);
-        AUDIT_PART("resource_id", record.ResourceId);
-    );
+                  AUDIT_PART("cloud_id", record.CloudId);
+              AUDIT_PART("folder_id", record.FolderId);
+              AUDIT_PART("resource_id", record.ResourceId););
 }
 
 using TParts = decltype(TXxportRecord::AdditionalParts);
@@ -234,7 +233,7 @@ template <class Proto>
 TParts ExportKindSpecificParts(const Proto& proto) {
     //NOTE: intentional switch -- that will help to detect (by breaking the compilation)
     // the moment when and if oneof Settings will be extended
-    switch  (proto.GetSettingsCase()) {
+    switch (proto.GetSettingsCase()) {
         case Proto::kExportToYtSettings:
             return ExportKindSpecificParts(proto.GetExportToYtSettings());
         case Proto::kExportToS3Settings:
@@ -243,14 +242,16 @@ TParts ExportKindSpecificParts(const Proto& proto) {
             return {};
     }
 }
-template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToYtSettings& proto) {
+template <>
+TParts ExportKindSpecificParts(const Ydb::Export::ExportToYtSettings& proto) {
     return {
         {"export_type", "yt"},
         {"export_item_count", ToString(proto.items().size())},
         {"export_yt_prefix", ((proto.items().size() > 0) ? proto.items(0).destination_path() : "")},
     };
 }
-template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToS3Settings& proto) {
+template <>
+TParts ExportKindSpecificParts(const Ydb::Export::ExportToS3Settings& proto) {
     return {
         {"export_type", "s3"},
         {"export_item_count", ToString(proto.items().size())},
@@ -265,14 +266,15 @@ template <class Proto>
 TParts ImportKindSpecificParts(const Proto& proto) {
     //NOTE: intentional switch -- that will help to detect (by breaking the compilation)
     // the moment when and if oneof Settings will be extended
-    switch  (proto.GetSettingsCase()) {
+    switch (proto.GetSettingsCase()) {
         case Proto::kImportFromS3Settings:
             return ImportKindSpecificParts(proto.GetImportFromS3Settings());
         case Proto::SETTINGS_NOT_SET:
             return {};
     }
 }
-template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settings& proto) {
+template <>
+TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settings& proto) {
     return {
         {"import_type", "s3"},
         {"export_item_count", ToString(proto.items().size())},
@@ -283,10 +285,16 @@ template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settin
     };
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 template <class Request, class Response>
-void _AuditLogXxportStart(const Request& request, const Response& response, const TString& operationName, TParts&& additionalParts, TSchemeShard* SS) {
+void _AuditLogXxportStart(
+    const Request& request,
+    const Response& response,
+    const TString& operationName,
+    TParts&& additionalParts,
+    TSchemeShard* SS
+) {
     TPath databasePath = DatabasePathFromWorkingDir(SS, request.GetDatabaseName());
     auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
     auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
@@ -315,11 +323,19 @@ void _AuditLogXxportStart(const Request& request, const Response& response, cons
     });
 }
 
-void AuditLogExportStart(const NKikimrExport::TEvCreateExportRequest& request, const NKikimrExport::TEvCreateExportResponse& response, TSchemeShard* SS) {
+void AuditLogExportStart(
+    const NKikimrExport::TEvCreateExportRequest& request,
+    const NKikimrExport::TEvCreateExportResponse& response,
+    TSchemeShard* SS
+) {
     _AuditLogXxportStart(request, response, "EXPORT START", ExportKindSpecificParts(request.GetRequest()), SS);
 }
 
-void AuditLogImportStart(const NKikimrImport::TEvCreateImportRequest& request, const NKikimrImport::TEvCreateImportResponse& response, TSchemeShard* SS) {
+void AuditLogImportStart(
+    const NKikimrImport::TEvCreateImportRequest& request,
+    const NKikimrImport::TEvCreateImportResponse& response,
+    TSchemeShard* SS
+) {
     _AuditLogXxportStart(request, response, "IMPORT START", ImportKindSpecificParts(request.GetRequest()), SS);
 }
 
@@ -335,7 +351,8 @@ void _AuditLogXxportEnd(const Info& info, const TString& operationName, TParts&&
     // Info.State can't be anything but Done or Cancelled here
     Y_ABORT_UNLESS(info.State == Info::EState::Done || info.State == Info::EState::Cancelled);
     TString status = TString(info.State == Info::EState::Done ? "SUCCESS" : "ERROR");
-    Ydb::StatusIds::StatusCode detailedStatus = (info.State == Info::EState::Done ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+    Ydb::StatusIds::StatusCode detailedStatus =
+        (info.State == Info::EState::Done ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
 
     AuditLogXxport({
         .OperationName = operationName,
@@ -379,25 +396,28 @@ void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
     _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info.Settings), SS);
 }
 
-void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::TEvLoginResult& response, TSchemeShard* SS) {
+void AuditLogLogin(
+    const NKikimrScheme::TEvLogin& request,
+    const NKikimrScheme::TEvLoginResult& response,
+    TSchemeShard* SS
+) {
     static const TString LoginOperationName = "LOGIN";
 
     TPath databasePath = TPath::Root(SS);
     auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
 
     // NOTE: audit field set here must be in sync with ydb/core/security/login_page.cpp, AuditLogWebUILogout()
-    AUDIT_LOG(
-        AUDIT_PART("component", SchemeshardComponentName)
-        AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
-        AUDIT_PART("database", (!databasePath.PathString().empty() ? databasePath.PathString() : EmptyValue))
-        AUDIT_PART("operation", LoginOperationName)
-        AUDIT_PART("status", TString(response.GetError().empty() ? "SUCCESS" : "ERROR"))
-        AUDIT_PART("reason", response.GetError(), response.HasError())
+    AUDIT_LOG(AUDIT_PART("component", SchemeshardComponentName) AUDIT_PART(
+        "remote_address", (!peerName.empty() ? peerName : EmptyValue)
+    ) AUDIT_PART("database", (!databasePath.PathString().empty() ? databasePath.PathString() : EmptyValue))
+                  AUDIT_PART("operation", LoginOperationName)
+                      AUDIT_PART("status", TString(response.GetError().empty() ? "SUCCESS" : "ERROR"))
+                          AUDIT_PART("reason", response.GetError(), response.HasError())
 
-        // Login
-        AUDIT_PART("login_user", (request.HasUser() ? request.GetUser() : EmptyValue))
-        AUDIT_PART("login_auth_domain", (!request.GetExternalAuth().empty() ? request.GetExternalAuth() : EmptyValue))
-    );
+              // Login
+              AUDIT_PART("login_user", (request.HasUser() ? request.GetUser() : EmptyValue)) AUDIT_PART(
+                  "login_auth_domain", (!request.GetExternalAuth().empty() ? request.GetExternalAuth() : EmptyValue)
+              ));
 }
 
-}
+} // namespace NKikimr::NSchemeShard

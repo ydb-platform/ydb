@@ -1,4 +1,3 @@
 #include "subscriber.h"
 
-namespace NKikimr::NColumnShard::NSubscriber {
-}
+namespace NKikimr::NColumnShard::NSubscriber {}

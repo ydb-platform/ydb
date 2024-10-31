@@ -4,7 +4,6 @@
 
 #include <util/generic/vector.h>
 
-
 namespace NKikimr {
 struct TAppData;
 
@@ -27,9 +26,7 @@ struct TEvTxAllocatorClient {
         TEvAllocate() = default;
 
         explicit TEvAllocate(ui32 count)
-            : Count(count)
-        {
-        }
+            : Count(count) {}
     };
 
     struct TEvAllocateResult: public TEventLocal<TEvAllocateResult, EvAllocateResult> {
@@ -38,14 +35,10 @@ struct TEvTxAllocatorClient {
         TEvAllocateResult() = default;
 
         explicit TEvAllocateResult(ui64 txId)
-            : TxIds(1, txId)
-        {
-        }
+            : TxIds(1, txId) {}
 
         explicit TEvAllocateResult(TVector<ui64>&& txIds)
-            : TxIds(std::move(txIds))
-        {
-        }
+            : TxIds(std::move(txIds)) {}
     };
 
 }; // TTxAllocatorClientEvents
@@ -53,4 +46,4 @@ struct TEvTxAllocatorClient {
 IActor* CreateTxAllocatorClient(TVector<ui64> txAllocators);
 IActor* CreateTxAllocatorClient(const TAppData* appData);
 
-} // NKikimr
+} // namespace NKikimr

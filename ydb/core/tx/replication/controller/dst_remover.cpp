@@ -21,8 +21,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
     STATEFN(StateAllocateTxId) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -40,11 +40,11 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         tx.MutableDrop()->SetId(DstPathId.LocalPathId);
 
         switch (Kind) {
-        case TReplication::ETargetKind::Table:
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-            break;
-        case TReplication::ETargetKind::IndexTable:
-            Y_ABORT("unreachable");
+            case TReplication::ETargetKind::Table:
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+                break;
+            case TReplication::ETargetKind::IndexTable:
+                Y_ABORT("unreachable");
         }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
@@ -56,8 +56,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             sFunc(TEvents::TEvWakeup, AllocateTxId);
-        default:
-            return StateBase(ev);
+            default:
+                return StateBase(ev);
         }
     }
 
@@ -66,20 +66,20 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
-        case NKikimrScheme::StatusAccepted:
-            Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
-            return SubscribeTx(record.GetTxId());
-        case NKikimrScheme::StatusMultipleModifications:
-            if (record.HasPathDropTxId()) {
-                return SubscribeTx(record.GetPathDropTxId());
-            } else {
+            case NKikimrScheme::StatusAccepted:
+                Y_DEBUG_ABORT_UNLESS(TxId == record.GetTxId());
+                return SubscribeTx(record.GetTxId());
+            case NKikimrScheme::StatusMultipleModifications:
+                if (record.HasPathDropTxId()) {
+                    return SubscribeTx(record.GetPathDropTxId());
+                } else {
+                    return Error(record.GetStatus(), record.GetReason());
+                }
+                break;
+            case NKikimrScheme::StatusPathDoesNotExist:
+                return Success();
+            default:
                 return Error(record.GetStatus(), record.GetReason());
-            }
-            break;
-        case NKikimrScheme::StatusPathDoesNotExist:
-            return Success();
-        default:
-            return Error(record.GetStatus(), record.GetReason());
         }
     }
 
@@ -136,13 +136,14 @@ public:
     }
 
     explicit TDstRemover(
-            const TActorId& parent,
-            ui64 schemeShardId,
-            const TActorId& proxy,
-            ui64 rid,
-            ui64 tid,
-            TReplication::ETargetKind kind,
-            const TPathId& dstPathId)
+        const TActorId& parent,
+        ui64 schemeShardId,
+        const TActorId& proxy,
+        ui64 rid,
+        ui64 tid,
+        TReplication::ETargetKind kind,
+        const TPathId& dstPathId
+    )
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -150,20 +151,18 @@ public:
         , TargetId(tid)
         , Kind(kind)
         , DstPathId(dstPathId)
-        , LogPrefix("DstRemover", ReplicationId, TargetId)
-    {
-    }
+        , LogPrefix("DstRemover", ReplicationId, TargetId) {}
 
     void Bootstrap() {
         if (!DstPathId) {
             Success();
         } else {
             switch (Kind) {
-            case TReplication::ETargetKind::Table:
-                return AllocateTxId();
-            case TReplication::ETargetKind::IndexTable:
+                case TReplication::ETargetKind::Table:
+                    return AllocateTxId();
+                case TReplication::ETargetKind::IndexTable:
                 // indexed table will be removed along with its indexes
-                return Success();
+                    return Success();
             }
         }
     }
@@ -194,14 +193,27 @@ private:
 IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
-    return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId());
+    return CreateDstRemover(
+        ctx.SelfID,
+        replication->GetSchemeShardId(),
+        replication->GetYdbProxy(),
+        replication->GetId(),
+        target->GetId(),
+        target->GetKind(),
+        target->GetDstPathId()
+    );
 }
 
-IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
-        ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)
-{
+IActor* CreateDstRemover(
+    const TActorId& parent,
+    ui64 schemeShardId,
+    const TActorId& proxy,
+    ui64 rid,
+    ui64 tid,
+    TReplication::ETargetKind kind,
+    const TPathId& dstPathId
+) {
     return new TDstRemover(parent, schemeShardId, proxy, rid, tid, kind, dstPathId);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

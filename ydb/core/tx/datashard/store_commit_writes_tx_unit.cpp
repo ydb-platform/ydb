@@ -5,12 +5,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TStoreCommitWritesTxUnit : public TExecutionUnit {
+class TStoreCommitWritesTxUnit: public TExecutionUnit {
 public:
     TStoreCommitWritesTxUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::StoreCommitWritesTx, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::StoreCommitWritesTx, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;

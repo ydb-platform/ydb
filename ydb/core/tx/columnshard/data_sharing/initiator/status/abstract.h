@@ -20,19 +20,22 @@ class IStatus {
 private:
     YDB_READONLY(EStatus, Status, EStatus::Undefined);
     YDB_READONLY_DEF(TString, SessionId);
+
 protected:
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_NULL;
     }
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardDataSharingProto::TInitiator::TStatus& proto) = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(
+        const NKikimrColumnShardDataSharingProto::TInitiator::TStatus& proto
+    ) = 0;
     virtual void DoSerializeFromProto(NKikimrColumnShardDataSharingProto::TInitiator::TStatus& proto) const = 0;
+
 public:
     using TProto = NKikimrColumnShardDataSharingProto::TInitiator::TStatus;
     using TFactory = NObjectFactory::TObjectFactory<IStatus, TString>;
     IStatus(const EStatus status, const TString& sessionId)
         : Status(status)
-        , SessionId(sessionId)
-    {
+        , SessionId(sessionId) {
         AFL_VERIFY(SessionId);
     }
 
@@ -64,7 +67,5 @@ public:
     }
 };
 
-class TStatusContainer: public NBackgroundTasks::TInterfaceProtoContainer<IStatus> {
-
-};
-}
+class TStatusContainer: public NBackgroundTasks::TInterfaceProtoContainer<IStatus> {};
+} // namespace NKikimr::NOlap::NDataSharing

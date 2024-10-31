@@ -9,4 +9,4 @@ const NTiers::TManager& ITiersManager::GetManagerVerified(const TString& tierId)
     return *result;
 }
 
-}
+} // namespace NKikimr::NColumnShard

@@ -31,7 +31,8 @@ bool TTieringRule::DeserializeDescriptionFromJson(const NJson::TJsonValue& jsonI
         return false;
     }
     if (rules->empty()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "tiering_rule_deserialization_failed")("reason", "empty_rules");
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "tiering_rule_deserialization_failed")("reason", "empty_rules");
         return false;
     }
     for (auto&& i : *rules) {
@@ -82,7 +83,9 @@ NKikimr::NOlap::TTiering TTieringRule::BuildOlapTiers() const {
     AFL_VERIFY(!Intervals.empty());
     NOlap::TTiering result;
     for (auto&& r : Intervals) {
-        AFL_VERIFY(result.Add(std::make_shared<NOlap::TTierInfo>(r.GetTierName(), r.GetDurationForEvict(), GetDefaultColumn())));
+        AFL_VERIFY(
+            result.Add(std::make_shared<NOlap::TTierInfo>(r.GetTierName(), r.GetDurationForEvict(), GetDefaultColumn()))
+        );
     }
     return result;
 }
@@ -101,4 +104,4 @@ NMetadata::IClassBehaviour::TPtr TTieringRule::GetBehaviour() {
     return result;
 }
 
-}
+} // namespace NKikimr::NColumnShard::NTiers

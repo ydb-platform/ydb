@@ -32,12 +32,19 @@ private:
     }
 
     const std::shared_ptr<TAllocationInfo>& RegisterAllocationImpl(
-        const ui64 internalGroupId, const std::shared_ptr<IAllocation>& task, const std::shared_ptr<TStageFeatures>& stage) {
+        const ui64 internalGroupId,
+        const std::shared_ptr<IAllocation>& task,
+        const std::shared_ptr<TStageFeatures>& stage
+    ) {
         auto it = AllocationInfo.find(task->GetIdentifier());
         if (it == AllocationInfo.end()) {
             it = AllocationInfo
-                     .emplace(task->GetIdentifier(),
-                         std::make_shared<TAllocationInfo>(ExternalProcessId, ExternalScopeId, internalGroupId, task, stage))
+                     .emplace(
+                         task->GetIdentifier(),
+                         std::make_shared<TAllocationInfo>(
+                             ExternalProcessId, ExternalScopeId, internalGroupId, task, stage
+                         )
+                     )
                      .first;
         }
         return it->second;
@@ -49,8 +56,7 @@ public:
     TProcessMemoryScope(const ui64 externalProcessId, const ui64 externalScopeId, const NActors::TActorId& ownerActorId)
         : ExternalProcessId(externalProcessId)
         , ExternalScopeId(externalScopeId)
-        , OwnerActorId(ownerActorId) {
-    }
+        , OwnerActorId(ownerActorId) {}
 
     void Register() {
         ++Links;
@@ -65,20 +71,23 @@ public:
         }
         GroupIds.Clear();
         AllocationInfo.clear();
-        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "scope_cleaned")("process_id", ExternalProcessId)(
-            "external_scope_id", ExternalScopeId);
+        AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)
+        ("event", "scope_cleaned")("process_id", ExternalProcessId)("external_scope_id", ExternalScopeId);
         return true;
     }
 
-    void RegisterAllocation(const bool isPriorityProcess, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task,
-        const std::shared_ptr<TStageFeatures>& stage) {
+    void RegisterAllocation(
+        const bool isPriorityProcess,
+        const ui64 externalGroupId,
+        const std::shared_ptr<IAllocation>& task,
+        const std::shared_ptr<TStageFeatures>& stage
+    ) {
         AFL_VERIFY(task);
         AFL_VERIFY(stage);
         const std::optional<ui64> internalGroupIdOptional = GroupIds.GetInternalIdOptional(externalGroupId);
         if (!internalGroupIdOptional) {
-            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
-                                                                   "ext_group", externalGroupId)(
-                                                                   "min_group", GroupIds.GetMinInternalIdOptional())("stage", stage->GetName());
+            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))
+            ("ext_group", externalGroupId)("min_group", GroupIds.GetMinInternalIdOptional())("stage", stage->GetName());
             AFL_VERIFY(!AllocationInfo.contains(task->GetIdentifier()));
         } else {
             const ui64 internalGroupId = *internalGroupIdOptional;
@@ -87,7 +96,8 @@ public:
             if (allocationInfo->GetAllocationStatus() != EAllocationStatus::Waiting) {
             } else if (WaitAllocations.GetMinGroupId().value_or(internalGroupId) < internalGroupId) {
                 WaitAllocations.AddAllocation(internalGroupId, allocationInfo);
-            } else if (allocationInfo->IsAllocatable(0) || (isPriorityProcess && internalGroupId == GroupIds.GetMinInternalIdVerified())) {
+            } else if (allocationInfo->IsAllocatable(0) ||
+                       (isPriorityProcess && internalGroupId == GroupIds.GetMinInternalIdVerified())) {
                 Y_UNUSED(WaitAllocations.RemoveAllocation(internalGroupId, allocationInfo));
                 if (!allocationInfo->Allocate(OwnerActorId)) {
                     UnregisterAllocation(allocationInfo->GetIdentifier());
@@ -111,8 +121,11 @@ public:
         ui64 memoryAllocated = 0;
         auto it = AllocationInfo.find(allocationId);
         if (it == AllocationInfo.end()) {
-            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("reason", "allocation_cleaned_in_previous_scope_id_live")(
-                "allocation_id", allocationId)("process_id", ExternalProcessId)("external_scope_id", ExternalScopeId);
+            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)
+            ("reason",
+             "allocation_cleaned_in_previous_scope_id_live")("allocation_id", allocationId)("process_id", ExternalProcessId)(
+                "external_scope_id", ExternalScopeId
+            );
             return true;
         }
         bool waitFlag = false;
@@ -127,8 +140,11 @@ public:
                 waitFlag = true;
                 break;
         }
-        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocation_unregister")("allocation_id", allocationId)("wait", waitFlag)(
-            "internal_group_id", internalGroupId)("allocation_status", it->second->GetAllocationStatus());
+        AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)
+        ("event",
+         "allocation_unregister")("allocation_id", allocationId)("wait", waitFlag)("internal_group_id", internalGroupId)(
+            "allocation_status", it->second->GetAllocationStatus()
+        );
         memoryAllocated = it->second->GetAllocatedVolume();
         AllocationInfo.erase(it);
         return !!memoryAllocated;
@@ -136,14 +152,15 @@ public:
 
     void UnregisterGroup(const bool isPriorityProcess, const ui64 externalGroupId) {
         if (auto internalGroupId = GroupIds.ExtractInternalIdOptional(externalGroupId)) {
-            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_group")("external_group_id", externalGroupId)(
-                "internal_group_id", internalGroupId);
+            AFL_INFO(NKikimrServices::GROUPED_MEMORY_LIMITER)
+            ("event", "remove_group")("external_group_id", externalGroupId)("internal_group_id", internalGroupId);
             UnregisterGroupImpl(*internalGroupId);
             if (isPriorityProcess && (*internalGroupId < GroupIds.GetMinInternalIdDef(*internalGroupId))) {
                 Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
             }
         } else {
-            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "remove_absent_group")("external_group_id", externalGroupId);
+            AFL_WARN(NKikimrServices::GROUPED_MEMORY_LIMITER)
+            ("event", "remove_absent_group")("external_group_id", externalGroupId);
         }
     }
 
@@ -186,7 +203,11 @@ public:
     }
 
     void RegisterAllocation(
-        const ui64 externalScopeId, const ui64 externalGroupId, const std::shared_ptr<IAllocation>& task, const std::optional<ui32>& stageIdx) {
+        const ui64 externalScopeId,
+        const ui64 externalGroupId,
+        const std::shared_ptr<IAllocation>& task,
+        const std::optional<ui32>& stageIdx
+    ) {
         AFL_VERIFY(task);
         std::shared_ptr<TStageFeatures> stage;
         if (Stages.empty()) {
@@ -230,7 +251,12 @@ public:
     void RegisterScope(const ui64 externalScopeId) {
         auto it = AllocationScopes.find(externalScopeId);
         if (it == AllocationScopes.end()) {
-            AFL_VERIFY(AllocationScopes.emplace(externalScopeId, std::make_shared<TProcessMemoryScope>(ExternalProcessId, externalScopeId, OwnerActorId)).second);
+            AFL_VERIFY(AllocationScopes
+                           .emplace(
+                               externalScopeId,
+                               std::make_shared<TProcessMemoryScope>(ExternalProcessId, externalScopeId, OwnerActorId)
+                           )
+                           .second);
         } else {
             it->second->Register();
         }
@@ -241,14 +267,18 @@ public:
         PriorityProcessFlag = true;
     }
 
-    TProcessMemory(const ui64 externalProcessId, const NActors::TActorId& ownerActorId, const bool isPriority,
-        const std::vector<std::shared_ptr<TStageFeatures>>& stages, const std::shared_ptr<TStageFeatures>& defaultStage)
+    TProcessMemory(
+        const ui64 externalProcessId,
+        const NActors::TActorId& ownerActorId,
+        const bool isPriority,
+        const std::vector<std::shared_ptr<TStageFeatures>>& stages,
+        const std::shared_ptr<TStageFeatures>& defaultStage
+    )
         : ExternalProcessId(externalProcessId)
         , OwnerActorId(ownerActorId)
         , PriorityProcessFlag(isPriority)
         , Stages(stages)
-        , DefaultStage(defaultStage) {
-    }
+        , DefaultStage(defaultStage) {}
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {
         bool allocated = false;

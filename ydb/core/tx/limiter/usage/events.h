@@ -18,13 +18,13 @@ struct TEvExternal {
     class TEvAskResource: public NActors::TEventLocal<TEvAskResource, EvAskResource> {
     private:
         YDB_READONLY_DEF(std::shared_ptr<IResourceRequest>, Request);
+
     public:
         TEvAskResource() = default;
 
         explicit TEvAskResource(const std::shared_ptr<IResourceRequest>& request)
-            : Request(request) {
-        }
+            : Request(request) {}
     };
 };
 
-}
+} // namespace NKikimr::NLimiter

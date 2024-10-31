@@ -34,9 +34,7 @@ using namespace NTable;
     }
 
 template <typename TDerived>
-class TResolveUserTableState
-    : virtual public NSchemeCache::TSchemeCacheHelpers
-{
+class TResolveUserTableState: virtual public NSchemeCache::TSchemeCacheHelpers {
     DEFINE_STATE_INTRO;
 
 public:
@@ -52,8 +50,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             sFunc(TEvents::TEvWakeup, ResolveUserTable);
-        default:
-            return AsDerived()->StateBase(ev);
+            default:
+                return AsDerived()->StateBase(ev);
         }
     }
 
@@ -96,9 +94,7 @@ private:
 };
 
 template <typename TDerived>
-class TResolveTargetTableState
-    : virtual public NSchemeCache::TSchemeCacheHelpers
-{
+class TResolveTargetTableState: virtual public NSchemeCache::TSchemeCacheHelpers {
     DEFINE_STATE_INTRO;
 
 public:
@@ -114,8 +110,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             sFunc(TEvents::TEvWakeup, OnRetry);
-        default:
-            return AsDerived()->StateBase(ev);
+            default:
+                return AsDerived()->StateBase(ev);
         }
     }
 
@@ -152,7 +148,8 @@ private:
             return;
         }
 
-        if (AsDerived()->TargetTableVersion && AsDerived()->TargetTableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+        if (AsDerived()->TargetTableVersion &&
+            AsDerived()->TargetTableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
             AsDerived()->CreateSenders();
             return AsDerived()->Serve();
         }
@@ -192,9 +189,7 @@ private:
 };
 
 template <typename TDerived>
-class TResolveKeysState
-    : virtual public NSchemeCache::TSchemeCacheHelpers
-{
+class TResolveKeysState: virtual public NSchemeCache::TSchemeCacheHelpers {
     DEFINE_STATE_INTRO;
 
 public:
@@ -210,8 +205,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             sFunc(TEvents::TEvWakeup, OnRetry);
-        default:
-            return AsDerived()->StateBase(ev);
+            default:
+                return AsDerived()->StateBase(ev);
         }
     }
 
@@ -259,9 +254,7 @@ private:
 };
 
 template <typename TDerived>
-struct TSchemeChecksMixin
-    : virtual private NSchemeCache::TSchemeCacheHelpers
-{
+struct TSchemeChecksMixin: virtual private NSchemeCache::TSchemeCacheHelpers {
     const TDerived* AsDerived() const {
         return static_cast<const TDerived*>(this);
     }
@@ -272,7 +265,12 @@ struct TSchemeChecksMixin
 
     template <typename CheckFunc, typename FailFunc, typename T, typename... Args>
     bool Check(CheckFunc checkFunc, FailFunc failFunc, const T& subject, Args&&... args) {
-        return checkFunc(AsDerived()->CurrentStateName(), subject, std::forward<Args>(args)..., std::bind(failFunc, AsDerived(), std::placeholders::_1));
+        return checkFunc(
+            AsDerived()->CurrentStateName(),
+            subject,
+            std::forward<Args>(args)...,
+            std::bind(failFunc, AsDerived(), std::placeholders::_1)
+        );
     }
 
     template <typename T>
@@ -299,7 +297,6 @@ struct TSchemeChecksMixin
     bool CheckEntryKind(const T& entry, TNavigate::EKind expected) {
         return Check(&TSchemeCacheHelpers::CheckEntryKind<T>, &TDerived::LogWarnAndRetry, entry, expected);
     }
-
 };
 
 enum class ETableChangeSenderType {
@@ -313,6 +310,7 @@ IActor* CreateTableChangeSenderShard(
     ui64 shardId,
     const TPathId& targetTablePathId,
     const TMap<TTag, TTag>& tagMap,
-    ETableChangeSenderType type);
+    ETableChangeSenderType type
+);
 
 } // namespace NKikimr::NDataShard

@@ -41,19 +41,26 @@ public:
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
-
 };
 
 class TLocalHelper: public Tests::NCS::THelper {
 private:
     using TBase = Tests::NCS::THelper;
+
 public:
     using TBase::TBase;
-    void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,
-        TString storeName = "olapStore", ui32 storeShardsCount = 4,
-        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
+    void CreateTestOlapTable(
+        TString tableName = "olapTable",
+        ui32 tableShardsCount = 3,
+        TString storeName = "olapStore",
+        ui32 storeShardsCount = 4,
+        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64"
+    ) {
         TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-        CreateTestOlapStore(sender, Sprintf(R"(
+        CreateTestOlapStore(
+            sender,
+            Sprintf(
+                R"(
              Name: "%s"
              ColumnShardCount: %d
              SchemaPresets {
@@ -62,14 +69,23 @@ public:
                      %s
                  }
              }
-        )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
+        )",
+                storeName.c_str(),
+                storeShardsCount,
+                GetTestTableSchema().data()
+            )
+        );
 
         TString shardingColumns = "[\"timestamp\", \"uid\"]";
         if (shardingFunction != "HASH_FUNCTION_CONSISTENCY_64") {
             shardingColumns = "[\"uid\"]";
         }
 
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(
+            sender,
+            storeName,
+            Sprintf(
+                R"(
             Name: "%s"
             ColumnShardCount: %d
             TtlSettings: {
@@ -81,15 +97,27 @@ public:
                     Columns: %s
                 }
             }
-        )", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
+        )",
+                tableName.c_str(),
+                tableShardsCount,
+                shardingFunction.c_str(),
+                shardingColumns.c_str()
+            )
+        );
     }
 
-    void CreateTestOlapTableWithTTL(TString tableName = "olapTable", ui32 tableShardsCount = 3,
-        TString storeName = "olapStore", ui32 storeShardsCount = 4,
-        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
-
+    void CreateTestOlapTableWithTTL(
+        TString tableName = "olapTable",
+        ui32 tableShardsCount = 3,
+        TString storeName = "olapStore",
+        ui32 storeShardsCount = 4,
+        TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64"
+    ) {
         TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-        CreateTestOlapStore(sender, Sprintf(R"(
+        CreateTestOlapStore(
+            sender,
+            Sprintf(
+                R"(
              Name: "%s"
              ColumnShardCount: %d
              SchemaPresets {
@@ -98,14 +126,23 @@ public:
                      %s
                  }
              }
-        )", storeName.c_str(), storeShardsCount, GetTestTableSchema().data()));
+        )",
+                storeName.c_str(),
+                storeShardsCount,
+                GetTestTableSchema().data()
+            )
+        );
 
         TString shardingColumns = "[\"timestamp\", \"uid\"]";
         if (shardingFunction != "HASH_FUNCTION_CONSISTENCY_64") {
             shardingColumns = "[\"uid\"]";
         }
 
-        TBase::CreateTestOlapTable(sender, storeName, Sprintf(R"(
+        TBase::CreateTestOlapTable(
+            sender,
+            storeName,
+            Sprintf(
+                R"(
             Name: "%s"
             ColumnShardCount: %d
             TtlSettings: {
@@ -120,16 +157,21 @@ public:
                     Columns: %s
                 }
             }
-        )", tableName.c_str(), tableShardsCount, shardingFunction.c_str(), shardingColumns.c_str()));
+        )",
+                tableName.c_str(),
+                tableShardsCount,
+                shardingFunction.c_str(),
+                shardingColumns.c_str()
+            )
+        );
     }
 };
 
-
 Y_UNIT_TEST_SUITE(ColumnShardTiers) {
-
-    TString GetConfigProtoWithName(const TString & tierName) {
-        return TStringBuilder() << "Name : \"" << tierName << "\"\n" <<
-            R"(
+    TString GetConfigProtoWithName(const TString& tierName) {
+        return TStringBuilder() << "Name : \"" << tierName << "\"\n"
+                                <<
+               R"(
                 ObjectStorage : {
                     Endpoint: "fake"
                     Bucket: "fake"
@@ -186,13 +228,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     private:
         YDB_ACCESSOR_DEF(TString, Path);
         YDB_ACCESSOR_DEF(TString, Expectation);
+
     public:
         TJsonChecker(const TString& path, const TString& expectation)
             : Path(path)
-            , Expectation(expectation)
-        {
-
-        }
+            , Expectation(expectation) {}
         bool Check(const NJson::TJsonValue& jsonInfo) const {
             auto* jsonPathValue = jsonInfo.GetValueByPath(Path);
             if (!jsonPathValue) {
@@ -204,7 +244,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         TString GetDebugString() const {
             TStringBuilder sb;
             sb << "path=" << Path << ";"
-                << "expectation=" << Expectation << ";";
+               << "expectation=" << Expectation << ";";
             return sb;
         }
     };
@@ -221,6 +261,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         using TKeyCheckers = TMap<TString, TJsonChecker>;
         YDB_ACCESSOR_DEF(TKeyCheckers, Checkers);
+
     public:
         void ResetConditions() {
             FoundFlag = false;
@@ -236,7 +277,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         void CheckRuntime(TTestActorRuntime& runtime) {
-            const auto pred = [this](TAutoPtr<IEventHandle>& event)->TTestActorRuntimeBase::EEventAction {
+            const auto pred = [this](TAutoPtr<IEventHandle>& event) -> TTestActorRuntimeBase::EEventAction {
                 if (event->HasBuffer() && !event->HasEvent()) {
                 } else if (!event->HasEvent()) {
                 } else {
@@ -250,7 +291,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
             runtime.SetObserverFunc(pred);
 
-            for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(30); ) {
+            for (const TInstant start = Now(); !IsFound() && Now() - start < TDuration::Seconds(30);) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
@@ -266,11 +307,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Cerr << "SNAPSHOT: " << snapshot->SerializeToString() << Endl;
             const auto& tierings = snapshot->GetTableTierings();
             if (tierings.size() != ExpectedTieringsCount) {
-                Cerr << "TieringsCount incorrect: " << snapshot->SerializeToString() << ";expectation=" << ExpectedTieringsCount << Endl;
+                Cerr << "TieringsCount incorrect: " << snapshot->SerializeToString()
+                     << ";expectation=" << ExpectedTieringsCount << Endl;
                 return;
             }
             if (ExpectedTiersCount != snapshot->GetTierConfigs().size()) {
-                Cerr << "TiersCount incorrect: " << snapshot->SerializeToString() << ";expectation=" << ExpectedTiersCount << Endl;
+                Cerr << "TiersCount incorrect: " << snapshot->SerializeToString()
+                     << ";expectation=" << ExpectedTiersCount << Endl;
                 return;
             }
             for (auto&& i : Checkers) {
@@ -285,7 +328,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     Y_ABORT_UNLESS(false);
                 }
                 if (!i.second.Check(jsonData)) {
-                    Cerr << "config value incorrect:" << snapshot->SerializeToString() << ";snapshot_check_path=" << i.first << Endl;
+                    Cerr << "config value incorrect:" << snapshot->SerializeToString()
+                         << ";snapshot_check_path=" << i.first << Endl;
                     Cerr << "json path incorrect:" << jsonData << ";" << i.second.GetDebugString() << Endl;
                     return;
                 }
@@ -309,6 +353,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     class TEmulatorAlterController: public NMetadata::NModifications::IAlterController {
     private:
         YDB_READONLY_FLAG(Finished, false);
+
     public:
         virtual void OnAlteringProblem(const TString& errorMessage) override {
             Cerr << errorMessage << Endl;
@@ -331,8 +376,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableTieringInColumnShard(true)
-        ;
+            .SetEnableTieringInColumnShard(true);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
@@ -354,12 +398,23 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             runtime.SimulateSleep(TDuration::Seconds(10));
             Cerr << "Initialization finished" << Endl;
 
-            lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
-            lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
-                "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )", false);
-            lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`");
-            lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
-                "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
+            lHelper.StartSchemaRequest(
+                "CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`"
+            );
+            lHelper.StartSchemaRequest(
+                "CREATE OBJECT tiering1 ("
+                "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" +
+                    ConfigTiering1Str + "` )",
+                false
+            );
+            lHelper.StartSchemaRequest(
+                "CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc") + "`"
+            );
+            lHelper.StartSchemaRequest(
+                "CREATE OBJECT tiering1 ("
+                "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" +
+                ConfigTiering1Str + "` )"
+            );
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(2000)) {
@@ -372,7 +427,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 emulator->SetExpectedTiersCount(2);
                 emulator->MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
 
-                lHelper.StartSchemaRequest("ALTER OBJECT tier1 (TYPE TIER) SET tierConfig = `" + GetConfigProtoWithName("abc1") + "`");
+                lHelper.StartSchemaRequest(
+                    "ALTER OBJECT tier1 (TYPE TIER) SET tierConfig = `" + GetConfigProtoWithName("abc1") + "`"
+                );
 
                 {
                     const TInstant start = Now();
@@ -443,7 +500,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SimulateSleep(TDuration::Seconds(10));
         Cerr << "Initialization finished" << Endl;
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc1") + "`", true, false);
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tier1 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc1") + "`", true, false
+        );
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
@@ -452,11 +511,21 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator.CheckRuntime(runtime);
         }
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc2") + "`");
-        lHelper.StartSchemaRequest("CREATE OBJECT IF NOT EXISTS tiering1 (TYPE TIERING_RULE) "
-            "WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "`)");
-        lHelper.StartSchemaRequest("CREATE OBJECT tiering2 (TYPE TIERING_RULE) "
-            "WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )", true, false);
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tier2 (TYPE TIER) WITH tierConfig = `" + GetConfigProtoWithName("abc2") + "`"
+        );
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT IF NOT EXISTS tiering1 (TYPE TIERING_RULE) "
+            "WITH (defaultColumn = timestamp, description = `" +
+            ConfigTiering1Str + "`)"
+        );
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tiering2 (TYPE TIERING_RULE) "
+            "WITH (defaultColumn = timestamp, description = `" +
+                ConfigTiering2Str + "` )",
+            true,
+            false
+        );
         {
             TTestCSEmulator emulator;
             emulator.MutableCheckers().emplace("TIER.tier1", TJsonChecker("Name", "abc1"));
@@ -537,7 +606,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #endif
 
     Y_UNIT_TEST(TieringUsage) {
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TFastTTLCompactionController>();
+        auto csControllerGuard =
+            NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TFastTTLCompactionController>();
 
         TPortManager pm;
 
@@ -552,13 +622,15 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
-            .SetEnableTieringInColumnShard(true)
-        ;
+            .SetEnableTieringInColumnShard(true);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
         Tests::TClient client(serverSettings);
-        Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
+        Tests::NCommon::TLoggerInit(server->GetRuntime())
+            .Clear()
+            .SetComponents({NKikimrServices::TX_COLUMNSHARD}, "CS")
+            .Initialize();
 
         auto& runtime = *server->GetRuntime();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
@@ -574,21 +646,37 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         TLocalHelper lHelper(*server);
         lHelper.SetOptionalStorageId("__DEFAULT");
-        lHelper.StartSchemaRequest("CREATE OBJECT secretAccessKey ( "
-            "TYPE SECRET) WITH (value = ak)");
-        lHelper.StartSchemaRequest("CREATE OBJECT secretSecretKey ( "
-            "TYPE SECRET) WITH (value = fakeSecret)");
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT secretAccessKey ( "
+            "TYPE SECRET) WITH (value = ak)"
+        );
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT secretSecretKey ( "
+            "TYPE SECRET) WITH (value = fakeSecret)"
+        );
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tier1 ( "
-            "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");
-        lHelper.StartSchemaRequest("CREATE OBJECT tier2 ( "
-            "TYPE TIER) WITH (tierConfig = `" + TierConfigProtoStr + "`)");
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tier1 ( "
+            "TYPE TIER) WITH (tierConfig = `" +
+            TierConfigProtoStr + "`)"
+        );
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tier2 ( "
+            "TYPE TIER) WITH (tierConfig = `" +
+            TierConfigProtoStr + "`)"
+        );
 
-        lHelper.StartSchemaRequest("CREATE OBJECT tiering1 ("
-            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering1Str + "` )");
-        lHelper.StartSchemaRequest("CREATE OBJECT tiering2 ("
-            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTiering2Str + "` )");
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tiering1 ("
+            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" +
+            ConfigTiering1Str + "` )"
+        );
+        lHelper.StartSchemaRequest(
+            "CREATE OBJECT tiering2 ("
+            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" +
+            ConfigTiering2Str + "` )"
+        );
         {
             TTestCSEmulator* emulator = new TTestCSEmulator;
             runtime.Register(emulator);
@@ -644,8 +732,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         lHelper.DropTable("/Root/olapStore/olapTable");
         lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");
 */
-        lHelper.StartSchemaRequest("UPSERT OBJECT tiering1 ("
-            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" + ConfigTieringNothingStr + "` )");
+        lHelper.StartSchemaRequest(
+            "UPSERT OBJECT tiering1 ("
+            "TYPE TIERING_RULE) WITH (defaultColumn = timestamp, description = `" +
+            ConfigTieringNothingStr + "` )"
+        );
         {
             const TInstant start = Now();
             bool check = false;
@@ -666,7 +757,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             UNIT_ASSERT(check);
         }
 #ifndef S3_TEST_USAGE
-        UNIT_ASSERT_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 1);
+        UNIT_ASSERT_EQUAL(
+            Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 1
+        );
 #endif
     }
 
@@ -685,16 +778,14 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     private:
         const ui64 TabletId;
         const ui32 Channel;
+
     public:
         ui32 GetChannel() const {
             return Channel;
         }
         TGCSource(const ui64 tabletId, const ui32 channel)
             : TabletId(tabletId)
-            , Channel(channel)
-        {
-
-        }
+            , Channel(channel) {}
 
         bool operator<(const TGCSource& item) const {
             return std::tie(TabletId, Channel) < std::tie(item.TabletId, item.Channel);
@@ -709,15 +800,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     private:
         ui32 Generation = 0;
         ui32 Step = 0;
+
     public:
         TCurrentBarrier() = default;
 
         TCurrentBarrier(const ui32 gen, const ui32 step)
             : Generation(gen)
-            , Step(step)
-        {
-
-        }
+            , Step(step) {}
 
         bool operator<(const TCurrentBarrier& b) const {
             return std::tie(Generation, Step) < std::tie(b.Generation, b.Step);
@@ -742,6 +831,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     private:
         bool KeepFlag = false;
         bool DontKeepFlag = false;
+
     public:
         bool IsRemovable() const {
             return !KeepFlag || DontKeepFlag;
@@ -759,8 +849,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         i64 BytesSize = 0;
         TCurrentBarrier Barrier;
         std::map<NKikimr::TLogoBlobID, TBlobFlags> Blobs;
-    public:
 
+    public:
         TString DebugString() const {
             return TStringBuilder() << "size=" << BytesSize << ";count=" << Blobs.size() << ";";
         }
@@ -805,7 +895,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     ReduceSize(it->first.BlobSize());
                     it = Blobs.erase(it);
                 } else {
-                    Cerr << "SKIPPED_BLOB:" << it->first << " deprecated=" << Barrier.IsDeprecated(it->first) << ";removable=" << it->second.IsRemovable() << ";" << Endl;
+                    Cerr << "SKIPPED_BLOB:" << it->first << " deprecated=" << Barrier.IsDeprecated(it->first)
+                         << ";removable=" << it->second.IsRemovable() << ";" << Endl;
                     ++it;
                 }
             }
@@ -815,6 +906,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     class TBSDataCollector {
     private:
         std::map<TGCSource, TGCSourceData> Data;
+
     public:
         TGCSourceData& GetData(const TGCSource& id) {
             return Data[id];
@@ -846,7 +938,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
             return sb;
         }
-
     };
 
     Y_UNIT_TEST(TTLUsage) {
@@ -858,11 +949,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetEnableMetadataProvider(true)
-        ;
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetEnableMetadataProvider(true);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<
+            NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         csControllerGuard->SetCompactionsLimit(5);
 
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
@@ -892,7 +981,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         ui32 gcCounter = 0;
         TBSDataCollector bsCollector;
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->StaticCastAsLocal<IEventBase>())) {
+            if (auto* msg =
+                    dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->StaticCastAsLocal<IEventBase>())) {
                 Y_ABORT_UNLESS(msg->Status == NKikimrProto::EReplyStatus::OK);
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbage*>(ev->StaticCastAsLocal<IEventBase>())) {
@@ -912,10 +1002,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 Y_ABORT_UNLESS(!msg->Hard);
                 if (msg->Collect) {
                     gcSourceData.SetBarrier(TCurrentBarrier(msg->CollectGeneration, msg->CollectStep));
-                    Cerr << "TEvBlobStorage::TEvCollectGarbage COLLECT:" << msg->CollectGeneration << "/" << msg->CollectStep << ":" << gcSource.DebugString() << ":" << ++gcCounter << ";" << bsCollector.StatusString() << Endl;
+                    Cerr << "TEvBlobStorage::TEvCollectGarbage COLLECT:" << msg->CollectGeneration << "/"
+                         << msg->CollectStep << ":" << gcSource.DebugString() << ":" << ++gcCounter << ";"
+                         << bsCollector.StatusString() << Endl;
                 } else {
                     gcSourceData.RefreshBarrier();
-                    Cerr << "TEvBlobStorage::TEvCollectGarbage REFRESH:" << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
+                    Cerr << "TEvBlobStorage::TEvCollectGarbage REFRESH:" << gcSource.DebugString() << ":" << ++gcCounter
+                         << "/" << bsCollector.StatusString() << Endl;
                 }
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvPut*>(ev->StaticCastAsLocal<IEventBase>())) {
@@ -923,7 +1016,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 auto& gcSourceData = bsCollector.GetData(gcSource);
                 gcSourceData.AddBlob(msg->Id);
                 gcSourceData.AddSize(msg->Id.BlobSize());
-                Cerr << "TEvBlobStorage::TEvPut " << gcSource.DebugString() << ":" << gcCounter << "/" << bsCollector.StatusString() << Endl;
+                Cerr << "TEvBlobStorage::TEvPut " << gcSource.DebugString() << ":" << gcCounter << "/"
+                     << bsCollector.StatusString() << Endl;
             }
             return false;
         };
@@ -935,7 +1029,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         {
             TVector<THashMap<TString, NYdb::TValue>> result;
-            lHelper.StartScanRequest("SELECT MAX(timestamp) as a, MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);
+            lHelper.StartScanRequest(
+                "SELECT MAX(timestamp) as a, MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`",
+                true,
+                &result
+            );
             UNIT_ASSERT(result.size() == 1);
             UNIT_ASSERT(result.front().size() == 3);
             UNIT_ASSERT(GetValueResult(result.front(), "c")->GetProto().uint64_value() == 600000);
@@ -957,7 +1055,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Cerr << "CLEANED: " << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
 
             TVector<THashMap<TString, NYdb::TValue>> result;
-            lHelper.StartScanRequest("SELECT MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);
+            lHelper.StartScanRequest(
+                "SELECT MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result
+            );
             UNIT_ASSERT(result.size() == 1);
             UNIT_ASSERT(result.front().size() == 2);
             UNIT_ASSERT(GetValueResult(result.front(), "c")->GetProto().uint64_value() == purposeRecords);
@@ -965,7 +1065,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 UNIT_ASSERT(GetValueResult(result.front(), "b")->GetProto().uint64_value() == purposeMinTimestamp);
             }
 
-            AFL_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize)("collector", bsCollector.GetChannelSize(2))("purpose", purposeSize);
+            AFL_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize)
+            ("collector", bsCollector.GetChannelSize(2))("purpose", purposeSize);
         }
 
         {
@@ -974,6 +1075,5 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             UNIT_ASSERT(result.front().begin()->second.GetProto().uint64_value() == 0);
         }
     }
-
 }
-}
+} // namespace NKikimr

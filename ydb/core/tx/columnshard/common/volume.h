@@ -12,8 +12,7 @@ private:
 public:
     TBlobsVolume(const ui64 blob, const ui64 raw)
         : BlobBytes(blob)
-        , RawBytes(raw) {
-    }
+        , RawBytes(raw) {}
 
     TBlobsVolume operator+(const TBlobsVolume& item) const {
         return TBlobsVolume(BlobBytes + item.BlobBytes, RawBytes + item.RawBytes);

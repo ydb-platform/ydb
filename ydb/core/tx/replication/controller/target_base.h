@@ -7,8 +7,7 @@ namespace NKikimr::NReplication::NController {
 
 class TTargetBase
     : public TReplication::ITarget
-    , public TLagProvider
-{
+    , public TLagProvider {
 protected:
     using ETargetKind = TReplication::ETargetKind;
     using EDstState = TReplication::EDstState;
@@ -23,8 +22,13 @@ protected:
     void RemoveWorkers(const TActorContext& ctx);
 
 public:
-    explicit TTargetBase(TReplication* replication, ETargetKind kind,
-        ui64 id, const TString& srcPath, const TString& dstPath);
+    explicit TTargetBase(
+        TReplication* replication,
+        ETargetKind kind,
+        ui64 id,
+        const TString& srcPath,
+        const TString& dstPath
+    );
 
     ui64 GetId() const override;
     ETargetKind GetKind() const override;
@@ -77,4 +81,4 @@ private:
 
 }; // TTargetBase
 
-}
+} // namespace NKikimr::NReplication::NController

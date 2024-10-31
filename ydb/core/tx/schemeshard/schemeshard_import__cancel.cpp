@@ -18,11 +18,9 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
     TEvImport::TEvCancelImportRequest::TPtr Request;
 
-    explicit TTxCancel(TSelf *self, TEvImport::TEvCancelImportRequest::TPtr& ev)
+    explicit TTxCancel(TSelf* self, TEvImport::TEvCancelImportRequest::TPtr& ev)
         : TXxport::TTxBase(self)
-        , Request(ev)
-    {
-    }
+        , Request(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CANCEL_IMPORT;
@@ -50,62 +48,68 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         NIceDb::TNiceDb db(txc.DB);
 
         switch (importInfo->State) {
-        case TImportInfo::EState::Done:
-        case TImportInfo::EState::Cancelled:
-            return respond(Ydb::StatusIds::SUCCESS);
+            case TImportInfo::EState::Done:
+            case TImportInfo::EState::Cancelled:
+                return respond(Ydb::StatusIds::SUCCESS);
 
-        case TImportInfo::EState::Waiting:
-        case TImportInfo::EState::Cancellation:
-            importInfo->Issue = "Cancelled manually";
-            importInfo->State = TImportInfo::EState::Cancelled;
+            case TImportInfo::EState::Waiting:
+            case TImportInfo::EState::Cancellation:
+                importInfo->Issue = "Cancelled manually";
+                importInfo->State = TImportInfo::EState::Cancelled;
 
-            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-                const auto& item = importInfo->Items.at(itemIdx);
+                for (ui32 itemIdx : xrange(importInfo->Items.size())) {
+                    const auto& item = importInfo->Items.at(itemIdx);
 
-                switch (item.State) {
-                case TImportInfo::EState::Transferring:
-                    if (item.WaitTxId != InvalidTxId) {
-                        importInfo->State = TImportInfo::EState::Cancellation;
-                        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo->Id);
-                    } else if (item.SubState == TImportInfo::TItem::ESubState::Proposed) {
-                        importInfo->State = TImportInfo::EState::Cancellation;
+                    switch (item.State) {
+                        case TImportInfo::EState::Transferring:
+                            if (item.WaitTxId != InvalidTxId) {
+                                importInfo->State = TImportInfo::EState::Cancellation;
+                                Send(
+                                    Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo->Id
+                                );
+                            } else if (item.SubState == TImportInfo::TItem::ESubState::Proposed) {
+                                importInfo->State = TImportInfo::EState::Cancellation;
+                            }
+                            break;
+
+                        case TImportInfo::EState::BuildIndexes:
+                            if (item.WaitTxId != InvalidTxId) {
+                                importInfo->State = TImportInfo::EState::Cancellation;
+                                Send(
+                                    Self->SelfId(),
+                                    CancelIndexBuildPropose(Self, importInfo, item.WaitTxId),
+                                    0,
+                                    importInfo->Id
+                                );
+                            } else if (item.SubState == TImportInfo::TItem::ESubState::Proposed) {
+                                importInfo->State = TImportInfo::EState::Cancellation;
+                            }
+                            break;
+
+                        default:
+                            break;
                     }
-                    break;
-
-                case TImportInfo::EState::BuildIndexes:
-                    if (item.WaitTxId != InvalidTxId) {
-                        importInfo->State = TImportInfo::EState::Cancellation;
-                        Send(Self->SelfId(), CancelIndexBuildPropose(Self, importInfo, item.WaitTxId), 0, importInfo->Id);
-                    } else if (item.SubState == TImportInfo::TItem::ESubState::Proposed) {
-                        importInfo->State = TImportInfo::EState::Cancellation;
-                    }
-                    break;
-
-                default:
-                    break;
                 }
-            }
 
-            if (importInfo->State == TImportInfo::EState::Cancelled) {
-                importInfo->EndTime = TAppData::TimeProvider->Now();
-            }
+                if (importInfo->State == TImportInfo::EState::Cancelled) {
+                    importInfo->EndTime = TAppData::TimeProvider->Now();
+                }
 
-            Self->PersistImportState(db, importInfo);
-            SendNotificationsIfFinished(importInfo);
+                Self->PersistImportState(db, importInfo);
+                SendNotificationsIfFinished(importInfo);
 
-            if (importInfo->IsFinished()) {
-                AuditLogImportEnd(*importInfo.Get(), Self);
-            }
+                if (importInfo->IsFinished()) {
+                    AuditLogImportEnd(*importInfo.Get(), Self);
+                }
 
-            return respond(Ydb::StatusIds::SUCCESS);
+                return respond(Ydb::StatusIds::SUCCESS);
 
-        default:
-            return respond(Ydb::StatusIds::UNDETERMINED);
+            default:
+                return respond(Ydb::StatusIds::UNDETERMINED);
         }
     }
 
-    void DoComplete(const TActorContext&) override {
-    }
+    void DoComplete(const TActorContext&) override {}
 
 }; // TTxCancel
 
@@ -113,17 +117,13 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
     TEvSchemeShard::TEvCancelTxResult::TPtr CancelTxResult = nullptr;
     TEvIndexBuilder::TEvCancelResponse::TPtr CancelIndexBuildResult = nullptr;
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf* self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
         : TXxport::TTxBase(self)
-        , CancelTxResult(ev)
-    {
-    }
+        , CancelTxResult(ev) {}
 
-    explicit TTxCancelAck(TSelf *self, TEvIndexBuilder::TEvCancelResponse::TPtr& ev)
+    explicit TTxCancelAck(TSelf* self, TEvIndexBuilder::TEvCancelResponse::TPtr& ev)
         : TXxport::TTxBase(self)
-        , CancelIndexBuildResult(ev)
-    {
-    }
+        , CancelIndexBuildResult(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CANCEL_IMPORT_ACK;
@@ -205,8 +205,7 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
-    }
+    void DoComplete(const TActorContext&) override {}
 
 }; // TTxCancelAck
 
@@ -222,5 +221,5 @@ ITransaction* TSchemeShard::CreateTxCancelImportAck(TEvIndexBuilder::TEvCancelRe
     return new TImport::TTxCancelAck(this, ev);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // namespace NSchemeShard
+} // namespace NKikimr

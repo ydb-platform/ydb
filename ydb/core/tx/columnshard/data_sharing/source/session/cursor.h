@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
 class TVersionedIndex;
-}
+} // namespace NKikimr::NOlap
 
 namespace NKikimr::NIceDb {
 class TNiceDb;
@@ -51,20 +51,34 @@ public:
     TConclusionStatus AckData(const ui64 packIdxReceived) {
         AFL_VERIFY(packIdxReceived <= PackIdx);
         if (packIdxReceived != PackIdx) {
-            return TConclusionStatus::Fail("incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
+            return TConclusionStatus::Fail(
+                "incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) +
+                " but expected: " + ::ToString(PackIdx)
+            );
         }
         AckReceivedForPackIdx = packIdxReceived;
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+        ("event",
+         "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())(
+            "links_waiting", Links.size()
+        );
         return TConclusionStatus::Success();
     }
 
     TConclusionStatus AckLinks(const TTabletId tabletId, const ui64 packIdxReceived) {
         if (packIdxReceived != PackIdx) {
-            return TConclusionStatus::Fail("incorrect packIdx received for AckLinks: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
+            return TConclusionStatus::Fail(
+                "incorrect packIdx received for AckLinks: " + ::ToString(packIdxReceived) +
+                " but expected: " + ::ToString(PackIdx)
+            );
         }
         AFL_VERIFY(Links.contains(tabletId));
         if (LinksModifiedTablets.emplace(tabletId).second) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
+            ("event",
+             "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())(
+                "links_waiting", Links.size()
+            );
             return TConclusionStatus::Success();
         } else {
             return TConclusionStatus::Fail("AckLinks repeated table");
@@ -105,10 +119,15 @@ public:
 
     void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
-    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions,
-        const TVersionedIndex& index);
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
-        const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
+    bool Start(
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions,
+        const TVersionedIndex& index
+    );
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(
+        const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
+        const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic
+    );
 };
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

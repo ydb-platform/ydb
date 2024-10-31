@@ -16,15 +16,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TFinalizeBuildIndex TConfigureParts"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TFinalizeBuildIndex TConfigureParts"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
     }
 
@@ -72,7 +70,7 @@ public:
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
             op->SetSnapshotStep(ui64(snapshotStepId));
-            op->SetTableSchemaVersion(table->AlterVersion+1);
+            op->SetTableSchemaVersion(table->AlterVersion + 1);
             op->SetBuildIndexId(ui64(txState->BuildIndexId));
             if (txState->BuildIndexOutcome) {
                 op->MutableOutcome()->CopyFrom(*txState->BuildIndexOutcome);
@@ -88,7 +86,9 @@ public:
                                     << " seqNo: " << seqNo
                                     << " at schemeshard: " << ssId);
 
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            auto event = context.SS->MakeDataShardProposal(
+                txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx
+            );
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
 
@@ -102,16 +102,17 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TFinalizeBuildIndex TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TFinalizeBuildIndex TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType});
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType}
+        );
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
@@ -157,7 +158,7 @@ public:
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
 
-        for(auto& column: tableInfo->Columns) {
+        for (auto& column : tableInfo->Columns) {
             if (column.second.IsDropped())
                 continue;
 
@@ -214,15 +215,13 @@ private:
     TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TFinalizeBuildIndex TCreateTxShards"
-            << " operationId: " << OperationId;
+        return TStringBuilder() << "TFinalizeBuildIndex TCreateTxShards"
+                                << " operationId: " << OperationId;
     }
 
 public:
     TCreateTxShards(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -245,7 +244,6 @@ public:
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
 
-
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
@@ -261,35 +259,35 @@ class TFinalizeBuildIndex: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::ProposedWaitParts;
-        case TTxState::ProposedWaitParts:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::ProposedWaitParts;
+            case TTxState::ProposedWaitParts:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateTxShards>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::ProposedWaitParts:
-            return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateTxShards>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::ProposedWaitParts:
+                return MakeHolder<NTableState::TProposedWaitParts>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -310,14 +308,14 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
 
         {
             TPath::TChecker checks = path.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -335,17 +333,13 @@ public:
         TPath parent = path.Parent();
         {
             TPath::TChecker checks = parent.Check();
-            checks
-                .NotEmpty()
-                .IsResolved()
-                .NotDeleted();
+            checks.NotEmpty().IsResolved().NotDeleted();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
-
 
         TString errStr;
 
@@ -359,23 +353,19 @@ public:
         }
 
         if (!context.SS->TablesWithSnapshots.contains(tablePathId)) {
-            errStr = TStringBuilder()
-                << "No snapshot presents for table"
-                << ", tableId:" << tablePathId
-                << ", txId: " << OperationId.GetTxId();
+            errStr = TStringBuilder() << "No snapshot presents for table"
+                                      << ", tableId:" << tablePathId << ", txId: " << OperationId.GetTxId();
             result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }
 
         TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tablePathId);
         if (TTxId(finalizeMainTable.GetSnapshotTxId()) != snapshotTxId) {
-            errStr = TStringBuilder()
-                << "No snapshot with requested txId presents for table"
-                << ", tableId:" << tablePathId
-                << ", txId: " << OperationId.GetTxId()
-                << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId()
-                << ", snapshotTxId: " << snapshotTxId
-                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(snapshotTxId);
+            errStr = TStringBuilder() << "No snapshot with requested txId presents for table"
+                                      << ", tableId:" << tablePathId << ", txId: " << OperationId.GetTxId()
+                                      << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId()
+                                      << ", snapshotTxId: " << snapshotTxId
+                                      << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(snapshotTxId);
             result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }
@@ -420,7 +410,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -433,4 +423,4 @@ ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState:
     return MakeSubOperation<TFinalizeBuildIndex>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

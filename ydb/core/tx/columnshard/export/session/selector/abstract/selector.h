@@ -14,7 +14,8 @@ namespace NKikimr::NOlap::NExport {
 
 class ISelector {
 protected:
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto) = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto
+    ) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardExportProto::TSelectorContainer& proto) const = 0;
     virtual std::unique_ptr<TEvDataShard::TEvKqpScan> DoBuildRequestInitiator(const TCursor& cursor) const = 0;
 
@@ -42,10 +43,12 @@ public:
 class TSelectorContainer: public NBackgroundTasks::TInterfaceProtoContainer<ISelector> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<ISelector>;
+
 public:
     using TBase::TBase;
 
-    static TConclusion<TSelectorContainer> BuildFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto) {
+    static TConclusion<TSelectorContainer> BuildFromProto(const NKikimrColumnShardExportProto::TSelectorContainer& proto
+    ) {
         TSelectorContainer result;
         if (!result.DeserializeFromProto(proto)) {
             return TConclusionStatus::Fail("cannot parse proto as TSelectorContainer");
@@ -59,4 +62,4 @@ public:
         return TBase::SerializeToProto().DebugString();
     }
 };
-}
+} // namespace NKikimr::NOlap::NExport

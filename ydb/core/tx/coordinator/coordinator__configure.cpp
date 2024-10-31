@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
+struct TTxCoordinator::TTxConfigure: public TTransactionBase<TTxCoordinator> {
     TActorId AckTo;
     ui64 Version;
     ui64 Resolution;
@@ -13,9 +13,14 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
     TAutoPtr<TEvSubDomain::TEvConfigureStatus> Respond;
     bool ConfigurationApplied;
 
-    TTxConfigure(TSelf *coordinator, TActorId ackTo,
-                 ui64 version, ui64 resolution, const TVector<TTabletId>& mediators,
-                 const NKikimrSubDomains::TProcessingParams& config)
+    TTxConfigure(
+        TSelf* coordinator,
+        TActorId ackTo,
+        ui64 version,
+        ui64 resolution,
+        const TVector<TTabletId>& mediators,
+        const NKikimrSubDomains::TProcessingParams& config
+    )
         : TBase(coordinator)
         , AckTo(ackTo)
         , Version(version)
@@ -26,9 +31,11 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
 
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_INIT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_INIT;
+    }
 
-    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
 
         auto rowset = db.Table<Schema::DomainConfiguration>().Range().Select();
@@ -62,8 +69,9 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
         bool persistedConfig = false;
         auto persistConfig = [&]() {
             db.Table<Schema::DomainConfiguration>().Key(Version).Update(
-                    NIceDb::TUpdate<Schema::DomainConfiguration::Mediators>(Mediators),
-                    NIceDb::TUpdate<Schema::DomainConfiguration::Resolution>(Resolution));
+                NIceDb::TUpdate<Schema::DomainConfiguration::Mediators>(Mediators),
+                NIceDb::TUpdate<Schema::DomainConfiguration::Resolution>(Resolution)
+            );
 
             if (auto* hooks = ICoordinatorHooks::Get(); hooks && !hooks->PersistConfig(Self->TabletID(), Config)) {
                 return;
@@ -72,7 +80,8 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
             TString encodedConfig;
             Y_ABORT_UNLESS(Config.SerializeToString(&encodedConfig));
             db.Table<Schema::DomainConfiguration>().Key(Version).Update(
-                NIceDb::TUpdate<Schema::DomainConfiguration::Config>(encodedConfig));
+                NIceDb::TUpdate<Schema::DomainConfiguration::Config>(encodedConfig)
+            );
             persistedConfig = true;
         };
 
@@ -92,30 +101,37 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
 
         if (curMissing) {
             // First config version
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
+            Respond = new TEvSubDomain::TEvConfigureStatus(
+                NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()
+            );
             persistConfig();
             ConfigurationApplied = true;
         } else if (curVersion == Version && curMediators == Mediators && curResolution == Resolution) {
             // Same config version without mediator/resolution changes
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID());
+            Respond = new TEvSubDomain::TEvConfigureStatus(
+                NKikimrTx::TEvSubDomainConfigurationAck::ALREADY, Self->TabletID()
+            );
             if (!curHaveConfig) {
                 persistConfig();
                 updateCurrentConfig();
             }
         } else if (curVersion < Version && curMediators == Mediators && curResolution == Resolution) {
             // New config version without mediator/resolution changes
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID());
+            Respond = new TEvSubDomain::TEvConfigureStatus(
+                NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()
+            );
             persistConfig();
             updateCurrentConfig();
         } else {
             // Outdated config version, or attempt to change mediators/resolution
-            Respond = new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
+            Respond =
+                new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::REJECT, Self->TabletID());
         }
 
         return true;
     }
 
-    void Complete(const TActorContext &ctx) override {
+    void Complete(const TActorContext& ctx) override {
         LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
              "tablet# " << Self->TabletID() <<
              " version# " << Version <<
@@ -135,11 +151,14 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
 };
 
 ITransaction* TTxCoordinator::CreateTxConfigure(
-        TActorId ackTo, ui64 version, ui64 resolution, const TVector<TTabletId> &mediators,
-        const NKikimrSubDomains::TProcessingParams &config)
-{
+    TActorId ackTo,
+    ui64 version,
+    ui64 resolution,
+    const TVector<TTabletId>& mediators,
+    const NKikimrSubDomains::TProcessingParams& config
+) {
     return new TTxCoordinator::TTxConfigure(this, ackTo, version, resolution, mediators, config);
 }
 
-}
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

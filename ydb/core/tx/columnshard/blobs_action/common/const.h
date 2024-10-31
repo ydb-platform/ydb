@@ -10,4 +10,4 @@ public:
     static const inline TString LocalMetadataStorageId = "__LOCAL_METADATA";
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations

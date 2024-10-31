@@ -15,8 +15,11 @@ namespace NMiniKQL {
 using namespace NTable;
 using namespace NUdf;
 
-typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx);
+typedef IComputationNode* (*TCallableDatashardBuilderFunc)(
+    TCallable& callable,
+    const TComputationNodeFactoryContext& ctx,
+    TKqpDatashardComputeContext& computeCtx
+);
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
@@ -37,24 +40,27 @@ TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContex
 
     auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
 
-    return [computeFactory, computeCtx]
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-            if (auto compute = computeFactory(callable, ctx)) {
-                return compute;
-            }
+    return [computeFactory,
+            computeCtx](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        if (auto compute = computeFactory(callable, ctx)) {
+            return compute;
+        }
 
-            const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map;
-            auto it = datashardMap.find(callable.GetType()->GetName());
-            if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx);
-            }
+        const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map;
+        auto it = datashardMap.find(callable.GetType()->GetName());
+        if (it != datashardMap.end()) {
+            return it->second(callable, ctx, *computeCtx);
+        }
 
-            return nullptr;
-        };
+        return nullptr;
+    };
 };
 
-typedef IComputationNode* (*TCallableScanBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpScanComputeContext& computeCtx);
+typedef IComputationNode* (*TCallableScanBuilderFunc)(
+    TCallable& callable,
+    const TComputationNodeFactoryContext& ctx,
+    TKqpScanComputeContext& computeCtx
+);
 
 struct TKqpScanComputationMap {
     TKqpScanComputationMap() {
@@ -71,37 +77,38 @@ TComputationNodeFactory GetKqpScanComputeFactory(TKqpScanComputeContext* compute
 
     auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
 
-    return [computeFactory, computeCtx]
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-            if (auto compute = computeFactory(callable, ctx)) {
-                return compute;
-            }
+    return [computeFactory,
+            computeCtx](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        if (auto compute = computeFactory(callable, ctx)) {
+            return compute;
+        }
 
-            const auto& datashardMap = Singleton<TKqpScanComputationMap>()->Map;
-            auto it = datashardMap.find(callable.GetType()->GetName());
-            if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx);
-            }
+        const auto& datashardMap = Singleton<TKqpScanComputationMap>()->Map;
+        auto it = datashardMap.find(callable.GetType()->GetName());
+        if (it != datashardMap.end()) {
+            return it->second(callable, ctx, *computeCtx);
+        }
 
-            return nullptr;
-        };
+        return nullptr;
+    };
 }
 
-TKqpDatashardComputeContext::TKqpDatashardComputeContext(NDataShard::TDataShard* shard, NDataShard::TDataShardUserDb& userDb, bool disableByKeyFilter)
+TKqpDatashardComputeContext::TKqpDatashardComputeContext(
+    NDataShard::TDataShard* shard,
+    NDataShard::TDataShardUserDb& userDb,
+    bool disableByKeyFilter
+)
     : Shard(shard)
     , UserDb(userDb)
-    , DisableByKeyFilter(disableByKeyFilter)
-{
-}
+    , DisableByKeyFilter(disableByKeyFilter) {}
 
-ui64 TKqpDatashardComputeContext::GetLocalTableId(const TTableId &tableId) const {
+ui64 TKqpDatashardComputeContext::GetLocalTableId(const TTableId& tableId) const {
     MKQL_ENSURE_S(Shard);
     return Shard->GetLocalTableId(tableId);
 }
 
-const NDataShard::TUserTable::TUserColumn& TKqpDatashardComputeContext::GetKeyColumnInfo(
-    const NDataShard::TUserTable& table, ui32 keyIndex) const
-{
+const NDataShard::TUserTable::TUserColumn&
+TKqpDatashardComputeContext::GetKeyColumnInfo(const NDataShard::TUserTable& table, ui32 keyIndex) const {
     MKQL_ENSURE_S(keyIndex <= table.KeyColumnTypes.size());
     const auto& col = table.Columns.at(table.KeyColumnIds[keyIndex]);
     MKQL_ENSURE_S(col.IsKey);
@@ -109,7 +116,7 @@ const NDataShard::TUserTable::TUserColumn& TKqpDatashardComputeContext::GetKeyCo
     return col;
 }
 
-THashMap<TString, NScheme::TTypeInfo> TKqpDatashardComputeContext::GetKeyColumnsMap(const TTableId &tableId) const {
+THashMap<TString, NScheme::TTypeInfo> TKqpDatashardComputeContext::GetKeyColumnsMap(const TTableId& tableId) const {
     MKQL_ENSURE_S(Shard);
     const NDataShard::TUserTable::TCPtr* tablePtr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
     MKQL_ENSURE_S(tablePtr);
@@ -117,17 +124,16 @@ THashMap<TString, NScheme::TTypeInfo> TKqpDatashardComputeContext::GetKeyColumns
     MKQL_ENSURE_S(table);
 
     THashMap<TString, NScheme::TTypeInfo> columnsMap;
-    for (size_t i = 0 ; i < table->KeyColumnTypes.size(); i++) {
+    for (size_t i = 0; i < table->KeyColumnTypes.size(); i++) {
         auto col = table->Columns.at(table->KeyColumnIds[i]);
         MKQL_ENSURE_S(col.IsKey);
         columnsMap[col.Name] = col.Type;
-
     }
 
     return columnsMap;
 }
 
-TString TKqpDatashardComputeContext::GetTablePath(const TTableId &tableId) const {
+TString TKqpDatashardComputeContext::GetTablePath(const TTableId& tableId) const {
     MKQL_ENSURE_S(Shard);
 
     auto table = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
@@ -270,15 +276,17 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
             }
         }
 
-        bool ready = Database->Precharge(localTid,
-                                         from,
-                                         key.Range.Point ? from : to,
-                                         columnTags,
-                                         DisableByKeyFilter ? (ui64)NTable::NoByKey : 0,
-                                         adjustLimit(key.RangeLimits.ItemsLimit),
-                                         adjustLimit(key.RangeLimits.BytesLimit),
-                                         key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                         GetReadVersion());
+        bool ready = Database->Precharge(
+            localTid,
+            from,
+            key.Range.Point ? from : to,
+            columnTags,
+            DisableByKeyFilter ? (ui64)NTable::NoByKey : 0,
+            adjustLimit(key.RangeLimits.ItemsLimit),
+            adjustLimit(key.RangeLimits.BytesLimit),
+            key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
+            GetReadVersion()
+        );
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
             << ", columns: [" << JoinSeq(", ", columnTags) << "]"
@@ -294,9 +302,14 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
     return ret;
 }
 
-static void BuildRowImpl(const TDbTupleRef& dbTuple, const THolderFactory& holderFactory,
-    const TSmallVec<TTag>& systemColumnTags, ui64 shardId, NUdf::TUnboxedValue& result, size_t& rowSize)
-{
+static void BuildRowImpl(
+    const TDbTupleRef& dbTuple,
+    const THolderFactory& holderFactory,
+    const TSmallVec<TTag>& systemColumnTags,
+    ui64 shardId,
+    NUdf::TUnboxedValue& result,
+    size_t& rowSize
+) {
     size_t columnsCount = dbTuple.ColumnCount + systemColumnTags.size();
 
     TUnboxedValue* rowItems = nullptr;
@@ -310,7 +323,7 @@ static void BuildRowImpl(const TDbTupleRef& dbTuple, const THolderFactory& holde
     }
 
     // Some per-row overhead to deal with the case when no columns were requested
-    rowSize = std::max(rowSize, (size_t) 8);
+    rowSize = std::max(rowSize, (size_t)8);
 
     for (ui32 i = dbTuple.ColumnCount, j = 0; i < columnsCount; ++i, ++j) {
         switch (systemColumnTags[j]) {
@@ -323,9 +336,13 @@ static void BuildRowImpl(const TDbTupleRef& dbTuple, const THolderFactory& holde
     }
 }
 
-static void BuildRowWideImpl(const TDbTupleRef& dbTuple, const TSmallVec<TTag>& systemColumnTags, ui64 shardId,
-    NUdf::TUnboxedValue* const* result, size_t& rowSize)
-{
+static void BuildRowWideImpl(
+    const TDbTupleRef& dbTuple,
+    const TSmallVec<TTag>& systemColumnTags,
+    ui64 shardId,
+    NUdf::TUnboxedValue* const* result,
+    size_t& rowSize
+) {
     size_t columnsCount = dbTuple.ColumnCount + systemColumnTags.size();
 
     rowSize = 0;
@@ -338,7 +355,7 @@ static void BuildRowWideImpl(const TDbTupleRef& dbTuple, const TSmallVec<TTag>& 
     }
 
     // Some per-row overhead to deal with the case when no columns were requested
-    rowSize = std::max(rowSize, (size_t) 8);
+    rowSize = std::max(rowSize, (size_t)8);
 
     for (ui32 i = dbTuple.ColumnCount, j = 0; i < columnsCount; ++i, ++j) {
         auto out = *result++;
@@ -356,10 +373,15 @@ static void BuildRowWideImpl(const TDbTupleRef& dbTuple, const TSmallVec<TTag>& 
     }
 }
 
-bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<const TCell> key,
-    const TSmallVec<NTable::TTag>& columnTags, const TSmallVec<NTable::TTag>& systemColumnTags,
-    const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& kqpStats)
-{
+bool TKqpDatashardComputeContext::ReadRow(
+    const TTableId& tableId,
+    TArrayRef<const TCell> key,
+    const TSmallVec<NTable::TTag>& columnTags,
+    const TSmallVec<NTable::TTag>& systemColumnTags,
+    const THolderFactory& holderFactory,
+    NUdf::TUnboxedValue& result,
+    TKqpTableStats& kqpStats
+) {
     MKQL_ENSURE_S(Shard);
 
     auto localTid = Shard->GetLocalTableId(tableId);
@@ -378,10 +400,18 @@ bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<con
 
     NTable::TRowState dbRow;
     NTable::TSelectStats stats;
-    ui64 flags = DisableByKeyFilter ? (ui64) NTable::NoByKey : 0;
-    auto ready = Database->Select(localTid, keyValues, columnTags, dbRow, stats, flags, GetReadVersion(),
-            UserDb.GetReadTxMap(tableId),
-            UserDb.GetReadTxObserver(tableId));
+    ui64 flags = DisableByKeyFilter ? (ui64)NTable::NoByKey : 0;
+    auto ready = Database->Select(
+        localTid,
+        keyValues,
+        columnTags,
+        dbRow,
+        stats,
+        flags,
+        GetReadVersion(),
+        UserDb.GetReadTxMap(tableId),
+        UserDb.GetReadTxObserver(tableId)
+    );
 
     if (InconsistentReads) {
         return false;
@@ -417,9 +447,11 @@ bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<con
     return true;
 }
 
-TAutoPtr<NTable::TTableIter> TKqpDatashardComputeContext::CreateIterator(const TTableId& tableId, const TTableRange& range,
-    const TSmallVec<NTable::TTag>& columnTags)
-{
+TAutoPtr<NTable::TTableIter> TKqpDatashardComputeContext::CreateIterator(
+    const TTableId& tableId,
+    const TTableRange& range,
+    const TSmallVec<NTable::TTag>& columnTags
+) {
     auto localTid = Shard->GetLocalTableId(tableId);
     auto tableInfo = Database->GetScheme().GetTableInfo(localTid);
     MKQL_ENSURE_S(tableInfo, "Can not resolve table " << tableId);
@@ -435,14 +467,21 @@ TAutoPtr<NTable::TTableIter> TKqpDatashardComputeContext::CreateIterator(const T
     keyRange.MaxInclusive = range.InclusiveTo;
 
     TouchTableRange(tableId, range);
-    return Database->IterateRange(localTid, keyRange, columnTags, GetReadVersion(),
-            UserDb.GetReadTxMap(tableId),
-            UserDb.GetReadTxObserver(tableId));
+    return Database->IterateRange(
+        localTid,
+        keyRange,
+        columnTags,
+        GetReadVersion(),
+        UserDb.GetReadTxMap(tableId),
+        UserDb.GetReadTxObserver(tableId)
+    );
 }
 
-TAutoPtr<NTable::TTableReverseIter> TKqpDatashardComputeContext::CreateReverseIterator(const TTableId& tableId,
-    const TTableRange& range, const TSmallVec<NTable::TTag>& columnTags)
-{
+TAutoPtr<NTable::TTableReverseIter> TKqpDatashardComputeContext::CreateReverseIterator(
+    const TTableId& tableId,
+    const TTableRange& range,
+    const TSmallVec<NTable::TTag>& columnTags
+) {
     auto localTid = Shard->GetLocalTableId(tableId);
     auto tableInfo = Database->GetScheme().GetTableInfo(localTid);
     MKQL_ENSURE_S(tableInfo, "Can not resolve table " << tableId);
@@ -458,16 +497,26 @@ TAutoPtr<NTable::TTableReverseIter> TKqpDatashardComputeContext::CreateReverseIt
     keyRange.MaxInclusive = range.InclusiveTo;
 
     TouchTableRange(tableId, range);
-    return Database->IterateRangeReverse(localTid, keyRange, columnTags, GetReadVersion(),
-            UserDb.GetReadTxMap(tableId),
-            UserDb.GetReadTxObserver(tableId));
+    return Database->IterateRangeReverse(
+        localTid,
+        keyRange,
+        columnTags,
+        GetReadVersion(),
+        UserDb.GetReadTxMap(tableId),
+        UserDb.GetReadTxObserver(tableId)
+    );
 }
 
 template <typename TReadTableIterator>
-bool TKqpDatashardComputeContext::ReadRowImpl(const TTableId& tableId, TReadTableIterator& iterator,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-    const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats)
-{
+bool TKqpDatashardComputeContext::ReadRowImpl(
+    const TTableId& tableId,
+    TReadTableIterator& iterator,
+    const TSmallVec<NTable::TTag>& systemColumnTags,
+    const TSmallVec<bool>& skipNullKeys,
+    const THolderFactory& holderFactory,
+    NUdf::TUnboxedValue& result,
+    TKqpTableStats& stats
+) {
     while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) {
         if (InconsistentReads) {
             return false;
@@ -516,10 +565,14 @@ bool TKqpDatashardComputeContext::ReadRowImpl(const TTableId& tableId, TReadTabl
 }
 
 template <typename TReadTableIterator>
-bool TKqpDatashardComputeContext::ReadRowWideImpl(const TTableId& tableId, TReadTableIterator& iterator,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-    NUdf::TUnboxedValue* const* result, TKqpTableStats& stats)
-{
+bool TKqpDatashardComputeContext::ReadRowWideImpl(
+    const TTableId& tableId,
+    TReadTableIterator& iterator,
+    const TSmallVec<NTable::TTag>& systemColumnTags,
+    const TSmallVec<bool>& skipNullKeys,
+    NUdf::TUnboxedValue* const* result,
+    TKqpTableStats& stats
+) {
     while (iterator.Next(NTable::ENext::Data) == NTable::EReady::Data) {
         if (InconsistentReads) {
             return false;
@@ -567,31 +620,49 @@ bool TKqpDatashardComputeContext::ReadRowWideImpl(const TTableId& tableId, TRead
     return false;
 }
 
-bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, NTable::TTableIter& iterator,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-    const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats)
-{
+bool TKqpDatashardComputeContext::ReadRow(
+    const TTableId& tableId,
+    NTable::TTableIter& iterator,
+    const TSmallVec<NTable::TTag>& systemColumnTags,
+    const TSmallVec<bool>& skipNullKeys,
+    const THolderFactory& holderFactory,
+    NUdf::TUnboxedValue& result,
+    TKqpTableStats& stats
+) {
     return ReadRowImpl(tableId, iterator, systemColumnTags, skipNullKeys, holderFactory, result, stats);
 }
 
-bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, NTable::TTableReverseIter& iterator,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-    const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats)
-{
+bool TKqpDatashardComputeContext::ReadRow(
+    const TTableId& tableId,
+    NTable::TTableReverseIter& iterator,
+    const TSmallVec<NTable::TTag>& systemColumnTags,
+    const TSmallVec<bool>& skipNullKeys,
+    const THolderFactory& holderFactory,
+    NUdf::TUnboxedValue& result,
+    TKqpTableStats& stats
+) {
     return ReadRowImpl(tableId, iterator, systemColumnTags, skipNullKeys, holderFactory, result, stats);
 }
 
-bool TKqpDatashardComputeContext::ReadRowWide(const TTableId& tableId, NTable::TTableIter& iterator,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-    NUdf::TUnboxedValue* const* result, TKqpTableStats& stats)
-{
-    return ReadRowWideImpl(tableId, iterator, systemColumnTags, skipNullKeys,result, stats);
+bool TKqpDatashardComputeContext::ReadRowWide(
+    const TTableId& tableId,
+    NTable::TTableIter& iterator,
+    const TSmallVec<NTable::TTag>& systemColumnTags,
+    const TSmallVec<bool>& skipNullKeys,
+    NUdf::TUnboxedValue* const* result,
+    TKqpTableStats& stats
+) {
+    return ReadRowWideImpl(tableId, iterator, systemColumnTags, skipNullKeys, result, stats);
 }
 
-bool TKqpDatashardComputeContext::ReadRowWide(const TTableId& tableId, NTable::TTableReverseIter& iterator,
-    const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-    NUdf::TUnboxedValue* const* result, TKqpTableStats& stats)
-{
+bool TKqpDatashardComputeContext::ReadRowWide(
+    const TTableId& tableId,
+    NTable::TTableReverseIter& iterator,
+    const TSmallVec<NTable::TTag>& systemColumnTags,
+    const TSmallVec<bool>& skipNullKeys,
+    NUdf::TUnboxedValue* const* result,
+    TKqpTableStats& stats
+) {
     return ReadRowWideImpl(tableId, iterator, systemColumnTags, skipNullKeys, result, stats);
 }
 

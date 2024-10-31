@@ -10,9 +10,7 @@ class TController::TTxCreateReplication: public TTxBase {
 public:
     explicit TTxCreateReplication(TController* self, TEvController::TEvCreateReplication::TPtr& ev)
         : TTxBase("TxCreateReplication", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_CREATE_REPLICATION;
@@ -71,4 +69,4 @@ void TController::RunTxCreateReplication(TEvController::TEvCreateReplication::TP
     Execute(new TTxCreateReplication(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

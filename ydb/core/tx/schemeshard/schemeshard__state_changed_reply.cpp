@@ -9,18 +9,19 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
+struct TSchemeShard::TTxShardStateChanged: public TSchemeShard::TRwTxBase {
     TEvDataShard::TEvStateChanged::TPtr Ev;
     TSideEffects SideEffects;
 
-    TTxShardStateChanged(TSelf *self, TEvDataShard::TEvStateChanged::TPtr& ev)
+    TTxShardStateChanged(TSelf* self, TEvDataShard::TEvStateChanged::TPtr& ev)
         : TRwTxBase(self)
-        , Ev(ev)
-    {}
+        , Ev(ev) {}
 
-    TTxType GetTxType() const override { return TXTYPE_DATASHARD_STATE_RESULT; }
+    TTxType GetTxType() const override {
+        return TXTYPE_DATASHARD_STATE_RESULT;
+    }
 
-    void DeleteShard(TTabletId tabletId, const TActorContext &ctx) {
+    void DeleteShard(TTabletId tabletId, const TActorContext& ctx) {
         auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -34,8 +35,8 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         SideEffects.DeleteShard(shardIdx);
     }
 
-    void ProgressDependentOperation(TTabletId tabletId, const TActorContext &ctx) {
-        for(auto txIdNum: Self->PipeTracker.FindTx(ui64(tabletId))) {
+    void ProgressDependentOperation(TTabletId tabletId, const TActorContext& ctx) {
+        for (auto txIdNum : Self->PipeTracker.FindTx(ui64(tabletId))) {
             auto txId = TTxId(txIdNum);
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TTxShardStateChanged DoExecute"
@@ -58,7 +59,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
                 continue;
             }
 
-            for (auto& item: operation->PipeBindedMessages.at(tabletId)) {
+            for (auto& item : operation->PipeBindedMessages.at(tabletId)) {
                 auto msgCookie = item.first;
                 auto& msg = item.second;
                 SideEffects.UnbindMsgFromPipe(msg.OpId, tabletId, msgCookie);
@@ -66,7 +67,7 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         }
     }
 
-    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
+    void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         auto tabletId = TTabletId(Ev->Get()->Record.GetTabletId());
         auto state = Ev->Get()->Record.GetState();
 
@@ -89,15 +90,14 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
 
-    void DoComplete(const TActorContext &ctx) override {
+    void DoComplete(const TActorContext& ctx) override {
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxShardStateChanged(
-    TEvDataShard::TEvStateChanged::TPtr& ev)
-{
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxShardStateChanged(TEvDataShard::TEvStateChanged::TPtr& ev) {
     return new TTxShardStateChanged(this, ev);
 }
 
-}}
+} // namespace NSchemeShard
+} // namespace NKikimr

@@ -74,8 +74,7 @@ public:
     public:
         TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
             : Counters(counters)
-            , Owner(owner) {
-        }
+            , Owner(owner) {}
 
         ~TEditGuard() {
             Counters.OnPortionsDataRefresh(Owner.GetInserted(), Owner.GetCompacted());
@@ -102,7 +101,8 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Compacted.DebugString() << "); ";
+        return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Compacted.DebugString()
+                                << "); ";
     }
 };
 
@@ -130,7 +130,9 @@ private:
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(
-        const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
+        const std::shared_ptr<TPortionInfo> portionAfter,
+        NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard
+    );
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
@@ -144,25 +146,33 @@ private:
         }
         if (portion->GetPathId() != GetPathId()) {
             return TConclusionStatus::Fail(
-                "portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId()));
+                "portion path_id is incorrect: " + ::ToString(portion->GetPathId()) + " != " + ::ToString(GetPathId())
+            );
         }
         return it->second;
     }
 
 public:
     void RefreshTiering(const std::optional<TTiering>& tiering) {
-        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        NActualizer::TAddExternalContext context(
+            HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions
+        );
         ActualizationIndex->RefreshTiering(tiering, context);
     }
 
     template <class TModifier>
     void ModifyPortionOnExecute(
-        IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
+        IDbWrapper& wrapper,
+        const TPortionInfo::TConstPtr& portion,
+        const TModifier& modifier,
+        const ui32 firstPKColumnId
+    ) const {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         auto copy = innerPortion->MakeCopy();
         modifier(copy);
-        TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, firstPKColumnId, false);
+        TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy)))
+            .SaveToDatabase(wrapper, firstPKColumnId, false);
     }
 
     template <class TModifier>
@@ -174,7 +184,8 @@ public:
         OnAfterChangePortion(innerPortion, nullptr);
     }
 
-    void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
+    void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion)
+        const {
         AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
         portion.SaveToDatabase(wrapper, 0, false);
@@ -185,7 +196,10 @@ public:
     }
 
     void CommitPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const {
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TInsertWriteId insertWriteId,
+        const TSnapshot& snapshot
+    ) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
@@ -195,7 +209,8 @@ public:
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
 
-    void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
+    void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId)
+        const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         TDbWrapper wrapper(txc.DB, nullptr);
@@ -207,7 +222,10 @@ public:
     }
 
     void CommitImmediateOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const;
+        NTabletFlatExecutor::TTransactionContext& txc,
+        const TSnapshot& snapshot,
+        const TPortionDataAccessor& portion
+    ) const;
 
     void CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine);
 
@@ -215,16 +233,23 @@ public:
         return OptimizerPlanner->GetTasksDescription();
     }
 
-    void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
-        std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
+    void ResetOptimizer(
+        const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
+        std::shared_ptr<IStoragesManager>& storages,
+        const std::shared_ptr<arrow::Schema>& pkSchema
+    );
 
     void RefreshScheme() {
-        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        NActualizer::TAddExternalContext context(
+            HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions
+        );
         ActualizationIndex->RefreshScheme(context);
     }
 
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {
-        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        NActualizer::TAddExternalContext context(
+            HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions
+        );
         context.SetPortionExclusiveGuarantee(false);
         for (auto&& p : portionIds) {
             auto it = Portions.find(p);
@@ -252,7 +277,9 @@ public:
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
-        std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+        std::shared_ptr<TGranuleMeta> self,
+        const std::shared_ptr<NDataLocks::TManager>& locksManager
+    ) const {
         return OptimizerPlanner->GetOptimizationTask(self, locksManager);
     }
 
@@ -346,8 +373,12 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
-        const TVersionedIndex& versionedIndex);
+    explicit TGranuleMeta(
+        const ui64 pathId,
+        const TGranulesStorage& owner,
+        const NColumnShard::TGranuleDataCounters& counters,
+        const TVersionedIndex& versionedIndex
+    );
 
     bool Empty() const noexcept {
         return Portions.empty();

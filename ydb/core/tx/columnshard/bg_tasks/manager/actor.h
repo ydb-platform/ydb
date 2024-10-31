@@ -18,6 +18,7 @@ private:
     virtual void OnSessionProgressSaved() = 0;
     virtual void OnSessionStateSaved() = 0;
     virtual void OnBootstrap(const TActorContext& ctx) = 0;
+
 protected:
     const TTabletId TabletId;
     const NActors::TActorId TabletActorId;
@@ -26,6 +27,7 @@ protected:
     ui64 GetNextTxId() {
         return ++TxCounter;
     }
+
 protected:
     void ExecuteTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx) {
         AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
@@ -45,8 +47,7 @@ public:
         : TabletId(adapter->GetTabletId())
         , TabletActorId(adapter->GetTabletActorId())
         , Adapter(adapter)
-        , Session(session)
-    {
+        , Session(session) {
         AFL_VERIFY(!!Session);
         AFL_VERIFY(!!Adapter);
     }
@@ -56,20 +57,22 @@ public:
     void Handle(TEvSessionControl::TPtr& ev);
 
     STATEFN(StateInProgress) {
-        const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
+        const NActors::TLogContextGuard gLogging =
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())(
+                "TabletId", TabletId
+            );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLocalTransactionCompleted, Handle);
             hFunc(TEvSessionControl, Handle);
             cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
-        default:
-            AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
+            default:
+                AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
     void Bootstrap(const TActorContext& ctx) {
         OnBootstrap(ctx);
     }
-
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

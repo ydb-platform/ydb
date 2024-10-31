@@ -6,10 +6,7 @@ namespace NKikimr::NColumnShard::NWriting {
 
 TActor::TActor(ui64 tabletId, const TActorId& parent)
     : TabletId(tabletId)
-    , ParentActorId(parent)
-{
-
-}
+    , ParentActorId(parent) {}
 
 void TActor::Bootstrap() {
     Become(&TThis::StateWait);
@@ -19,13 +16,19 @@ void TActor::Bootstrap() {
 
 void TActor::Flush() {
     if (Aggregations.size()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "flush_writing")("size", SumSize)("count", Aggregations.size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "flush_writing")("size", SumSize)("count", Aggregations.size());
         auto action = Aggregations.front()->GetBlobsAction();
-        auto writeController = std::make_shared<NOlap::TIndexedWriteController>(ParentActorId, action, std::move(Aggregations));
+        auto writeController =
+            std::make_shared<NOlap::TIndexedWriteController>(ParentActorId, action, std::move(Aggregations));
         if (action->NeedDraftTransaction()) {
-            TActorContext::AsActorContext().Send(ParentActorId, std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController));
+            TActorContext::AsActorContext().Send(
+                ParentActorId, std::make_unique<NColumnShard::TEvPrivate::TEvWriteDraft>(writeController)
+            );
         } else {
-            TActorContext::AsActorContext().Register(NColumnShard::CreateWriteActor(TabletId, writeController, TInstant::Max()));
+            TActorContext::AsActorContext().Register(
+                NColumnShard::CreateWriteActor(TabletId, writeController, TInstant::Max())
+            );
         }
         Aggregations.clear();
         SumSize = 0;
@@ -48,12 +51,12 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     auto* evBase = ev->Get();
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
     SumSize += evBase->GetWriteData()->GetSize();
-    Aggregations.emplace_back(
-        std::make_shared<NOlap::TWriteAggregation>(*evBase->GetWriteData(), std::move(evBase->MutableBlobsToWrite()), evBase->GetRecordBatch()));
+    Aggregations.emplace_back(std::make_shared<NOlap::TWriteAggregation>(
+        *evBase->GetWriteData(), std::move(evBase->MutableBlobsToWrite()), evBase->GetRecordBatch()
+    ));
     if (SumSize > 4 * 1024 * 1024 || Aggregations.size() > 750 || !FlushDuration) {
         Flush();
     }
 }
 
-
-}
+} // namespace NKikimr::NColumnShard::NWriting

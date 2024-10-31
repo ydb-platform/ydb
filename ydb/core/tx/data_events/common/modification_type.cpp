@@ -1,4 +1,3 @@
 #include "modification_type.h"
 
-namespace NKikimr::NEvWrite {
-}
+namespace NKikimr::NEvWrite {}

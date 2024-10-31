@@ -24,9 +24,8 @@ private:
     TActorId TxAllocatorClient;
 
 public:
-    TTestEnv(TTestActorRuntime &runtime)
-        : Runtime(runtime)
-    {
+    TTestEnv(TTestActorRuntime& runtime)
+        : Runtime(runtime) {
         Setup();
         Boot();
         SetupClient();
@@ -46,7 +45,7 @@ public:
 };
 
 typedef std::pair<TVector<ui64>, ui64> TAnswerWithCookie;
-TAnswerWithCookie GrabAnswer(TTestActorRuntime &runtime);
+TAnswerWithCookie GrabAnswer(TTestActorRuntime& runtime);
 void CheckExpectedCookie(const TEvTxAllocatorClient::TEvAllocateResult& result, ui64 cockie);
 
 struct TMsgCounter {
@@ -65,4 +64,4 @@ struct TMsgCounter {
     }
 };
 
-}
+} // namespace NTxAllocatorUT_Private

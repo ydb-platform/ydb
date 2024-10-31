@@ -29,9 +29,13 @@ struct TEvTxProxy {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY)");
+    static_assert(
+        EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY),
+        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY)"
+    );
 
-    struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTx::TEvProposeTransaction, EvProposeTransaction> {
+    struct TEvProposeTransaction
+        : public TEventPB<TEvProposeTransaction, NKikimrTx::TEvProposeTransaction, EvProposeTransaction> {
         static constexpr ui32 FlagVolatile = NKikimrTx::TProxyTransaction::FLAG_VOLATILE;
 
         static constexpr ui32 AffectedRead = NKikimrTx::TProxyTransaction::FLAG_AFFECTED_READ;
@@ -42,7 +46,11 @@ struct TEvTxProxy {
         TEvProposeTransaction(ui64 coordinator, ui64 txId, ui8 execLevel, ui64 minStep, ui64 maxStep);
     };
 
-    struct TEvProposeTransactionStatus : public TEventPB<TEvProposeTransactionStatus, NKikimrTx::TEvProposeTransactionStatus, EvProposeTransactionStatus> {
+    struct TEvProposeTransactionStatus
+        : public TEventPB<
+              TEvProposeTransactionStatus,
+              NKikimrTx::TEvProposeTransactionStatus,
+              EvProposeTransactionStatus> {
         enum class EStatus {
             StatusUnknown,
             StatusDeclined,
@@ -67,9 +75,7 @@ struct TEvTxProxy {
         }
     };
 
-    struct TEvAcquireReadStep
-        : public TEventPB<TEvAcquireReadStep, NKikimrTx::TEvAcquireReadStep, EvAcquireReadStep>
-    {
+    struct TEvAcquireReadStep: public TEventPB<TEvAcquireReadStep, NKikimrTx::TEvAcquireReadStep, EvAcquireReadStep> {
         TEvAcquireReadStep() = default;
 
         explicit TEvAcquireReadStep(ui64 coordinator) {
@@ -78,8 +84,7 @@ struct TEvTxProxy {
     };
 
     struct TEvAcquireReadStepResult
-        : public TEventPB<TEvAcquireReadStepResult, NKikimrTx::TEvAcquireReadStepResult, EvAcquireReadStepResult>
-    {
+        : public TEventPB<TEvAcquireReadStepResult, NKikimrTx::TEvAcquireReadStepResult, EvAcquireReadStepResult> {
         TEvAcquireReadStepResult() = default;
 
         TEvAcquireReadStepResult(ui64 coordinator, ui64 step) {
@@ -89,8 +94,7 @@ struct TEvTxProxy {
     };
 
     struct TEvSubscribeReadStep
-        : public TEventPB<TEvSubscribeReadStep, NKikimrTx::TEvSubscribeReadStep, EvSubscribeReadStep>
-    {
+        : public TEventPB<TEvSubscribeReadStep, NKikimrTx::TEvSubscribeReadStep, EvSubscribeReadStep> {
         TEvSubscribeReadStep() = default;
 
         TEvSubscribeReadStep(ui64 coordinator, ui64 seqNo) {
@@ -100,8 +104,7 @@ struct TEvTxProxy {
     };
 
     struct TEvUnsubscribeReadStep
-        : public TEventPB<TEvUnsubscribeReadStep, NKikimrTx::TEvUnsubscribeReadStep, EvUnsubscribeReadStep>
-    {
+        : public TEventPB<TEvUnsubscribeReadStep, NKikimrTx::TEvUnsubscribeReadStep, EvUnsubscribeReadStep> {
         TEvUnsubscribeReadStep() = default;
 
         TEvUnsubscribeReadStep(ui64 coordinator, ui64 seqNo) {
@@ -111,8 +114,10 @@ struct TEvTxProxy {
     };
 
     struct TEvSubscribeReadStepResult
-        : public TEventPB<TEvSubscribeReadStepResult, NKikimrTx::TEvSubscribeReadStepResult, EvSubscribeReadStepResult>
-    {
+        : public TEventPB<
+              TEvSubscribeReadStepResult,
+              NKikimrTx::TEvSubscribeReadStepResult,
+              EvSubscribeReadStepResult> {
         TEvSubscribeReadStepResult() = default;
 
         TEvSubscribeReadStepResult(ui64 coordinator, ui64 seqNo, ui64 lastAcquireStep, ui64 nextAcquireStep) {
@@ -124,8 +129,10 @@ struct TEvTxProxy {
     };
 
     struct TEvSubscribeReadStepUpdate
-        : public TEventPB<TEvSubscribeReadStepUpdate, NKikimrTx::TEvSubscribeReadStepUpdate, EvSubscribeReadStepUpdate>
-    {
+        : public TEventPB<
+              TEvSubscribeReadStepUpdate,
+              NKikimrTx::TEvSubscribeReadStepUpdate,
+              EvSubscribeReadStepUpdate> {
         TEvSubscribeReadStepUpdate() = default;
 
         TEvSubscribeReadStepUpdate(ui64 coordinator, ui64 seqNo, ui64 nextAcquireStep) {
@@ -136,8 +143,7 @@ struct TEvTxProxy {
     };
 
     struct TEvSubscribeLastStep
-        : public TEventPB<TEvSubscribeLastStep, NKikimrTx::TEvSubscribeLastStep, EvSubscribeLastStep>
-    {
+        : public TEventPB<TEvSubscribeLastStep, NKikimrTx::TEvSubscribeLastStep, EvSubscribeLastStep> {
         TEvSubscribeLastStep() = default;
 
         TEvSubscribeLastStep(ui64 coordinator, ui64 seqNo) {
@@ -147,8 +153,7 @@ struct TEvTxProxy {
     };
 
     struct TEvUnsubscribeLastStep
-        : public TEventPB<TEvUnsubscribeLastStep, NKikimrTx::TEvUnsubscribeLastStep, EvUnsubscribeLastStep>
-    {
+        : public TEventPB<TEvUnsubscribeLastStep, NKikimrTx::TEvUnsubscribeLastStep, EvUnsubscribeLastStep> {
         TEvUnsubscribeLastStep() = default;
 
         TEvUnsubscribeLastStep(ui64 coordinator, ui64 seqNo) {
@@ -157,9 +162,7 @@ struct TEvTxProxy {
         }
     };
 
-    struct TEvUpdatedLastStep
-        : public TEventPB<TEvUpdatedLastStep, NKikimrTx::TEvUpdatedLastStep, EvUpdatedLastStep>
-    {
+    struct TEvUpdatedLastStep: public TEventPB<TEvUpdatedLastStep, NKikimrTx::TEvUpdatedLastStep, EvUpdatedLastStep> {
         TEvUpdatedLastStep() = default;
 
         TEvUpdatedLastStep(ui64 coordinator, ui64 seqNo, ui64 lastStep) {
@@ -170,8 +173,7 @@ struct TEvTxProxy {
     };
 
     struct TEvRequirePlanSteps
-        : public TEventPB<TEvRequirePlanSteps, NKikimrTx::TEvRequirePlanSteps, EvRequirePlanSteps>
-    {
+        : public TEventPB<TEvRequirePlanSteps, NKikimrTx::TEvRequirePlanSteps, EvRequirePlanSteps> {
         TEvRequirePlanSteps() = default;
 
         TEvRequirePlanSteps(ui64 coordinator, ui64 planStep) {
@@ -201,7 +203,7 @@ struct TExecLevelHierarchy {
 
     ui32 Select(ui64 mask) const {
         for (ui32 i = 0, e = Entries.size(); i != e; ++i) {
-            const TEntry &x = Entries[i];
+            const TEntry& x = Entries[i];
 
             if ((x.ReversedDomainMask & mask) == 0)
                 return x.ExecLevel;
@@ -236,43 +238,46 @@ struct TTestTxConfig {
     static constexpr ui64 TxTablet7 = 0x0000000000900006;
     static constexpr ui64 FakeHiveTablets = MakeTabletID(true, 0x000000000090000a);
     static constexpr ui64 SchemeShard = MakeTabletID(false, 0x00000000008587a0);
-    static constexpr ui64 Hive = MakeTabletID(false,  0x000000000000A001);
+    static constexpr ui64 Hive = MakeTabletID(false, 0x000000000000A001);
     static constexpr ui64 UseLessId = 0xFFFFFFFFFFFFFFF;
 };
 
 namespace TEvSubDomain {
-    enum EEv {
-        EvConfigure = EventSpaceBegin(TKikimrEvents::ES_SUB_DOMAIN),
-        EvConfigureStatus,
+enum EEv {
+    EvConfigure = EventSpaceBegin(TKikimrEvents::ES_SUB_DOMAIN),
+    EvConfigureStatus,
 
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN)");
-
-    struct TEvConfigure : public TEventPB<TEvConfigure, NKikimrSubDomains::TProcessingParams, EvConfigure> {
-        TEvConfigure() = default;
-
-        TEvConfigure(const NKikimrSubDomains::TProcessingParams &processing);
-        TEvConfigure(NKikimrSubDomains::TProcessingParams &&processing);
-    };
-
-    struct TEvConfigureStatus : public TEventPB<TEvConfigureStatus, NKikimrTx::TEvSubDomainConfigurationAck, EvConfigureStatus> {
-        TEvConfigureStatus() = default;
-
-        TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::EStatus status,
-                           ui64 tabletId);
-    };
+    EvEnd
 };
 
-TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata);
+static_assert(
+    EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN),
+    "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN)"
+);
 
-}
+struct TEvConfigure: public TEventPB<TEvConfigure, NKikimrSubDomains::TProcessingParams, EvConfigure> {
+    TEvConfigure() = default;
 
-template<>
-inline void Out<NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus>(IOutputStream& o,
-        NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus x) {
+    TEvConfigure(const NKikimrSubDomains::TProcessingParams& processing);
+    TEvConfigure(NKikimrSubDomains::TProcessingParams&& processing);
+};
+
+struct TEvConfigureStatus
+    : public TEventPB<TEvConfigureStatus, NKikimrTx::TEvSubDomainConfigurationAck, EvConfigureStatus> {
+    TEvConfigureStatus() = default;
+
+    TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::EStatus status, ui64 tabletId);
+};
+}; // namespace TEvSubDomain
+
+TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData* appdata);
+
+} // namespace NKikimr
+
+template <>
+inline void Out<NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus>(
+    IOutputStream& o,
+    NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus x
+) {
     o << (ui32)x;
 }
-
-

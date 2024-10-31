@@ -90,9 +90,13 @@ const TS3Upload& TS3UploadsManager::Add(NIceDb::TNiceDb& db, ui64 txId, const TS
     return res.first->second;
 }
 
-const TS3Upload& TS3UploadsManager::ChangeStatus(NIceDb::TNiceDb& db, ui64 txId, TS3Upload::EStatus status,
-        TMaybe<TString>&& error, TVector<TString>&& parts)
-{
+const TS3Upload& TS3UploadsManager::ChangeStatus(
+    NIceDb::TNiceDb& db,
+    ui64 txId,
+    TS3Upload::EStatus status,
+    TMaybe<TString>&& error,
+    TVector<TString>&& parts
+) {
     using Schema = TDataShard::Schema;
 
     auto it = Uploads.find(txId);
@@ -113,9 +117,9 @@ const TS3Upload& TS3UploadsManager::ChangeStatus(NIceDb::TNiceDb& db, ui64 txId,
         const ui32 partNumber = partIndex + 1;
         const auto& eTag = upload.Parts.at(partIndex);
 
-        db.Table<Schema::S3UploadedParts>().Key(txId, partNumber).Update(
-            NIceDb::TUpdate<Schema::S3UploadedParts::ETag>(eTag)
-        );
+        db.Table<Schema::S3UploadedParts>()
+            .Key(txId, partNumber)
+            .Update(NIceDb::TUpdate<Schema::S3UploadedParts::ETag>(eTag));
     }
 
     return upload;

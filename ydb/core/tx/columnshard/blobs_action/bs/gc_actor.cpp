@@ -14,7 +14,12 @@ void TGarbageCollectionActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TP
         CheckFinished();
     } else {
         ACFL_ERROR()("event", "GC_ERROR")("details", ev->Get()->Print(true));
-        SendToBSProxy(NActors::TActivationContext::AsActorContext(), ev->Cookie, GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel)).release(), ev->Cookie);
+        SendToBSProxy(
+            NActors::TActivationContext::AsActorContext(),
+            ev->Cookie,
+            GCTask->BuildRequest(TBlobAddress(ev->Cookie, ev->Get()->Channel)).release(),
+            ev->Cookie
+        );
     }
 }
 
@@ -22,8 +27,10 @@ void TGarbageCollectionActor::CheckFinished() {
     if (SharedRemovingFinished && GCTask->IsFinished()) {
         auto g = PassAwayGuard();
         ACFL_DEBUG("actor", "TGarbageCollectionActor")("event", "finished");
-        TActorContext::AsActorContext().Send(TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask));
+        TActorContext::AsActorContext().Send(
+            TabletActorId, std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(GCTask)
+        );
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

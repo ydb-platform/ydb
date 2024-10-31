@@ -32,5 +32,5 @@ static TBitMapType DeserializeBitMap(const TString& serialized) {
     return bitmap;
 }
 
-} // NDataShard
-} // NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

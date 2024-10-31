@@ -15,18 +15,19 @@ namespace {
 
 class TConfigureParts: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TConfigureParts"
-            << " opId# " << OperationId << " ";
+        return TStringBuilder() << "TCreateReplication TConfigureParts"
+                                << " opId# " << OperationId << " ";
     }
 
 public:
     explicit TConfigureParts(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvHive::TEvCreateTabletReply::EventType,
+            }
+        );
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -72,21 +73,22 @@ public:
         return false;
     }
 
-    bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
+    bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context)
+        override {
         LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
 
         switch (status) {
-        case NKikimrReplication::TEvCreateReplicationResult::SUCCESS:
-        case NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS:
-            break;
-        default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvCreateReplicationResult"
+            case NKikimrReplication::TEvCreateReplicationResult::SUCCESS:
+            case NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS:
+                break;
+            default:
+                LOG_W(DebugHint() << "Ignoring unexpected TEvCreateReplicationResult"
                 << " tabletId# " << tabletId
                 << " status# " << static_cast<int>(status));
-            return false;
+                return false;
         }
 
         auto* txState = context.SS->FindTx(OperationId);
@@ -120,19 +122,20 @@ private:
 
 class TPropose: public TSubOperationState {
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TPropose"
-            << " opId# " << OperationId << " ";
+        return TStringBuilder() << "TCreateReplication TPropose"
+                                << " opId# " << OperationId << " ";
     }
 
 public:
     explicit TPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {
-            TEvHive::TEvCreateTabletReply::EventType,
-            NReplication::TEvController::TEvCreateReplicationResult::EventType,
-        });
+        : OperationId(id) {
+        IgnoreMessages(
+            DebugHint(),
+            {
+                TEvHive::TEvCreateTabletReply::EventType,
+                NReplication::TEvController::TEvCreateReplicationResult::EventType,
+            }
+        );
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -192,7 +195,7 @@ public:
     }
 
 private:
-   const TOperationId OperationId;
+    const TOperationId OperationId;
 
 }; // TPropose
 
@@ -203,31 +206,31 @@ class TCreateReplication: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return TTxState::ConfigureParts;
-        case TTxState::ConfigureParts:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return TTxState::ConfigureParts;
+            case TTxState::ConfigureParts:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::CreateParts:
-            return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::CreateParts:
+                return MakeHolder<TCreateParts>(OperationId);
+            case TTxState::ConfigureParts:
+                return MakeHolder<TConfigureParts>(OperationId);
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -245,13 +248,14 @@ public:
             << ": opId# " << OperationId
             << ", path# " << workingDir << "/" << name);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
+        auto result = MakeHolder<TProposeResponse>(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId())
+        );
 
         const auto parentPath = TPath::Resolve(workingDir, context.SS);
         {
             const auto checks = parentPath.Check();
-            checks
-                .NotEmpty()
+            checks.NotEmpty()
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
@@ -270,28 +274,18 @@ public:
         auto path = parentPath.Child(name);
         {
             const auto checks = path.Check();
-            checks
-                .IsAtLocalSchemeShard();
+            checks.IsAtLocalSchemeShard();
 
             if (path.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeReplication, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeReplication, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .ShardsLimit(1)
-                    .IsValidACL(acl);
+                checks.IsValidLeafName().DepthLimit().PathsLimit().DirChildrenLimit().ShardsLimit(1).IsValidACL(acl);
             }
 
             if (!checks) {
@@ -313,8 +307,10 @@ public:
 
         TChannelsBindings channelsBindings;
         if (!context.SS->ResolveTabletChannels(0, parentPath.GetPathIdForDomain(), channelsBindings)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                "Unable to construct channel binding for replication controller with the storage pool");
+            result->SetError(
+                NKikimrScheme::StatusInvalidParameter,
+                "Unable to construct channel binding for replication controller with the storage pool"
+            );
             return result;
         }
 
@@ -334,7 +330,8 @@ public:
         parentPath->IncAliveChildren();
         parentPath.DomainInfo()->IncPathsInside();
 
-        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
+        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() ==
+            NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
 
@@ -343,15 +340,16 @@ public:
         context.SS->Replications[path->PathId] = replication;
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 
-        replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(
-            TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), path->PathId)
-                .WithBindedChannels(channelsBindings));
+        replication->AlterData->ControllerShardIdx =
+            context.SS->RegisterShardInfo(TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), path->PathId)
+                                              .WithBindedChannels(channelsBindings));
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateReplication, path->PathId);
-        txState.Shards.emplace_back(replication->AlterData->ControllerShardIdx,
-            ETabletType::ReplicationController, TTxState::CreateParts);
+        txState.Shards.emplace_back(
+            replication->AlterData->ControllerShardIdx, ETabletType::ReplicationController, TTxState::CreateParts
+        );
         txState.State = TTxState::CreateParts;
 
         path->IncShardsInside();
@@ -378,7 +376,9 @@ public:
             const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
 
             if (shard.Operation == TTxState::CreateParts) {
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, path->PathId, OperationId.GetTxId(), shard.TabletType);
+                context.SS->PersistShardMapping(
+                    db, shard.Idx, InvalidTabletId, path->PathId, OperationId.GetTxId(), shard.TabletType
+                );
                 context.SS->PersistChannelsBinding(db, shard.Idx, shardInfo.BindedChannels);
             }
         }
@@ -416,7 +416,7 @@ public:
 
 }; // TCreateReplication
 
-} // anonymous
+} // namespace
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateReplication>(id, tx);
@@ -426,4 +426,4 @@ ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState sta
     return MakeSubOperation<TCreateReplication>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

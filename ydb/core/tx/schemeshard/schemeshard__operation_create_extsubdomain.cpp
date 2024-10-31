@@ -17,24 +17,24 @@ class TCreateExtSubDomain: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Waiting:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Waiting:
+                return TTxState::Propose;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<NSubDomainState::TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Waiting:
+            case TTxState::Propose:
+                return MakeHolder<NSubDomainState::TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -60,8 +60,8 @@ public:
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
         auto paramErrorResult = [&result](const char* const msg) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                TStringBuilder() << "Invalid ExtSubDomain request: " << msg
+            result->SetError(
+                NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Invalid ExtSubDomain request: " << msg
             );
             return std::move(result);
         };
@@ -77,8 +77,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -100,19 +99,15 @@ public:
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeExtSubDomain, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeExtSubDomain, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
+                checks.IsValidLeafName()
                     .DepthLimit()
                     .PathsLimit() //check capacity on root Domain
                     .DirChildrenLimit()
@@ -130,9 +125,8 @@ public:
         }
 
         const bool onlyDeclaration = settings.GetTimeCastBucketsPerMediator() == 0 &&
-            settings.GetPlanResolution() == 0 &&
-            settings.GetCoordinators() == 0 &&
-            settings.GetMediators() == 0;
+                                     settings.GetPlanResolution() == 0 && settings.GetCoordinators() == 0 &&
+                                     settings.GetMediators() == 0;
 
         if (!onlyDeclaration) {
             return paramErrorResult("only declaration at creation is allowed, do not set up tables");
@@ -168,8 +162,7 @@ public:
         TString errStr;
 
         if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateExtSubDomain, userAttrsDetails, errStr) ||
-            !userAttrs->CheckLimits(errStr))
-        {
+            !userAttrs->CheckLimits(errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -206,7 +199,8 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExtSubDomain, newNode->PathId);
 
-        TSubDomainInfo::TPtr alter = new TSubDomainInfo(1, 0, 0, resourcesDomainId ? resourcesDomainId : newNode->PathId);
+        TSubDomainInfo::TPtr alter =
+            new TSubDomainInfo(1, 0, 0, resourcesDomainId ? resourcesDomainId : newNode->PathId);
         alter->SetSchemeLimits(parentPath.DomainInfo()->GetSchemeLimits()); //inherit from root
 
         if (resourcesDomainId) {
@@ -242,7 +236,8 @@ public:
         context.SS->IncrementPathDbRefCount(newNode->PathId);
 
         if (parentPath.Base()->HasActiveChanges()) {
-            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+            TTxId parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -282,7 +277,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -295,4 +290,4 @@ ISubOperation::TPtr CreateExtSubDomain(TOperationId id, TTxState::ETxState state
     return MakeSubOperation<TCreateExtSubDomain>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

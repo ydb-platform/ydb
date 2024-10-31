@@ -15,4 +15,4 @@ public:
     virtual ~ITiersManager() = default;
 };
 
-}
+} // namespace NKikimr::NColumnShard

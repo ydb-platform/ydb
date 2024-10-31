@@ -34,4 +34,4 @@ struct TCompactionLimits {
     ui32 GranuleIndexedPortionsCountLimit = WARNING_INSERTED_PORTIONS_COUNT;
 };
 
-}
+} // namespace NKikimr::NOlap

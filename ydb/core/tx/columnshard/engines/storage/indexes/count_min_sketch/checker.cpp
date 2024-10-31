@@ -19,4 +19,4 @@ bool TCountMinSketchChecker::DoDeserializeFromProtoImpl(const NKikimrSSA::TProgr
     return proto.HasCountMinSketch();
 }
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

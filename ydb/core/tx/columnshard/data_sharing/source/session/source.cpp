@@ -8,9 +8,11 @@
 
 namespace NKikimr::NOlap::NDataSharing {
 
-NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto, 
+NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(
+    const NKikimrColumnShardDataSharingProto::TSourceSession& proto,
     const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor,
-    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic) {
+    const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic
+) {
     auto parseBase = TBase::DeserializeFromProto(proto);
     if (!parseBase) {
         return parseBase;
@@ -39,33 +41,51 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
     return TConclusionStatus::Success();
 }
 
-TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr) {
+TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>>
+TSourceSession::AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr) {
     return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxFinishAckToSource(self, selfPtr, "ack_finished"));
 }
 
-TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr) {
+TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckData(
+    NColumnShard::TColumnShard* self,
+    const ui32 receivedPackIdx,
+    const std::shared_ptr<TSourceSession>& selfPtr
+) {
     auto ackResult = Cursor->AckData(receivedPackIdx);
     if (!ackResult) {
         return ackResult;
     }
     if (Cursor->IsReadyForNext()) {
         Cursor->Next(self->GetStoragesManager(), self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
-        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataAckToSource(self, selfPtr, "ack_to_source_on_ack_data"));
+        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(
+            new TTxDataAckToSource(self, selfPtr, "ack_to_source_on_ack_data")
+        );
     } else {
-        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxWriteSourceCursor(self, selfPtr, "write_source_cursor_on_ack_data"));
+        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(
+            new TTxWriteSourceCursor(self, selfPtr, "write_source_cursor_on_ack_data")
+        );
     }
 }
 
-TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckLinks(NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr) {
+TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TSourceSession::AckLinks(
+    NColumnShard::TColumnShard* self,
+    const TTabletId tabletId,
+    const ui32 receivedPackIdx,
+    const std::shared_ptr<TSourceSession>& selfPtr
+) {
     auto ackResult = Cursor->AckLinks(tabletId, receivedPackIdx);
     if (!ackResult) {
         return ackResult;
     }
     if (Cursor->IsReadyForNext()) {
         Cursor->Next(self->GetStoragesManager(), self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
-        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxDataAckToSource(self, selfPtr, "ack_to_source_on_ack_links"));
+        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(
+            new TTxDataAckToSource(self, selfPtr, "ack_to_source_on_ack_links")
+        );
     } else {
-        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(new TTxWriteSourceCursor(self, selfPtr, "write_source_cursor_on_ack_links"));
+        return std::unique_ptr<NTabletFlatExecutor::ITransaction>(
+            new TTxWriteSourceCursor(self, selfPtr, "write_source_cursor_on_ack_links")
+        );
     }
 }
 
@@ -73,15 +93,24 @@ void TSourceSession::SaveCursorToDatabase(NIceDb::TNiceDb& db) {
     GetCursorVerified()->SaveToDatabase(db, GetSessionId());
 }
 
-void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
+void TSourceSession::ActualizeDestination(
+    const NColumnShard::TColumnShard& shard,
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager
+) {
     AFL_VERIFY(IsInProgress() || IsPrepared());
     AFL_VERIFY(Cursor);
     if (Cursor->IsValid()) {
         if (!Cursor->IsAckDataReceived()) {
             const THashMap<ui64, NEvents::TPathIdData>& packPortions = Cursor->GetSelected();
-            auto ev = std::make_unique<NEvents::TEvSendDataFromSource>(GetSessionId(), Cursor->GetPackIdx(), SelfTabletId, packPortions);
-            NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(ev.release(), (ui64)DestinationTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+            auto ev = std::make_unique<NEvents::TEvSendDataFromSource>(
+                GetSessionId(), Cursor->GetPackIdx(), SelfTabletId, packPortions
+            );
+            NActors::TActivationContext::AsActorContext().Send(
+                MakePipePerNodeCacheID(false),
+                new TEvPipeCache::TEvForward(ev.release(), (ui64)DestinationTabletId, true),
+                IEventHandle::FlagTrackDelivery,
+                GetRuntimeId()
+            );
         }
         {
             const auto& links = Cursor->GetLinks();
@@ -89,22 +118,37 @@ void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shar
                 if (Cursor->GetLinksModifiedTablets().contains(tabletId)) {
                     continue;
                 }
-                auto ev = std::make_unique<NEvents::TEvApplyLinksModification>(SelfTabletId, GetSessionId(), Cursor->GetPackIdx(), task);
-                NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
-                    new TEvPipeCache::TEvForward(ev.release(), (ui64)tabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+                auto ev = std::make_unique<NEvents::TEvApplyLinksModification>(
+                    SelfTabletId, GetSessionId(), Cursor->GetPackIdx(), task
+                );
+                NActors::TActivationContext::AsActorContext().Send(
+                    MakePipePerNodeCacheID(false),
+                    new TEvPipeCache::TEvForward(ev.release(), (ui64)tabletId, true),
+                    IEventHandle::FlagTrackDelivery,
+                    GetRuntimeId()
+                );
             }
         }
     } else {
         auto ev = std::make_unique<NEvents::TEvFinishedFromSource>(GetSessionId(), SelfTabletId);
-        NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(ev.release(), (ui64)DestinationTabletId, true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
+        NActors::TActivationContext::AsActorContext().Send(
+            MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(ev.release(), (ui64)DestinationTabletId, true),
+            IEventHandle::FlagTrackDelivery,
+            GetRuntimeId()
+        );
         Finish(shard, dataLocksManager);
     }
 }
 
-bool TSourceSession::DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) {
+bool TSourceSession::DoStart(
+    const NColumnShard::TColumnShard& shard,
+    const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions
+) {
     AFL_VERIFY(Cursor);
-    if (Cursor->Start(shard.GetStoragesManager(), portions, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex())) {
+    if (Cursor->Start(
+            shard.GetStoragesManager(), portions, shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex()
+        )) {
         ActualizeDestination(shard, shard.GetDataLocksManager());
         return true;
     } else {
@@ -112,4 +156,4 @@ bool TSourceSession::DoStart(const NColumnShard::TColumnShard& shard, const THas
     }
 }
 
-}
+} // namespace NKikimr::NOlap::NDataSharing

@@ -31,7 +31,9 @@ private:
         NKikimrTxColumnShard::TSchemaTxBody result;
         result.MutableSeqNo()->SetGeneration(seqNo.Generation);
         result.MutableSeqNo()->SetRound(seqNo.Round);
-        AFL_VERIFY(NewShardIds.contains(tabletId) || ModifiedShardIds.contains(tabletId) || DeleteShardIds.contains(tabletId));
+        AFL_VERIFY(
+            NewShardIds.contains(tabletId) || ModifiedShardIds.contains(tabletId) || DeleteShardIds.contains(tabletId)
+        );
         if (NewShardIds.contains(tabletId)) {
             auto& alter = *result.MutableEnsureTables();
             auto& create = *alter.AddTables();
@@ -58,7 +60,6 @@ private:
     }
 
 public:
-
 };
 
-}
+} // namespace NKikimr::NSchemeShard::NOlap::NAlter

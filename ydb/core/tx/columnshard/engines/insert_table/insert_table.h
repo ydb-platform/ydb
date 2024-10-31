@@ -22,7 +22,10 @@ protected:
         ++BlobLinks[blobId];
     }
 
-    bool RemoveBlobLinkOnExecute(const TUnifiedBlobId& blobId, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    bool RemoveBlobLinkOnExecute(
+        const TUnifiedBlobId& blobId,
+        const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction
+    );
     bool RemoveBlobLinkOnComplete(const TUnifiedBlobId& blobId);
 
 public:
@@ -94,7 +97,7 @@ public:
 class TInsertTable: public TInsertTableAccessor {
 private:
     bool Loaded = false;
-    TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
+    TInsertWriteId LastWriteId = TInsertWriteId{0};
 
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
@@ -102,7 +105,12 @@ public:
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TInsertionSummary::TCounters Commit(
-        IDbWrapper& dbTable, ui64 planStep, ui64 txId, const THashSet<TInsertWriteId>& writeIds, std::function<bool(ui64)> pathExists);
+        IDbWrapper& dbTable,
+        ui64 planStep,
+        ui64 txId,
+        const THashSet<TInsertWriteId>& writeIds,
+        std::function<bool(ui64)> pathExists
+    );
     TInsertionSummary::TCounters CommitEphemeral(IDbWrapper& dbTable, TCommittedData&& data);
     void Abort(IDbWrapper& dbTable, const THashSet<TInsertWriteId>& writeIds);
     void MarkAsNotAbortable(const TInsertWriteId writeId) {
@@ -111,14 +119,26 @@ public:
     THashSet<TInsertWriteId> OldWritesToAbort(const TInstant& now) const;
 
     void EraseCommittedOnExecute(
-        IDbWrapper& dbTable, const TCommittedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+        IDbWrapper& dbTable,
+        const TCommittedData& key,
+        const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction
+    );
     void EraseCommittedOnComplete(const TCommittedData& key);
 
-    void EraseAbortedOnExecute(IDbWrapper& dbTable, const TInsertedData& key, const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction);
+    void EraseAbortedOnExecute(
+        IDbWrapper& dbTable,
+        const TInsertedData& key,
+        const std::shared_ptr<IBlobsDeclareRemovingAction>& blobsAction
+    );
     void EraseAbortedOnComplete(const TInsertedData& key);
 
-    std::vector<TCommittedBlob> Read(ui64 pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
-        const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
+    std::vector<TCommittedBlob> Read(
+        ui64 pathId,
+        const std::optional<ui64> lockId,
+        const TSnapshot& reqSnapshot,
+        const std::shared_ptr<arrow::Schema>& pkSchema,
+        const TPKRangesFilter* pkRangesFilter
+    ) const;
     bool Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant loadTime);
 
     TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);

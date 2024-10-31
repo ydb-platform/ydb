@@ -13,11 +13,8 @@ struct TS3Download {
 
     void Out(IOutputStream& out) const {
         out << "{"
-            << " DataETag: " << DataETag
-            << " ProcessedBytes: " << ProcessedBytes
-            << " WrittenBytes: " << WrittenBytes
-            << " WrittenRows: " << WrittenRows
-        << " }";
+            << " DataETag: " << DataETag << " ProcessedBytes: " << ProcessedBytes << " WrittenBytes: " << WrittenBytes
+            << " WrittenRows: " << WrittenRows << " }";
     }
 };
 

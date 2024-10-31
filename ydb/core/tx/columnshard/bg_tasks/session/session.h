@@ -11,6 +11,7 @@ private:
     YDB_READONLY_DEF(std::optional<NActors::TActorId>, ActorId);
     YDB_READONLY_DEF(TStatusChannelContainer, ChannelContainer);
     YDB_READONLY_DEF(TSessionLogicContainer, LogicContainer);
+
 public:
     TSessionInfoReport GetSessionInfoForReport() const {
         return TSessionInfoReport(Identifier, LogicContainer.GetClassName(), LogicContainer->IsFinished());
@@ -77,12 +78,11 @@ public:
     TSession(const TString& identifier, const TStatusChannelContainer& channel, const TSessionLogicContainer& logic)
         : Identifier(identifier)
         , ChannelContainer(channel)
-        , LogicContainer(logic)
-    {
+        , LogicContainer(logic) {
         AFL_VERIFY(!!Identifier);
         AFL_VERIFY(!!ChannelContainer);
         AFL_VERIFY(!!LogicContainer);
     }
 };
 
-}
+} // namespace NKikimr::NOlap::NBackground

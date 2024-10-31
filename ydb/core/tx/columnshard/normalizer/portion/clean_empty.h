@@ -4,15 +4,15 @@
 
 namespace NKikimr::NOlap {
 
-class TCleanEmptyPortionsNormalizer : public TNormalizationController::INormalizerComponent {
-
+class TCleanEmptyPortionsNormalizer: public TNormalizationController::INormalizerComponent {
     static TString ClassName() {
         return ToString(ENormalizerSequentialId::EmptyPortionsCleaner);
     }
-    static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanEmptyPortionsNormalizer>(ClassName());
+    static inline auto Registrator =
+        INormalizerComponent::TFactory::TRegistrator<TCleanEmptyPortionsNormalizer>(ClassName());
+
 public:
-    TCleanEmptyPortionsNormalizer(const TNormalizationController::TInitContext&)
-    {}
+    TCleanEmptyPortionsNormalizer(const TNormalizationController::TInitContext&) {}
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
         return ENormalizerSequentialId::EmptyPortionsCleaner;
@@ -22,7 +22,8 @@ public:
         return ClassName();
     }
 
-    TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
+    TConclusion<std::vector<INormalizerTask::TPtr>>
+    DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 };
 
 } //namespace NKikimr::NOlap

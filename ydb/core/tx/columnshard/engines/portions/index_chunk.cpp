@@ -4,7 +4,9 @@
 
 namespace NKikimr::NOlap {
 
-NKikimr::TConclusionStatus TIndexChunk::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TIndexChunk& proto) {
+NKikimr::TConclusionStatus TIndexChunk::DeserializeFromProto(
+    const NKikimrColumnShardDataSharingProto::TIndexChunk& proto
+) {
     IndexId = proto.GetIndexId();
     ChunkIdx = proto.GetChunkIdx();
     {
@@ -35,8 +37,7 @@ private:
 
 public:
     TBlobInfoSerializer(NKikimrColumnShardDataSharingProto::TIndexChunk& proto)
-        : Proto(proto) {
-    }
+        : Proto(proto) {}
 
     void operator()(const TBlobRangeLink16& link) {
         *Proto.MutableBlobRange() = link.SerializeToProto();

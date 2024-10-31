@@ -8,7 +8,8 @@ namespace NKikimr::NOlap::NCompaction {
 
 class TSparsedMerger: public IColumnMerger {
 private:
-    static inline auto Registrator = TFactory::TRegistrator<TSparsedMerger>(NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
+    static inline auto Registrator =
+        TFactory::TRegistrator<TSparsedMerger>(NArrow::NAccessor::TGlobalConst::SparsedDataAccessorName);
 
     using TBase = IColumnMerger;
     class TWriter: public TColumnPortionResult {
@@ -58,20 +59,25 @@ private:
 
         void InitArrays(const ui32 position) {
             AFL_VERIFY(!ChunkAddress || ChunkFinishPosition <= position);
-            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position)("pos", position)(
-                "global", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
-            ChunkAddress = CurrentChunkedArray->GetChunk(ChunkAddress, position - CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() <= position)
+            ("pos", position)("global", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            ChunkAddress = CurrentChunkedArray->GetChunk(
+                ChunkAddress, position - CurrentOwnedArray->GetAddress().GetGlobalStartPosition()
+            );
             AFL_VERIFY(ChunkAddress);
-            ChunkStartPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalStartPosition();
-            ChunkFinishPosition =
-                CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + ChunkAddress->GetAddress().GetGlobalFinishPosition();
+            ChunkStartPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() +
+                                 ChunkAddress->GetAddress().GetGlobalStartPosition();
+            ChunkFinishPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() +
+                                  ChunkAddress->GetAddress().GetGlobalFinishPosition();
             AFL_VERIFY(position < ChunkFinishPosition)("finish", ChunkFinishPosition)("pos", position);
             AFL_VERIFY(ChunkStartPosition <= position)("start", ChunkStartPosition)("pos", position);
         }
 
     public:
-        TPlainChunkCursor(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunked,
-            const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* currentOwnedArray)
+        TPlainChunkCursor(
+            const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunked,
+            const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* currentOwnedArray
+        )
             : CurrentChunkedArray(chunked)
             , CurrentOwnedArray(currentOwnedArray) {
             AFL_VERIFY(CurrentChunkedArray);
@@ -80,8 +86,10 @@ private:
         }
         bool AddIndexTo(const ui32 index, TWriter& writer);
         std::optional<ui32> MoveToSignificant(const ui32 currentGlobalPosition, const TColumnMergeContext& context) {
-            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition)("start", ChunkStartPosition)("pos", currentGlobalPosition)(
-                "global_start", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
+            AFL_VERIFY(ChunkStartPosition <= currentGlobalPosition)
+            ("start", ChunkStartPosition)("pos", currentGlobalPosition)(
+                "global_start", CurrentOwnedArray->GetAddress().GetGlobalStartPosition()
+            );
             ui32 currentIndex = currentGlobalPosition;
             while (true) {
                 if (CurrentOwnedArray->GetAddress().GetGlobalFinishPosition() <= currentIndex) {
@@ -93,7 +101,10 @@ private:
                 }
                 for (; currentIndex < ChunkFinishPosition; ++currentIndex) {
                     if (!NArrow::ColumnEqualsScalar(
-                            ChunkAddress->GetArray(), currentIndex - ChunkStartPosition, context.GetLoader()->GetDefaultValue())) {
+                            ChunkAddress->GetArray(),
+                            currentIndex - ChunkStartPosition,
+                            context.GetLoader()->GetDefaultValue()
+                        )) {
                         return currentIndex;
                     }
                 }
@@ -111,21 +122,31 @@ private:
         ui32 NextLocalPosition = 0;
         ui32 FinishGlobalPosition = 0;
         void InitArrays(const ui32 position) {
-            AFL_VERIFY(!Chunk || CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition() <= position);
+            AFL_VERIFY(
+                !Chunk ||
+                CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition() <= position
+            );
             Chunk = &CurrentSparsedArray->GetSparsedChunk(CurrentOwnedArray->GetAddress().GetLocalIndex(position));
             AFL_VERIFY(Chunk->GetRecordsCount());
-            AFL_VERIFY(CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition() <= position && 
-                    position < CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition())
+            AFL_VERIFY(
+                CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition() <= position &&
+                position < CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition()
+            )
             ("pos", position)("start", Chunk->GetStartPosition())("finish", Chunk->GetFinishPosition())(
-                "shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition());
-            ChunkStartGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition();
-            NextGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFirstIndexNotDefault();
+                "shift", CurrentOwnedArray->GetAddress().GetGlobalStartPosition()
+            );
+            ChunkStartGlobalPosition =
+                CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetStartPosition();
+            NextGlobalPosition =
+                CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFirstIndexNotDefault();
             NextLocalPosition = 0;
-            FinishGlobalPosition = CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition();
+            FinishGlobalPosition =
+                CurrentOwnedArray->GetAddress().GetGlobalStartPosition() + Chunk->GetFinishPosition();
         }
 
     public:
-        std::optional<ui32> MoveToSignificant(const ui32 currentGlobalPosition, const TColumnMergeContext& /*context*/) {
+        std::optional<ui32>
+        MoveToSignificant(const ui32 currentGlobalPosition, const TColumnMergeContext& /*context*/) {
             while (true) {
                 if (NextGlobalPosition == CurrentOwnedArray->GetAddress().GetGlobalFinishPosition()) {
                     return {};
@@ -147,8 +168,10 @@ private:
             }
         }
         bool AddIndexTo(const ui32 index, TWriter& writer);
-        TSparsedChunkCursor(const std::shared_ptr<NArrow::NAccessor::TSparsedArray>& sparsed,
-            const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* currentOwnedArray)
+        TSparsedChunkCursor(
+            const std::shared_ptr<NArrow::NAccessor::TSparsedArray>& sparsed,
+            const NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress* currentOwnedArray
+        )
             : CurrentSparsedArray(sparsed)
             , CurrentOwnedArray(currentOwnedArray) {
             AFL_VERIFY(sparsed);
@@ -275,9 +298,12 @@ private:
     std::list<TCursorPosition> CursorPositions;
 
     virtual void DoStart(
-        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override;
+        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input,
+        TMergingContext& mergeContext
+    ) override;
 
-    virtual std::vector<TColumnPortionResult> DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
+    virtual std::vector<TColumnPortionResult>
+    DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
 
 public:
     using TBase::TBase;

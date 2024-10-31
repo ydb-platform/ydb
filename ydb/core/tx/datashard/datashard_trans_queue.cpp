@@ -21,7 +21,7 @@ void TTransQueue::AddTxInFly(TOperation::TPtr op) {
     Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
 }
 
-void TTransQueue::RemoveTxInFly(ui64 txId, std::vector<std::unique_ptr<IEventHandle>> *cleanupReplies) {
+void TTransQueue::RemoveTxInFly(ui64 txId, std::vector<std::unique_ptr<IEventHandle>>* cleanupReplies) {
     auto it = TxsInFly.find(txId);
     if (it != TxsInFly.end()) {
         if (cleanupReplies) {
@@ -112,9 +112,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 if (Y_LIKELY(!op->GetStep())) {
                     op->SetStep(step);
                     --PlanWaitingTxCount;
-                    if (op->HasFlag(TTxFlags::BlockingImmediateOps) ||
-                        op->HasFlag(TTxFlags::BlockingImmediateWrites))
-                    {
+                    if (op->HasFlag(TTxFlags::BlockingImmediateOps) || op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
                         ProposeDelayers.insert(txId);
                     }
                 }
@@ -151,11 +149,22 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 continue;
             }
 
-            TSchemaOperation op(txId, TSchemaOperation::EType(opType), source,
-                               tabletId, minStep, maxStep, planStep, readOnly,
-                               success, error, dataSize, rows);
+            TSchemaOperation op(
+                txId,
+                TSchemaOperation::EType(opType),
+                source,
+                tabletId,
+                minStep,
+                maxStep,
+                planStep,
+                readOnly,
+                success,
+                error,
+                dataSize,
+                rows
+            );
             auto saved = SchemaOps.insert(std::make_pair(op.TxId, op));
-            TSchemaOperation * savedOp = &saved.first->second;
+            TSchemaOperation* savedOp = &saved.first->second;
             if (schemaTxs.contains(txId)) { // is not done yet
                 Self->Pipeline.SetSchemaOp(savedOp);
             } else {
@@ -220,9 +229,10 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
         NIceDb::TUpdate<Schema::SchemaOperations::Success>(op.Success),
         NIceDb::TUpdate<Schema::SchemaOperations::Error>(op.Error),
         NIceDb::TUpdate<Schema::SchemaOperations::DataSize>(op.BytesProcessed),
-        NIceDb::TUpdate<Schema::SchemaOperations::Rows>(op.RowsProcessed));
+        NIceDb::TUpdate<Schema::SchemaOperations::Rows>(op.RowsProcessed)
+    );
 
-    TSchemaOperation * savedOp = &saved.first->second;
+    TSchemaOperation* savedOp = &saved.first->second;
     Y_ABORT_UNLESS(savedOp->TabletId);
     Self->Pipeline.SetSchemaOp(savedOp);
 
@@ -241,18 +251,24 @@ void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId s
         return;
     }
 
-    db.Table<Schema::TxMain>().Key(op->GetTxId()).Update(
-        NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()),
-        NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask),
-        NIceDb::TUpdate<Schema::TxMain::MaxStep>(op->GetMaxStep()),
-        NIceDb::TUpdate<Schema::TxMain::ReceivedAt>(op->GetReceivedAt().GetValue()),
-        NIceDb::TUpdate<Schema::TxMain::Flags64>(op->GetFlags() & preserveFlagsMask),
-        NIceDb::TUpdate<Schema::TxMain::Source>(source),
-        NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie()));
+    db.Table<Schema::TxMain>()
+        .Key(op->GetTxId())
+        .Update(
+            NIceDb::TUpdate<Schema::TxMain::Kind>(op->GetKind()),
+            NIceDb::TUpdate<Schema::TxMain::Flags>(op->GetFlags() & preserveFlagsMask),
+            NIceDb::TUpdate<Schema::TxMain::MaxStep>(op->GetMaxStep()),
+            NIceDb::TUpdate<Schema::TxMain::ReceivedAt>(op->GetReceivedAt().GetValue()),
+            NIceDb::TUpdate<Schema::TxMain::Flags64>(op->GetFlags() & preserveFlagsMask),
+            NIceDb::TUpdate<Schema::TxMain::Source>(source),
+            NIceDb::TUpdate<Schema::TxMain::Cookie>(op->GetCookie())
+        );
 
-    db.Table<Schema::TxDetails>().Key(op->GetTxId(), Self->TabletID()).Update(
-        NIceDb::TUpdate<Schema::TxDetails::Body>(TString(txBody)),
-        NIceDb::TUpdate<Schema::TxDetails::Source>(source));
+    db.Table<Schema::TxDetails>()
+        .Key(op->GetTxId(), Self->TabletID())
+        .Update(
+            NIceDb::TUpdate<Schema::TxDetails::Body>(TString(txBody)),
+            NIceDb::TUpdate<Schema::TxDetails::Source>(source)
+        );
 
     // NOTE: we no longer add rows to the DeadlineQueue table
     db.NoMoreReadsForTx();
@@ -271,7 +287,8 @@ void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
 
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
 
-    db.Table<Schema::TxMain>().Key(txId)
+    db.Table<Schema::TxMain>()
+        .Key(txId)
         .Update<Schema::TxMain::Flags>(flags & preserveFlagsMask)
         .Update<Schema::TxMain::Flags64>(flags & preserveFlagsMask);
 }
@@ -284,12 +301,10 @@ void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf&
 
     Y_ABORT_UNLESS(!it->second->HasVolatilePrepareFlag(), "Unexpected UpdateTxBody for a volatile transaction");
 
-    db.Table<Schema::TxDetails>().Key(txId, Self->TabletID())
-        .Update<Schema::TxDetails::Body>(TString(txBody));
+    db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()).Update<Schema::TxDetails::Body>(TString(txBody));
 }
 
-void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
-                           const TOperation &op) {
+void TTransQueue::RemoveTx(NIceDb::TNiceDb& db, const TOperation& op) {
     using Schema = TDataShard::Schema;
 
     if (!op.HasVolatilePrepareFlag()) {
@@ -343,12 +358,14 @@ bool TTransQueue::GetNextPlannedTxId(ui64& step, ui64& txId) const {
     return false;
 }
 
-bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
-                                ui64 txId,
-                                TActorId &target,
-                                TString &txBody,
-                                TVector<TSysTables::TLocksTable::TLock> &locks,
-                                ui64 &artifactFlags) {
+bool TTransQueue::LoadTxDetails(
+    NIceDb::TNiceDb& db,
+    ui64 txId,
+    TActorId& target,
+    TString& txBody,
+    TVector<TSysTables::TLocksTable::TLock>& locks,
+    ui64& artifactFlags
+) {
     using Schema = TDataShard::Schema;
 
     auto it = TxsInFly.find(txId);
@@ -394,7 +411,8 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
 
             for (size_t i = 0; i < count; ++i) {
                 locks.push_back(TSysTables::TLocksTable::TLock::FromPersistent(
-                    ReadUnaligned<TSysTables::TLocksTable::TPersistentLock>(p)));
+                    ReadUnaligned<TSysTables::TLocksTable::TPersistentLock>(p)
+                ));
                 p += elementSize;
             }
         }
@@ -451,9 +469,8 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId, std::vector<std:
 // The argument outdatedStep specifies the maximum step for which we received
 // all planned transactions.
 // NOTE: DeadlineQueue no longer contains planned transactions.
-ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize,
-        TVector<ui64>& outdatedTxs)
-{
+ECleanupStatus
+TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs) {
     using Schema = TDataShard::Schema;
 
     outdatedTxs.reserve(batchSize);
@@ -516,10 +533,7 @@ bool TTransQueue::CleanupVolatile(ui64 txId) {
     return false;
 }
 
-void TTransQueue::PlanTx(TOperation::TPtr op,
-                         ui64 step,
-                         NIceDb::TNiceDb &db)
-{
+void TTransQueue::PlanTx(TOperation::TPtr op, ui64 step, NIceDb::TNiceDb& db) {
     Y_DEBUG_ABORT_UNLESS(TxsInFly.contains(op->GetTxId()) && TxsInFly.at(op->GetTxId()) == op);
 
     if (Y_LIKELY(!op->GetStep())) {
@@ -539,8 +553,7 @@ void TTransQueue::PlanTx(TOperation::TPtr op,
     DeadlineQueue.erase(std::make_pair(op->GetMaxStep(), op->GetTxId()));
 }
 
-void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
-{
+void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb& db, ui64 step, ui64 txId) {
     using Schema = TDataShard::Schema;
     db.Table<Schema::PlanQueue>().Key(step, txId).Delete();
     PlannedTxs.erase(TStepOrder(step, txId));
@@ -551,12 +564,11 @@ void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
     Self->IncCounter(COUNTER_TX_PROGRESS_DUPLICATE);
 }
 
-TString TTransQueue::TxInFlyToString() const
-{
+TString TTransQueue::TxInFlyToString() const {
     TStringStream ss;
-    for (auto &pr : TxsInFly)
-        ss << "{" << pr.first << ": " << pr.second->GetKind() << "} ";
+    for (auto& pr : TxsInFly) ss << "{" << pr.first << ": " << pr.second->GetKind() << "} ";
     return ss.Str();
 }
 
-}}
+} // namespace NDataShard
+} // namespace NKikimr

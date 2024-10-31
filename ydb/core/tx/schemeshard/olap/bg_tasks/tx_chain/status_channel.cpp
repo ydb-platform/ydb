@@ -1,5 +1,3 @@
 #include "status_channel.h"
 
-namespace NKikimr::NSchemeShard::NOlap::NBackground {
-
-}
+namespace NKikimr::NSchemeShard::NOlap::NBackground {}

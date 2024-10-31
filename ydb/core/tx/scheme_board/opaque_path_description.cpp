@@ -11,18 +11,14 @@ bool TOpaquePathDescription::IsEmpty() const {
 TString TOpaquePathDescription::ToString() const {
     // fields are reordered to be more useful to people reading logs
     return TStringBuilder() << "{"
-        << "Status " << Status
-        << ", Path " << Path
-        << ", PathId " << PathId
-        << ", PathVersion " << PathVersion
-        << ", SubdomainPathId " << SubdomainPathId
-        << ", PathAbandonedTenantsSchemeShards size " << PathAbandonedTenantsSchemeShards.size()
-        << ", DescribeSchemeResultSerialized size " << DescribeSchemeResultSerialized.size()
-        << "}"
-    ;
+                            << "Status " << Status << ", Path " << Path << ", PathId " << PathId << ", PathVersion "
+                            << PathVersion << ", SubdomainPathId " << SubdomainPathId
+                            << ", PathAbandonedTenantsSchemeShards size " << PathAbandonedTenantsSchemeShards.size()
+                            << ", DescribeSchemeResultSerialized size " << DescribeSchemeResultSerialized.size() << "}";
 }
 
-TOpaquePathDescription MakeOpaquePathDescription(const TString& preSerializedPart, const NKikimrScheme::TEvDescribeSchemeResult& protoPart) {
+TOpaquePathDescription
+MakeOpaquePathDescription(const TString& preSerializedPart, const NKikimrScheme::TEvDescribeSchemeResult& protoPart) {
     return TOpaquePathDescription{
         .DescribeSchemeResultSerialized = SerializeDescribeSchemeResult(preSerializedPart, protoPart),
         .Status = protoPart.GetStatus(),
@@ -38,4 +34,4 @@ TOpaquePathDescription MakeOpaquePathDescription(const TTwoPartDescription& twoP
     return MakeOpaquePathDescription(twoPartDescription.PreSerialized, twoPartDescription.Record);
 }
 
-}  // NKikimr::NSchemeBoard
+}  // namespace NKikimr::NSchemeBoard

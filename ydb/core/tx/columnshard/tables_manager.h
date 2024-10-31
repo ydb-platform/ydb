@@ -129,16 +129,18 @@ public:
     TTableInfo() = default;
 
     TTableInfo(const ui64 pathId)
-        : PathId(pathId) {
-    }
+        : PathId(pathId) {}
 
     template <class TRow>
     bool InitFromDB(const TRow& rowset) {
         PathId = rowset.template GetValue<Schema::TableInfo::PathId>();
         TieringUsage = rowset.template GetValue<Schema::TableInfo::TieringUsage>();
-        if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
+        if (rowset.template HaveValue<Schema::TableInfo::DropStep>() &&
+            rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             DropVersion.emplace(
-                rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
+                rowset.template GetValue<Schema::TableInfo::DropStep>(),
+                rowset.template GetValue<Schema::TableInfo::DropTxId>()
+            );
         }
         return true;
     }
@@ -257,14 +259,29 @@ public:
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);
 
-    void AddSchemaVersion(const ui32 presetId, const NOlap::TSnapshot& version, const NKikimrSchemeOp::TColumnTableSchema& schema,
-        NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
-    void AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& version, const NKikimrTxColumnShard::TTableVersionInfo& versionInfo,
-        const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, NIceDb::TNiceDb& db, std::shared_ptr<TTiersManager>& manager);
+    void AddSchemaVersion(
+        const ui32 presetId,
+        const NOlap::TSnapshot& version,
+        const NKikimrSchemeOp::TColumnTableSchema& schema,
+        NIceDb::TNiceDb& db,
+        std::shared_ptr<TTiersManager>& manager
+    );
+    void AddTableVersion(
+        const ui64 pathId,
+        const NOlap::TSnapshot& version,
+        const NKikimrTxColumnShard::TTableVersionInfo& versionInfo,
+        const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema,
+        NIceDb::TNiceDb& db,
+        std::shared_ptr<TTiersManager>& manager
+    );
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const ui64 pathId,
-        const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(
+        TColumnShard& owner,
+        const ui64 pathId,
+        const ui64 versionId,
+        const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic
+    ) const;
 };
 
 }   // namespace NKikimr::NColumnShard

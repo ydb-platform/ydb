@@ -8,54 +8,58 @@
 namespace NKikimr::NReplication {
 
 namespace TEvController {
-    enum EEv {
-        EvCreateReplication = EventSpaceBegin(TKikimrEvents::ES_REPLICATION_CONTROLLER),
-        EvCreateReplicationResult,
-        EvAlterReplication,
-        EvAlterReplicationResult,
-        EvDropReplication,
-        EvDropReplicationResult,
-        EvDescribeReplication,
-        EvDescribeReplicationResult,
+enum EEv {
+    EvCreateReplication = EventSpaceBegin(TKikimrEvents::ES_REPLICATION_CONTROLLER),
+    EvCreateReplicationResult,
+    EvAlterReplication,
+    EvAlterReplicationResult,
+    EvDropReplication,
+    EvDropReplicationResult,
+    EvDescribeReplication,
+    EvDescribeReplicationResult,
 
-        EvEnd,
-    };
+    EvEnd,
+};
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_CONTROLLER),
-        "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_CONTROLLER)");
+static_assert(
+    EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_CONTROLLER),
+    "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_CONTROLLER)"
+);
 
-    struct TEvCreateReplication
-        : public TSensitiveEventPB<TEvCreateReplication, NKikimrReplication::TEvCreateReplication, EvCreateReplication>
-    {};
+struct TEvCreateReplication
+    : public TSensitiveEventPB<TEvCreateReplication, NKikimrReplication::TEvCreateReplication, EvCreateReplication> {};
 
-    struct TEvCreateReplicationResult
-        : public TEventPB<TEvCreateReplicationResult, NKikimrReplication::TEvCreateReplicationResult, EvCreateReplicationResult>
-    {};
+struct TEvCreateReplicationResult
+    : public TEventPB<
+          TEvCreateReplicationResult,
+          NKikimrReplication::TEvCreateReplicationResult,
+          EvCreateReplicationResult> {};
 
-    struct TEvAlterReplication
-        : public TSensitiveEventPB<TEvAlterReplication, NKikimrReplication::TEvAlterReplication, EvAlterReplication>
-    {};
+struct TEvAlterReplication
+    : public TSensitiveEventPB<TEvAlterReplication, NKikimrReplication::TEvAlterReplication, EvAlterReplication> {};
 
-    struct TEvAlterReplicationResult
-        : public TEventPB<TEvAlterReplicationResult, NKikimrReplication::TEvAlterReplicationResult, EvAlterReplicationResult>
-    {};
+struct TEvAlterReplicationResult
+    : public TEventPB<
+          TEvAlterReplicationResult,
+          NKikimrReplication::TEvAlterReplicationResult,
+          EvAlterReplicationResult> {};
 
-    struct TEvDropReplication
-        : public TEventPB<TEvDropReplication, NKikimrReplication::TEvDropReplication, EvDropReplication>
-    {};
+struct TEvDropReplication
+    : public TEventPB<TEvDropReplication, NKikimrReplication::TEvDropReplication, EvDropReplication> {};
 
-    struct TEvDropReplicationResult
-        : public TEventPB<TEvDropReplicationResult, NKikimrReplication::TEvDropReplicationResult, EvDropReplicationResult>
-    {};
+struct TEvDropReplicationResult
+    : public TEventPB<TEvDropReplicationResult, NKikimrReplication::TEvDropReplicationResult, EvDropReplicationResult> {
+};
 
-    struct TEvDescribeReplication
-        : public TEventPB<TEvDescribeReplication, NKikimrReplication::TEvDescribeReplication, EvDescribeReplication>
-    {};
+struct TEvDescribeReplication
+    : public TEventPB<TEvDescribeReplication, NKikimrReplication::TEvDescribeReplication, EvDescribeReplication> {};
 
-    struct TEvDescribeReplicationResult
-        : public TEventPB<TEvDescribeReplicationResult, NKikimrReplication::TEvDescribeReplicationResult, EvDescribeReplicationResult>
-    {};
+struct TEvDescribeReplicationResult
+    : public TEventPB<
+          TEvDescribeReplicationResult,
+          NKikimrReplication::TEvDescribeReplicationResult,
+          EvDescribeReplicationResult> {};
 
-}; // TEvController
+}; // namespace TEvController
 
-}
+} // namespace NKikimr::NReplication

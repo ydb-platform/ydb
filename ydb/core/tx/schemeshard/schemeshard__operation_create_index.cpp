@@ -12,15 +12,13 @@ private:
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateTableIndex TPropose"
-            << " operationId#" << OperationId;
+        return TStringBuilder() << "TCreateTableIndex TPropose"
+                                << " operationId#" << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {
+        : OperationId(id) {
         IgnoreMessages(DebugHint(), {});
     }
 
@@ -79,21 +77,21 @@ class TCreateTableIndex: public TSubOperation {
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
+            case TTxState::Propose:
+                return TTxState::Done;
+            default:
+                return TTxState::Invalid;
         }
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
-        case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
+            case TTxState::Propose:
+                return MakeHolder<TPropose>(OperationId);
+            case TTxState::Done:
+                return MakeHolder<TDone>(OperationId);
+            default:
+                return nullptr;
         }
     }
 
@@ -117,7 +115,8 @@ public:
                          << ", transaction: " << Transaction.ShortDebugString()
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!Transaction.HasCreateTableIndex()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "CreateTableIndex is not present");
@@ -132,8 +131,7 @@ public:
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -147,8 +145,7 @@ public:
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-                checks
-                    .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                checks.IsUnderCreating(NKikimrScheme::StatusNameConflict)
                     .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
             }
 
@@ -164,21 +161,15 @@ public:
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             if (dstPath.IsResolved()) {
-                checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, acceptExisted);
+                checks.IsResolved().NotUnderDeleting().FailOnExist(
+                    TPathElement::EPathType::EPathTypeTableIndex, acceptExisted
+                );
             } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
+                checks.NotEmpty().NotResolved();
             }
 
             if (checks) {
-                checks
-                    .PathsLimit()
-                    .IsValidLeafName()
-                    .IsValidACL(acl);
+                checks.PathsLimit().IsValidLeafName().IsValidACL(acl);
             }
 
             if (!checks) {
@@ -281,4 +272,4 @@ ISubOperation::TPtr CreateNewTableIndex(TOperationId id, TTxState::ETxState stat
     return MakeSubOperation<TCreateTableIndex>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

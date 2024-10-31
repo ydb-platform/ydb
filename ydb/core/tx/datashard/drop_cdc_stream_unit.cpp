@@ -5,14 +5,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDropCdcStreamUnit : public TExecutionUnit {
+class TDropCdcStreamUnit: public TExecutionUnit {
     THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
 
 public:
     TDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::DropCdcStream, false, self, pipeline)
-    {
-    }
+        : TExecutionUnit(EExecutionUnitKind::DropCdcStream, false, self, pipeline) {}
 
     bool IsReadyToExecute(TOperation::TPtr) const override {
         return true;

@@ -15,15 +15,13 @@ class TPropose: public TSubOperationState {
     const TOperationId OperationId;
 
     TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateView::TPropose"
-            << ", opId: " << OperationId;
+        return TStringBuilder() << "TCreateView::TPropose"
+                                << ", opId: " << OperationId;
     }
 
 public:
     TPropose(TOperationId id)
-        : OperationId(id)
-    {}
+        : OperationId(id) {}
 
     bool ProgressState(TOperationContext& context) override {
         LOG_I(DebugHint() << " ProgressState");
@@ -122,13 +120,13 @@ public:
                             << ", viewDescription: " << viewDescription.ShortDebugString()
         );
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+        auto result =
+            MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         const auto parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             const auto checks = parentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
+            checks.NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
@@ -150,21 +148,13 @@ public:
             const auto checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
-                checks
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeView, acceptExisting);
+                checks.NotUnderDeleting().FailOnExist(TPathElement::EPathType::EPathTypeView, acceptExisting);
             } else {
-                checks
-                    .NotEmpty();
+                checks.NotEmpty();
             }
 
             if (checks) {
-                checks
-                    .IsValidLeafName()
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit()
-                    .IsValidACL(acl);
+                checks.IsValidLeafName().DepthLimit().PathsLimit().DirChildrenLimit().IsValidACL(acl);
             }
 
             if (!checks) {
@@ -221,7 +211,8 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         if (parentPath.Base()->HasActiveChanges()) {
-            TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
+            TTxId parentTxId =
+                parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
@@ -245,7 +236,7 @@ public:
     }
 };
 
-}
+} // namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -258,4 +249,4 @@ ISubOperation::TPtr CreateNewView(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateView>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

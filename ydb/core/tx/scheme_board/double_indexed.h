@@ -24,8 +24,7 @@ template <
     template <typename...> typename TPIndex = THashMap,
     template <typename...> typename TSIndex = THashMap,
     template <typename...> typename TValueContainer = TList,
-    typename TBaseItem = TDefaultBaseItem
->
+    typename TBaseItem = TDefaultBaseItem>
 class TDoubleIndexedMapImpl {
     struct TItem;
 
@@ -43,22 +42,20 @@ private:
         explicit TItem(
             const TValue& value,
             typename TPrimaryIndex::iterator primaryIndexIterator,
-            typename TSecondaryIndex::iterator secondaryIndexIterator)
+            typename TSecondaryIndex::iterator secondaryIndexIterator
+        )
             : Value(value)
             , PrimaryIndexIterator(primaryIndexIterator)
-            , SecondaryIndexIterator(secondaryIndexIterator)
-        {
-        }
+            , SecondaryIndexIterator(secondaryIndexIterator) {}
 
         explicit TItem(
             TValue&& value,
             typename TPrimaryIndex::iterator primaryIndexIterator,
-            typename TSecondaryIndex::iterator secondaryIndexIterator) noexcept
+            typename TSecondaryIndex::iterator secondaryIndexIterator
+        ) noexcept
             : Value(std::move(value))
             , PrimaryIndexIterator(primaryIndexIterator)
-            , SecondaryIndexIterator(secondaryIndexIterator)
-        {
-        }
+            , SecondaryIndexIterator(secondaryIndexIterator) {}
     };
 
 protected:
@@ -153,9 +150,7 @@ protected:
 
 public:
     explicit TDoubleIndexedMapImpl(const TMergeFunc& mf = TMergeFunc())
-        : Merge(mf)
-    {
-    }
+        : Merge(mf) {}
 
     template <typename TK, typename TV>
     TValue& Upsert(TK&& key, TV&& val) {
@@ -268,7 +263,7 @@ private:
 
 }; // TDoubleIndexedMapImpl
 
-} // NPrivate
+} // namespace NPrivate
 
 template <
     typename TPrimaryKey,
@@ -277,29 +272,16 @@ template <
     typename TMergeFunc,
     template <typename...> typename TPIndex = THashMap,
     template <typename...> typename TSIndex = THashMap,
-    template <typename...> typename TValueContainer = TList
->
-class TDoubleIndexedMap: public NPrivate::TDoubleIndexedMapImpl<
-    TPrimaryKey,
-    TSecondaryKey,
-    TValue,
-    TMergeFunc,
-    TPIndex,
-    TSIndex,
-    TValueContainer> {
-
+    template <typename...> typename TValueContainer = TList>
+class TDoubleIndexedMap
+    : public NPrivate::
+          TDoubleIndexedMapImpl<TPrimaryKey, TSecondaryKey, TValue, TMergeFunc, TPIndex, TSIndex, TValueContainer> {
 public:
     explicit TDoubleIndexedMap(const TMergeFunc& mf = TMergeFunc())
-        : NPrivate::TDoubleIndexedMapImpl<
-              TPrimaryKey,
-              TSecondaryKey,
-              TValue,
-              TMergeFunc,
-              TPIndex,
-              TSIndex,
-              TValueContainer>(mf)
-    {
-    }
+        : NPrivate::
+              TDoubleIndexedMapImpl<TPrimaryKey, TSecondaryKey, TValue, TMergeFunc, TPIndex, TSIndex, TValueContainer>(
+                  mf
+              ) {}
 };
 
 template <
@@ -310,18 +292,17 @@ template <
     typename TEvictFunc,
     template <typename...> typename TPIndex = THashMap,
     template <typename...> typename TSIndex = THashMap,
-    template <typename...> typename TValueContainer = TList
->
-class TDoubleIndexedCache: public NPrivate::TDoubleIndexedMapImpl<
-    TPrimaryKey,
-    TSecondaryKey,
-    TValue,
-    TMergeFunc,
-    TPIndex,
-    TSIndex,
-    TValueContainer,
-    NPrivate::TTimestampedItem> {
-
+    template <typename...> typename TValueContainer = TList>
+class TDoubleIndexedCache
+    : public NPrivate::TDoubleIndexedMapImpl<
+          TPrimaryKey,
+          TSecondaryKey,
+          TValue,
+          TMergeFunc,
+          TPIndex,
+          TSIndex,
+          TValueContainer,
+          NPrivate::TTimestampedItem> {
 public:
     typedef TInstant (*TInstantGetter)();
 
@@ -349,10 +330,11 @@ private:
 
 public:
     explicit TDoubleIndexedCache(
-            const TDuration keep,
-            TInstantGetter now,
-            const TMergeFunc& mf = TMergeFunc(),
-            const TEvictFunc& ef = TEvictFunc())
+        const TDuration keep,
+        TInstantGetter now,
+        const TMergeFunc& mf = TMergeFunc(),
+        const TEvictFunc& ef = TEvictFunc()
+    )
         : NPrivate::TDoubleIndexedMapImpl<
               TPrimaryKey,
               TSecondaryKey,
@@ -364,9 +346,7 @@ public:
               NPrivate::TTimestampedItem>(mf)
         , Keep(keep)
         , Now(now)
-        , OnEvict(ef)
-    {
-    }
+        , OnEvict(ef) {}
 
     void Promote(const TPrimaryKey& key) {
         Promote(key, this->PrimaryIndex);
@@ -406,4 +386,4 @@ private:
 
 }; // TDoubleIndexedCache
 
-} // NKikimr
+} // namespace NKikimr

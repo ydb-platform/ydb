@@ -8,11 +8,13 @@ namespace NKikimr::NColumnShard {
 class IProposeTxOperator: public TTxController::ITransactionOperator {
 private:
     using TBase = TTxController::ITransactionOperator;
+
 protected:
     virtual bool DoCheckTxInfoForReply(const TFullTxInfo& originalTxInfo) const override {
         return GetTxInfo() == originalTxInfo;
     }
-    std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> BuildProposeResultEvent(const TColumnShard& owner) const;
+    std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> BuildProposeResultEvent(const TColumnShard& owner
+    ) const;
     virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override;
     virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override {
         if (!currentTxInfo.SeqNo || !GetTxInfo().SeqNo) {
@@ -23,6 +25,7 @@ protected:
         }
         return currentTxInfo.SeqNo->Generation < GetTxInfo().SeqNo->Generation;
     }
+
 public:
     using TBase::TBase;
 
@@ -31,4 +34,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NColumnShard

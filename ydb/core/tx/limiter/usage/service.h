@@ -19,6 +19,7 @@ private:
         Y_ABORT_UNLESS(TLimiterPolicy::Name.size() == 4);
         return TLimiterPolicy::Name;
     }
+
 public:
     static bool AskResource(const std::shared_ptr<IResourceRequest>& request) {
         AFL_VERIFY(!!request);
@@ -38,11 +39,11 @@ public:
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcLimt" + GetLimiterName());
     }
-    static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals) {
+    static NActors::IActor*
+    CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals) {
         Register(config);
         return new TLimiterActor(config, GetLimiterName(), baseSignals);
     }
-
 };
 
 class TCompDiskLimiterPolicy {
@@ -55,4 +56,4 @@ public:
 
 using TCompDiskOperator = TServiceOperatorImpl<TCompDiskLimiterPolicy>;
 
-}
+} // namespace NKikimr::NLimiter

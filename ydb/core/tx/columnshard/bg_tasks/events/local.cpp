@@ -1,5 +1,3 @@
 #include "local.h"
 
-namespace NKikimr::NOlap::NExport::NEvents {
-
-}
+namespace NKikimr::NOlap::NExport::NEvents {}

@@ -18,8 +18,12 @@ private:
     std::shared_ptr<TSourceCursor> Cursor;
     YDB_READONLY_DEF(std::set<ui64>, PathIds);
     TTabletId DestinationTabletId = TTabletId(0);
+
 protected:
-    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) override;
+    virtual bool DoStart(
+        const NColumnShard::TColumnShard& shard,
+        const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions
+    ) override;
     virtual THashSet<ui64> GetPathIdsForStart() const override {
         THashSet<ui64> result;
         for (auto&& i : PathIds) {
@@ -27,35 +31,35 @@ protected:
         }
         return result;
     }
+
 public:
     TSourceSession(const TTabletId selfTabletId)
         : TBase("source_proto")
-        , SelfTabletId(selfTabletId)
-    {
+        , SelfTabletId(selfTabletId) {}
 
-    }
-
-    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTabletId destTabletId)
+    TSourceSession(
+        const TString& sessionId,
+        const TTransferContext& transfer,
+        const TTabletId selfTabletId,
+        const std::set<ui64>& pathIds,
+        const TTabletId destTabletId
+    )
         : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
-        , DestinationTabletId(destTabletId)
-    {
-    }
+        , DestinationTabletId(destTabletId) {}
 
     TTabletId GetDestinationTabletId() const {
         return DestinationTabletId;
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{base=" << TBase::DebugString() << ";destination_tablet_id=" << (ui64)DestinationTabletId << ";}";
+        return TStringBuilder() << "{base=" << TBase::DebugString()
+                                << ";destination_tablet_id=" << (ui64)DestinationTabletId << ";}";
     }
 
     bool IsEqualTo(const TSourceSession& item) const {
-        return
-            TBase::IsEqualTo(item) &&
-            DestinationTabletId == item.DestinationTabletId &&
-            PathIds == item.PathIds;
+        return TBase::IsEqualTo(item) && DestinationTabletId == item.DestinationTabletId && PathIds == item.PathIds;
     }
 
     std::shared_ptr<TSourceCursor> GetCursorVerified() const {
@@ -74,11 +78,24 @@ public:
         return true;
     }
 */
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckLinks(NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 packIdx, const std::shared_ptr<TSourceSession>& selfPtr);
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>>
+    AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(
+        NColumnShard::TColumnShard* self,
+        const ui32 receivedPackIdx,
+        const std::shared_ptr<TSourceSession>& selfPtr
+    );
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckLinks(
+        NColumnShard::TColumnShard* self,
+        const TTabletId tabletId,
+        const ui32 packIdx,
+        const std::shared_ptr<TSourceSession>& selfPtr
+    );
 
-    void ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
+    void ActualizeDestination(
+        const NColumnShard::TColumnShard& shard,
+        const std::shared_ptr<NDataLocks::TManager>& dataLocksManager
+    );
 
     NKikimrColumnShardDataSharingProto::TSourceSession SerializeDataToProto() const {
         NKikimrColumnShardDataSharingProto::TSourceSession result;
@@ -90,8 +107,10 @@ public:
         return result;
     }
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession& proto,
-        const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor, 
-        const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(
+        const NKikimrColumnShardDataSharingProto::TSourceSession& proto,
+        const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic>& protoCursor,
+        const std::optional<NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic>& protoCursorStatic
+    );
 };
-}
+} // namespace NKikimr::NOlap::NDataSharing

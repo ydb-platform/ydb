@@ -16,6 +16,7 @@ private:
     NKikimrSchemeOp::TColumnStorageConfig StorageConfig;
     NKikimrSchemeOp::TColumnStoreDescription Description;
     ui64 AlterVersion = 0;
+
 public:
     using TPtr = std::shared_ptr<TOlapStoreInfo>;
 
@@ -23,18 +24,18 @@ public:
     private:
         YDB_ACCESSOR_DEF(std::vector<ui64>, TabletIds);
         YDB_READONLY(bool, IsNewGroup, false);
+
     public:
         TLayoutInfo(std::vector<ui64>&& ids, const bool isNewGroup)
             : TabletIds(std::move(ids))
-            , IsNewGroup(isNewGroup)
-        {
-
-        }
+            , IsNewGroup(isNewGroup) {}
     };
 
     class ILayoutPolicy {
     protected:
-        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const = 0;
+        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount)
+            const = 0;
+
     public:
         using TPtr = std::shared_ptr<ILayoutPolicy>;
         virtual ~ILayoutPolicy() = default;
@@ -43,12 +44,14 @@ public:
 
     class TMinimalTablesCountLayout: public ILayoutPolicy {
     protected:
-        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const override;
+        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount)
+            const override;
     };
 
     class TIdentityGroupsLayout: public ILayoutPolicy {
     protected:
-        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount) const override;
+        virtual TConclusion<TLayoutInfo> DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount)
+            const override;
     };
 
     TPtr AlterData;
@@ -70,11 +73,14 @@ public:
     TAggregatedStats Stats;
 
     TOlapStoreInfo() = default;
-    TOlapStoreInfo(ui64 alterVersion,
+    TOlapStoreInfo(
+        ui64 alterVersion,
         NKikimrSchemeOp::TColumnStoreSharding&& sharding,
-        TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
+        TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing()
+    );
 
-    static TOlapStoreInfo::TPtr BuildStoreWithAlter(const TOlapStoreInfo& initialStore, const NKikimrSchemeOp::TAlterColumnStore& alterBody);
+    static TOlapStoreInfo::TPtr
+    BuildStoreWithAlter(const TOlapStoreInfo& initialStore, const NKikimrSchemeOp::TAlterColumnStore& alterBody);
 
     const NKikimrSchemeOp::TColumnStorageConfig& GetStorageConfig() const {
         return StorageConfig;
@@ -117,4 +123,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NSchemeShard

@@ -9,9 +9,7 @@ class TController::TTxResolveSecretResult: public TTxBase {
 public:
     explicit TTxResolveSecretResult(TController* self, TEvPrivate::TEvResolveSecretResult::TPtr& ev)
         : TTxBase("TxResolveSecretResult", self)
-        , Ev(ev)
-    {
-    }
+        , Ev(ev) {}
 
     TTxType GetTxType() const override {
         return TXTYPE_RESOLVE_SECRET_RESULT;
@@ -40,10 +38,12 @@ public:
             Replication->SetState(TReplication::EState::Error, Ev->Get()->Error);
 
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-                NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
-                NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
-            );
+            db.Table<Schema::Replications>()
+                .Key(Replication->GetId())
+                .Update(
+                    NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+                    NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
+                );
         }
 
         return true;
@@ -63,4 +63,4 @@ void TController::RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::T
     Execute(new TTxResolveSecretResult(this, ev), ctx);
 }
 
-}
+} // namespace NKikimr::NReplication::NController

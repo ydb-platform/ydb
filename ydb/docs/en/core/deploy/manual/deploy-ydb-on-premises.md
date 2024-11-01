@@ -109,7 +109,7 @@ sudo usermod -aG disk ydb
 
 {% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
-To get a list of block devices on the server, you can use the lsblk command. Example output:
+The `lsblk` command can be used to display a list of available block devices on the server. Example output:
 
 ```txt
 NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS

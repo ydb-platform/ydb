@@ -107,6 +107,12 @@ public:
 
     }
 
+    void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
+        for (auto&& i : request.GetPathIds()) {
+            GetGranuleVerified(i)->GetDataAccessor()->AskData(request);
+        }
+    }
+
     const std::shared_ptr<TGranulesStat>& GetStats() const {
         return Stats;
     }
@@ -168,6 +174,12 @@ public:
         if (it == Tables.end()) {
             return nullptr;
         }
+        return it->second;
+    }
+
+    std::shared_ptr<TGranuleMeta> GetGranuleVerified(const ui64 pathId) const {
+        auto it = Tables.find(pathId);
+        AFL_VERIFY(it != Tables.end());
         return it->second;
     }
 

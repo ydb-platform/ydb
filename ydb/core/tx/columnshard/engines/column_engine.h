@@ -238,6 +238,7 @@ public:
 class IColumnEngine {
 protected:
     virtual void DoRegisterTable(const ui64 pathId) = 0;
+    virtual void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const = 0;
 
 public:
     class TSchemaInitializationData {
@@ -275,6 +276,12 @@ public:
             return Diff->GetVersion();
         }
     };
+
+    void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
+        AFL_VERIFY(!!request);
+        AFL_VERIFY(!request->IsEmpty());
+        DoFetchDataAccessors(request);
+    }
 
     static ui64 GetMetadataLimit();
 

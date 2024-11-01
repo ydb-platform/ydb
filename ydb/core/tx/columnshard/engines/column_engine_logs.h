@@ -105,6 +105,9 @@ public:
     }
 
     virtual void DoRegisterTable(const ui64 pathId) override;
+    void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
+        GranulesStorage->FetchDataAccessors(request);
+    }
 
 public:
     bool Load(IDbWrapper& db) override;

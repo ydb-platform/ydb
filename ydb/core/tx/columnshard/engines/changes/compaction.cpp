@@ -69,12 +69,11 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
 }
 
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(
-    std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext)
+    std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext)
     : TBase(saverContext, NBlobOperations::EConsumer::GENERAL_COMPACTION)
     , GranuleMeta(granule) {
     Y_ABORT_UNLESS(GranuleMeta);
 
-    SwitchedPortions.reserve(portions.size());
     for (const auto& portionInfo : portions) {
         Y_ABORT_UNLESS(!portionInfo.GetPortionInfo().HasRemoveSnapshot());
         SwitchedPortions.emplace_back(portionInfo);

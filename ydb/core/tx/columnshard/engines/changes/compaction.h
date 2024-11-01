@@ -11,6 +11,7 @@ class TCompactColumnEngineChanges: public TChangesWithAppend {
 private:
     using TBase = TChangesWithAppend;
     bool NeedGranuleStatusProvide = false;
+    std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
 protected:
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
@@ -30,10 +31,13 @@ protected:
     }
 
 public:
-    std::vector<TPortionDataAccessor> SwitchedPortions; // Portions that would be replaced by new ones
-
     TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
+
+    void AddSwitchedPortion(const TPortionInfo::TConstPtr& portion) {
+        SwitchedPortions.emplace_back(portion);
+        PortionsToAccess->AddPortion(portion);
+    }
 
     static TString StaticTypeName() {
         return "CS::GENERAL";

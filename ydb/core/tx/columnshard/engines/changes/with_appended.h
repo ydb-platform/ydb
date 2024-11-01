@@ -12,7 +12,13 @@ private:
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToRemove;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToMove;
 
+    virtual std::shared_ptr<TDataAccessorsRequest> BuildDataAccessorsRequest() const override {
+        return PortionsToAccess;
+    }
+
 protected:
+    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>();
+
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
     virtual void DoCompile(TFinalizationContext& context) override;
@@ -56,6 +62,7 @@ public:
         for (auto&& i : portions) {
             AFL_VERIFY(i);
             AFL_VERIFY(PortionsToMove.emplace(i->GetAddress(), i).second)("portion_id", i->GetPortionId());
+            PortionsToAccess->AddPortion(i);
         }
     }
 
@@ -78,6 +85,7 @@ public:
     void AddPortionToRemove(const TPortionInfo::TConstPtr& info) {
         AFL_VERIFY(!info->HasRemoveSnapshot());
         AFL_VERIFY(PortionsToRemove.emplace(info->GetAddress(), info).second);
+        PortionsToAccess->AddPortion(info);
     }
 
     std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;

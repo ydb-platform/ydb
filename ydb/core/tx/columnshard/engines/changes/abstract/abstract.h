@@ -203,6 +203,7 @@ private:
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
+    std::optional<TDataAccessorsResult> FetchedDataAccessors;
 
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
@@ -230,6 +231,18 @@ protected:
     }
 
 public:
+    const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {
+        AFL_VERIFY(FetchedDataAccessors);
+        return FetchedDataAccessors->GetPortionAccessorVerified(portionId);
+    }
+
+    std::shared_ptr<TDataAccessorsRequest> BuildDataAccessorsRequest() const = 0;
+
+    void SetFetchedDataAccessors(TDataAccessorsResult&& result) {
+        AFL_VERIFY(!FetchedDataAccessors);
+        FetchedDataAccessors = std::move(result);
+    }
+
     class IMemoryPredictor {
     public:
         virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) = 0;

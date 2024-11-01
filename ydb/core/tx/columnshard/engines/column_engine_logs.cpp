@@ -378,11 +378,11 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
     return changes;
 }
 
-std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(
+THashMap<ui64, std::shared_ptr<TCleanupPortionsColumnEngineChanges>> TColumnEngineForLogs::StartCleanupPortions(
     const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
-    auto changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
+    THashMap<ui64, std::shared_ptr<TCleanupPortionsColumnEngineChanges>> changes;
 
     // Add all portions from dropped paths
     ui64 txSize = 0;
@@ -410,7 +410,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 limitExceeded = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(TPortionDataAccessor(info));
+            changes->AddPortionToDrop(info);
             ++portionsFromDrop;
         }
     }
@@ -525,6 +525,9 @@ void TColumnEngineForLogs::AppendPortion(const TPortionInfo::TPtr& portionInfo) 
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
     UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
     granule->AppendPortion(portionInfo);
+    if (portionInfo->HasRemoveSnapshot())  {
+        AddCleanupPortion(portionInfo);
+    }
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {

@@ -13,10 +13,10 @@ private:
 
     class TPortionForEviction {
     private:
-        TPortionDataAccessor PortionInfo;
+        TPortionInfo::TConstPtr PortionInfo;
         TPortionEvictionFeatures Features;
     public:
-        TPortionForEviction(const TPortionDataAccessor& portion, TPortionEvictionFeatures&& features)
+        TPortionForEviction(const TPortionInfo::TConstPtr& portion, TPortionEvictionFeatures&& features)
             : PortionInfo(portion)
             , Features(std::move(features)) {
         };
@@ -29,7 +29,7 @@ private:
             return Features;
         }
 
-        const TPortionDataAccessor& GetPortionInfo() const {
+        const TPortionInfo::TConstPtr& GetPortionInfo() const {
             return PortionInfo;
         }
     };
@@ -88,9 +88,10 @@ public:
     ui32 GetPortionsToEvictCount() const {
         return PortionsToEvict.size();
     }
-    void AddPortionToEvict(const TPortionDataAccessor& info, TPortionEvictionFeatures&& features) {
-        AFL_VERIFY(!info.GetPortionInfo().HasRemoveSnapshot());
+    void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
+        AFL_VERIFY(!info->HasRemoveSnapshot());
         PortionsToEvict.emplace_back(info, std::move(features));
+        PortionsToAccess->AddPortion(info);
     }
 
     static TString StaticTypeName() {

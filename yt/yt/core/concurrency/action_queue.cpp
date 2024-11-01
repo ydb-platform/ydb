@@ -410,7 +410,7 @@ public:
     void Invoke(TClosure callback) override
     {
         auto guard = Guard(SpinLock_);
-        if (Semaphore_ < MaxConcurrentInvocations_) {
+        if (Semaphore_ < MaxConcurrentInvocations_ && !PendingMaxConcurrentInvocations_.has_value()) {
             YT_VERIFY(Queue_.empty());
             IncrementSemaphore(+1);
             guard.Release();
@@ -420,10 +420,57 @@ public:
         }
     }
 
-private:
-    const int MaxConcurrentInvocations_;
+    void SetMaxConcurrentInvocations(int newMaxConcurrentInvocations)
+    {
+        // XXX(apachee): Check that newMaxConcurrentInvocations >= 0? Verify? If condition with throw?
 
+        auto guard = Guard(SpinLock_);
+
+        if (newMaxConcurrentInvocations == MaxConcurrentInvocations_) {
+            return;
+        }
+
+        if (newMaxConcurrentInvocations >= Semaphore_) {
+            i64 diff = newMaxConcurrentInvocations - Semaphore_;
+            i64 numberOfCallbacksToRun = std::min(diff, std::ssize(Queue_));
+            if (numberOfCallbacksToRun == 0) {
+                // Fast path.
+
+                PendingMaxConcurrentInvocations_ = {};
+                MaxConcurrentInvocations_ = newMaxConcurrentInvocations;
+            } else {
+                // Slow path.
+
+                std::vector<TClosure> callbacksToRun;
+                callbacksToRun.reserve(numberOfCallbacksToRun);
+
+                for (int i = 0; i < numberOfCallbacksToRun; i++) {
+                    YT_ASSERT(!Queue_.empty());
+                    callbacksToRun.push_back(std::move(Queue_.front()));
+                    Queue_.pop();
+                }
+
+                PendingMaxConcurrentInvocations_ = {};
+                MaxConcurrentInvocations_ = newMaxConcurrentInvocations;
+                IncrementSemaphore(numberOfCallbacksToRun);
+
+                guard.Release();
+                for (auto& callback : callbacksToRun) {
+                    RunCallback(std::move(callback));
+                }
+            }
+        } else /* newMaxConcurrentInvocations < Semaphore_ */ {
+            // NB(apachee): We have to wait for some of the callbacks to finish before updating MaxConcurrentInvocations_.
+            PendingMaxConcurrentInvocations_ = newMaxConcurrentInvocations;
+        }
+    }
+
+private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    // If set, it is the next value of MaxConcurrentInvocations_.
+    // Used only when decrease of MaxConcurrentInvocations_ value is requested.
+    std::optional<int> PendingMaxConcurrentInvocations_;
+    int MaxConcurrentInvocations_;
     TRingQueue<TClosure> Queue_;
     int Semaphore_ = 0;
 
@@ -451,8 +498,15 @@ private:
 
     void IncrementSemaphore(int delta)
     {
+        VERIFY_SPINLOCK_AFFINITY(SpinLock_);
+
         Semaphore_ += delta;
-        YT_ASSERT(Semaphore_ >= 0 && Semaphore_ <= MaxConcurrentInvocations_);
+        YT_ASSERT(Semaphore_ >= 0 && Semaphore_ <= MaxConcurrentInvocations_ && (!PendingMaxConcurrentInvocations_.has_value() || delta <= 0));
+
+        if (PendingMaxConcurrentInvocations_.has_value() && Semaphore_ <= *PendingMaxConcurrentInvocations_) {
+            MaxConcurrentInvocations_ = *PendingMaxConcurrentInvocations_;
+            PendingMaxConcurrentInvocations_ = {};
+        }
     }
 
     void RunCallback(TClosure callback)
@@ -481,7 +535,7 @@ private:
     {
         auto guard = Guard(SpinLock_);
         // See RunCallback.
-        if (Queue_.empty() || CurrentBoundedConcurrencyInvoker() == this) {
+        if (Queue_.empty() || CurrentBoundedConcurrencyInvoker() == this || PendingMaxConcurrentInvocations_.has_value()) {
             IncrementSemaphore(-1);
         } else {
             auto callback = std::move(Queue_.front());
@@ -492,13 +546,23 @@ private:
     }
 };
 
-IInvokerPtr CreateBoundedConcurrencyInvoker(
+TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
     int maxConcurrentInvocations)
 {
-    return New<TBoundedConcurrencyInvoker>(
+    return TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag>(New<TBoundedConcurrencyInvoker>(
         std::move(underlyingInvoker),
-        maxConcurrentInvocations);
+        maxConcurrentInvocations));
+}
+
+void SetMaxConcurrentInvocations(
+    TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> invoker,
+    int maxConcurrentInvocations)
+{
+    // TODO(apachee): Fix inheritance from IInvoker so that it is possible to use static_cast here instead of dynamic_cast in non-debug builds.
+    auto boundedConcurrencyInvoker = dynamic_cast<TBoundedConcurrencyInvoker*>(invoker.Get());
+    YT_VERIFY(boundedConcurrencyInvoker);
+    boundedConcurrencyInvoker->SetMaxConcurrentInvocations(maxConcurrentInvocations);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

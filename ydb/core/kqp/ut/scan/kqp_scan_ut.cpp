@@ -254,9 +254,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             const NYdb::NTable::TTableDescription& tableDescription = describeResult.GetTableDescription();
             const TVector<NYdb::NTable::TKeyRange>& keyRanges = tableDescription.GetKeyRanges();
             const TVector<NYdb::NTable::TTableColumn>& columns = tableDescription.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Type.ToString(), "Decimal(22,9)?");
-            UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(22,9)?");
+            UNIT_ASSERT_STRINGS_EQUAL(columns[1].Type.ToString(), "Decimal(35,10)?");
             auto extractValue = [](const TValue& val) {
                 auto parser = TValueParser(val);
                 parser.OpenTuple();

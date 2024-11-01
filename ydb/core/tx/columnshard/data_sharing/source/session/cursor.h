@@ -110,6 +110,7 @@ public:
     bool Next(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
 
     bool IsValid() {
+        AFL_VERIFY(NextSchemaBegin <= SchemeHistory.size());
         return NextSchemaBegin < SchemeHistory.size() || Selected.size();
     }
 
@@ -117,8 +118,8 @@ public:
 
     void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
-    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, THashMap<ui64, std::vector<TPortionDataAccessor>> portions,
-        std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemeHistory, const TVersionedIndex& index);
+    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions,
+        std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index);
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
         const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
 };

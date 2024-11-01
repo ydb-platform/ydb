@@ -164,7 +164,7 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     for (auto&& i : protoStatic.GetPathHashes()) {
         PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
     }
-    SchemeHistory = std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>{ protoStatic.GetSchemeHistory().begin(), protoStatic.GetSchemeHistory().end() };
+    SchemeHistory = std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>(protoStatic.GetSchemeHistory().begin(), protoStatic.GetSchemeHistory().end());
     if (PathPortionHashes.empty()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty static cursor");
     } else {
@@ -191,7 +191,7 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    THashMap<ui64, std::vector<TPortionDataAccessor>> portions, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemeHistory, const TVersionedIndex& index) {
+    THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
     SchemeHistory = std::move(schemeHistory);
     AFL_VERIFY(!IsStartedFlag);
     std::map<ui64, std::map<ui32, TPortionDataAccessor>> local;

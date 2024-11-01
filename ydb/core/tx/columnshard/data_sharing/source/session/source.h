@@ -21,7 +21,7 @@ private:
     TTabletId DestinationTabletId = TTabletId(0);
 
 protected:
-    virtual void DoStart(NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) override;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) override;
     virtual THashSet<ui64> GetPathIdsForStart() const override {
         THashSet<ui64> result;
         for (auto&& i : PathIds) {
@@ -64,7 +64,7 @@ public:
 
     void SaveCursorToDatabase(NIceDb::TNiceDb& db);
 
-    void StartCursor(const NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>> portions, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemeHistory);
+    void StartCursor(const NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemeHistory);
 
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);

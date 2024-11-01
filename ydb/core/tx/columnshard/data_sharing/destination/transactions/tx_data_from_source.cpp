@@ -15,12 +15,9 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
 
     for (auto& info : SchemeHistory) {
-        NOlap::TSnapshot version(
-            info.GetSinceStep(), info.GetSinceTxId());
+        NOlap::TSnapshot version(info.GetSinceStep(), info.GetSinceTxId());
 
-        if (!index.GetVersionedIndex().HasSnapshot(version)) {
-            index.RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(info));
-        }
+        index.RegisterOldSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(info));
     }
 
     TDbWrapper dbWrapper(txc.DB, nullptr);
@@ -51,7 +48,7 @@ void TTxDataFromSource::DoComplete(const TActorContext& /*ctx*/) {
     Session->SendCurrentCursorAck(*Self, SourceTabletId);
 }
 
-TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<ui64, NEvents::TPathIdData> portionsByPathId, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemas, const TTabletId sourceTabletId)
+TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<ui64, NEvents::TPathIdData>&& portionsByPathId, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemas, const TTabletId sourceTabletId)
     : TBase(self)
     , Session(session)
     , PortionsByPathId(std::move(portionsByPathId))

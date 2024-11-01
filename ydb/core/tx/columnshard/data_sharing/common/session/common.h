@@ -44,7 +44,7 @@ private:
 
 protected:
     TTransferContext TransferContext;
-    virtual void DoStart(NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) = 0;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) = 0;
     virtual THashSet<ui64> GetPathIdsForStart() const = 0;
 
 public:
@@ -86,7 +86,7 @@ public:
     }
 
     void PrepareToStart(const NColumnShard::TColumnShard& shard);
-    void Start(NColumnShard::TColumnShard& shard);
+    TConclusionStatus TryStart(NColumnShard::TColumnShard& shard);
     void Finish(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     const TSnapshot& GetSnapshotBarrier() const {

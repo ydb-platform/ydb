@@ -95,6 +95,16 @@ public:
         return Snapshots.begin()->second;
     }
 
+    ISnapshotSchema::TPtr GetLastSchemaBeforeSnapshot(const TSnapshot& version) {
+        ISnapshotSchema::TPtr res = nullptr;
+        for (auto it = Snapshots.begin(); it != Snapshots.end(); ++it) {
+            if (it->first <= version) {
+                res = it->second;
+            }
+        }
+        return res;
+    }
+
     ISnapshotSchema::TPtr GetLastSchema() const {
         Y_ABORT_UNLESS(!Snapshots.empty());
         return Snapshots.rbegin()->second;
@@ -102,10 +112,6 @@ public:
 
     bool IsEmpty() const {
         return Snapshots.empty();
-    }
-
-    bool HasSnapshot(TSnapshot snapshot) const {
-        return Snapshots.count(snapshot);
     }
 
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {

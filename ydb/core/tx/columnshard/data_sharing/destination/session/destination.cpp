@@ -69,7 +69,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
-    THashMap<ui64, NEvents::TPathIdData> data, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
+    THashMap<ui64, NEvents::TPathIdData>&& data, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
     const std::shared_ptr<TDestinationSession>& selfPtr) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
@@ -160,7 +160,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
     return TConclusionStatus::Success();
 }
 
-void TDestinationSession::DoStart(
+TConclusionStatus TDestinationSession::DoStart(
     NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) {
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
@@ -172,6 +172,7 @@ void TDestinationSession::DoStart(
     }
     std::swap(CurrentBlobIds, local);
     SendCurrentCursorAck(shard, {});
+    return TConclusionStatus::Success();
 }
 
 bool TDestinationSession::TryTakePortionBlobs(const TVersionedIndex& vIndex, const TPortionDataAccessor& portion) {

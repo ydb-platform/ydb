@@ -395,13 +395,13 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
     };
 
-    // Y_UNIT_TEST(TableReshardingConsistency64) {
-    //     TShardingTypeTest().SetShardingType("HASH_FUNCTION_CONSISTENCY_64").Execute();
-    // }
+    Y_UNIT_TEST(TableReshardingConsistency64) {
+        TShardingTypeTest().SetShardingType("HASH_FUNCTION_CONSISTENCY_64").Execute();
+    }
 
-    // Y_UNIT_TEST(TableReshardingModuloN) {
-    //     TShardingTypeTest().SetShardingType("HASH_FUNCTION_MODULO_N").Execute();
-    // }
+    Y_UNIT_TEST(TableReshardingModuloN) {
+        TShardingTypeTest().SetShardingType("HASH_FUNCTION_MODULO_N").Execute();
+    }
 
     class TAsyncReshardingTest: public TReshardingTest {
         YDB_ACCESSOR(TString, ShardingType, "HASH_FUNCTION_CONSISTENCY_64");
@@ -479,24 +479,24 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         ui64 HasNewCol = false;
     };
 
-    // Y_UNIT_TEST(UpsertWhileSplitTest) {
-    //     TAsyncReshardingTest tester;
+    Y_UNIT_TEST(UpsertWhileSplitTest) {
+        TAsyncReshardingTest tester;
 
-    //     tester.AddBatch(10000);
+        tester.AddBatch(10000);
 
-    //     tester.CheckCount();
+        tester.CheckCount();
 
-    //     for (int i = 0; i < 4; i++) {
-    //         tester.StartResharding("SPLIT");
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
 
-    //         tester.CheckCount();
-    //         tester.AddBatch(10000);
-    //         tester.CheckCount();
-    //         tester.WaitResharding();
-    //     }
-    //     tester.AddBatch(10000);
-    //     tester.CheckCount();
-    // }
+            tester.CheckCount();
+            tester.AddBatch(10000);
+            tester.CheckCount();
+            tester.WaitResharding();
+        }
+        tester.AddBatch(10000);
+        tester.CheckCount();
+    }
 
     Y_UNIT_TEST(SplitEmpty) {
         TAsyncReshardingTest tester;

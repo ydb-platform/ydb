@@ -1023,6 +1023,9 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
         return;
     }
 
+    // in current implementation the next loop will crash if schemas will be sent in the same package with the data, so adding this verify to ensure consistent behaviour
+    AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty())("reason", "can not send schemas and data in the same package");
+
     THashMap<ui64, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     TBlobGroupSelector dsGroupSelector(Info());
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {

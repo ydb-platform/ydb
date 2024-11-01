@@ -20,7 +20,7 @@ protected:
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
 public:
-    TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<ui64, NEvents::TPathIdData> portionsByPathId, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemas, const TTabletId sourceTabletId);
+    TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<ui64, NEvents::TPathIdData>&& portionsByPathId, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemas, const TTabletId sourceTabletId);
 
     TTxType GetTxType() const override { return NColumnShard::TXTYPE_DATA_SHARING_DATA_FROM_SOURCE; }
 };

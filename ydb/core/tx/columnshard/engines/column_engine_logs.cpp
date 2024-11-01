@@ -124,7 +124,7 @@ void TColumnEngineForLogs::UpdatePortionStats(
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
     bool switchOptimizer = false;
     if (!VersionedIndex.IsEmpty()) {
-        const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetSchema(snapshot)->GetIndexInfo();
+        const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
         Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
     }
@@ -154,12 +154,32 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
         AFL_VERIFY(!VersionedIndex.IsEmpty());
 
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
-            *schema.GetDiff(), VersionedIndex.GetSchema(snapshot)->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+            *schema.GetDiff(), VersionedIndex.GetLastSchema()->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
     }
     AFL_VERIFY(indexInfoOptional);
     RegisterSchemaVersion(snapshot, std::move(*indexInfoOptional));
+}
+
+void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
+    AFL_VERIFY(!VersionedIndex.IsEmpty());
+
+    std::optional<NOlap::TIndexInfo> indexInfoOptional;
+    if (schema.GetDiff()) {
+        ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeSnapshot(snapshot);
+        AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
+        if (snapshot == prevSchema->GetSnapshot()) {
+            return;
+        }
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
+            *schema.GetDiff(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+    } else {
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
+    }
+
+    AFL_VERIFY(indexInfoOptional);
+    VersionedIndex.AddIndex(snapshot, std::move(*indexInfoOptional));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {

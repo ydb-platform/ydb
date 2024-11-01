@@ -105,21 +105,21 @@ private:
 
 class TResultSetPrinter {
 public:
-    class TConfig {
+    class TSettings {
         YDB_ACCESSOR(EDataFormat, Format, EDataFormat::Pretty);
         YDB_ACCESSOR(std::function<bool()>, IsInterrupted, []() { return false; });
         YDB_ACCESSOR(size_t, MaxWidth, 0);
         YDB_FLAG_ACCESSOR(CsvWithHeader, false);
         YDB_READONLY(IOutputStream*, Output, &Cout);
     public:
-        TConfig& SetOutput(IOutputStream* value) {
+        TSettings& SetOutput(IOutputStream* value) {
             Output = value;
             return *this;
         }
     };
 
     TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; });
-    TResultSetPrinter(const TConfig& config);
+    explicit TResultSetPrinter(const TSettings& settings);
     ~TResultSetPrinter();
 
     void Print(const TResultSet& resultSet);
@@ -138,7 +138,7 @@ private:
 
     bool FirstPart = true;
     bool PrintedSomething = false;
-    TConfig Config;
+    TSettings Settings;
     std::unique_ptr<TResultSetParquetPrinter> ParquetPrinter;
 };
 

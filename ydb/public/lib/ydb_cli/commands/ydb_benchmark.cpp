@@ -460,7 +460,7 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
 }
 
 void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const {
-    TResultSetPrinter printer(TResultSetPrinter::TConfig()
+    TResultSetPrinter printer(TResultSetPrinter::TSettings()
         .SetOutput(&out)
         .SetFormat(EDataFormat::Pretty).SetMaxWidth(120)
     );

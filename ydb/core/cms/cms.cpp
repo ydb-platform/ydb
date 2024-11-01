@@ -927,7 +927,7 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             return false;
         }
 
-        auto counters = CreateErasureCounter(ClusterInfo->BSGroup(groupId).Erasure.GetErasure(), vdisk, groupId);
+        auto counters = CreateErasureCounter(ClusterInfo->BSGroup(groupId).Erasure.GetErasure(), vdisk, groupId, TabletCounters);
         counters->CountGroupState(ClusterInfo, State->Config.DefaultRetryTime, duration, error);
 
         switch (opts.AvailabilityMode) {
@@ -942,10 +942,11 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
             }
             break;
         case MODE_FORCE_RESTART:
-            if ( counters->GroupAlreadyHasLockedDisks() && opts.PartialPermissionAllowed) {
+            if (counters->GroupAlreadyHasLockedDisks() && !counters->GroupHasMoreThanOneDiskPerNode() && opts.PartialPermissionAllowed) {
+                TabletCounters->Cumulative()[COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED].Increment(1);
                 error.Code = TStatus::DISALLOW_TEMP;
                 error.Reason = "You cannot get two or more disks from the same group at the same time"
-                               " without specifying the PartialPermissionAllowed parameter";
+                               " in partial permissions allowed mode";
                 error.Deadline = defaultDeadline;
                 return false;
             }

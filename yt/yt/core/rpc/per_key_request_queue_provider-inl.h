@@ -1,4 +1,8 @@
-#include "per_user_request_queue_provider.h"
+#ifndef PER_KEY_REQUEST_QUEUE_PROVIDER_INL_H_
+#error "Direct inclusion of this file is not allowed, include per_key_request_queue_provider.h"
+// For the sake of sane code completion.
+#include "per_key_request_queue_provider.h"
+#endif
 
 #include "service_detail.h"
 
@@ -6,33 +10,36 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto InfiniteRequestThrottlerConfig = New<NConcurrency::TThroughputThrottlerConfig>();
-
-////////////////////////////////////////////////////////////////////////////////
-
-TPerUserRequestQueueProvider::TPerUserRequestQueueProvider(
-    TReconfigurationCallback reconfigurationCallback,
-    NProfiling::TProfiler throttlerProfiler)
+template <class T>
+TPerKeyRequestQueueProvider<T>::TPerKeyRequestQueueProvider(
+    TKeyFromRequestHeaderCallback keyFromRequestHeader,
+    TReconfigurationCallback reconfigurationCallback)
     : DefaultConfigs_(TRequestQueueThrottlerConfigs{
         InfiniteRequestThrottlerConfig,
         InfiniteRequestThrottlerConfig
     })
+    , KeyFromRequestHeader_(std::move(keyFromRequestHeader))
     , ReconfigurationCallback_(std::move(reconfigurationCallback))
-    , ThrottlerProfiler_(std::move(throttlerProfiler))
+{ }
+
+template <class T>
+TRequestQueue* TPerKeyRequestQueueProvider<T>::GetQueue(const NProto::TRequestHeader& header)
 {
-    DoGetQueue(RootUserName);
+    return DoGetQueue(KeyFromRequestHeader_(header));
 }
 
-TRequestQueue* TPerUserRequestQueueProvider::GetQueue(const NProto::TRequestHeader& header)
+template <class T>
+bool TPerKeyRequestQueueProvider<T>::IsReconfigurationPermitted(const T& /*key*/) const
 {
-    auto userName = header.has_user() ? ::NYT::FromProto<TString>(header.user()) : RootUserName;
-    return DoGetQueue(userName);
+    return true;
 }
 
-TRequestQueue* TPerUserRequestQueueProvider::DoGetQueue(const std::string& userName)
+template <class T>
+TRequestQueue* TPerKeyRequestQueueProvider<T>::DoGetQueue(const T& key)
 {
-    auto queue = RequestQueues_.FindOrInsert(userName, [&] {
-        auto queue = CreateRequestQueue(userName, ThrottlerProfiler_);
+    auto queue = RequestQueues_.FindOrInsert(key, [&] {
+        auto queue = CreateQueueForKey(key);
+        YT_VERIFY(key == std::any_cast<T>(queue->GetTag()));
 
         // It doesn't matter if configs are outdated since we will reconfigure them
         // again in the automaton thread.
@@ -57,29 +64,31 @@ TRequestQueue* TPerUserRequestQueueProvider::DoGetQueue(const std::string& userN
     return queue->Get();
 }
 
-void TPerUserRequestQueueProvider::ConfigureQueue(
+template <class T>
+void TPerKeyRequestQueueProvider<T>::ConfigureQueue(
     TRequestQueue* queue,
     const TMethodConfigPtr& config)
 {
     TRequestQueueProviderBase::ConfigureQueue(queue, config);
 
     if (ReconfigurationCallback_) {
-        ReconfigurationCallback_(queue->GetName(), queue);
+        auto key = std::any_cast<T>(queue->GetTag());
+        ReconfigurationCallback_(key, queue);
     }
 }
 
-std::pair<bool, bool> TPerUserRequestQueueProvider::ReadThrottlingEnabledFlags()
+template <class T>
+std::pair<bool, bool> TPerKeyRequestQueueProvider<T>::ReadThrottlingEnabledFlags()
 {
-    std::pair<bool, bool> result;
-
     auto guard = ReaderGuard(ThrottlingEnabledFlagsSpinLock_);
-    result.first = WeightThrottlingEnabled_;
-    result.second = BytesThrottlingEnabled_;
-
-    return result;
+    return {
+        WeightThrottlingEnabled_,
+        BytesThrottlingEnabled_
+    };
 }
 
-void TPerUserRequestQueueProvider::UpdateThrottlingEnabledFlags(
+template <class T>
+void TPerKeyRequestQueueProvider<T>::UpdateThrottlingEnabledFlags(
     bool enableWeightThrottling,
     bool enableBytesThrottling)
 {
@@ -88,38 +97,40 @@ void TPerUserRequestQueueProvider::UpdateThrottlingEnabledFlags(
     BytesThrottlingEnabled_ = enableBytesThrottling;
 }
 
-void TPerUserRequestQueueProvider::UpdateDefaultConfigs(
+template <class T>
+void TPerKeyRequestQueueProvider<T>::UpdateDefaultConfigs(
     const TRequestQueueThrottlerConfigs& configs)
 {
     YT_ASSERT(configs.WeightThrottlerConfig && configs.BytesThrottlerConfig);
     DefaultConfigs_.Store(configs);
 }
 
-void TPerUserRequestQueueProvider::ReconfigureAllUsers()
+template <class T>
+void TPerKeyRequestQueueProvider<T>::ReconfigureAllQueues()
 {
     if (!ReconfigurationCallback_) {
         return;
     }
 
     RequestQueues_.Flush();
-    RequestQueues_.IterateReadOnly([&] (const auto& userName, const auto& queue) {
-        ReconfigurationCallback_(userName, queue);
+    RequestQueues_.IterateReadOnly([&] (const auto& key, const auto& queue) {
+        ReconfigurationCallback_(key, queue);
     });
 }
 
-void TPerUserRequestQueueProvider::ReconfigureUser(const std::string& userName)
+template <class T>
+void TPerKeyRequestQueueProvider<T>::ReconfigureQueue(const T& key)
 {
     if (!ReconfigurationCallback_) {
         return;
     }
 
-    // Extra layer of defense from throttling root and spelling doom.
-    if (userName == RootUserName) {
+    if (!IsReconfigurationPermitted(key)) {
         return;
     }
 
-    if (auto* queue = RequestQueues_.Find(userName)) {
-        ReconfigurationCallback_(userName, *queue);
+    if (auto* queue = RequestQueues_.Find(key)) {
+        ReconfigurationCallback_(key, *queue);
     }
 }
 

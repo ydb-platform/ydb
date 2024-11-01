@@ -12,6 +12,7 @@
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/moody_camel_concurrent_queue.h>
+#include <yt/yt/core/concurrency/throughput_throttler.h>
 
 #include <yt/yt/core/logging/log.h>
 
@@ -464,8 +465,16 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern const NConcurrency::TThroughputThrottlerConfigPtr InfiniteRequestThrottlerConfig;
+
 TRequestQueuePtr CreateRequestQueue(
-    const std::string& name,
+    std::string name,
+    std::any tag,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler);
+
+TRequestQueuePtr CreateRequestQueue(
+    std::string name,
     const NProfiling::TProfiler& profiler = {});
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1081,7 +1090,11 @@ class TRequestQueue
     : public TRefCounted
 {
 public:
-    TRequestQueue(const std::string& name, NProfiling::TProfiler profiler);
+    TRequestQueue(
+        std::string name,
+        std::any tag,
+        NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler,
+        NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler);
 
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
@@ -1101,9 +1114,11 @@ public:
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
 
     const std::string& GetName() const;
+    const std::any& GetTag() const;
 
 private:
     const std::string Name_;
+    const std::any Tag_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;

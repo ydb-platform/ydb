@@ -86,7 +86,6 @@ private:
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
-    std::vector<TUnifiedBlobId> BlobIds;
 
     std::vector<TIndexChunk> Indexes;
     std::vector<TColumnRecord> Records;
@@ -95,7 +94,7 @@ private:
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
         AFL_VERIFY(MinSnapshotDeprecated.Valid());
-        AFL_VERIFY(BlobIds.size());
+        Meta.FullValidation();
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
@@ -111,7 +110,7 @@ public:
     }
 
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return BlobIds;
+        return Meta.GetBlobIds();
     }
 
     ui32 GetCompactionLevel() const {
@@ -224,12 +223,11 @@ public:
     }
 
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < BlobIds.size());
-        return BlobIds[linkId];
+        return Meta.GetBlobId(linkId);
     }
 
     ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
+        return Meta.GetBlobIdsCount();
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;

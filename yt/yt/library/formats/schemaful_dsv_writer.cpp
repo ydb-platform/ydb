@@ -266,9 +266,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateDuplicateColumns(const std::vector<TString>& columns)
+void ValidateDuplicateColumns(const std::vector<std::string>& columns)
 {
-    THashSet<TString> names;
+    THashSet<std::string> names;
     for (const auto& name : columns) {
         if (!names.insert(name).second) {
             THROW_ERROR_EXCEPTION("Duplicate column name %Qv in schemaful DSV config",

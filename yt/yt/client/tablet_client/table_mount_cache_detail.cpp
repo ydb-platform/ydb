@@ -304,11 +304,14 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
             }
         }
 
-        TabletInfoOwnerCache_.Insert(*tabletId, MakeWeak(clone));
         clonedTableInfos.push_back(std::move(clone));
     }
 
     for (const auto& tableInfo : clonedTableInfos) {
+        for (const auto& tabletInfo : tableInfo->Tablets) {
+            TabletInfoOwnerCache_.Insert(tabletInfo->TabletId, MakeWeak(tableInfo));
+        }
+
         TAsyncExpiringCache::Set(tableInfo->Path, tableInfo);
     }
 

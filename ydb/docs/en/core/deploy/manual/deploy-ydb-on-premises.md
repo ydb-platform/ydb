@@ -122,7 +122,7 @@ vdb    252:16   0   186G  0 disk
 └─vdb1 252:17   0   186G  0 part
 ```
 
-The names of block devices depend on the OS settings configured by the system administrator or provided by the cloud provider. For example, block device names in Yandex Cloud are based on `vd(n)`, where `n` is an incrementing literal. In AWS, block device names include the device type (`hdd`, `ssd`, `nvme`) and a sequential number (`0n1`, `1n1`).
+The names of block devices depend on the OS settings configured by the system administrator or provided by the cloud provider. In the example above, block device names are based on the `vd(n)` pattern, where `(n)` is a sequence number. In other environments, block device names might include the device type (`hdd`, `ssd`, `nvme`).
 
 1. Create partitions on the selected disks:
 

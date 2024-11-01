@@ -79,7 +79,7 @@ select
                   t_s_secyear.customer_id
                  ,t_s_secyear.customer_first_name
                  ,t_s_secyear.customer_last_name
-                 ,t_s_secyear.customer_birth_country
+                 ,t_s_secyear.customer_preferred_cust_flag
  from $year_total as t_s_firstyear
  cross join $year_total as t_s_secyear
  cross join $year_total as t_c_firstyear
@@ -113,7 +113,7 @@ select
  order by t_s_secyear.customer_id
          ,t_s_secyear.customer_first_name
          ,t_s_secyear.customer_last_name
-         ,t_s_secyear.customer_birth_country
+         ,t_s_secyear.customer_preferred_cust_flag
 limit 100;
 
 -- end query 1 in stream 0 using template query4.tpl

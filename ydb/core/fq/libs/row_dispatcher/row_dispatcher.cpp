@@ -50,12 +50,14 @@ struct TEvPrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCoordinatorPing = EvBegin + 20,
         EvUpdateMetrics,
+        EvPrintStateToLog,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvCoordinatorPing : NActors::TEventLocal<TEvCoordinatorPing, EvCoordinatorPing> {};
     struct TEvUpdateMetrics : public NActors::TEventLocal<TEvUpdateMetrics, EvUpdateMetrics> {};
+    struct TEvPrintStateToLog : public NActors::TEventLocal<TEvPrintStateToLog, EvPrintStateToLog> {};
 };
 
 struct TQueryStat {
@@ -64,7 +66,8 @@ struct TQueryStat {
     NYql::TCounters::TEntry UnreadBytes;
 };
 
-ui64 UpdateMetricsPeriodSec = 300;
+ui64 UpdateMetricsPeriodSec = 60;
+ui64 PrintStateToLogPeriodSec = 300;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
@@ -215,7 +218,8 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
-
+    void Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&);
+    
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     void UpdateMetrics();
@@ -243,6 +247,7 @@ public:
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvPrivate::TEvUpdateMetrics, Handle);
+        hFunc(NFq::TEvPrivate::TEvPrintStateToLog, Handle);
     })
 };
 
@@ -276,6 +281,7 @@ void TRowDispatcher::Bootstrap() {
     Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
+    Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -615,6 +621,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     UpdateMetrics();
+}
+
+void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&) {
+    Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
     PrintInternalState();
 }
 

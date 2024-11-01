@@ -62,6 +62,7 @@ struct TQueryStat {
     const TString QueryId;
     NYql::TCounters::TEntry UnreadRows;
     NYql::TCounters::TEntry UnreadBytes;
+    NYql::TCounters::TEntry ReadBytes;
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
@@ -351,6 +352,7 @@ void TRowDispatcher::UpdateMetrics() {
                 auto& stat = queryStats[consumer->QueryId];
                 stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
                 stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
+                stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
                 str << "    " << consumer->QueryId << " " << readActorId << " unread rows "
                     << consumer->Stat.UnreadRows << " unread bytes " << consumer->Stat.UnreadBytes << " offset " << consumer->Stat.Offset
                     << " get " << consumer->Counters.GetNextBatch
@@ -369,6 +371,7 @@ void TRowDispatcher::UpdateMetrics() {
         queryGroup->GetCounter("AvgUnreadRows")->Set(stat.UnreadRows.Avg);
         queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
         queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+        queryGroup->GetCounter("DataRate", true)->Add(stat.ReadBytes.Sum);
     }
 }
 

@@ -33,6 +33,8 @@ struct TTopicSessionMetrics {
         InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
         RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
+        DataRate = SubGroup->GetCounter("DataRate", true);
+        WaitEventTimeMs = SubGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(12, 2, 1)); // ~ 1ms -> ~ 4s
     }
 
     ~TTopicSessionMetrics() {
@@ -43,6 +45,8 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
+    ::NMonitoring::THistogramPtr WaitEventTimeMs;
 };
 
 struct TEvPrivate {
@@ -115,6 +119,7 @@ private:
         TMaybe<ui64> NextMessageOffset;
         ui64 LastSendedNextMessageOffset = 0;
         TVector<ui64> FieldsIds;
+        ui64 ReadBytes = 0;
     };
 
     struct TTopicEventProcessor {
@@ -161,6 +166,7 @@ private:
     TParserSchema ParserSchema;
     THashMap<TString, ui64> FieldsIndexes;
     NYql::IPqGateway::TPtr PqGateway;
+    TInstant WaitEventStartedAt;
 
 public:
     explicit TTopicSession(
@@ -307,6 +313,7 @@ void TTopicSession::SubscribeOnNextEvent() {
     IsWaitingEvents = true;
     Metrics.InFlySubscribe->Inc();
     NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
+    WaitEventStartedAt = TInstant::Now();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
         actorSystem->Send(selfId, new NFq::TEvPrivate::TEvPqEventsReady());
     });
@@ -379,6 +386,8 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPqEventsReady");
     Metrics.InFlySubscribe->Dec();
     IsWaitingEvents = false;
+    auto waitEventDurationMs = (TInstant::Now() - WaitEventStartedAt).MilliSeconds();
+    Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
     HandleNewEvents();
     SubscribeOnNextEvent();
 }
@@ -478,14 +487,15 @@ void TTopicSession::CloseTopicSession() {
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-    Self.Metrics.RowsRead->Add(event.GetMessages().size());
+    ui64 dataSize = 0;
     for (const auto& message : event.GetMessages()) {
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
-
-        Self.IngressStats.Bytes += message.GetData().size();
+        dataSize += message.GetData().size();
         Self.LastMessageOffset = message.GetOffset();
     }
-
+    Self.IngressStats.Bytes += dataSize;
+    Self.Metrics.RowsRead->Add(event.GetMessages().size());
+    Self.Metrics.DataRate->Add(dataSize);
     Self.SendToParsing(event.GetMessages());
 }
 
@@ -606,7 +616,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     if (info.Buffer.empty()) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
     }
-
+    ui64 dataSize = 0;
     do {
         auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
         event->Record.SetPartitionId(PartitionId);
@@ -630,12 +640,14 @@ void TTopicSession::SendData(TClientsInfo& info) {
                 break;
             }
         }
+        dataSize += batchSize;
         if (info.Buffer.empty()) {
             event->Record.SetNextMessageOffset(*info.NextMessageOffset);
         }
         LOG_ROW_DISPATCHER_TRACE("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
         Send(RowDispatcherActorId, event.release());
     } while(!info.Buffer.empty());
+    info.ReadBytes += dataSize; 
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
 }
 
@@ -883,6 +895,7 @@ void TTopicSession::SendStatistic() {
         client.UnreadRows = info.Buffer.size();
         client.UnreadBytes = info.UnreadBytes;
         client.Offset = info.NextMessageOffset.GetOrElse(0);
+        client.ReadBytes = info.ReadBytes;
         stat.Clients.emplace_back(std::move(client));
     }
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionStatistic>(stat);

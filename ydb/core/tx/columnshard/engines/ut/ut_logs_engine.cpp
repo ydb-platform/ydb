@@ -35,8 +35,12 @@ std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<N
 
 class TTestDbWrapper : public IDbWrapper {
 private:
-    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContext>> LoadContexts;
+    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
 public:
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return &Default<TFakeGroupSelector>();
+    }
+
     struct TIndex {
         THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Columns; // pathId -> portions
         THashMap<ui32, ui64> Counters;
@@ -101,7 +105,7 @@ public:
     }
     virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
-            callback(NOlap::TPortionInfoConstructor(i.second, false, true), i.second.GetMeta().SerializeToProto());
+            callback(NOlap::TPortionInfoConstructor(i.second, false, false, false), i.second.GetMeta().SerializeToProto());
         }
         return true;
     }
@@ -113,15 +117,15 @@ public:
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContext loadContext(
-            portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), portion.RestoreBlobRange(row.BlobRange), rowProto);
+        NOlap::TColumnChunkLoadContextV1 loadContext(
+            portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), row.BlobRange, rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
             itInsertInfo.first->second = loadContext;
         }
         auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, false, true)).first;
+            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, false, true, true)).first;
         } else {
             Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortionId() == it->second.GetPortionIdVerified());
         }
@@ -162,7 +166,7 @@ public:
         portionLocal.MutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) override {
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {

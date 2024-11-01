@@ -4385,8 +4385,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         auto* room = tableInfo->Rooms.FindPtr(family.Room);
         Y_ABORT_UNLESS(room, "Cannot find room %" PRIu32 " in table %" PRIu32, family.Room, table);
 
-        auto& pageGroup = comp->Layout.Groups.at(groupIndex);
-        auto& writeGroup = comp->Writer.Groups.at(groupIndex);
+        auto& pageGroup = comp->Layout.Groups.at(group);
+        auto& writeGroup = comp->Writer.Groups.at(group);
 
         pageGroup.Codec = family.Codec;
         pageGroup.PageSize = policy->MinDataPageSize;
@@ -4398,7 +4398,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         writeGroup.Channel = room->Main;
         addChannel(room->Main);
 
-        if (groupIndex == 0) {
+        if (group == 0) {
             // Small/Large edges are taken from the leader family
             comp->Layout.SmallEdge = family.Small;
             comp->Layout.LargeEdge = family.Large;

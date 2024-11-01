@@ -1,5 +1,6 @@
 #pragma once
 #include "json_wb_req.h"
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/util/wildcard.h>
 
 namespace NKikimr::NViewer {
@@ -173,7 +174,15 @@ public:
             return IsBase64Encode ? Base64Encode(cell.AsBuf()) : (TStringBuilder() << '"' << cell.AsBuf() << '"');
         case NScheme::NTypeIds::Utf8:
             return TStringBuilder() << '"' << cell.AsBuf() << '"';
-        case NScheme::NTypeIds::Decimal:         return "Decimal";
+        case NScheme::NTypeIds::Decimal: {
+            NScheme::TTypeInfo typeInfo = NKikimr::NScheme::TypeInfoFromProto(type.GetTypeId(), type.GetTypeInfo());
+            return typeInfo.GetDecimalType().CellValueToString(cell.AsValue<std::pair<ui64, i64>>());
+        }
+        case NScheme::NTypeIds::Pg: {
+            NScheme::TTypeInfo typeInfo = NKikimr::NScheme::TypeInfoFromProto(type.GetTypeId(), type.GetTypeInfo());
+            auto convert = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(),typeInfo.GetPgTypeDesc());
+            return !convert.Error ? convert.Str : *convert.Error;
+        }        
         case NScheme::NTypeIds::DyNumber:        return "DyNumber";
         case NScheme::NTypeIds::Uuid:            return "Uuid";
         default:

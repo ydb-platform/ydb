@@ -2581,17 +2581,19 @@ private:
     {
         TVector<NYT::TNode> attributes(tables.size());
         TVector<TMaybe<NYT::TNode>> linkAttributes(tables.size());
+        std::atomic<bool> linksPresent = false;
         {
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
             for (auto& idx: idxs) {
                 batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@").Apply(
-                     [&attributes, &linkAttributes, idx] (const TFuture<NYT::TNode>& res) {
+                     [&attributes, &linkAttributes, &linksPresent, idx] (const TFuture<NYT::TNode>& res) {
                     try {
                         NYT::TNode attrs = res.GetValue();
                         auto type = GetTypeFromAttributes(attrs, false);
                         if (type == "link") {
                             linkAttributes[idx.first] = attrs;
+                            linksPresent.store(true);
                         } else {
                             attributes[idx.first] = attrs;
                         }
@@ -2607,11 +2609,7 @@ private:
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
         }
-        int numLinks = std::accumulate(linkAttributes.begin(), linkAttributes.end(), 0,
-            [](int current, const TMaybe<NYT::TNode>& node) {
-                return current + (node ? 1 : 0);
-            });
-        if (numLinks > 0) {
+        if (linksPresent.load()) {
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes;
             for (auto& idx : idxs) {

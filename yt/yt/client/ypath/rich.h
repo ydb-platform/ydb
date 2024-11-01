@@ -67,8 +67,8 @@ public:
     void SetReadViaExecNode(bool value);
 
     // "columns"
-    std::optional<std::vector<TString>> GetColumns() const;
-    void SetColumns(const std::vector<TString>& columns);
+    std::optional<std::vector<std::string>> GetColumns() const;
+    void SetColumns(const std::vector<std::string>& columns);
 
     // "rename_columns"
     std::optional<NTableClient::TColumnRenameDescriptors> GetColumnRenameDescriptors() const;

@@ -1,20 +1,26 @@
-{%- set mainClass = target.app_main_class -%}
+val baseBuildDir = "{{ export_root }}/gradle.build/"
+buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
+subprojects {
+    buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
+}
+
+{%  set mainClass = target.app_main_class -%}
 {%- set publish = target.publish -%}
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
 {%- set hasJunit5Test = extra_targets|selectattr('junit5_test') -%}
 {%- set errorprone_plugin_version = "4.0.0" -%}
 plugins {
-{# some plugins configuration #}
+{#- some plugins configuration -#}
 {%- for library in target.consumer if library.classpath -%}
-{# error prone plugin configuration #}
+{#- error prone plugin configuration -#}
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations/" in library.jar -%}
 
     id("net.ltgt.errorprone") version "{{ errorprone_plugin_version }}"
 
 {%-     endif -%}
 {%- endfor -%}
-{# lombok configuration #}
+{#- lombok configuration -#}
 {%- if "lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors %}
     id("io.freefair.lombok") version "8.6"
 {%- endif -%}
@@ -43,7 +49,7 @@ plugins {
 {%      endif -%}
 {%- endif %}
 }
-{# language level #}
+{#- language level -#}
 {%- if target.required_jdk is defined and target.required_jdk|length %}
 java {
     toolchain {
@@ -98,7 +104,7 @@ tasks.withType<Javadoc> {
 }
 {% endif %}
 
-{# javac flags #}
+{#- javac flags -#}
 {%- if (target.javac.flags is defined) and (target.javac.flags|length) %}
 tasks.withType<JavaCompile> {
 {%- for javac_flag in target.javac.flags %}
@@ -113,20 +119,18 @@ tasks.withType<JavaCompile> {
 val bucketUsername: String by project
 val bucketPassword: String by project
 repositories {
-   repositories {
-    maven {
-        url = uri("https://bucket.yandex-team.ru/v1/maven/central")
-        credentials {
-            username = "$bucketUsername"
-            password = "$bucketPassword"
+    repositories {
+        maven {
+            url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+            credentials {
+                username = "$bucketUsername"
+                password = "$bucketPassword"
+            }
         }
     }
 }
 
-
-}
-
-val project_root="{%- if export_root.startswith(arcadia_root + '/') -%}{{ arcadia_root }}{%- else -%}{{ export_root }}/.hic_sunt_dracones{%- endif -%}"
+val project_root = "{{ arcadia_root }}"
 
 {%  if mainClass -%}
 application {
@@ -269,13 +273,13 @@ tasks.named<Test>("test") {
     useJUnitPlatform()
 }
 
-{% endif -%}
+{%  endif -%}
 
-{# run_java_program #}
-{# {% set runs = targets|selectattr("runs") -%} #}
-{% set runs = target.runs -%}
-{% if runs -%}
-{%     for run in runs -%}
+{#- run_java_program -#}
+{#- {% set runs = targets|selectattr("runs") -%} -#}
+{%- set runs = target.runs -%}
+{%- if runs -%}
+{%-     for run in runs -%}
 
 val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
         group = "build"
@@ -287,7 +291,7 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 {%                 set real_classpath = classpath|replace('@', '') -%}
 {%                 set real_classpath = real_classpath|replace('.run.cp', '') -%}
 {%                 set real_classpath = real_classpath|replace('.cplst', '') -%}
-{%                 set real_classpath = real_classpath|replace(export_root, '') -%}
+{%                 set real_classpath = real_classpath|replace(export_root, '')|replace(arcadia_root, '') -%}
 {%                 set real_gradle_classpath = real_classpath|replace('/', ':') %}
         val classPath = "{{ real_gradle_classpath }}"
         val classPathParts = classPath.split(":")
@@ -321,15 +325,15 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 {%             for dir in run.out_dir -%}
         outputs.dir("{{ dir }}")
 {%             endfor -%}
-{#
+{#-
     Не использованы аттрибуты
     run-cwd="str"
     run-in_dirs_inputs="list"
     run-in_noparse="list"
     run-out_dir="list"
     run-tool="list"
-#}
-{%         endif -%}
+-#}
+{%-        endif -%}
     }
 tasks {
     build {

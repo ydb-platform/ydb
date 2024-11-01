@@ -857,17 +857,20 @@ struct TCreateBackupCollectionSettings {
     };
 
     TString Name;
+    TString Prefix;
     std::variant<TDatabase, TVector<TTable>> Entries;
     TBackupCollectionSettings Settings;
 };
 
 struct TAlterBackupCollectionSettings {
     TString Name;
+    TString Prefix;
     TBackupCollectionSettings Settings;
 };
 
 struct TDropBackupCollectionSettings {
     TString Name;
+    TString Prefix;
     bool Cascade = false;
 };
 

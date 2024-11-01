@@ -110,6 +110,13 @@ TStringBuf GetServiceHostName(TStringBuf address)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString FormatNetworkAddress(TStringBuf address, int port)
+{
+    return Format("[%v]:%v", address, port);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 const TNetworkAddress NullNetworkAddress;
 
 TNetworkAddress::TNetworkAddress()

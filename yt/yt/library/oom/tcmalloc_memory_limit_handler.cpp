@@ -35,6 +35,13 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString MakeIncompletePath(const TString& path)
+{
+    return NYT::Format("%v_incomplete", path);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::ProfileType profileType)
 {
     auto profile = NYTProf::ReadHeapProfile(profileType);
@@ -45,9 +52,12 @@ void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::Pro
         },
     });
 
-    TFileOutput output(memoryProfilePath);
+    auto incompletePath = NYT::MakeIncompletePath(memoryProfilePath);
+
+    TFileOutput output(incompletePath);
     NYTProf::WriteProfile(&output, profile);
     output.Finish();
+    NFs::Rename(incompletePath, memoryProfilePath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -185,12 +195,22 @@ private:
         AbortProcess(ToUnderlying(EProcessExitCode::OK));
     }
 
+    auto MakeSuffixFormatter(const TString& timestamp) const
+    {
+        return NYT::MakeFormatterWrapper([this, &timestamp] (TStringBuilderBase* builder) {
+            if (Options_.FilenameSuffix) {
+                builder->AppendFormat("%v_", Options_.FilenameSuffix);
+            }
+            FormatValue(builder, timestamp, "v");
+        });
+    }
+
     TString GetHeapDumpPath(const TString& timestamp) const
     {
         return Format(
             "%v/heap_%v.pb.gz",
             Options_.HeapDumpDirectory,
-            timestamp);
+            MakeSuffixFormatter(timestamp));
     }
 
     TString GetPeakDumpPath(const TString& timestamp) const
@@ -198,7 +218,7 @@ private:
         return Format(
             "%v/peak_%v.pb.gz",
             Options_.HeapDumpDirectory,
-            timestamp);
+            MakeSuffixFormatter(timestamp));
     }
 
     TString GetProfilePaths(const TString& timestamp) const
@@ -206,7 +226,7 @@ private:
         return Format(
             "%v/oom_profile_paths_%v.yson",
             Options_.HeapDumpDirectory,
-            timestamp);
+            MakeSuffixFormatter(timestamp));
     }
 
     void ExecWaitForChild(int pid)

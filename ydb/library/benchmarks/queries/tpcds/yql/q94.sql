@@ -19,11 +19,11 @@ from
   left semi join $bla1 bla1 on (ws1.ws_order_number = bla1.ws_order_number)
   left only join {{web_returns}} as web_returns on (ws1.ws_order_number = web_returns.wr_order_number)
 where
-    cast(d_date as date) between cast('1999-4-01' as date) and
-           (cast('1999-4-01' as date) + DateTime::IntervalFromDays(60))
+    cast(d_date as date) between cast('1999-2-01' as date) and
+           (cast('1999-2-01' as date) + DateTime::IntervalFromDays(60))
 and ws1.ws_ship_date_sk = d_date_sk
 and ws1.ws_ship_addr_sk = ca_address_sk
-and ca_state = 'NE'
+and ca_state = 'IL'
 and ws1.ws_web_site_sk = web_site_sk
 and web_company_name = 'pri'
 order by `order count`

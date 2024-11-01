@@ -1,15 +1,15 @@
 //
-// experimental/impl/as_tuple.hpp
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// impl/as_tuple.hpp
+// ~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
 
-#ifndef BOOST_ASIO_IMPL_EXPERIMENTAL_AS_TUPLE_HPP
-#define BOOST_ASIO_IMPL_EXPERIMENTAL_AS_TUPLE_HPP
+#ifndef BOOST_ASIO_IMPL_AS_TUPLE_HPP
+#define BOOST_ASIO_IMPL_AS_TUPLE_HPP
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1200)
 # pragma once
@@ -31,7 +31,6 @@
 
 namespace boost {
 namespace asio {
-namespace experimental {
 namespace detail {
 
 // Class to adapt a as_tuple_t as a completion handler.
@@ -169,17 +168,16 @@ struct as_tuple_signature<R(Args...) && noexcept>
 #endif // defined(BOOST_ASIO_HAS_REF_QUALIFIED_FUNCTIONS)
 
 } // namespace detail
-} // namespace experimental
 
 #if !defined(GENERATING_DOCUMENTATION)
 
 template <typename CompletionToken, typename... Signatures>
-struct async_result<experimental::as_tuple_t<CompletionToken>, Signatures...>
+struct async_result<as_tuple_t<CompletionToken>, Signatures...>
   : async_result<CompletionToken,
-      typename experimental::detail::as_tuple_signature<Signatures>::type...>
+      typename detail::as_tuple_signature<Signatures>::type...>
 {
   typedef async_result<CompletionToken,
-    typename experimental::detail::as_tuple_signature<Signatures>::type...>
+    typename detail::as_tuple_signature<Signatures>::type...>
       base_async_result;
 
   template <typename Initiation>
@@ -196,7 +194,7 @@ struct async_result<experimental::as_tuple_t<CompletionToken>, Signatures...>
         BOOST_ASIO_MOVE_ARG(Args)... args)
     {
       BOOST_ASIO_MOVE_CAST(Initiation)(initiation_)(
-          experimental::detail::as_tuple_handler<
+          detail::as_tuple_handler<
             typename decay<Handler>::type>(
               BOOST_ASIO_MOVE_CAST(Handler)(handler)),
           BOOST_ASIO_MOVE_CAST(Args)(args)...);
@@ -207,7 +205,7 @@ struct async_result<experimental::as_tuple_t<CompletionToken>, Signatures...>
 
   template <typename Initiation, typename RawCompletionToken, typename... Args>
   static BOOST_ASIO_INITFN_DEDUCED_RESULT_TYPE(CompletionToken,
-      typename experimental::detail::as_tuple_signature<Signatures>::type...,
+      typename detail::as_tuple_signature<Signatures>::type...,
       (base_async_result::initiate(
         declval<init_wrapper<typename decay<Initiation>::type> >(),
         declval<CompletionToken>(),
@@ -227,11 +225,11 @@ struct async_result<experimental::as_tuple_t<CompletionToken>, Signatures...>
 template <template <typename, typename> class Associator,
     typename Handler, typename DefaultCandidate>
 struct associator<Associator,
-    experimental::detail::as_tuple_handler<Handler>, DefaultCandidate>
+    detail::as_tuple_handler<Handler>, DefaultCandidate>
   : Associator<Handler, DefaultCandidate>
 {
   static typename Associator<Handler, DefaultCandidate>::type get(
-      const experimental::detail::as_tuple_handler<Handler>& h,
+      const detail::as_tuple_handler<Handler>& h,
       const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
   {
     return Associator<Handler, DefaultCandidate>::get(h.handler_, c);
@@ -245,4 +243,4 @@ struct associator<Associator,
 
 #include <boost/asio/detail/pop_options.hpp>
 
-#endif // BOOST_ASIO_IMPL_EXPERIMENTAL_AS_TUPLE_HPP
+#endif // BOOST_ASIO_IMPL_AS_TUPLE_HPP

@@ -54,7 +54,9 @@ namespace NKikimr::NSchemeShard {
                 return false;
             }
             Type = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
-        } else {
+        } else if (const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName)) {
+            Type = NScheme::TTypeInfo(NScheme::NTypeIds::Decimal, *decimalType);
+        }else {
             Y_ABORT_UNLESS(AppData()->TypeRegistry);
             const NScheme::IType* type = AppData()->TypeRegistry->GetType(typeName);
             if (!type) {

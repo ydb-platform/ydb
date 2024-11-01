@@ -101,6 +101,12 @@ constexpr bool IsYqlType(TTypeId typeId) {
     return IsYqlTypeImpl(typeId, 0);
 }
 
+constexpr bool IsParametrizedType(TTypeId typeId) {
+    return typeId == Pg
+        || typeId == Decimal
+    ;
+}
+
 } // namespace NTypeIds
 
 #ifdef _MSC_VER
@@ -138,7 +144,6 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::Yson:            return "Yson";
         case NTypeIds::Json:            return "Json";
         case NTypeIds::JsonDocument:    return "JsonDocument";
-        case NTypeIds::Decimal:         return "Decimal";
         case NTypeIds::DyNumber:        return "DyNumber";
         case NTypeIds::Uuid:            return "Uuid";
         default:                        return "Unknown";

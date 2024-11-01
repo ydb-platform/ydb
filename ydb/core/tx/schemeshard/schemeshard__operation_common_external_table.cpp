@@ -53,16 +53,26 @@ bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDe
 
 Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
     Ydb::Type ydbType;
-    if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
+    switch (typeInfo.GetTypeId()) {
+    case NScheme::NTypeIds::Pg : {
         auto typeDesc = typeInfo.GetPgTypeDesc();
-        auto* pg = ydbType.mutable_pg_type();
-        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-    } else {
-        auto& item = notNull
-            ? ydbType
-            : *ydbType.mutable_optional_type()->mutable_item();
-        item.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(typeInfo.GetTypeId()));
+        auto* pgProto = ydbType.mutable_pg_type();
+        pgProto->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pgProto->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));        
+        break;
+    }
+    case NScheme::NTypeIds::Decimal : {
+        auto decimalType = typeInfo.GetDecimalType();
+        auto* decimalProto = ydbType.mutable_decimal_type();
+        decimalProto->set_precision(decimalType.GetPrecision());
+        decimalProto->set_scale(decimalType.GetScale());        
+        break;
+    }
+    default : {
+        auto& item = notNull ? ydbType : *ydbType.mutable_optional_type()->mutable_item();
+        item.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(typeInfo.GetTypeId()));        
+        break;
+    }
     }
     return ydbType;
 }
@@ -113,23 +123,10 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         }
 
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
-        const NScheme::IType* type = typeRegistry->GetType(typeName);
 
         NScheme::TTypeInfo typeInfo;
-        if (type) {
-            // Only allow YQL types
-            if (!NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                errStr = Sprintf("Type '%s' specified for column '%s' is no longer supported", col.GetType().data(), colName.data());
-                return std::make_pair(nullptr, errStr);
-            }
-            typeInfo = NScheme::TTypeInfo(type->GetTypeId());
-        } else {
-            auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-            if (!typeDesc) {
-                errStr = Sprintf("Type '%s' specified for column '%s' is not supported by storage", col.GetType().data(), colName.data());
-                return std::make_pair(nullptr, errStr);
-            }
-            typeInfo = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+        if (!typeRegistry->GetTypeInfo(typeName, colName, typeInfo, errStr)) {
+            return std::make_pair(nullptr, errStr);
         }
 
         ui32 colId = col.HasId() ? col.GetId() : nextColumnId;
@@ -141,7 +138,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         nextColumnId = colId + 1 > nextColumnId ? colId + 1 : nextColumnId;
 
         TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
-        column = TTableInfo::TColumn(colName, colId, typeInfo, "", col.GetNotNull()); // TODO: do we need typeMod here?
+        column = TTableInfo::TColumn(colName, colId, typeInfo, typeInfo.GetPgTypeMod(typeName), col.GetNotNull());
 
         auto& schemaColumn= *schema.add_column();
         schemaColumn.set_name(colName);

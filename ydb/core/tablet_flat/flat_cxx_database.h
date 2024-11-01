@@ -230,7 +230,6 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString 
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Decimal> { typedef std::pair<ui64, i64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date> { typedef ui16 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime> { typedef ui32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp> { typedef ui64 Type; };

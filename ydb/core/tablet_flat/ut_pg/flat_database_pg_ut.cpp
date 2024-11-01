@@ -33,19 +33,26 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
             return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(oid));
         };
 
+        auto makePgTypeInfo = [] (ui32 pgTypeId) {
+            NKikimrProto::TTypeInfo typeInfo;
+            typeInfo.SetPgTypeId(pgTypeId);
+            typeInfo.SetPgTypeMod("");
+            return typeInfo;
+        };
+
         db.Begin();
         db->Alter()
             .AddTable("TestTable", tableId)
-            .AddPgColumn(tableId, "boolean", IdBool, NScheme::NTypeIds::Pg, BOOLOID, "", false)
-            .AddPgColumn(tableId, "char", IdChar, NScheme::NTypeIds::Pg, CHAROID, "", false)
-            .AddPgColumn(tableId, "int2", IdInt2, NScheme::NTypeIds::Pg, INT2OID, "", false)
-            .AddPgColumn(tableId, "int4", IdInt4, NScheme::NTypeIds::Pg, INT4OID, "", false)
-            .AddPgColumn(tableId, "int8", IdInt8, NScheme::NTypeIds::Pg, INT8OID, "", false)
-            .AddPgColumn(tableId, "float4", IdFloat4, NScheme::NTypeIds::Pg, FLOAT4OID, "", false)
-            .AddPgColumn(tableId, "float8", IdFloat8, NScheme::NTypeIds::Pg, FLOAT8OID, "", false)
-            .AddPgColumn(tableId, "text", IdText, NScheme::NTypeIds::Pg, TEXTOID, "", false)
-            .AddPgColumn(tableId, "bytea", IdBytea, NScheme::NTypeIds::Pg, BYTEAOID, "", false)
-            .AddPgColumn(tableId, "bpchar", IdBpchar, NScheme::NTypeIds::Pg, BPCHAROID, "", false)
+            .AddColumnWithTypeInfo(tableId, "boolean", IdBool, NScheme::NTypeIds::Pg, makePgTypeInfo(BOOLOID), false)
+            .AddColumnWithTypeInfo(tableId, "char", IdChar, NScheme::NTypeIds::Pg, makePgTypeInfo(CHAROID), false)
+            .AddColumnWithTypeInfo(tableId, "int2", IdInt2, NScheme::NTypeIds::Pg, makePgTypeInfo(INT2OID), false)
+            .AddColumnWithTypeInfo(tableId, "int4", IdInt4, NScheme::NTypeIds::Pg, makePgTypeInfo(INT4OID), false)
+            .AddColumnWithTypeInfo(tableId, "int8", IdInt8, NScheme::NTypeIds::Pg, makePgTypeInfo(INT8OID), false)
+            .AddColumnWithTypeInfo(tableId, "float4", IdFloat4, NScheme::NTypeIds::Pg, makePgTypeInfo(FLOAT4OID), false)
+            .AddColumnWithTypeInfo(tableId, "float8", IdFloat8, NScheme::NTypeIds::Pg, makePgTypeInfo(FLOAT8OID), false)
+            .AddColumnWithTypeInfo(tableId, "text", IdText, NScheme::NTypeIds::Pg, makePgTypeInfo(TEXTOID), false)
+            .AddColumnWithTypeInfo(tableId, "bytea", IdBytea, NScheme::NTypeIds::Pg, makePgTypeInfo(BYTEAOID), false)
+            .AddColumnWithTypeInfo(tableId, "bpchar", IdBpchar, NScheme::NTypeIds::Pg, makePgTypeInfo(BPCHAROID), false)
             .AddColumnToKey(tableId, IdText)
             .AddColumnToKey(tableId, IdBytea)
             .AddColumnToKey(tableId, IdInt2)

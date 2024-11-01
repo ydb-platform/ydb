@@ -486,4 +486,22 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
         TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathNotExist);
     }
+
+    Y_UNIT_TEST(Decimal) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        ui64 txId = 100;
+        CreateExternalDataSource(runtime, env, txId++);
+        TestCreateExternalTable(runtime, txId++, "/MyRoot", R"_(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Decimal(35,9)" }
+            )_", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId - 1);
+
+        TestLs(runtime, "/MyRoot/ExternalTable", false, NLs::PathExist);
+    }    
 }

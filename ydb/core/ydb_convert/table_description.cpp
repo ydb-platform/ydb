@@ -593,7 +593,9 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
             typeId = (ui32)itemType.type_id();
             break;
         case Ydb::Type::kDecimalType: {
-            if (itemType.decimal_type().precision() != NScheme::DECIMAL_PRECISION) {
+            ui32 precision = itemType.decimal_type().precision();
+            ui32 scale = itemType.decimal_type().scale();
+            if (precision != NScheme::DECIMAL_PRECISION) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("Bad decimal precision. Only Decimal(%" PRIu32
                                     ",%" PRIu32 ") is supported for table columns",
@@ -601,7 +603,7 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
                                     NScheme::DECIMAL_SCALE);
                 return false;
             }
-            if (itemType.decimal_type().scale() != NScheme::DECIMAL_SCALE) {
+            if (scale != NScheme::DECIMAL_SCALE) {
                 status = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("Bad decimal scale. Only Decimal(%" PRIu32
                                     ",%" PRIu32 ") is supported for table columns",
@@ -609,8 +611,8 @@ bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
                                     NScheme::DECIMAL_SCALE);
                 return false;
             }
-            typeId = NYql::NProto::TypeIds::Decimal;
-            break;
+            outTypeInfo = NScheme::TTypeInfo(NYql::NProto::TypeIds::Decimal, {precision, scale});
+            return true;
         }
         case Ydb::Type::kPgType: {
             const auto& pgType = itemType.pg_type();

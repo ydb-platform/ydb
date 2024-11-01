@@ -315,10 +315,8 @@ Y_UNIT_TEST_SUITE(Scheme) {
     void DoTestCompareOrder(const TCell& cell1, const TCell& cell2, const TCell& cell3, NScheme::TTypeId typeId) {
         TCell nullCell;
 
-        NScheme::TTypeIdOrder typeIdDescending(typeId, NScheme::EOrder::Descending);
-
         NScheme::TTypeInfo type(typeId);
-        NScheme::TTypeInfoOrder typeDescending(typeIdDescending);
+        NScheme::TTypeInfoOrder typeDescending(type, NScheme::EOrder::Descending);
 
         // NULL is always equal to itself, both ascending and descending
         UNIT_ASSERT_EQUAL(CompareTypedCells(nullCell, nullCell, type), 0);

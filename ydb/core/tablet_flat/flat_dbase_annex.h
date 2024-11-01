@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_page_label.h"
+#include "flat_part_iface.h"
 #include "flat_redo_writer.h"
 #include "flat_dbase_scheme.h"
 #include "flat_sausage_solid.h"
@@ -14,9 +15,9 @@ namespace NTable {
         using TGlobId = NPageCollection::TGlobId;
 
     public:
-        TAnnex(const TScheme &scheme, const THashMap<ui32, float>& approximateFreeSpaceShareByChannel)
+        TAnnex(const TScheme &scheme, const THashMap<ui32, float>& normalizedFreeSpaceShareByChannel)
             : Scheme(scheme)
-            , ApproximateFreeSpaceShareByChannel(approximateFreeSpaceShareByChannel) { }
+            , NormalizedFreeSpaceShareByChannel(normalizedFreeSpaceShareByChannel) { }
 
         TVector<NPageCollection::TMemGlob> Unwrap() noexcept
         {
@@ -51,7 +52,7 @@ namespace NTable {
 
             const ui32 ref = Blobs.size();
 
-            ui8 bestChannel = SelectChannel(ApproximateFreeSpaceShareByChannel, Room->Blobs);
+            ui8 bestChannel = NUtil::SelectChannel(NormalizedFreeSpaceShareByChannel, Room->Blobs);
 
             const TLogoBlobID fake(0, 0, 0, bestChannel, blob.size(), ref);
 
@@ -74,7 +75,7 @@ namespace NTable {
 
     private:
         const TScheme &Scheme;
-        const THashMap<ui32, float>& ApproximateFreeSpaceShareByChannel;
+        const THashMap<ui32, float>& NormalizedFreeSpaceShareByChannel;
         TVector<NPageCollection::TMemGlob> Blobs;
 
         /*_ Simple table info lookup cache */

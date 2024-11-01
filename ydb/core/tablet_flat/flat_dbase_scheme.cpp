@@ -3,6 +3,8 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#include <util/generic/set.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -17,7 +19,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         for(const auto& it : itTable.second.Rooms) {
             auto &room = it.second;
 
-            THashSet<ui32> blobs;
+            TSet<ui32> blobs;
             for (auto blob : room.Blobs) {
                 blobs.insert(blob);
             }
@@ -212,7 +214,7 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, const THashSet<ui32>& blobs, ui32 outer)
+TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer)
 {
     Y_ABORT_UNLESS(!blobs.empty(), "Room must have at least one external blob channel");
 

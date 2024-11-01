@@ -25,7 +25,7 @@ namespace NWriter {
             : Groups(conf.Groups)
             , BlobsChannels(conf.BlobsChannels)
             , ExtraChannel(conf.ExtraChannel)
-            , ApproximateFreeSpaceShareByChannel(conf.ApproximateFreeSpaceShareByChannel)
+            , ChannelsShares(conf.ChannelsShares)
             , Banks(base, conf.Slots)
         {
             Y_ABORT_UNLESS(Groups.size() >= 1, "There must be at least one page collection group");
@@ -85,7 +85,7 @@ namespace NWriter {
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
         {
-            ui8 bestChannel = NTable::SelectChannel(ApproximateFreeSpaceShareByChannel, BlobsChannels);
+            ui8 bestChannel = ChannelsShares.Select(BlobsChannels);
             
             auto glob = Banks.Data.Do(bestChannel, blob.size());
 
@@ -155,7 +155,7 @@ namespace NWriter {
         const TVector<TConf::TGroup> Groups;
         const TVector<ui8> BlobsChannels;
         const ui8 ExtraChannel;
-        const THashMap<ui32, float>& ApproximateFreeSpaceShareByChannel;
+        const NUtil::TChannelsShares& ChannelsShares;
         TBanks Banks;
         TVector<NPageCollection::TGlob> Blobs;
         TVector<THolder<TBlocks>> Blocks;

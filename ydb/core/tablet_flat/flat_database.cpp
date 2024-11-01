@@ -432,7 +432,7 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
 {
     Y_ABORT_UNLESS(!Redo, "Transaction already in progress");
     Y_ABORT_UNLESS(!Env);
-    Annex = new TAnnex(*DatabaseImpl->Scheme, DatabaseImpl->Stats.ApproximateFreeSpaceShareByChannel);
+    Annex = new TAnnex(*DatabaseImpl->Scheme, DatabaseImpl->Stats.NormalizedFreeSpaceShareByChannel);
     Redo = new NRedo::TWriter;
     DatabaseImpl->BeginTransaction();
     Change = MakeHolder<TChange>(stamp, DatabaseImpl->Serial());
@@ -514,7 +514,7 @@ const TDbStats& TDatabase::Counters() const noexcept
 void TDatabase::UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>& approximateFreeSpaceShareByChannel)
 {
     for (auto& [channel, value] : approximateFreeSpaceShareByChannel) {
-        DatabaseImpl->Stats.ApproximateFreeSpaceShareByChannel[channel] = value;
+        DatabaseImpl->Stats.NormalizedFreeSpaceShareByChannel[channel] = NUtil::NormalizeFreeSpaceShare(value);
     }
 }
 

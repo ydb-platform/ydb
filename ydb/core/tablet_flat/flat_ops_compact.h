@@ -13,6 +13,7 @@
 #include "flat_comp.h"
 #include "flat_executor_misc.h"
 #include "flat_bio_stats.h"
+#include "util_channel.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
@@ -441,7 +442,7 @@ namespace NTabletFlatExecutor {
                 }
             }
 
-            Conf->Writer.ApproximateFreeSpaceShareByChannel[channel] = msg.ApproximateFreeSpaceShare;
+            Conf->Writer.ChannelsShares.Update(channel, msg.ApproximateFreeSpaceShare);
 
             const auto ok = (msg.Status == NKikimrProto::OK);
 

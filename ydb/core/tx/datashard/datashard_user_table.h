@@ -124,7 +124,7 @@ struct TUserTable : public TThrRefBase {
             return MainChannelByStorageEnum();
         }
 
-        THashSet<ui32> ExternalChannels() const {
+        TSet<ui32> ExternalChannels() const {
             if (!*Room) {
                 return {ExternalChannelByStorageEnum()};
             }

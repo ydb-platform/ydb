@@ -4417,7 +4417,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             addChannel(room->Outer);
         }
         
-        comp->Writer.ApproximateFreeSpaceShareByChannel = Database->Counters().ApproximateFreeSpaceShareByChannel;
+        comp->Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
     }
 
     if (const auto& ranges = Database->GetRemovedRowVersions(table)) {

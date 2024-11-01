@@ -668,10 +668,10 @@ bool TSchemeShard::GetBindingsRooms(
     // N.B. channel 0 is used for syslog and cannot be used for anything else
     // Here we use channel 0 as a marker for unassigned (default) channel
     ui32 primaryData = rooms[0].GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, 0);
-    THashSet<ui32> primaryExternals = rooms[0].GetExternalChannels(0);
+    TSet<ui32> primaryExternals = rooms[0].GetExternalChannels(0);
 
     struct ChannelsKey {
-        THashSet<ui32> External;
+        TSet<ui32> External;
         ui32 Data;
 
         bool operator==(const ChannelsKey& other) const {
@@ -705,7 +705,7 @@ bool TSchemeShard::GetBindingsRooms(
         }
 
         ui32 dataChannel = newRoom.GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, primaryData);
-        THashSet<ui32> externalChannels = newRoom.GetExternalChannels(0);
+        TSet<ui32> externalChannels = newRoom.GetExternalChannels(0);
         if (dataChannel == primaryData && externalChannels == primaryExternals) {
             continue; // will use the default room
         }

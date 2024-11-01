@@ -29,7 +29,7 @@ namespace NTable {
         ui64 MemTableOps = 0;
         TPartStats Parts;
         THashMap<ui64, TPartStats> PartsPerTablet;
-        THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
+        THashMap<ui32, float> NormalizedFreeSpaceShareByChannel;
     };
 
 }

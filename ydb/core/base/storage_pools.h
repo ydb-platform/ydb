@@ -6,7 +6,7 @@
 #include <util/system/types.h>
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/set.h>
 
 namespace NKikimr {
 
@@ -41,7 +41,7 @@ public:
 private:
     ui32 RoomId;
     TMap<EPurpose, ui32> Purposes;
-    THashSet<ui32> ExternalChannels;
+    TSet<ui32> ExternalChannels;
 
 public:
     TStorageRoom(ui32 id)
@@ -88,7 +88,7 @@ public:
         return it->second;
     }
 
-    const THashSet<ui32> GetExternalChannels(ui32 defaultChannel) const {
+    const TSet<ui32> GetExternalChannels(ui32 defaultChannel) const {
         if (ExternalChannels.empty()) {
             return {defaultChannel};
         }

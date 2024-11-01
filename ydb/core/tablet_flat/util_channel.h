@@ -1,20 +1,22 @@
 #pragma once
 
+#include <ydb/core/base/appdata_fwd.h>
+
+#include <library/cpp/random_provider/random_provider.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/random/random.h>
 
 namespace NKikimr {
-namespace NTable {
+namespace NUtil {
 
-namespace {
-    inline float Normalize(float x) {
+    inline float NormalizeFreeSpaceShare(float x) {
         // Using a second-order approximation: log1p(x) ≈ x - x^2 / 2, but with a bit steeper curve, hence 3.0f.
         return x - (x * x) / 3.0f;
     }
-} // anonymous namespace
 
-    inline ui8 SelectChannel(const THashMap<ui32, float>& shares, const TVector<ui8>& channels) {
+    inline std::pair<TVector<float>, float> CreateNormalizedSharesVector(const THashMap<ui32, float>& shares, const TVector<ui8>& channels) {
         float totalWeight = 0.0f;
 
         TVector<float> normalizedShares;
@@ -35,29 +37,64 @@ namespace {
                 }
             }
 
-            spaceShare = Normalize(spaceShare);
+            spaceShare = NormalizeFreeSpaceShare(spaceShare);
 
             totalWeight += spaceShare;
-            normalizedShares.push_back(spaceShare);
+            normalizedShares.push_back(totalWeight);
+        }
+
+        return { normalizedShares, totalWeight };
+    }
+
+    inline ui8 SelectChannel(const TVector<float>& normalizedShares, float totalWeight, const TVector<ui8>& channels) {
+        Y_ABORT_UNLESS(normalizedShares.size() == channels.size(), "Normalized shares and channels sizes mismatch");
+
+        if (channels.size() == 1) {
+            return channels[0];
         }
 
         // Generate a random value between 0 and totalWeight
-        float randomWeight = totalWeight * RandomNumber<float>();
+        float randomWeight = totalWeight * TAppData::RandomProvider->GenRandReal1();
 
-        ui8 bestChannel = channels[0];
+        auto it = std::lower_bound(normalizedShares.begin(), normalizedShares.end(), randomWeight);
+        size_t index = std::distance(normalizedShares.begin(), it);
 
-        // Iterate and select the channel based on the segment random weight falls into
-        for (size_t i = 0; i < channels.size(); i++) {
-            const ui8 channel = channels[i];
-            float share = normalizedShares[i];
-            if (randomWeight <= share) {
-                bestChannel = channel;
-                break;
-            }
-            randomWeight -= share;
+        return channels[index];
+    }
+
+    inline ui8 SelectChannel(const THashMap<ui32, float>& shares, const TVector<ui8>& channels) {
+        if (channels.size() == 1) {
+            return channels[0];
         }
 
-        return bestChannel;
+        auto [normalizedShares, totalWeight] = CreateNormalizedSharesVector(shares, channels);
+
+        return SelectChannel(normalizedShares, totalWeight, channels);
     }
+
+    struct TChannelsShares {
+        THashMap<ui32, float> Shares; /** Normalized free space shares. */
+        mutable TVector<float> PrefixSums; /** Prefix sum array for binary search. */
+        mutable float TotalWeight; /** Total weight of all shares. */
+        mutable bool IsValid;
+
+        TChannelsShares() : IsValid(false) {}
+
+        explicit TChannelsShares(const THashMap<ui32, float>& normalizedShares) : Shares(normalizedShares)
+            , IsValid(false) {}
+
+        void Update(ui32 channel, float share) {
+            Shares[channel] = NormalizeFreeSpaceShare(share);
+            IsValid = false;
+        }
+
+        ui8 Select(const TVector<ui8>& channels) const {
+            if (!IsValid) {
+                std::tie(PrefixSums, TotalWeight) = CreateNormalizedSharesVector(Shares, channels);
+                IsValid = true;
+            }
+            return SelectChannel(PrefixSums, TotalWeight, channels);
+        }
+    };
 }
 }

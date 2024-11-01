@@ -257,9 +257,7 @@ public:
 
                 NYql::NConnector::NApi::TPredicate predicateProto;
                 auto serializedProto = topicSource.FilterPredicate().Ref().Content();
-                if (!predicateProto.ParseFromString(serializedProto)) {
-                    YQL_CLOG(ERROR, ProviderPq) << "ParseFromString failed";
-                }
+                YQL_ENSURE (predicateProto.ParseFromString(serializedProto));
 
                 sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);

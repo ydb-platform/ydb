@@ -276,10 +276,7 @@ public:
         }
         
         TString serializedProto;
-        if (!predicateProto.SerializeToString(&serializedProto)) {
-            YQL_CLOG(ERROR, ProviderPq) << "SerializeToString failed";
-            return node;
-        }            
+        YQL_ENSURE(predicateProto.SerializeToString(&serializedProto));       
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
 
         if (maybeExtractMembers) {

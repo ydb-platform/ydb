@@ -193,14 +193,14 @@ public:
                                             TEvControlPlaneProxy::TEvCreateQueryRequest,
                                             TEvControlPlaneProxy::TEvCreateQueryResponse>;
 
-        explicit TCreateQueryRequestActor(typename TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr requestProxy,
-                                          const TControlPlaneProxyConfig& config,
-                                          const TActorId& serviceId,
-                                          const TRequestCounters& counters,
-                                          const TRequestCommonCountersPtr& rateLimiterCounters,
-                                          const std::function<void(const TDuration&, bool, bool)>& probe,
-                                          const TPermissions& availablePermissions,
-                                          bool replyWithResponseOnSuccess = true)
+        TCreateQueryRequestActor(typename TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr requestProxy,
+                                 const TControlPlaneProxyConfig& config,
+                                 const TActorId& serviceId,
+                                 const TRequestCounters& counters,
+                                 const TRequestCommonCountersPtr& rateLimiterCounters,
+                                 const std::function<void(const TDuration&, bool, bool)>& probe,
+                                 const TPermissions& availablePermissions,
+                                 bool replyWithResponseOnSuccess = true)
         : TBaseRequestActor(requestProxy, config, serviceId, counters, probe, availablePermissions, replyWithResponseOnSuccess)
         , RateLimiterCounters(rateLimiterCounters) {
     }

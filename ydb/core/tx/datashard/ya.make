@@ -202,6 +202,7 @@ SRCS(
     store_distributed_erase_tx_unit.cpp
     store_scheme_tx_unit.cpp
     store_snapshot_tx_unit.cpp
+    stream_scan_common.cpp    
     type_serialization.cpp
     volatile_tx.cpp
     wait_for_plan_unit.cpp

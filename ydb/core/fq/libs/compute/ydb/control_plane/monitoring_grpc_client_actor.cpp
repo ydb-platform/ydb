@@ -1,16 +1,16 @@
-#include <contrib/ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 
-#include <contrib/ydb/core/fq/libs/compute/ydb/events/events.h>
-#include <contrib/ydb/library/services/services.pb.h>
+#include <ydb/core/fq/libs/compute/ydb/events/events.h>
+#include <ydb/library/services/services.pb.h>
 
-#include <contrib/ydb/library/security/ydb_credentials_provider_factory.h>
-#include <contrib/ydb/library/ycloud/api/events.h>
-#include <contrib/ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/ycloud/api/events.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
-#include <contrib/ydb/library/actors/core/actor.h>
-#include <contrib/ydb/library/actors/core/event.h>
-#include <contrib/ydb/library/actors/core/hfunc.h>
-#include <contrib/ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)

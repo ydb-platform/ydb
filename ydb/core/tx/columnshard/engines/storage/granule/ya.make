@@ -4,6 +4,7 @@ SRCS(
     granule.cpp
     storage.cpp
     portions_index.cpp
+    accessors_request.cpp
 )
 
 PEERDIR(

@@ -14,7 +14,7 @@ void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     if (ui32 switched = SwitchedPortions.size()) {
         out << "switch " << switched << " portions:(";
         for (auto& portionInfo : SwitchedPortions) {
-            out << portionInfo.GetPortionInfo().DebugString(false);
+            out << portionInfo->DebugString(false);
         }
         out << "); ";
     }
@@ -35,7 +35,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     THashMap<TString, THashSet<TBlobRange>> blobRanges;
     auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
     for (const auto& p : SwitchedPortions) {
-        p.FillBlobRangesByStorage(blobRanges, index);
+        GetPortionDataAccessor(p->GetPortionId()).FillBlobRangesByStorage(blobRanges, index);
     }
 
     for (const auto& p : blobRanges) {
@@ -75,10 +75,10 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(
     Y_ABORT_UNLESS(GranuleMeta);
 
     for (const auto& portionInfo : portions) {
-        Y_ABORT_UNLESS(!portionInfo.GetPortionInfo().HasRemoveSnapshot());
+        Y_ABORT_UNLESS(!portionInfo->HasRemoveSnapshot());
         SwitchedPortions.emplace_back(portionInfo);
-        AddPortionToRemove(portionInfo.GetPortionInfoPtr());
-        Y_ABORT_UNLESS(portionInfo.GetPortionInfo().GetPathId() == GranuleMeta->GetPathId());
+        AddPortionToRemove(portionInfo);
+        Y_ABORT_UNLESS(portionInfo->GetPathId() == GranuleMeta->GetPathId());
     }
     //    Y_ABORT_UNLESS(SwitchedPortions.size());
 }

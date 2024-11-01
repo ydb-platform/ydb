@@ -8,11 +8,7 @@ private:
     using TBase = TColumnEngineChanges;
     THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
-    std::shared_ptr<TDataAccessorsRequest> PortionsToDrop = std::make_shared<TDataAccessorsRequest>();
-
-    virtual std::shared_ptr<TDataAccessorsRequest> BuildDataAccessorsRequest() const override {
-        return PortionsToDrop;
-    }
+    std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
 
 protected:
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
@@ -43,8 +39,13 @@ public:
 
     }
 
+    const std::vector<TPortionInfo::TConstPtr>& GetPortionsToDrop() const {
+        return PortionsToDrop;
+    }
+
     void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {
-        PortionsToDrop->AddPortion(portion);
+        PortionsToDrop.emplace_back(portion);
+        PortionsToAccess->AddPortion(portion);
     }
 
     virtual ui32 GetWritePortionsCount() const override {

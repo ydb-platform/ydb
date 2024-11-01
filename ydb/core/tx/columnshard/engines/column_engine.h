@@ -17,6 +17,7 @@ class TTtl;
 
 namespace NKikimr::NOlap {
 class TInsertColumnEngineChanges;
+class TDataAccessorsRequest;
 class TCompactColumnEngineChanges;
 class TColumnEngineChanges;
 class TTTLColumnEngineChanges;
@@ -277,11 +278,7 @@ public:
         }
     };
 
-    void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
-        AFL_VERIFY(!!request);
-        AFL_VERIFY(!request->IsEmpty());
-        DoFetchDataAccessors(request);
-    }
+    void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const;
 
     static ui64 GetMetadataLimit();
 

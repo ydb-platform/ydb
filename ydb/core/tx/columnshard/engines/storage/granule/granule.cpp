@@ -121,6 +121,7 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
 TGranuleMeta::TGranuleMeta(
     const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
+    , DataAccessor(std::make_shared<TMemDataAccessor>(PathId))
     , Counters(counters)
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())

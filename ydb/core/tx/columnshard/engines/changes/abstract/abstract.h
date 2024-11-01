@@ -203,9 +203,9 @@ private:
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
-    std::optional<TDataAccessorsResult> FetchedDataAccessors;
 
 protected:
+    std::optional<TDataAccessorsResult> FetchedDataAccessors;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
     virtual void DoOnAfterCompile() {}
@@ -230,13 +230,27 @@ protected:
         return DoBuildDataLock();
     }
 
+    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>();
+
 public:
+    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() const {
+        AFL_VERIFY(!!PortionsToAccess);
+        return std::move(PortionsToAccess);
+    }
+
     const TPortionDataAccessor& GetPortionDataAccessor(const ui64 portionId) const {
         AFL_VERIFY(FetchedDataAccessors);
         return FetchedDataAccessors->GetPortionAccessorVerified(portionId);
     }
 
-    std::shared_ptr<TDataAccessorsRequest> BuildDataAccessorsRequest() const = 0;
+    std::vector<TPortionDataAccessor> GetPortionDataAccessors(const std::vector<TPortionInfo::TConstPtr>& portions) const {
+        AFL_VERIFY(FetchedDataAccessors);
+        std::vector<TPortionDataAccessor> result;
+        for (auto&& i : portions) {
+            result.emplace_back(GetPortionDataAccessor(i->GetPortionId()));
+        }
+        return result;
+    }
 
     void SetFetchedDataAccessors(TDataAccessorsResult&& result) {
         AFL_VERIFY(!FetchedDataAccessors);

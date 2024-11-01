@@ -11,8 +11,8 @@ class TCompactColumnEngineChanges: public TChangesWithAppend {
 private:
     using TBase = TChangesWithAppend;
     bool NeedGranuleStatusProvide = false;
-    std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
 protected:
+    std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
@@ -31,7 +31,7 @@ protected:
     }
 
 public:
-    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
     void AddSwitchedPortion(const TPortionInfo::TConstPtr& portion) {

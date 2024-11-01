@@ -378,11 +378,11 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
     return changes;
 }
 
-THashMap<ui64, std::shared_ptr<TCleanupPortionsColumnEngineChanges>> TColumnEngineForLogs::StartCleanupPortions(
+std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::StartCleanupPortions(
     const TSnapshot& snapshot, const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
-    THashMap<ui64, std::shared_ptr<TCleanupPortionsColumnEngineChanges>> changes;
+    std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
 
     // Add all portions from dropped paths
     ui64 txSize = 0;
@@ -404,7 +404,7 @@ THashMap<ui64, std::shared_ptr<TCleanupPortionsColumnEngineChanges>> TColumnEngi
                 ++skipLocked;
                 continue;
             }
-            if (txSize + info->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+            if (txSize + info->GetTxVolume() < txSizeLimit || changes->GetPortionsToDrop().empty()) {
                 txSize += info->GetTxVolume();
             } else {
                 limitExceeded = true;
@@ -429,13 +429,13 @@ THashMap<ui64, std::shared_ptr<TCleanupPortionsColumnEngineChanges>> TColumnEngi
                 continue;
             }
             AFL_VERIFY(it->second[i]->CheckForCleanup(snapshot))("p_snapshot", it->second[i]->GetRemoveSnapshotOptional())("snapshot", snapshot);
-            if (txSize + it->second[i]->GetTxVolume() < txSizeLimit || changes->PortionsToDrop.empty()) {
+            if (txSize + it->second[i]->GetTxVolume() < txSizeLimit || changes->GetPortionsToDrop().empty()) {
                 txSize += it->second[i]->GetTxVolume();
             } else {
                 limitExceeded = true;
                 break;
             }
-            changes->PortionsToDrop.push_back(TPortionDataAccessor(it->second[i]));
+            changes->AddPortionToDrop(it->second[i]);
             if (i + 1 < it->second.size()) {
                 it->second[i] = std::move(it->second.back());
             }
@@ -451,9 +451,9 @@ THashMap<ui64, std::shared_ptr<TCleanupPortionsColumnEngineChanges>> TColumnEngi
         }
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())(
-        "portions_prepared", changes->PortionsToDrop.size())("drop", portionsFromDrop)("skip", skipLocked);
+        "portions_prepared", changes->GetPortionsToDrop().size())("drop", portionsFromDrop)("skip", skipLocked);
 
-    if (changes->PortionsToDrop.empty()) {
+    if (changes->GetPortionsToDrop().empty()) {
         return nullptr;
     }
 

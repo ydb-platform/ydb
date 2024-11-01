@@ -107,8 +107,8 @@ public:
 
     }
 
-    void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
-        for (auto&& i : request.GetPathIds()) {
+    void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
+        for (auto&& i : request->GetPathIds()) {
             GetGranuleVerified(i)->GetDataAccessor()->AskData(request);
         }
     }

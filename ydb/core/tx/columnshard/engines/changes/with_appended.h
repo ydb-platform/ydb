@@ -12,13 +12,7 @@ private:
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToRemove;
     THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToMove;
 
-    virtual std::shared_ptr<TDataAccessorsRequest> BuildDataAccessorsRequest() const override {
-        return PortionsToAccess;
-    }
-
 protected:
-    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>();
-
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
     virtual void DoCompile(TFinalizationContext& context) override;

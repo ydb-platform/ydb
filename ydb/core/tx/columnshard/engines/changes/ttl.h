@@ -49,13 +49,13 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : PortionsToEvict) {
-            result = predictor->AddPortion(p.GetPortionInfo().GetPortionInfoPtr());
+            result = predictor->AddPortion(p.GetPortionInfo());
         }
         return result;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         const auto pred = [](const TPortionForEviction& p) {
-            return p.GetPortionInfo().GetPortionInfo().GetAddress();
+            return p.GetPortionInfo()->GetAddress();
         };
         return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
     }

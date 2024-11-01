@@ -350,10 +350,10 @@ TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folder
     const TString secretName1 = MakeSecretKeyName("f1", folderId, name);
     const TString secretName2 = MakeSecretKeyName("f1", folderId, name);
     return TStringBuilder{}
-            << MakeDropSecretObjectSql(secretName1)
             << MakeDropSecretAccessObjectsSql(secretName1, externalSourcesAccessSIDs)
-            << MakeDropSecretObjectSql(secretName2)
-            << MakeDropSecretAccessObjectsSql(secretName2, externalSourcesAccessSIDs);
+            << MakeDropSecretObjectSql(secretName1)
+            << MakeDropSecretAccessObjectsSql(secretName2, externalSourcesAccessSIDs)
+            << MakeDropSecretObjectSql(secretName2);
 }
 
 TString MakeDeleteExternalDataTableQuery(const TString& tableName) {

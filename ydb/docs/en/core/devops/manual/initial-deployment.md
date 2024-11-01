@@ -140,7 +140,7 @@ The names of block devices depend on the OS settings configured by the system ad
   sudo partx --u ${DISK}
   ```
 
-  Execute the command `ls -l /dev/disk/by-partlabel/` to ensure that a disk with the label `/dev/disk/by-partlabel/ydb_disk_ssd_01` has appeared in the system.
+  Run the `ls -l /dev/disk/by-partlabel/` command to ensure that a disk with the label `/dev/disk/by-partlabel/ydb_disk_ssd_01` has appeared in the system.
 
   If you plan to use more than one disk on each server, replace `ydb_disk_ssd_01` with a unique label for each one. Disk labels should be unique within each server. They are used in configuration files, see the following guides.
 

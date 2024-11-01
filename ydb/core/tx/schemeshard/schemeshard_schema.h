@@ -1449,8 +1449,8 @@ struct Schema : NIceDb::Schema {
         struct UploadRowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
         struct UploadBytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
 
-        struct ReadRowsProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
-        struct ReadBytesProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct ReadRowsProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesProcessed : Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<

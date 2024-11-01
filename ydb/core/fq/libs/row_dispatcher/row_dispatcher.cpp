@@ -64,7 +64,7 @@ struct TQueryStat {
     NYql::TCounters::TEntry UnreadBytes;
 };
 
-ui64 UpdateMetricsPeriodSec = 60;
+ui64 UpdateMetricsPeriodSec = 300;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
@@ -219,6 +219,7 @@ public:
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     void UpdateMetrics();
+    void PrintInternalState();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -339,8 +340,27 @@ void TRowDispatcher::UpdateMetrics() {
         return;
     }
     TMap<TString, TQueryStat> queryStats;
-    TStringStream str;
+    
+    for (auto& [key, sessionsInfo] : TopicSessions) {
+        for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
+            for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
+                auto& stat = queryStats[consumer->QueryId];
+                stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
+                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
+            }
+        }
+    }
+    for (const auto& [queryId, stat] : queryStats) {
+        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
+        queryGroup->GetCounter("MaxUnreadRows")->Set(stat.UnreadRows.Max);
+        queryGroup->GetCounter("AvgUnreadRows")->Set(stat.UnreadRows.Avg);
+        queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
+        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+    }
+}
 
+void TRowDispatcher::PrintInternalState() {
+    TStringStream str;
     str << "Statistics:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
         str << "  " << key.Endpoint << " / " << key.Database << " / " << key.TopicPath << " / " << key.PartitionId;
@@ -348,9 +368,6 @@ void TRowDispatcher::UpdateMetrics() {
             str << " / " << actorId << "\n";
             str << "    unread bytes " << sessionInfo.Stat.UnreadBytes << "\n";
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                auto& stat = queryStats[consumer->QueryId];
-                stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
                 str << "    " << consumer->QueryId << " " << readActorId << " unread rows "
                     << consumer->Stat.UnreadRows << " unread bytes " << consumer->Stat.UnreadBytes << " offset " << consumer->Stat.Offset
                     << " get " << consumer->Counters.GetNextBatch
@@ -361,15 +378,6 @@ void TRowDispatcher::UpdateMetrics() {
         }
     }
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
-
-    for (const auto& [queryId, stat] : queryStats) {
-        LOG_ROW_DISPATCHER_DEBUG("UnreadBytes " <<  queryId << " " <<  stat.UnreadBytes.Max);
-        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
-        queryGroup->GetCounter("MaxUnreadRows")->Set(stat.UnreadRows.Max);
-        queryGroup->GetCounter("AvgUnreadRows")->Set(stat.UnreadRows.Avg);
-        queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
-        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
-    }
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
@@ -607,6 +615,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     UpdateMetrics();
+    PrintInternalState();
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {

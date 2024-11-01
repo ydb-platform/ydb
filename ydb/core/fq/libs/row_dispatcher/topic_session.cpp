@@ -192,7 +192,7 @@ private:
     void DoFiltering(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& parsedValues);
     void SendData(ClientsInfo& info);
     void UpdateParser();
-    void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
+    void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription);
     void SendDataArrived(ClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
@@ -494,7 +494,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
     LOG_ROW_DISPATCHER_DEBUG(message);
     NYql::TIssues issues;
     issues.AddIssue(message);
-    Self.FatalError(issues.ToOneLineString());
+    Self.FatalError(issues.ToOneLineString(), nullptr, false);
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
@@ -580,7 +580,7 @@ void TTopicSession::DoParsing(bool force) {
         const auto& parsedValues = Parser->Parse();
         DoFiltering(Parser->GetOffsets(), parsedValues);
     } catch (const std::exception& e) {
-        FatalError(e.what());
+        FatalError(e.what(), nullptr, true);
     }
 }
 
@@ -594,7 +594,7 @@ void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<TVec
                 info.Filter->Push(offsets, RebuildJson(info, parsedValues));
             }
         } catch (const std::exception& e) {
-            FatalError(e.what(), &info.Filter);
+            FatalError(e.what(), &info.Filter, false);
         }
     }
 
@@ -655,7 +655,7 @@ void TTopicSession::UpdateFieldsIds(ClientsInfo& info) {
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
-        FatalError("Internal error: sender " + ev->Sender.ToString());
+        FatalError("Internal error: sender " + ev->Sender.ToString(), nullptr, false);
         return;
     }
 
@@ -697,11 +697,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             }
         }
     } catch (const NYql::NPureCalc::TCompileError& e) {
-        FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues());
+        FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues(), nullptr, true);
     } catch (const yexception &ex) {
-        FatalError(TString{"Adding new client failed: "} + ex.what());
+        FatalError(TString{"Adding new client failed: "} + ex.what(), nullptr, true);
     } catch (...) {
-        FatalError("Adding new client failed, " + CurrentExceptionMessage());
+        FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true);
     }
     UpdateParser();
     SendStatistic();
@@ -795,14 +795,14 @@ void TTopicSession::UpdateParser() {
         const auto& parserConfig = Config.GetJsonParser();
         Parser = NewJsonParser(names, types, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()));
     } catch (const NYql::NPureCalc::TCompileError& e) {
-        FatalError(e.GetIssues());
+        FatalError(e.GetIssues(), nullptr, true);
     }
 }
 
-void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter) {
+void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription) {
     TStringStream str;
     str << message;
-    if (Parser) {
+    if (Parser && addParserDescription) {
         str << ", parser description:\n" << Parser->GetDescription();
     }
     if (filter) {
@@ -853,7 +853,7 @@ void TTopicSession::HandleException(const std::exception& e) {
     if (CurrentStateFunc() == &TThis::ErrorState) {
         return;
     }
-    FatalError(TString("Internal error: exception: ") + e.what());
+    FatalError(TString("Internal error: exception: ") + e.what(), nullptr, false);
 }
 
 void TTopicSession::SendStatistic() {

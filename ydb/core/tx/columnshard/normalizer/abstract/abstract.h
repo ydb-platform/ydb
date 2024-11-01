@@ -52,13 +52,16 @@ public:
 enum class ENormalizerSequentialId: ui32 {
     Granules = 1,
     Chunks,
+    DeprecatedPortionsCleaner,
     TablesCleaner,
+    DeprecatedPortionsMetadata,
     CleanGranuleId,
     EmptyPortionsCleaner,
     CleanInsertionDedup,
     GCCountersNormalizer,
     RestorePortionFromChunks,
     SyncPortionFromChunks,
+    RestoreV1Chunks,
 
     MAX
 };

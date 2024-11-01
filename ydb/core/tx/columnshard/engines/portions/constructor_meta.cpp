@@ -26,13 +26,16 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
     }
 }
 
-TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
+TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs) {
     FirstAndLastPK = meta.ReplaceKeyEdges;
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
     CompactionLevel = meta.GetCompactionLevel();
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
+    if (withBlobs) {
+        BlobIds = meta.BlobIds;
+    }
     if (meta.Produced != NPortion::EProduced::UNSPECIFIED) {
         Produced = meta.Produced;
     }
@@ -46,6 +49,9 @@ TPortionMeta TPortionMetaConstructor::Build() {
     if (TierName) {
         result.TierName = *TierName;
     }
+    AFL_VERIFY(BlobIds.size());
+    result.BlobIds = BlobIds;
+    result.BlobIds.shrink_to_fit();
     result.CompactionLevel = *TValidator::CheckNotNull(CompactionLevel);
     result.DeletionsCount = *TValidator::CheckNotNull(DeletionsCount);
     result.Produced = *TValidator::CheckNotNull(Produced);
@@ -59,11 +65,8 @@ TPortionMeta TPortionMetaConstructor::Build() {
     return result;
 }
 
-bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo) {
-    if (!!Produced) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
-        return true;
-    }
+bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
+    AFL_VERIFY(!Produced)("produced", Produced);
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
     }
@@ -71,6 +74,10 @@ bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPor
         DeletionsCount = portionMeta.GetDeletionsCount();
     } else {
         DeletionsCount = 0;
+    }
+    for (auto&& i : portionMeta.GetBlobIds()) {
+        TLogoBlobID logo = TLogoBlobID::FromBinary(i);
+        BlobIds.emplace_back(TUnifiedBlobId(groupSelector.GetGroup(logo), logo));
     }
     CompactionLevel = portionMeta.GetCompactionLevel();
     RecordsCount = TValidator::CheckNotNull(portionMeta.GetRecordsCount());

@@ -1,9 +1,11 @@
+#include "ydb_common.h"
 #include "ydb_service_scheme.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/descriptions/view.h>
 
 #include <util/string/join.h>
 
@@ -273,6 +275,13 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeCoordinationNode(driver);
     case NScheme::ESchemeEntryType::Replication:
         return DescribeReplication(driver);
+    case NScheme::ESchemeEntryType::View:
+        if (result.HasViewDescription()) {
+            PrintDescription(
+                this, OutputFormat, result, &TCommandDescribe::PrintViewDescriptionPretty
+            );
+        }
+        break;
     default:
         return DescribeEntryDefault(entry);
     }
@@ -581,6 +590,11 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     ThrowOnError(result);
 
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
+}
+
+int TCommandDescribe::PrintViewDescriptionPretty(const NYdb::NScheme::TDescribePathResult& pathDescription) const {
+    Cout << "\nQuery text:\n" << pathDescription.GetViewDescription().GetQueryText() << Endl;
+    return EXIT_SUCCESS;
 }
 
 namespace {

@@ -1,4 +1,5 @@
 #include "scheme.h"
+#include "descriptions/view.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
@@ -8,6 +9,7 @@
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <util/string/join.h>
 
@@ -200,7 +202,7 @@ public:
                     any->UnpackTo(&result);
                 }
 
-                promise.SetValue(TDescribePathResult(TStatus(std::move(status)), result.self()));
+                promise.SetValue(TDescribePathResult(TStatus(std::move(status)), std::move(result)));
             };
 
         Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, DescribePathRequest, DescribePathResponse>(
@@ -291,9 +293,27 @@ TDescribePathResult::TDescribePathResult(TStatus&& status, const TSchemeEntry& e
     , Entry_(entry)
 {}
 
+TDescribePathResult::TDescribePathResult(TStatus&& status, Ydb::Scheme::DescribePathResult&& proto)
+    : TStatus(std::move(status))
+    , Entry_(proto.self())
+    , Proto_(std::make_shared<Ydb::Scheme::DescribePathResult>(std::move(proto)))
+{
+}
+
+TDescribePathResult::~TDescribePathResult() {}
+
 const TSchemeEntry& TDescribePathResult::GetEntry() const {
     CheckStatusOk("TDescribePathResult::GetEntry");
     return Entry_;
+}
+
+bool TDescribePathResult::HasViewDescription() const {
+    return Proto_->has_view_description();
+}
+
+TViewDescription TDescribePathResult::GetViewDescription() const {
+    CheckStatusOk("TDescribePathResult::GetViewDescription");
+    return TViewDescription(Proto_->view_description());
 }
 
 void TDescribePathResult::Out(IOutputStream& out) const {
@@ -355,4 +375,9 @@ TAsyncStatus TSchemeClient::ModifyPermissions(const TString& path,
 }
 
 } // namespace NScheme
+
+const Ydb::Scheme::DescribePathResult& TProtoAccessor::GetProto(const NScheme::TDescribePathResult& description) {
+    return *description.Proto_;
+}
+
 } // namespace NYdb

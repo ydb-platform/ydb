@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ydb_command.h"
-#include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
@@ -99,6 +98,8 @@ private:
 
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
+
+    int PrintViewDescriptionPretty(const NYdb::NScheme::TDescribePathResult& pathDescription) const;
 
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;

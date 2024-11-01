@@ -391,6 +391,39 @@ public:
         return CheckResetMarker(req, code);
     }
 
+    template <typename... Ts>
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code,
+            Ydb::Maintenance::AvailabilityMode availabilityMode,
+            const Ts&... actionGroups) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
+        ev->Record.SetUserSID("test-user");
+
+        auto *req = ev->Record.MutableRequest();
+        req->mutable_task_options()->set_task_uid(taskUid);
+        req->mutable_task_options()->set_availability_mode(availabilityMode);
+        AddActionGroups(*req, actionGroups...);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
+    template <typename... Ts>
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code,
+            const Ts&... actionGroups) 
+    {   
+        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, actionGroups...);
+    }
+
     void EnableBSBaseConfig();
     void DisableBSBaseConfig();
 

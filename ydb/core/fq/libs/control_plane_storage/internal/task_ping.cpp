@@ -180,8 +180,7 @@ TPingTaskParams ConstructHardPingTask(
                 policy = it->second;
             }
 
-            auto deadline = NProtoInterop::CastFromProto(internal.execution_deadline());
-            if (retryLimiter.UpdateOnRetry(Now(), policy) && deadline && deadline > TInstant::Now()) {
+            if (retryLimiter.UpdateOnRetry(Now(), policy)) {
                 queryStatus.Clear();
                 // failing query is throttled for backoff period
                 backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);

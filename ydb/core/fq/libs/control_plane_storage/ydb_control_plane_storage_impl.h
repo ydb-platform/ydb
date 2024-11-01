@@ -923,10 +923,6 @@ private:
     ui64 GetExecutionLimitMills(
         FederatedQuery::QueryContent_QueryType queryType,
         const TMaybe<TQuotaMap>& quotas);
-    
-    TInstant GetExecutionDeadline(
-        const FederatedQuery::Limits& userLimits,
-        const TDuration& systemLimit);
 };
 
 }

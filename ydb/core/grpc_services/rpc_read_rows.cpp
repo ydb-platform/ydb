@@ -171,7 +171,7 @@ public:
                     return false;
                 }
 
-                const auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                const auto typeInRequest = NScheme::TTypeInfo(typeDesc);
                 if (typeInRequest != colInfo.PType) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",
                                            name.c_str(), NScheme::TypeName(colInfo.PType).c_str(),

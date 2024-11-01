@@ -29,7 +29,7 @@ bool StructHoldsPgType(const TStructType& structType, ui32 index) {
 
 NScheme::TTypeInfo UnwrapPgTypeFromStruct(const TStructType& structType, ui32 index) {
     TPgType* type = AS_TYPE(TPgType, structType.GetMemberType(index));
-    return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(type->GetTypeId()));
+    return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(type->GetTypeId()));
 }
 
 NUdf::TDataTypeId UnwrapDataTypeFromStruct(const TStructType& structType, ui32 index) {

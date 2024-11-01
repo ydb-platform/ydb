@@ -44,7 +44,7 @@ NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType *type, bool &isOption
     if (type->GetKind() == TType::EKind::Pg) {
         auto pgType = static_cast<TPgType*>(type);
         auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
+        return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(pgTypeId));
     } else {
         auto dataType = UnpackOptionalData(type, isOptional);
         return NScheme::TTypeInfo(dataType->GetSchemeType());
@@ -198,7 +198,7 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
         if (cmd.GetStaticType()->IsVoid()) {
             // erase
             op.Operation = TKeyDesc::EColumnOperation::Set;
-            op.ExpectedType = NScheme::TTypeInfo(0);
+            op.ExpectedType = NScheme::TTypeInfo();
         } else if (cmd.GetStaticType()->IsTuple()) {
             // inplace update
             TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, cmd);

@@ -36,7 +36,7 @@ TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTy
     case NTypeIds::Pg: {
         Y_ABORT_UNLESS(typeInfo, "no type info for pg type");
         TTypeInfoMod res = {
-            .TypeInfo = {type, NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId())},
+            .TypeInfo = {NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId())},
             .TypeMod = (typeInfo->HasPgTypeMod() ? typeInfo->GetPgTypeMod() : TProtoStringType{})
         };
         return res;
@@ -44,7 +44,7 @@ TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTy
     case NTypeIds::Decimal: {
         Y_ABORT_UNLESS(typeInfo, "no type info for decimal type");
         TTypeInfoMod res = {
-            .TypeInfo = {type, {typeInfo->GetDecimalPrecision(), typeInfo->GetDecimalScale()}},
+            .TypeInfo = {{typeInfo->GetDecimalPrecision(), typeInfo->GetDecimalScale()}},
             .TypeMod = {}
         };
         return res;

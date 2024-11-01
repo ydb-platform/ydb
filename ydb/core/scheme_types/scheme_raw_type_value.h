@@ -14,7 +14,7 @@ public:
     TRawTypeValue()
         : Buffer(nullptr)
         , BufferSize(0)
-        , ValueType(0)
+        , ValueType()
     {}
 
     TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeInfo vtype)

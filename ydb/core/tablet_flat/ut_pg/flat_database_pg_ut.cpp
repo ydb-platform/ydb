@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
         NTest::TDbExec db;
 
         auto makePgType = [] (ui32 oid) {
-            return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(oid));
+            return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(oid));
         };
 
         auto makePgTypeInfo = [] (ui32 pgTypeId) {

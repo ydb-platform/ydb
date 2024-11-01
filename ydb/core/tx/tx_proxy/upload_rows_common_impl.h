@@ -528,7 +528,7 @@ private:
                                            name.c_str(), typeName.c_str());
                     return false;
                 }
-                auto typeInRequest = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, typeDesc);
+                auto typeInRequest = NScheme::TTypeInfo(typeDesc);
                 bool ok = SameDstType(typeInRequest, ci.PType, false);
                 if (!ok) {
                     errorMessage = Sprintf("Type mismatch for column %s: expected %s, got %s",

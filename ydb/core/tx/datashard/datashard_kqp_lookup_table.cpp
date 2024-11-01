@@ -74,7 +74,7 @@ TParseLookupTableResult ParseLookupTable(TCallable& callable) {
         NKikimr::NMiniKQL::TType* type = keyTypes->GetMemberType(i);
         if (type->GetKind() == TType::EKind::Pg) {
             auto itemType = AS_TYPE(TPgType, type);
-            result.KeyTypes[i] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(itemType->GetTypeId()));
+            result.KeyTypes[i] = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(itemType->GetTypeId()));
         } else {
             if (type->IsOptional()) {
                 type = AS_TYPE(TOptionalType, keyTypes->GetMemberType(i))->GetItemType();

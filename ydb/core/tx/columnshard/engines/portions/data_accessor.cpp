@@ -134,7 +134,7 @@ void TPortionDataAccessor::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnif
     THashSet<TUnifiedBlobId>* currentHashResult = nullptr;
     std::optional<ui32> lastEntityId;
     TString lastStorageId;
-    ui32 lastBlobIdx = PortionInfo->BlobIds.size();
+    ui32 lastBlobIdx = PortionInfo->GetBlobIdsCount();
     for (auto&& i : PortionInfo->Records) {
         if (!lastEntityId || *lastEntityId != i.GetEntityId()) {
             const TString& storageId = PortionInfo->GetColumnStorageId(i.GetEntityId(), indexInfo);
@@ -143,7 +143,7 @@ void TPortionDataAccessor::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnif
                 currentHashResult = &result[storageId];
                 currentHashLocal = &local[storageId];
                 lastStorageId = storageId;
-                lastBlobIdx = PortionInfo->BlobIds.size();
+                lastBlobIdx = PortionInfo->GetBlobIdsCount();
             }
         }
         if (lastBlobIdx != i.GetBlobRange().GetBlobIdxVerified() && currentHashLocal->emplace(i.GetBlobRange().GetBlobIdxVerified()).second) {
@@ -161,7 +161,7 @@ void TPortionDataAccessor::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnif
                 currentHashResult = &result[storageId];
                 currentHashLocal = &local[storageId];
                 lastStorageId = storageId;
-                lastBlobIdx = PortionInfo->BlobIds.size();
+                lastBlobIdx = PortionInfo->GetBlobIdsCount();
             }
         }
         if (auto bRange = i.GetBlobRangeOptional()) {
@@ -534,8 +534,8 @@ void TPortionDataAccessor::FullValidation() const {
         }
     }
     AFL_VERIFY(blobIdxs.size());
-    AFL_VERIFY(PortionInfo->BlobIds.size() == blobIdxs.size());
-    AFL_VERIFY(PortionInfo->BlobIds.size() == *blobIdxs.rbegin() + 1);
+    AFL_VERIFY(PortionInfo->GetBlobIdsCount() == blobIdxs.size());
+    AFL_VERIFY(PortionInfo->GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
 }
 
 void TPortionDataAccessor::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
@@ -554,9 +554,9 @@ TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumn
 }
 
 TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
-    const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo) {
+    const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
     TPortionMetaConstructor constructor;
-    if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo)) {
+    if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo, groupSelector)) {
         return TConclusionStatus::Fail("cannot parse meta");
     }
     std::shared_ptr<TPortionInfo> resultPortion(new TPortionInfo(constructor.Build()));

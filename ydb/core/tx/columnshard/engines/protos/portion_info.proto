@@ -25,6 +25,7 @@ message TIndexPortionMeta {
     optional uint32 ColumnBlobBytes = 14;
     optional uint32 IndexBlobBytes = 15;
     optional uint64 IndexRawBytes = 16;
+    repeated string BlobIds = 17;
 }
 
 message TIndexColumnMeta {

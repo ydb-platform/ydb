@@ -22,7 +22,7 @@ class TColumnRecord;
 }
 
 namespace NKikimr::NOlap {
-class TColumnChunkLoadContext;
+class TColumnChunkLoadContextV1;
 struct TIndexInfo;
 class TColumnRecord;
 
@@ -59,7 +59,7 @@ public:
         }
     };
 
-    TChunkMeta(const TColumnChunkLoadContext& context);
+    TChunkMeta(const TColumnChunkLoadContextV1& context);
 
     TChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
 };
@@ -160,7 +160,7 @@ public:
     }
 
     TColumnRecord(const TChunkAddress& address, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column);
-    TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext);
+    TColumnRecord(const TColumnChunkLoadContextV1& loadContext);
 
     friend IOutputStream& operator<<(IOutputStream& out, const TColumnRecord& rec) {
         out << '{';

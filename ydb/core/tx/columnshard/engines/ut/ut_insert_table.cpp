@@ -16,6 +16,10 @@ namespace {
 
 class TTestInsertTableDB : public IDbWrapper {
 public:
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return &Default<TFakeGroupSelector>();
+    }
+
     void Insert(const TInsertedData&) override {
     }
     void Commit(const TCommittedData&) override {
@@ -50,7 +54,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>&) override {
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>&) override {
         return true;
     }
 

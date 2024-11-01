@@ -10,6 +10,7 @@ SRCS(
     GLOBAL special_cleaner.cpp
     GLOBAL chunks_actualization.cpp
     GLOBAL restore_portion_from_chunks.cpp
+    GLOBAL restore_v1_chunks.cpp
 )
 
 PEERDIR(

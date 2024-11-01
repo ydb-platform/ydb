@@ -70,7 +70,7 @@ public:
     }
 
     static TConclusion<TPortionDataAccessor> BuildFromProto(
-        const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo);
+        const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;

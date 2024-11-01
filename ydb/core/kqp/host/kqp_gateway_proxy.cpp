@@ -1131,26 +1131,23 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            TString path;
-
-            if (!settings.Name.StartsWith(SessionCtx->GetDatabase())) {
-                path = JoinPath({SessionCtx->GetDatabase(), ".backups/collections", settings.Name});
-            } else {
-                path = settings.Name;
-            }
-
-            TString error;
             std::pair<TString, TString> pathPair;
-            if (!NSchemeHelpers::SplitTablePath(path, GetDatabase(), pathPair, error, true)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(pathPair.first);
+            tx.SetWorkingDir(GetDatabase());
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateBackupCollection);
 
             auto& op = *tx.MutableCreateBackupCollection();
             op.SetName(pathPair.second);
+            op.SetPrefix(settings.Prefix);
 
             if (settings.Settings.IncrementalBackupEnabled) {
                 op.MutableIncrementalBackupConfig();
@@ -1161,7 +1158,7 @@ public:
                     [](const TCreateBackupCollectionSettings::TDatabase&) -> std::optional<TString> {
                         return "Unimplemented";
                     },
-                    [&](const TVector<TCreateBackupCollectionSettings::TTable>& tables)  -> std::optional<TString> {
+                    [&](const TVector<TCreateBackupCollectionSettings::TTable>& tables) -> std::optional<TString> {
                         auto& dstTables = *op.MutableExplicitEntryList();
                         for (const auto& table : tables) {
                             auto& entry = *dstTables.AddEntries();
@@ -1204,18 +1201,23 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            TString error;
             std::pair<TString, TString> pathPair;
-            if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(pathPair.first);
+            tx.SetWorkingDir(GetDatabase());
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterBackupCollection);
 
             auto& op = *tx.MutableAlterBackupCollection();
             op.SetName(pathPair.second);
+            op.SetPrefix(settings.Prefix);
 
             // TODO(innokentii): handle settings
             // TODO(innokentii): add/remove entries
@@ -1246,14 +1248,18 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            TString error;
             std::pair<TString, TString> pathPair;
-            if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, false)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(pathPair.first);
+            tx.SetWorkingDir(GetDatabase());
             if (settings.Cascade) {
                 return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
             } else {

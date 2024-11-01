@@ -17,7 +17,7 @@ $sales_detail = (SELECT d_year
                           JOIN {{date_dim}} as date_dim ON date_dim.d_date_sk=catalog_sales.cs_sold_date_sk
                           LEFT JOIN {{catalog_returns}} as catalog_returns ON (catalog_sales.cs_order_number=catalog_returns.cr_order_number
                                                     AND catalog_sales.cs_item_sk=catalog_returns.cr_item_sk)
-       WHERE i_category='Sports'
+       WHERE i_category='Books'
        UNION all
        SELECT d_year
              ,i_brand_id
@@ -31,7 +31,7 @@ $sales_detail = (SELECT d_year
                         JOIN {{date_dim}} as date_dim ON date_dim.d_date_sk=store_sales.ss_sold_date_sk
                         LEFT JOIN {{store_returns}} as store_returns ON (store_sales.ss_ticket_number=store_returns.sr_ticket_number
                                                 AND store_sales.ss_item_sk=store_returns.sr_item_sk)
-       WHERE i_category='Sports'
+       WHERE i_category='Books'
        UNION all
        SELECT d_year
              ,i_brand_id
@@ -45,7 +45,7 @@ $sales_detail = (SELECT d_year
                       JOIN {{date_dim}} as date_dim ON date_dim.d_date_sk=web_sales.ws_sold_date_sk
                       LEFT JOIN {{web_returns}} as web_returns ON (web_sales.ws_order_number=web_returns.wr_order_number
                                             AND web_sales.ws_item_sk=web_returns.wr_item_sk)
-       WHERE i_category='Sports');
+       WHERE i_category='Books');
 
 $all_sales = (
  SELECT d_year
@@ -73,8 +73,8 @@ $all_sales = (
    AND curr_yr.i_class_id=prev_yr.i_class_id
    AND curr_yr.i_category_id=prev_yr.i_category_id
    AND curr_yr.i_manufact_id=prev_yr.i_manufact_id
-   AND curr_yr.d_year=2001
-   AND prev_yr.d_year=2001-1
+   AND curr_yr.d_year=2002
+   AND prev_yr.d_year=2002-1
    AND cast((CAST(curr_yr.sales_cnt AS decimal(17, 2))/CAST(prev_yr.sales_cnt AS decimal(17, 2))) AS double)<0.9
  ORDER BY sales_cnt_diff,sales_amt_diff
  limit 100;

@@ -7,8 +7,18 @@ import socket
 import sys
 import types
 import weakref
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Collection,
+    Coroutine,
+    Iterable,
+    Sequence,
+)
 from concurrent.futures import Future
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import partial
 from io import IOBase
@@ -19,15 +29,8 @@ from types import TracebackType
 from typing import (
     IO,
     Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Collection,
-    ContextManager,
-    Coroutine,
     Generic,
     NoReturn,
-    Sequence,
     TypeVar,
     cast,
     overload,
@@ -183,13 +186,12 @@ class TaskGroup(abc.TaskGroup):
         try:
             return await self._nursery_manager.__aexit__(exc_type, exc_val, exc_tb)
         except BaseExceptionGroup as exc:
-            _, rest = exc.split(trio.Cancelled)
-            if not rest:
-                cancelled_exc = trio.Cancelled._create()
-                raise cancelled_exc from exc
+            if not exc.split(trio.Cancelled)[1]:
+                raise trio.Cancelled._create() from exc
 
             raise
         finally:
+            del exc_val, exc_tb
             self._active = False
 
     def start_soon(
@@ -1289,7 +1291,7 @@ class TrioBackend(AsyncBackend):
     @classmethod
     def open_signal_receiver(
         cls, *signals: Signals
-    ) -> ContextManager[AsyncIterator[Signals]]:
+    ) -> AbstractContextManager[AsyncIterator[Signals]]:
         return _SignalReceiver(signals)
 
     @classmethod

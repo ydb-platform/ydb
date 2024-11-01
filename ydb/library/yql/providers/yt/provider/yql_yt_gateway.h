@@ -570,6 +570,49 @@ public:
         NYT::TMultiTablePartitions Partitions;
     };
 
+    struct TDownloadTablesReq {
+        using TSelf = TDownloadTablesReq;
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Table)
+        OPTION_FIELD_DEFAULT(bool, Anonymous, false)
+        OPTION_FIELD(TString, TargetPath)
+    };
+
+    struct TDownloadTablesOptions : public TCommonOptions {
+        using TSelf = TDownloadTablesOptions;
+
+        TDownloadTablesOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TVector<TDownloadTablesReq>, Tables)
+        OPTION_FIELD_DEFAULT(ui32, Epoch, 0)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TDownloadTablesResult: public NCommon::TOperationResult {
+    };
+
+    struct TUploadTableOptions : public TCommonOptions {
+        using TSelf = TUploadTableOptions;
+
+        TUploadTableOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Table)
+        OPTION_FIELD(TString, Path)
+        OPTION_FIELD(TString, Attrs)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TUploadTableResult: public NCommon::TOperationResult {
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -617,6 +660,9 @@ public:
     virtual TString GetClusterServer(const TString& cluster) const = 0;
     virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const = 0;
     virtual NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const = 0;
+
+    virtual NThreading::TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) = 0;
+    virtual NThreading::TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) = 0;
 
     virtual TFullResultTableResult PrepareFullResultTable(TFullResultTableOptions&& options) = 0;
 

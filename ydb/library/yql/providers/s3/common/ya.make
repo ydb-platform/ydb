@@ -14,7 +14,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/common
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/s3/events
     ydb/library/yql/public/issue

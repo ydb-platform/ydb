@@ -818,6 +818,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
         targetName = tx.GetCreateResourcePool().GetName();
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+        targetName = tx.GetCreateBackupCollection().GetName();
+        break;
     default:
         result.Transactions.push_back(tx);
         return result;
@@ -910,6 +913,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             break;
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
             create.MutableCreateResourcePool()->SetName(name);
+            break;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
+            create.MutableCreateBackupCollection()->SetName(name);
             break;
         default:
             Y_ABORT("Invariant violation");

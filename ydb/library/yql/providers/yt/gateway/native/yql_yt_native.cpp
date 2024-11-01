@@ -1082,6 +1082,133 @@ public:
         return NYT::TRichYPath(table);
     }
 
+    TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+
+            const auto epoch = options.Epoch();
+            THashMap<TString, TTransactionCache::TEntry::TPtr> entries;
+            TVector<TFuture<void>> waits;
+            for (auto& req: options.Tables()) {
+                const auto cluster = req.Cluster();
+                const auto table = req.Table();
+                const auto anon = req.Anonymous();
+                const auto targetPath = req.TargetPath();
+                YQL_CLOG(DEBUG, ProviderYt) << "Downloading " << cluster << '.' << table << " to " << targetPath;
+
+                TTransactionCache::TEntry::TPtr& entry = entries[cluster];
+                if (!entry) {
+                    auto ytServer = Clusters_->TryGetServer(cluster);
+                    YQL_ENSURE(ytServer);
+                    entry = session->TxCache_.GetEntry(ytServer);
+                }
+
+                auto richYPath = NYT::TRichYPath(table);
+                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
+                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                } else {
+                    auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
+                    realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
+                    richYPath = NYT::TRichYPath(realTableName);
+                    richYPath.TransactionId(entry->Tx->GetId());
+                }
+
+                waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx] () {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+
+                    auto reader = entry->Tx->CreateRawReader(
+                        richYPath,
+                        NYT::TFormat::YsonText(),
+                        NYT::TTableReaderOptions()
+                            .CreateTransaction(false)
+                            .ControlAttributes(
+                                NYT::TControlAttributes()
+                                    .EnableRowIndex(false)
+                                    .EnableRangeIndex(false)
+                                )
+                        );
+
+                    TOFStream out(targetPath);
+                    TransferData(reader.Get(), &out);
+                    out.Finish();
+                }));
+            }
+            return WaitExceptionOrAll(waits).Apply([](const TFuture<void>& f) {
+                try {
+                    f.TryRethrow();
+                    TDownloadTablesResult res;
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return ResultFromCurrentException<TDownloadTablesResult>();
+                }
+            });
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeFuture(ResultFromCurrentException<TDownloadTablesResult>());
+        }
+    }
+
+    TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+
+            const auto cluster = options.Cluster();
+            const auto table = options.Table();
+            const auto path = options.Path();
+            auto attrs = NYT::NodeFromYsonString(options.Attrs());
+            const auto config = options.Config();
+            YQL_CLOG(DEBUG, ProviderYt) << "Uploading " << path << " to " << cluster << '.' << table;
+
+            auto ytServer = Clusters_->TryGetServer(cluster);
+            YQL_ENSURE(ytServer);
+            auto entry = session->TxCache_.GetEntry(ytServer);
+
+            NYT::TTableWriterOptions writerOptions;
+            auto maxRowWeight = config->MaxRowWeight.Get(cluster);
+            auto maxKeyWeight = config->MaxKeyWeight.Get(cluster);
+
+            if (maxRowWeight || maxKeyWeight) {
+                NYT::TNode writeConfig;
+                if (maxRowWeight) {
+                    writeConfig["max_row_weight"] = static_cast<i64>(*maxRowWeight);
+                }
+                if (maxKeyWeight) {
+                    writeConfig["max_key_weight"] = static_cast<i64>(*maxKeyWeight);
+                }
+                writerOptions.Config(writeConfig);
+            }
+
+            NYT::MergeNodes(attrs, YqlOpOptionsToAttrs(session->OperationOptions_));
+
+            return session->Queue_->Async([entry, table, path, attrs, writerOptions, logCtx] () {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    entry->Tx->Create(table, NT_TABLE, NYT::TCreateOptions().Force(true).Attributes(attrs));
+
+                    TRawTableWriterPtr writer = entry->Tx->CreateRawWriter(table, NYT::TFormat::YsonText(), writerOptions);
+                    TIFStream in(path);
+                    TransferData(&in, writer.Get());
+                    writer->Finish();
+                    TUploadTableResult res;
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+                    return ResultFromCurrentException<TUploadTableResult>();
+                }
+            });
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
+            return MakeFuture(ResultFromCurrentException<TUploadTableResult>());
+        }
+    }
+
     TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         auto nodePos = ctx.GetPosition(node->Pos());

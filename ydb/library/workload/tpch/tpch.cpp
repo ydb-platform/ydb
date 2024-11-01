@@ -32,18 +32,6 @@ TString TTpchWorkloadGenerator::DoGetDDLQueries() const {
     return schema;
 }
 
-void TTpchWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    TTpcBaseWorkloadParams::ConfigureOpts(opts, commandType, workloadType);
-    switch (commandType) {
-    case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
-            .NoArgument().StoreTrue(&CheckCanonical);
-        break;
-    default:
-        break;
-    }
-}
-
 TVector<TString> TTpchWorkloadGenerator::GetTablesList() const {
     return {
         "customer",

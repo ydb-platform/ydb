@@ -716,17 +716,22 @@ private:
         };
 
         for (const TPartitionStatsResult& shardStats : record.GetStats()) {
-            if (!shardStats.GetStats().empty()) {
-                // Find leader stats
-                auto leaderStats = std::find_if(shardStats.GetStats().begin(), shardStats.GetStats().end(), [](const TPartitionStats& stats) {
-                    return stats.GetFollowerId() == 0;
-                });
-                // Leader is set during TEvSysView::TEvSetPartitioning
-                Y_ABORT_UNLESS(leaderStats != shardStats.GetStats().end());
-                
+            // Get partition stats
+            const auto& partitionStats = shardStats.GetStats();
+
+            // Find leader stats
+            auto leaderStatsIter = std::find_if(partitionStats.begin(), partitionStats.end(), [](const TPartitionStats& stats) {
+                return stats.GetFollowerId() == 0;
+            });
+
+            const TPartitionStats& leaderStats = leaderStatsIter != partitionStats.end() 
+                ? *leaderStatsIter
+                : TPartitionStats{};   // Only at the very beginning, when there is no statistics from the leader
+
+            if (!partitionStats.empty()) {
                 // Enumerate all stats
-                for (const TPartitionStats& stats : shardStats.GetStats()) {
-                    addCellsToBatch(shardStats, *leaderStats, stats);
+                for (const TPartitionStats& stats : partitionStats) {
+                    addCellsToBatch(shardStats, leaderStats, stats);
                 }
             } else {
                 // Only at the very beginning, when there is no statistics from shards

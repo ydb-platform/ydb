@@ -2499,6 +2499,7 @@ public:
 
             TCreateBackupCollectionSettings settings;
             settings.Name = TString(createBackupCollection.BackupCollection());
+            settings.Prefix = TString(createBackupCollection.Prefix());
 
             TVector<TCreateBackupCollectionSettings::TTable> tables;
 
@@ -2542,6 +2543,7 @@ public:
 
             TAlterBackupCollectionSettings settings;
             settings.Name = TString(alterBackupCollection.BackupCollection());
+            settings.Prefix = TString(alterBackupCollection.Prefix());
 
             if (!ParseBackupCollectionSettings(settings.Settings, alterBackupCollection.BackupCollectionSettings(), ctx, alterBackupCollection.Pos())) {
                 return SyncError();
@@ -2568,6 +2570,7 @@ public:
 
             TDropBackupCollectionSettings settings;
             settings.Name = TString(dropBackupCollection.BackupCollection());
+            settings.Prefix = TString(dropBackupCollection.Prefix());
             settings.Cascade = (dropBackupCollection.Cascade().Value() == "1");
 
             auto cluster = TString(dropBackupCollection.DataSink().Cluster());

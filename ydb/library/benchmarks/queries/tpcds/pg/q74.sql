@@ -12,7 +12,7 @@ with year_total as (
      ,{{date_dim}}
  where c_customer_sk = ss_customer_sk
    and ss_sold_date_sk = d_date_sk
-   and d_year in (1998,1998+1)
+   and d_year in (2001,2001+1)
  group by c_customer_id
          ,c_first_name
          ,c_last_name
@@ -29,7 +29,7 @@ with year_total as (
      ,{{date_dim}}
  where c_customer_sk = ws_bill_customer_sk
    and ws_sold_date_sk = d_date_sk
-   and d_year in (1998,1998+1)
+   and d_year in (2001,2001+1)
  group by c_customer_id
          ,c_first_name
          ,c_last_name
@@ -48,15 +48,15 @@ with year_total as (
          and t_w_firstyear.sale_type = 'w'
          and t_s_secyear.sale_type = 's'
          and t_w_secyear.sale_type = 'w'
-         and t_s_firstyear.year = 1998
-         and t_s_secyear.year = 1998+1
-         and t_w_firstyear.year = 1998
-         and t_w_secyear.year = 1998+1
+         and t_s_firstyear.year = 2001
+         and t_s_secyear.year = 2001+1
+         and t_w_firstyear.year = 2001
+         and t_w_secyear.year = 2001+1
          and t_s_firstyear.year_total > 0
          and t_w_firstyear.year_total > 0
          and case when t_w_firstyear.year_total > 0 then t_w_secyear.year_total / t_w_firstyear.year_total else null end
            > case when t_s_firstyear.year_total > 0 then t_s_secyear.year_total / t_s_firstyear.year_total else null end
- order by 3 nulls first,1 nulls first,2 nulls first
+ order by 1 nulls first,1 nulls first,1 nulls first
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query74.tpl

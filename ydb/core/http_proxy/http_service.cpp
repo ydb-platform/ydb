@@ -1,6 +1,9 @@
 #include "http_service.h"
 #include "http_req.h"
 #include "events.h"
+#include "ydb/core/base/appdata_fwd.h"
+#include "ydb/library/security/ydb_credentials_provider_factory.h"
+#include "ydb/core/ymq/actor/auth_multi_factory.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -38,12 +41,14 @@ namespace NKikimr::NHttpProxy {
         THolder<THttpRequestProcessors> Processors;
         THolder<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
+        std::shared_ptr<NYdb::ICredentialsProvider> SqsCredentialsProvider;
     };
 
     THttpProxyActor::THttpProxyActor(const THttpProxyConfig& cfg)
         : Config(cfg.Config)
     {
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
+        SqsCredentialsProvider = CreateYdbCredentialsProviderFactory(NSQS::TMultiAuthFactory::GetCredSettings(AppData()->SqsConfig))->CreateProvider();
         Processors = MakeHolder<THttpRequestProcessors>();
         Processors->Initialize();
         if (cfg.UseSDK) {

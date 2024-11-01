@@ -67,12 +67,14 @@ struct THttpRequestContext {
                         NHttp::THttpIncomingRequestPtr request,
                         NActors::TActorId sender,
                         NYdb::TDriver* driver,
-                        std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider);
+                        std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider,
+                        std::shared_ptr<NYdb::ICredentialsProvider> sqsCredentialsProvider);
     const NKikimrConfig::TServerlessProxyConfig& ServiceConfig;
     NHttp::THttpIncomingRequestPtr Request;
     NActors::TActorId Sender;
     NYdb::TDriver* Driver;
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
+    std::shared_ptr<NYdb::ICredentialsProvider> SqsCredentialsProvider;
 
     THttpResponseData ResponseData;
     TString ServiceAccountId;

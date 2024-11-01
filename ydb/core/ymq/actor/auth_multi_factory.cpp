@@ -1,4 +1,5 @@
 #include "auth_multi_factory.h"
+#include "ydb/library/security/ydb_credentials_provider_factory.h"
 
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/ymq/actor/cfg.h>
@@ -592,22 +593,28 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
 TMultiAuthFactory::TCredentialsFactoryPtr
 TMultiAuthFactory::CreateCredentialsProviderFactory(const NKikimrConfig::TSqsConfig& config)
 {
-    if (!config.HasAuthConfig())
-        return AuthFactory_.CreateCredentialsProviderFactory(config);
-
-    const auto& authCfg = config.GetAuthConfig();
-
-    if (authCfg.LocalAuthConfig_case() != TSqsConfig::TYdbAuthConfig::kJwt)
-        return AuthFactory_.CreateCredentialsProviderFactory(config);
-
-    const auto& jwt = authCfg.GetJwt();
-
-    NYdb::TIamJwtFilename params = {.JwtFilename = jwt.GetJwtFile()};
-
-    if (jwt.HasIamEndpoint())
-        if (TString endpoint = jwt.GetIamEndpoint(); !endpoint.empty())
-            params.Endpoint = std::move(endpoint);
-
-    return NYdb::CreateIamJwtFileCredentialsProviderFactory(std::move(params));
+    return CreateYdbCredentialsProviderFactory(GetCredSettings(config));
 }
+
+TYdbCredentialsSettings TMultiAuthFactory::GetCredSettings(const NKikimrConfig::TSqsConfig& config) {
+    TYdbCredentialsSettings credSettings;
+
+    if (config.HasAuthConfig()) {
+        const auto& authCfg = config.GetAuthConfig();
+        if (authCfg.LocalAuthConfig_case() == TSqsConfig::TYdbAuthConfig::kJwt) {
+            const auto& jwt = authCfg.GetJwt();
+            credSettings.SaKeyFile = jwt.GetJwtFile();
+            if (jwt.HasIamEndpoint()) {
+                credSettings.IamEndpoint = jwt.GetIamEndpoint();
+            }
+        } else if(authCfg.LocalAuthConfig_case() == TSqsConfig::TYdbAuthConfig::kOauthToken) {
+            credSettings.OAuthToken = TFileInput(authCfg.GetOauthToken().GetTokenFile()).ReadAll();
+        } else {
+            Y_ABORT("Invalid AuthConfig");
+        }
+    }
+
+    return credSettings;
+}
+
 } // namespace NKikimr::NSQS

@@ -4,6 +4,7 @@
 #include "ydb/core/protos/sqs.pb.h"
 #include "ydb/library/grpc/client/grpc_client_low.h"
 #include "ydb/library/http_proxy/error/error.h"
+#include "ydb/library/security/ydb_credentials_provider_factory.h"
 #include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
@@ -43,6 +44,8 @@ public:
     void RegisterAuthActor(NActors::TActorSystem& system, TAuthActorData&& data) final;
 
     TCredentialsFactoryPtr CreateCredentialsProviderFactory(const TSqsConfig& config);
+
+    static TYdbCredentialsSettings GetCredSettings(const NKikimrConfig::TSqsConfig& config);
 
 private:
     bool IsYandexCloudMode_ {false};

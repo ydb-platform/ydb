@@ -4,6 +4,7 @@
 #include "json_proto_conversion.h"
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
+#include "ydb/library/security/ydb_credentials_provider_factory.h"
 #include "ydb/public/sdk/cpp/client/iam/common/iam.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
@@ -557,22 +558,7 @@ namespace NKikimr::NHttpProxy {
                         .FolderID = HttpContext.FolderId
                     };
 
-                    TString token = "";
-
-                    auto& config = AppData()->SqsConfig;
-                    if (config.HasAuthConfig()) {
-                        const auto& authConfig = config.GetAuthConfig();
-                        if (authConfig.LocalAuthConfig_case() == NKikimrConfig::TSqsConfig::TYdbAuthConfig::kJwt) {
-                            const auto& jwt = authConfig.GetJwt();
-                            NYdb::TIamJwtFilename params = {.JwtFilename = jwt.GetJwtFile()};
-                            if (jwt.HasIamEndpoint()) {
-                                if (TString endpoint = jwt.GetIamEndpoint(); !endpoint.empty()) {
-                                    params.Endpoint = std::move(endpoint);
-                                }
-                            }
-                            token =  NYdb::CreateIamJwtFileCredentialsProviderFactory(std::move(params))->CreateProvider()->GetAuthInfo();
-                        }
-                    }
+                    TString token = HttpContext.SqsCredentialsProvider->GetAuthInfo();
 
                     ctx.RegisterWithSameMailbox(new NSQS::THttpProxyAuthRequestProxy(std::move(data), token, ctx.SelfID));
                 }
@@ -1148,12 +1134,14 @@ namespace NKikimr::NHttpProxy {
         NHttp::THttpIncomingRequestPtr request,
         NActors::TActorId sender,
         NYdb::TDriver* driver,
-        std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider)
+        std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider,
+        std::shared_ptr<NYdb::ICredentialsProvider> sqsCredentialsProvider)
         : ServiceConfig(config)
         , Request(request)
         , Sender(sender)
         , Driver(driver)
-        , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider) {
+        , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider)
+        , SqsCredentialsProvider(sqsCredentialsProvider) {
         char address[INET6_ADDRSTRLEN];
         if (inet_ntop(AF_INET6, &(Request->Address), address, INET6_ADDRSTRLEN) == nullptr) {
             SourceAddress = "unknown";

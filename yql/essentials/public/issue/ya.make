@@ -12,7 +12,6 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/colorizer
     library/cpp/resource
-    contrib/ydb/public/api/protos
     yql/essentials/public/issue/protos
     yql/essentials/utils
 )

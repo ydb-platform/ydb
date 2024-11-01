@@ -1657,6 +1657,20 @@ ui64 AsyncAlterDropColumn(
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }
 
+ui64 AsyncSetEnableFilterByKey(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        bool value)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterTable, workingDir);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterTable();
+    desc.SetName(name);
+    desc.MutablePartitionConfig()->SetEnableFilterByKey(value);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
 ui64 AsyncAlterAndDisableShadow(
         Tests::TServer::TPtr server,
         const TString& workingDir,

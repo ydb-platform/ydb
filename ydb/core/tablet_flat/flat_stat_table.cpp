@@ -39,10 +39,10 @@ bool HasSchemaChanges(const TPartView& partView, const TScheme::TTableInfo& tabl
         return false;
     }
 
-    { // Check bloom filter existence
-        bool partBloomFilter = bool(partView->ByKey);
-        bool schemeBloomFilter = tableInfo.ByKeyFilter;
-        if (partBloomFilter != schemeBloomFilter) {
+    { // Check by key filter existence
+        bool partByKeyFilter = bool(partView->ByKey);
+        bool schemeByKeyFilter = tableInfo.ByKeyFilter;
+        if (partByKeyFilter != schemeByKeyFilter) {
             return true;
         }
     }

@@ -636,6 +636,12 @@ ui64 AsyncAlterDropColumn(
         const TString& name,
         const TString& colName);
 
+ui64 AsyncSetEnableFilterByKey(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        bool value);
+
 ui64 AsyncAlterAndDisableShadow(
         Tests::TServer::TPtr server,
         const TString& workingDir,

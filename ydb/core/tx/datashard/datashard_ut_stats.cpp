@@ -582,6 +582,48 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
     }
 
+    Y_UNIT_TEST(HasSchemaChanges_ByKeyFilter) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ui64 shard1 = shards.at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        {
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetHasSchemaChanges(), false);
+        }
+
+        auto txId = AsyncSetEnableFilterByKey(server, "/Root", "table-1", true);
+        WaitTxNotification(server, sender, txId);
+
+        // TODO:
+        // Note: stats is rebuilt only on restarts and compactions
+        RebootTablet(runtime, shard1, sender);
+
+        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardStats)
 
 } // namespace NKikimr

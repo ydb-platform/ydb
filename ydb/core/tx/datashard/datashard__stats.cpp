@@ -535,7 +535,7 @@ public:
             // Remove memtables from the subset as we only want to look at indexes for parts
             subsetForStats->Frozen.clear();
 
-            auto schemeTableInfo = Self->Scheme().GetTableInfo(tableId);
+            auto schemeTableInfo = Self->Scheme().GetTableInfo(localTableId);
             Y_ABORT_UNLESS(schemeTableInfo);
             bool hasSchemaChanges = HasSchemaChanges(*subsetForStats, *schemeTableInfo, 
                 AppData(ctx)->FeatureFlags.GetEnableLocalDBBtreeIndex());

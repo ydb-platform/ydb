@@ -1,7 +1,7 @@
 #include "yql_restricted_yson.h"
 
-#include <contrib/ydb/library/yql/utils/parse_double.h>
-#include <contrib/ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/parse_double.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/yson/parser.h>

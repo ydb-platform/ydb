@@ -3,8 +3,8 @@
 #include "yql_result_format_impl.h"
 
 #include "yql_restricted_yson.h"
-#include <contrib/ydb/library/yql/utils/parse_double.h>
-#include <contrib/ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/utils/parse_double.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <library/cpp/yson/node/node_builder.h>
 #include <library/cpp/string_utils/base64/base64.h>

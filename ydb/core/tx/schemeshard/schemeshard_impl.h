@@ -20,6 +20,7 @@
 #include "schemeshard__stats.h"
 
 #include "olap/manager/manager.h"
+#include "operations/metadata/info.h"
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
@@ -254,6 +255,7 @@ public:
     THashMap<TPathId, TViewInfo::TPtr> Views;
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
+    THashMap<TPathId, TMetadataObjectInfo::TPtr> MetadataObjects;
 
     TTempDirsState TempDirsState;
 
@@ -828,6 +830,10 @@ public:
     // BackupCollection
     void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
     void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
+
+    // MetadataObjects
+    void PersistMetadataObject(NIceDb::TNiceDb& db, TPathId pathId, const TMetadataObjectInfo::TPtr object);
+    void PersistRemoveMetadataObject(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 

@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     object.cpp
     update.cpp
-    converter.cpp
     context.cpp
 )
 

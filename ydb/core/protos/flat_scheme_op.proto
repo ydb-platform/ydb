@@ -1596,6 +1596,11 @@ enum EOperationType {
     ESchemeOpCreateBackupCollection = 105;
     ESchemeOpAlterBackupCollection = 106;
     ESchemeOpDropBackupCollection = 107;
+
+    // Metadata Object
+    ESchemeOpCreateMetadataObject = 108;
+    ESchemeOpDropMetadataObject = 109;
+    ESchemeOpAlterMetadataObject = 110;
 }
 
 message TApplyIf {
@@ -1783,6 +1788,8 @@ message TModifyScheme {
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
+
+    optional TModifyMetadataObject CreateMetadataObject = 77;
 }
 
 message TCopySequence {
@@ -1906,6 +1913,7 @@ message TPathVersion {
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
+    optional uint64 MetadataObjectVersion = 32;
 }
 
 // Describes single path
@@ -2170,5 +2178,23 @@ message TBackupCollectionDescription {
 
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
+    }
+}
+
+message TModifyMetadataObject {
+    optional string Name = 1;
+    optional TMetadataObjectProperties Properties = 2;
+}
+
+message TMetadataObjectDescription {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional uint64 Version = 3;
+    optional TMetadataObjectProperties Properties = 4;
+}
+
+message TMetadataObjectProperties {
+    oneof PropertiesImpl {
+        google.protobuf.Empty Placeholder = 1;  // unused, replace it with first impl
     }
 }

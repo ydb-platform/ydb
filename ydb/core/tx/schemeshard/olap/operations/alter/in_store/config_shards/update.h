@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/update.h>
+#include <ydb/core/tx/schemeshard/operations/abstract/update.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/object.h>
 #include <ydb/core/tx/schemeshard/olap/operations/alter/in_store/common/update.h>
 #include <ydb/core/tx/schemeshard/olap/ttl/update.h>
@@ -16,14 +16,14 @@ private:
     std::set<ui64> DeleteShardIds;
     std::set<ui64> ModifiedShardIds;
     std::shared_ptr<NSharding::IShardingBase> Sharding;
-    virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoInitializeImpl(const NOperations::TUpdateInitializationContext& context) override;
     void FillToShardTx(NKikimrTxColumnShard::TCreateTable& shardAlter) const;
 
-    virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& context) override;
+    virtual TConclusionStatus DoFinishImpl(const NOperations::TUpdateFinishContext& context) override;
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
         return TargetInStoreTable->GetTableInfoPtrVerified();
     }
-    virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const override {
+    virtual std::shared_ptr<NOperations::ISSEntity> GetTargetSSEntity() const override {
         return TargetInStoreTable;
     }
 

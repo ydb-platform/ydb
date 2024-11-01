@@ -555,6 +555,7 @@ void TClusterInfo::UpdateVDiskState(const TVDiskID &id, const NKikimrWhiteboard:
 
 void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &info)
 {
+     Cerr << info.ShortUtf8DebugString() << Endl;
     TBSGroupInfo bsgroup;
     bsgroup.GroupId = info.GetGroupId();
     if (info.GetErasureSpecies())
@@ -575,8 +576,11 @@ void TClusterInfo::AddBSGroup(const NKikimrBlobStorage::TBaseConfig::TGroup &inf
             return;
         }
 
+        Cerr << pdisk.VSlots.size() << Endl;
         bsgroup.VDisks.insert(pdisk.VSlots.at(vdisk.GetVSlotId()));
     }
+
+    Cerr << bsgroup.VDisks.size() << Endl;
 
     for (auto &vdisk : bsgroup.VDisks)
         VDiskRef(vdisk).BSGroups.insert(bsgroup.GroupId);

@@ -309,6 +309,18 @@ private:
     };
 };
 
+bool IsValidLoadControlConfig(const NConfig::TLoadControlConfig& config) {
+    if (!config.GetEnable()) {
+        return true;
+    }
+
+    const auto& databaseConnection = config.GetDatabaseConnection();
+    if (!databaseConnection.GetDatabase()) {
+        return false;
+    }
+    return databaseConnection.GetEndpoint() || config.GetMonitoringEndpoint();
+}
+
 }
 
 class TComputeDatabaseControlPlaneServiceActor : public NActors::TActorBootstrapped<TComputeDatabaseControlPlaneServiceActor> {
@@ -380,18 +392,19 @@ public:
 
     void CreateSingleClientActors() {
         auto globalLoadConfig = Config.GetYdb().GetLoadControlConfig();
-        if (globalLoadConfig.GetEnable()) {
-            TActorId clientActor;
-            auto monitoringEndpoint = globalLoadConfig.GetMonitoringEndpoint();
-            const auto& databaseConnection = globalLoadConfig.GetDatabaseConnection();
-            auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(databaseConnection))->CreateProvider();
-            if (monitoringEndpoint) {
-                clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, databaseConnection.GetDatabase(), credentialsProvider).release());
-            } else {
-                clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(databaseConnection), credentialsProvider).release());
-            }
-            MonitoringActorId = Register(CreateDatabaseMonitoringActor(clientActor, globalLoadConfig, Counters).release());
+        if (!globalLoadConfig.GetEnable() || !IsValidLoadControlConfig(globalLoadConfig)) {
+            return;
         }
+        TActorId clientActor;
+        auto monitoringEndpoint = globalLoadConfig.GetMonitoringEndpoint();
+        const auto& databaseConnection = globalLoadConfig.GetDatabaseConnection();
+        auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(databaseConnection))->CreateProvider();
+        if (monitoringEndpoint) {
+            clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, databaseConnection.GetDatabase(), credentialsProvider).release());
+        } else {
+            clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(databaseConnection), credentialsProvider).release());
+        }
+        MonitoringActorId = Register(CreateDatabaseMonitoringActor(clientActor, globalLoadConfig, Counters).release());
     }
 
     void CreateCmsClientActors(const NConfig::TYdbComputeControlPlane::TCms& cmsConfig, const TString& databasesCacheReloadPeriod) {
@@ -405,7 +418,7 @@ public:
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? config.GetLoadControlConfig()
                 : globalLoadConfig;
-            if (loadConfig.GetEnable()) {
+            if (loadConfig.GetEnable() && IsValidLoadControlConfig(loadConfig)) {
                 TActorId clientActor;
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
                 const auto& databaseConnection = loadConfig.GetDatabaseConnection();
@@ -430,7 +443,7 @@ public:
             const NConfig::TLoadControlConfig& loadConfig = config.GetLoadControlConfig().GetEnable()
                 ? config.GetLoadControlConfig()
                 : globalLoadConfig;
-            if (loadConfig.GetEnable()) {
+            if (loadConfig.GetEnable() && IsValidLoadControlConfig(loadConfig)) {
                 TActorId clientActor;
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
                 const auto& databaseConnection = loadConfig.GetDatabaseConnection();

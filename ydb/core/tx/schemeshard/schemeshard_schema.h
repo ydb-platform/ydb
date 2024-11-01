@@ -1316,8 +1316,8 @@ struct Schema : NIceDb::Schema {
 
         struct MaxRetries : Column<27, NScheme::NTypeIds::Uint32> {};
 
-        struct RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
-        struct BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct UploadRowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct UploadBytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
 
         struct BuildKind : Column<30, NScheme::NTypeIds::Uint32> {};
 
@@ -1327,6 +1327,15 @@ struct Schema : NIceDb::Schema {
 
         // Serialized as string NKikimrSchemeOp::TIndexCreationConfig protobuf.
         struct CreationConfig : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+
+        struct ReadRowsBilled : Column<35, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesBilled : Column<36, NScheme::NTypeIds::Uint64> {};
+
+        struct UploadRowsProcessed : Column<37, NScheme::NTypeIds::Uint64> {};
+        struct UploadBytesProcessed : Column<38, NScheme::NTypeIds::Uint64> {};
+
+        struct ReadRowsProcessed : Column<39, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesProcessed : Column<40, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1357,13 +1366,19 @@ struct Schema : NIceDb::Schema {
             UnlockTxDone,
             CancelRequest,
             MaxRetries,
-            RowsBilled,
-            BytesBilled,
+            UploadRowsBilled,
+            UploadBytesBilled,
             BuildKind,
             AlterMainTableTxId,
             AlterMainTableTxStatus,
             AlterMainTableTxDone,
-            CreationConfig
+            CreationConfig,
+            ReadRowsBilled,
+            ReadBytesBilled,
+            UploadRowsProcessed,
+            UploadBytesProcessed,
+            ReadRowsProcessed,
+            ReadBytesProcessed
         >;
     };
 
@@ -1431,8 +1446,11 @@ struct Schema : NIceDb::Schema {
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
         struct UploadStatus : Column<8, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
 
-        struct RowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
-        struct BytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct UploadRowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct UploadBytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+
+        struct ReadRowsProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct ReadBytesProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
@@ -1444,8 +1462,10 @@ struct Schema : NIceDb::Schema {
             Status,
             Message,
             UploadStatus,
-            RowsProcessed,
-            BytesProcessed
+            UploadRowsProcessed,
+            UploadBytesProcessed,
+            ReadRowsProcessed,
+            ReadBytesProcessed
         >;
     };
 

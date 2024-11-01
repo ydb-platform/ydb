@@ -2638,7 +2638,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 Columns { Name: "Value0" Type: "Utf8" }
                                 Columns { Name: "Value1" Type: "Utf8" }
                                 KeyColumnNames: "RowId"
-                                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                             }
                 )", {NKikimrScheme::StatusAccepted});
             env.TestWaitNotification(runtime, txId - 1);
@@ -2671,7 +2670,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 Columns { Name: "Value1" Type: "Utf8" }
                                 Columns { Name: "Value2" Type: "Utf8" }
                                 KeyColumnNames: "RowId"
-                                Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                             }
                 )", {NKikimrScheme::StatusSchemeError});
 
@@ -2684,7 +2682,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
                         Columns { Name: "data" Type: "Utf8" }
                         KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                     }
                 }
             )";
@@ -2703,7 +2700,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                         Columns { Name: "data2" Type: "Utf8" }
                         Columns { Name: "data3" Type: "Utf8" }
                         KeyColumnNames: "timestamp"
-                        Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                     }
                 }
             )";

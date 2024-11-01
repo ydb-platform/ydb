@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import pytest
 
+from markupsafe import escape
 from markupsafe import Markup
 
 
@@ -18,12 +21,12 @@ from markupsafe import Markup
         ("こんにちは&><'\"", "こんにちは&amp;&gt;&lt;&#39;&#34;"),
         # 4 byte
         (
-            "\U0001F363\U0001F362&><'\"\U0001F37A xyz",
-            "\U0001F363\U0001F362&amp;&gt;&lt;&#39;&#34;\U0001F37A xyz",
+            "\U0001f363\U0001f362&><'\"\U0001f37a xyz",
+            "\U0001f363\U0001f362&amp;&gt;&lt;&#39;&#34;\U0001f37a xyz",
         ),
-        ("&><'\"\U0001F37A xyz", "&amp;&gt;&lt;&#39;&#34;\U0001F37A xyz"),
-        ("\U0001F363\U0001F362&><'\"", "\U0001F363\U0001F362&amp;&gt;&lt;&#39;&#34;"),
+        ("&><'\"\U0001f37a xyz", "&amp;&gt;&lt;&#39;&#34;\U0001f37a xyz"),
+        ("\U0001f363\U0001f362&><'\"", "\U0001f363\U0001f362&amp;&gt;&lt;&#39;&#34;"),
     ),
 )
-def test_escape(escape, value, expect):
+def test_escape(value: str, expect: str) -> None:
     assert escape(value) == Markup(expect)

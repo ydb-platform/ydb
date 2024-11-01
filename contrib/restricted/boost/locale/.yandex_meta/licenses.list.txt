@@ -77,7 +77,7 @@ DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
-// Copyright (c) 2023 Alexander Grund
+// Copyright (c) 2022-2024 Alexander Grund
 
 
 ====================COPYRIGHT====================
@@ -95,4 +95,12 @@ DEALINGS IN THE SOFTWARE.
 
 
 ====================COPYRIGHT====================
+// Copyright (c) 2023 Alexander Grund
+
+
+====================COPYRIGHT====================
 // Copyright (c) 2023-2023 Alexander Grund
+
+
+====================COPYRIGHT====================
+// Copyright (c) 2024 Alexander Grund

@@ -191,13 +191,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     << column.GetName() << "' using sequence '" << sequenceName << "'";
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
             }
-
-            if (!keys.contains(column.GetName())) {
-                TString msg = TStringBuilder()
-                    << "Cannot specify default from sequence from non-key columns, e.g. column'"
-                    << column.GetName() << "' using sequence '" << sequenceName << "'";
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-            }
         }
     }
 

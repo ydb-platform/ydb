@@ -202,9 +202,15 @@ public:
         }
     }
 
+    bool ShouldCreateRateLimiter() const {
+        return RequestProxy->Get()->Quotas 
+                && (RequestProxy->Get()->Request.content().type() == FederatedQuery::QueryContent::STREAMING
+                    || !Config.ComputeConfig.YdbComputeControlPlaneEnabled(RequestProxy->Get()->Scope));
+    }
+
     void OnBootstrap() override {
         this->UnsafeBecome(&TCreateQueryRequestActor::StateFunc);
-        if (RequestProxy->Get()->Quotas) {
+        if (ShouldCreateRateLimiter()) {
             SendCreateRateLimiterResourceRequest();
         } else {
             SendRequestIfCan();
@@ -249,7 +255,7 @@ public:
     }
 
     bool CanSendRequest() const override {
-        return (QuoterResourceCreated || !RequestProxy->Get()->Quotas) && TBaseRequestActor::CanSendRequest();
+        return (QuoterResourceCreated || !ShouldCreateRateLimiter()) && TBaseRequestActor::CanSendRequest();
     }
 };
 

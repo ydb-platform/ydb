@@ -641,7 +641,7 @@ def flatten(obj, list_types=(list, tuple, set, frozenset, types.GeneratorType)):
 
 
 def update_from_env(variables):
-    """Update variables dict from environment."""
+    """Update variables dict from environment (cuts name prefix "YT_")."""
     for key, value in iteritems(os.environ):
         prefix = "YT_"
         if not key.startswith(prefix):

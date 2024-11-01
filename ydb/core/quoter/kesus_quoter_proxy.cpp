@@ -41,7 +41,7 @@
 namespace NKikimr {
 namespace NQuoter {
 
-using NKesus::TEvKesus;
+namespace TEvKesus = NKesus::TEvKesus;
 
 class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     struct TResourceState {

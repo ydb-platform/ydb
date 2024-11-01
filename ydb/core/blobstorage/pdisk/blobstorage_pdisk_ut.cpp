@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 }
             } while (!testCtx.GetPDisk()->CommonLogger->OnFirstSectorInChunk());
         }
-        // expect log chunks list looks like 1 -> 2 -> ... -> 6 (empty)
+        // expect log chunks list looks like 1 -> 2 -> ... -> 9 (empty)
 
         testCtx.RestartPDiskSync(); // writes NonceJump
         UNIT_ASSERT_C(testCtx.GetPDisk()->CommonLogger->SectorIdx == 1, "To reproduce bug nonce jump record"
@@ -332,9 +332,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
             UNIT_ASSERT_C(pdisk->LogChunks.size() == 9, pdisk->LogChunks.size());
             intensiveVDisk.CutLogAllButOne();
-            // 1 -> 2 -> 6
+            // 1 -> 2 -> 3 -> 4 -> 5 -> 9
             pdisk->PDiskThread.StopSync();
-            while (pdisk->LogChunks.size() != 6) {
+            while (pdisk->LogChunks.size() != 6 || pdisk->IsLogChunksReleaseInflight) {
                 pdisk->Update();
             }
         }
@@ -343,13 +343,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         moderateVDisk.Init();
         {
             // initiate log splicing, expect transition to be
-            // 1 -> 2 -> ... -> 6
+            // 1 -> 2 -> 3 -> 4 -> 5 -> 9
             NPDisk::TPDisk *pdisk = testCtx.GetPDisk();
             UNIT_ASSERT(pdisk->LogChunks.size() == 6);
             moderateVDisk.CutLogAllButOne();
-            // 1 -> 2 -> 6
+            // 1 -> 9
             pdisk->PDiskThread.StopSync();
-            while (pdisk->LogChunks.size() != 2) {
+            while (pdisk->LogChunks.size() != 2 || pdisk->IsLogChunksReleaseInflight) {
                 pdisk->Update();
             }
         }

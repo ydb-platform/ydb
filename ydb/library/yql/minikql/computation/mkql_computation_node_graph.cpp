@@ -757,7 +757,7 @@ public:
                 }
                 WriteUi64(result, taskStateSize);
                 for (auto it = taskState.begin(); it != taskState.end();) {
-                    result.AppendNoAlias(it->Data(), it->Size());
+                    result.AppendNoAlias(it->data(), it->size());
                     it = taskState.erase(it);
                 }
             } else { // No load was done during previous runs (if any).
@@ -966,7 +966,7 @@ private:
         auto lpos = s.rfind(flag);
         if (lpos == TString::npos)
             return TStringBuf();
-        lpos += flag.Size();
+        lpos += flag.size();
         auto rpos = s.find(" --", lpos);
         if (rpos == TString::npos)
             return TStringBuf(s, lpos);

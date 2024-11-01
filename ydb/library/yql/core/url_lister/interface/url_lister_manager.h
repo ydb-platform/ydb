@@ -14,7 +14,7 @@ namespace NYql {
 
 class IUrlListerManager: public TThrRefBase {
 public:
-    virtual TVector<TUrlListEntry> ListUrl(const THttpURL& url, const TString& tokenName) const = 0;
+    virtual TVector<TUrlListEntry> ListUrl(const TString& url, const TString& tokenName) const = 0;
 
 public:
     virtual TIntrusivePtr<IUrlListerManager> Clone() const = 0;

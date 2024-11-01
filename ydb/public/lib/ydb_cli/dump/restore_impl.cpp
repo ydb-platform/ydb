@@ -7,28 +7,15 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
+#include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
-
-#include <library/cpp/logger/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
-#include <util/string/builder.h>
 #include <util/string/join.h>
-
-#define LOG_IMPL(log, level, message) \
-    if (log.FiltrationLevel() >= level) { \
-        log.Write(level, TStringBuilder() << message); \
-    } \
-    Y_SEMICOLON_GUARD
-
-#define LOG_D(message) LOG_IMPL(Log, ELogPriority::TLOG_DEBUG, message)
-#define LOG_I(message) LOG_IMPL(Log, ELogPriority::TLOG_INFO, message)
-#define LOG_W(message) LOG_IMPL(Log, ELogPriority::TLOG_WARNING, message)
-#define LOG_E(message) LOG_IMPL(Log, ELogPriority::TLOG_ERR, message)
 
 namespace NYdb {
 namespace NDump {
@@ -48,7 +35,7 @@ bool IsFileExists(const TFsPath& path) {
     return path.Exists() && path.IsFile();
 }
 
-Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, TLog& log) {
+Ydb::Table::CreateTableRequest ReadTableScheme(const TString& fsPath, const TLog* log) {
     LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read scheme from " << fsPath.Quote());
     Ydb::Table::CreateTableRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
@@ -64,7 +51,7 @@ TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTabl
     return TableDescriptionFromProto(proto);
 }
 
-Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath, TLog& log) {
+Ydb::Scheme::ModifyPermissionsRequest ReadPermissions(const TString& fsPath, const TLog* log) {
     LOG_IMPL(log, ELogPriority::TLOG_DEBUG, "Read ACL from " << fsPath.Quote());
     Ydb::Scheme::ModifyPermissionsRequest proto;
     Y_ENSURE(google::protobuf::TextFormat::ParseFromString(TFileInput(fsPath).ReadAll(), &proto));
@@ -95,17 +82,67 @@ bool IsOperationStarted(TStatus operationStatus) {
 
 } // anonymous
 
-TRestoreClient::TRestoreClient(
-        TLog& log,
-        TImportClient& importClient,
-        TOperationClient& operationClient,
-        TSchemeClient& schemeClient,
-        TTableClient& tableClient)
-    : Log(log)
-    , ImportClient(importClient)
-    , OperationClient(operationClient)
-    , SchemeClient(schemeClient)
-    , TableClient(tableClient)
+namespace NPrivate {
+
+TLocation::TLocation(TStringBuf file, ui64 lineNo)
+    : File(file)
+    , LineNo(lineNo)
+{
+}
+
+void TLocation::Out(IOutputStream& out) const {
+    out << File << ":" << LineNo;
+}
+
+TLine::TLine(TString&& data, TStringBuf file, ui64 lineNo)
+    : Data(std::move(data))
+    , Location(file, lineNo)
+{
+}
+
+TLine::TLine(TString&& data, const TLocation& location)
+    : Data(std::move(data))
+    , Location(location)
+{
+}
+
+void TBatch::Add(const TLine& line) {
+    Data << line.GetData() << "\n";
+    Locations.push_back(line.GetLocation());
+}
+
+TString TBatch::GetLocation() const {
+    THashMap<TStringBuf, std::pair<ui64, ui64>> locations;
+    for (const auto& location : Locations) {
+        auto it = locations.find(location.File);
+        if (it == locations.end()) {
+            it = locations.emplace(location.File, std::make_pair(Max<ui64>(), Min<ui64>())).first;
+        }
+        it->second.first = Min(location.LineNo, it->second.first);
+        it->second.second = Max(location.LineNo, it->second.second);
+    }
+
+    TStringBuilder result;
+    bool comma = false;
+    for (const auto& [file, range] : locations) {
+        if (comma) {
+            result << ", ";
+        }
+        result << file << ":" << range.first << "-" << range.second;
+        comma = true;
+    }
+
+    return result;
+}
+
+} // NPrivate
+
+TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log)
+    : ImportClient(driver)
+    , OperationClient(driver)
+    , SchemeClient(driver)
+    , TableClient(driver)
+    , Log(log)
 {
 }
 
@@ -262,7 +299,7 @@ TRestoreResult TRestoreClient::RestoreTable(const TFsPath& fsPath, const TString
             TStringBuilder() << "There is incomplete file in folder: " << fsPath.GetPath());
     }
 
-    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME), Log);
+    auto scheme = ReadTableScheme(fsPath.Child(SCHEME_FILE_NAME), Log.get());
     auto dumpedDesc = TableDescriptionFromProto(scheme);
 
     if (dumpedDesc.GetAttributes().contains(DOC_API_TABLE_VERSION_ATTR) && settings.SkipDocumentTables_) {
@@ -388,25 +425,35 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
                 return Result<TRestoreResult>(dbPath, std::move(descResult));
             }
 
-            accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings));
-            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings));
+            accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings, Log));
+            writer.Reset(CreateImportDataWriter(dbPath, desc, ImportClient, TableClient, accumulator.Get(), settings, Log));
 
             break;
         }
     }
 
     TWriterWaiter waiter(*writer);
+
     ui32 dataFileId = 0;
     TFsPath dataFile = fsPath.Child(DataFileName(dataFileId));
+    TVector<TString> dataFileNames;
 
     while (dataFile.Exists()) {
         LOG_D("Read data from " << dataFile.GetPath().Quote());
 
+        dataFileNames.push_back(dataFile);
         TFileInput input(dataFile, settings.FileBufferSize_);
         TString line;
+        ui64 lineNo = 0;
 
         while (input.ReadLine(line)) {
-            while (!accumulator->Fits(line)) {
+            auto l = NPrivate::TLine(std::move(line), dataFileNames.back(), ++lineNo);
+            for (auto status = accumulator->Check(l); status != NPrivate::IDataAccumulator::OK; status = accumulator->Check(l)) {
+                if (status == NPrivate::IDataAccumulator::ERROR) {
+                    return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR,
+                        TStringBuilder() << "Invalid data: " << l.GetLocation());
+                }
+
                 if (!accumulator->Ready(true)) {
                     LOG_E("Error reading data from " << dataFile.GetPath().Quote());
                     return Result<TRestoreResult>(dbPath, EStatus::INTERNAL_ERROR, "Data is not ready");
@@ -418,7 +465,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
                 }
             }
 
-            accumulator->Feed(std::move(line));
+            accumulator->Feed(std::move(l));
             if (accumulator->Ready()) {
                 if (!writer->Push(accumulator->GetData())) {
                     LOG_E("Error writing data to " << dbPath.Quote() << ", file: " << dataFile.GetPath().Quote());
@@ -509,7 +556,7 @@ TRestoreResult TRestoreClient::RestorePermissions(const TFsPath& fsPath, const T
 
     LOG_D("Restore ACL " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
-    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME), Log);
+    auto permissions = ReadPermissions(fsPath.Child(PERMISSIONS_FILE_NAME), Log.get());
     return ModifyPermissions(SchemeClient, dbPath, TModifyPermissionsSettings(permissions));
 }
 
@@ -535,3 +582,7 @@ TRestoreResult TRestoreClient::RestoreEmptyDir(const TFsPath& fsPath, const TStr
 
 } // NDump
 } // NYdb
+
+Y_DECLARE_OUT_SPEC(, NYdb::NDump::NPrivate::TLocation, o, x) {
+    return x.Out(o);
+}

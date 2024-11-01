@@ -1,5 +1,39 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 24.1 {#24-1}
+
+Release date: July 31, 2024.
+
+### Functionality
+
+* The [Knn UDF](./yql/reference/udf/list/knn.md) function for precise nearest vector search has been implemented.
+* The gRPC Query service has been developed, enabling the execution of all types of queries (DML, DDL) and retrieval of unlimited amounts of data.
+* [Integration with the LDAP protocol](./concepts/auth.md) has been implemented, allowing the retrieval of a list of groups from external LDAP directories.
+
+### Embedded UI
+
+* The database information tab now includes a resource consumption diagnostic dashboard, which allows users to assess the current consumption of key resources: processor cores, RAM, and distributed storage space.
+* Charts for monitoring the key performance indicators of the {{ ydb-short-name }} cluster have been added.
+
+### Performance
+
+* [Session timeouts](https://github.com/ydb-platform/ydb/pull/1837) for the coordination service between server and client have been optimized. Previously, the timeout was 5 seconds, which could result in a 10-second delay in identifying an unresponsive client and releasing its resources. In the new version, the check interval depends on the session's wait time, allowing for faster responses during leader changes or when acquiring distributed locks.
+* CPU consumption by [SchemeShard](./concepts/glossary.md#scheme-shard) replicas has been [optimized](https://github.com/ydb-platform/ydb/pull/2391), particularly when handling rapid updates for tables with a large number of partitions.
+
+### Bug fixes
+
+* A possible queue overflow error has been [fixed](https://github.com/ydb-platform/ydb/pull/3917). [Change Data Capture](./dev/cdc.md) now reserves the change queue capacity during the initial scan.
+* A potential deadlock between receiving and sending CDC records has been [fixed](https://github.com/ydb-platform/ydb/pull/4597).
+* An issue causing the loss of the mediator task queue during mediator reconnection has been [fixed](https://github.com/ydb-platform/ydb/pull/2056). This fix allows processing of the mediator task queue during resynchronization.
+* A rarely occurring error has been [fixed](https://github.com/ydb-platform/ydb/pull/2624), where with volatile transactions enabled, a successful transaction confirmation result could be returned before the transaction was fully committed. Volatile transactions remain disabled by default and are still under development.
+* A rare error that led to the loss of established locks and the successful confirmation of transactions that should have failed with a "Transaction Locks Invalidated" error has been [fixed](https://github.com/ydb-platform/ydb/pull/2839).
+* A rare error that could result in a violation of data integrity guarantees during concurrent read and write operations on a specific key has been [fixed](https://github.com/ydb-platform/ydb/pull/3074).
+* An issue causing read replicas to stop processing requests has been [fixed](https://github.com/ydb-platform/ydb/pull/4343).
+* A rare error that could cause abnormal termination of database processes if there were uncommitted transactions on a table during its renaming has been [fixed](https://github.com/ydb-platform/ydb/pull/4979).
+* An error in determining the status of a static group, where it was not marked as non-working when it should have been, has been [fixed](https://github.com/ydb-platform/ydb/pull/3632).
+* An error involving partial commits of a distributed transaction with uncommitted changes, caused by certain race conditions with restarts, has been [fixed](https://github.com/ydb-platform/ydb/pull/2169).
+* Anomalies related to reading outdated data, [detected using Jepsen](https://blog.ydb.tech/hardening-ydb-with-jepsen-lessons-learned-e3238a7ef4f2), have been [fixed](https://github.com/ydb-platform/ydb/pull/2374).
+
 ## Version 23.4 {#23-4}
 
 Release date: May 14, 2024.

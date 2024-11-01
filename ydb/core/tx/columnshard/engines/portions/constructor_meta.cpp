@@ -42,16 +42,20 @@ TPortionMeta TPortionMetaConstructor::Build() {
     AFL_VERIFY(FirstAndLastPK);
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
-    AFL_VERIFY(CompactionLevel);
     TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
     if (TierName) {
         result.TierName = *TierName;
     }
-    result.CompactionLevel = *CompactionLevel;
-    AFL_VERIFY(DeletionsCount);
-    result.DeletionsCount = *DeletionsCount;
-    AFL_VERIFY(Produced);
-    result.Produced = *Produced;
+    result.CompactionLevel = *TValidator::CheckNotNull(CompactionLevel);
+    result.DeletionsCount = *TValidator::CheckNotNull(DeletionsCount);
+    result.Produced = *TValidator::CheckNotNull(Produced);
+
+    result.RecordsCount = *TValidator::CheckNotNull(RecordsCount);
+    result.ColumnRawBytes = *TValidator::CheckNotNull(ColumnRawBytes);
+    result.ColumnBlobBytes = *TValidator::CheckNotNull(ColumnBlobBytes);
+    result.IndexRawBytes = *TValidator::CheckNotNull(IndexRawBytes);
+    result.IndexBlobBytes = *TValidator::CheckNotNull(IndexBlobBytes);
+
     return result;
 }
 
@@ -69,6 +73,11 @@ bool TPortionMetaConstructor::LoadMetadata(const NKikimrTxColumnShard::TIndexPor
         DeletionsCount = 0;
     }
     CompactionLevel = portionMeta.GetCompactionLevel();
+    RecordsCount = TValidator::CheckNotNull(portionMeta.GetRecordsCount());
+    ColumnRawBytes = TValidator::CheckNotNull(portionMeta.GetColumnRawBytes());
+    ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
+    IndexRawBytes = portionMeta.GetIndexRawBytes();
+    IndexBlobBytes = portionMeta.GetIndexBlobBytes();
     if (portionMeta.GetIsInserted()) {
         Produced = TPortionMeta::EProduced::INSERTED;
     } else if (portionMeta.GetIsCompacted()) {

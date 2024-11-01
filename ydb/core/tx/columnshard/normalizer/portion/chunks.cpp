@@ -1,16 +1,17 @@
 #include "chunks.h"
 #include "normalizer.h"
 
+#include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
-
 
 namespace NKikimr::NOlap {
 
 class TChunksNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
     std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+
 public:
     TNormalizerResult(std::vector<TChunksNormalizer::TChunkInfo>&& chunks)
         : Chunks(std::move(chunks)) {
@@ -21,17 +22,15 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto&& chunkInfo : Chunks) {
-
             NKikimrTxColumnShard::TIndexColumnMeta metaProto = chunkInfo.GetMetaProto();
-            metaProto.SetNumRows(chunkInfo.GetUpdate().GetNumRows());
+            metaProto.SetNumRows(chunkInfo.GetUpdate().GetRecordsCount());
             metaProto.SetRawBytes(chunkInfo.GetUpdate().GetRawBytes());
 
             const auto& key = chunkInfo.GetKey();
 
-            db.Table<Schema::IndexColumns>().Key(key.GetIndex(), key.GetGranule(), key.GetColumnIdx(),
-                key.GetPlanStep(), key.GetTxId(), key.GetPortion(), key.GetChunk()).Update(
-                    NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString())
-                );
+            db.Table<Schema::IndexColumns>()
+                .Key(key.GetIndex(), key.GetGranule(), key.GetColumnIdx(), key.GetPlanStep(), key.GetTxId(), key.GetPortion(), key.GetChunk())
+                .Update(NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString()));
         }
         return true;
     }
@@ -44,10 +43,12 @@ public:
 class TRowsAndBytesChangesTask: public NConveyor::ITask {
 public:
     using TDataContainer = std::vector<TChunksNormalizer::TChunkInfo>;
+
 private:
     NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
     TNormalizationContext NormContext;
+
 protected:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         for (auto&& chunkInfo : Chunks) {
@@ -58,26 +59,28 @@ protected:
             auto columnLoader = chunkInfo.GetLoader();
             Y_ABORT_UNLESS(!!columnLoader);
 
-            TPortionInfo::TAssembleBlobInfo assembleBlob(blobData);
+            TPortionDataAccessor::TAssembleBlobInfo assembleBlob(blobData);
             assembleBlob.SetExpectedRecordsCount(chunkInfo.GetRecordsCount());
             auto batch = assembleBlob.BuildRecordBatch(*columnLoader).DetachResult();
             Y_ABORT_UNLESS(!!batch);
 
-            chunkInfo.MutableUpdate().SetNumRows(batch->GetRecordsCount());
+            chunkInfo.MutableUpdate().SetRecordsCount(batch->GetRecordsCount());
             chunkInfo.MutableUpdate().SetRawBytes(batch->GetRawSizeVerified());
         }
 
         auto changes = std::make_shared<TChunksNormalizer::TNormalizerResult>(std::move(Chunks));
-        TActorContext::AsActorContext().Send(NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
+        TActorContext::AsActorContext().Send(
+            NormContext.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(changes));
         return TConclusionStatus::Success();
     }
 
 public:
-    TRowsAndBytesChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx, std::vector<TChunksNormalizer::TChunkInfo>&& chunks, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>)
+    TRowsAndBytesChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx,
+        std::vector<TChunksNormalizer::TChunkInfo>&& chunks, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>)
         : Blobs(std::move(blobs))
         , Chunks(std::move(chunks))
-        , NormContext(nCtx)
-    {}
+        , NormContext(nCtx) {
+    }
 
     virtual TString GetTaskClassIdentifier() const override {
         const static TString name = "TRowsAndBytesChangesTask";
@@ -97,7 +100,8 @@ void TChunksNormalizer::TChunkInfo::InitSchema(const NColumnShard::TTablesManage
     Schema = tm.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(NOlap::TSnapshot(Key.GetPlanStep(), Key.GetTxId()));
 }
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(
+    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -160,4 +164,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksNormalizer::DoInit(const 
     return tasks;
 }
 
-}
+}   // namespace NKikimr::NOlap

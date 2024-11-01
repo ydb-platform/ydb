@@ -1,9 +1,11 @@
 #include "controller.h"
 #include "controller_impl.h"
+#include "event_util.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 namespace NKikimr::NReplication {
 
@@ -13,6 +15,13 @@ TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , LogPrefix(this)
+    , TabletCountersPtr(new TProtobufTabletCounters<
+             ESimpleCounters_descriptor,
+             ECumulativeCounters_descriptor,
+             EPercentileCounters_descriptor,
+             ETxTypes_descriptor
+        >())
+    , TabletCounters(TabletCountersPtr.Get())
 {
 }
 
@@ -30,6 +39,7 @@ void TController::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorCont
 
 void TController::OnActivateExecutor(const TActorContext& ctx) {
     CLOG_T(ctx, "OnActivateExecutor");
+    Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
     RunTxInitSchema(ctx);
 }
 
@@ -68,6 +78,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvService::TEvStatus, Handle);
         HFunc(TEvService::TEvWorkerStatus, Handle);
         HFunc(TEvService::TEvRunWorker, Handle);
+        HFunc(TEvService::TEvWorkerDataEnd, Handle);
         HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
     default:
         HandleDefaultEvents(ev, SelfId());
@@ -292,9 +303,11 @@ void TController::Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& 
 void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
     CLOG_D(ctx, "Create session"
         << ": nodeId# " << nodeId);
+    TabletCounters->Cumulative()[COUNTER_CREATE_SESSION] += 1;
 
     Y_ABORT_UNLESS(!Sessions.contains(nodeId));
     Sessions.emplace(nodeId, TSessionInfo());
+    TabletCounters->Simple()[COUNTER_SESSIONS] = Sessions.size();
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
     ui32 flags = 0;
@@ -308,6 +321,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
 void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
     CLOG_D(ctx, "Delete session"
         << ": nodeId# " << nodeId);
+    TabletCounters->Cumulative()[COUNTER_DELETE_SESSION] += 1;
 
     Y_ABORT_UNLESS(Sessions.contains(nodeId));
     auto& session = Sessions[nodeId];
@@ -327,6 +341,8 @@ void TController::DeleteSession(ui32 nodeId, const TActorContext& ctx) {
     }
 
     Sessions.erase(nodeId);
+    TabletCounters->Simple()[COUNTER_SESSIONS] = Sessions.size();
+
     CloseSession(nodeId, ctx);
     ScheduleProcessQueues();
 }
@@ -431,6 +447,9 @@ void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
     }
 
     target->UpdateLag(id.WorkerId(), lag);
+    if (const auto lag = replication->GetLag()) {
+        TabletCounters->Simple()[COUNTER_DATA_LAG] = lag->MilliSeconds();
+    }
 }
 
 void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {
@@ -454,6 +473,43 @@ void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext
     }
 
     ScheduleProcessQueues();
+}
+
+void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+
+    const auto nodeId = ev->Sender.NodeId();
+    if (!Sessions.contains(nodeId)) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    const auto id = TWorkerId::Parse(record.GetWorker());
+    auto* worker = GetOrCreateWorker(id);
+    worker->SetDataEnded(true);
+
+    auto allParentsEnded = AllOf(record.GetAdjacentPartitionsIds(), [&](auto partitionId) {
+        auto it = Workers.find(TWorkerId{id.ReplicationId(), id.TargetId(), partitionId});
+        if (it == Workers.end()) {
+            return false;
+        }
+        return it->second.IsDataEnded();
+    });
+
+    if (allParentsEnded) {
+        auto replication = Replications.at(id.ReplicationId());
+        const auto* target = replication->FindTarget(id.TargetId());
+
+        if (!target) {
+            Y_VERIFY_DEBUG(target);
+            CLOG_E(ctx, "Resolve target error " << id.TargetId() << ": " << ev->Get()->ToString());
+            return;
+        }
+        for (auto partitionId : record.GetChildPartitionsIds()) {
+            auto ev = MakeTEvRunWorker(replication, *target, partitionId);
+            Send(SelfId(), std::move(ev));
+        }
+    }
 }
 
 bool TController::IsValidWorker(const TWorkerId& id) const {
@@ -486,6 +542,7 @@ TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplicat
     auto it = Workers.find(id);
     if (it == Workers.end()) {
         it = Workers.emplace(id, cmd).first;
+        TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
     }
 
     auto replication = Find(id.ReplicationId());
@@ -499,6 +556,9 @@ TWorkerInfo* TController::GetOrCreateWorker(const TWorkerId& id, NKikimrReplicat
 }
 
 void TController::ScheduleProcessQueues() {
+    TabletCounters->Simple()[COUNTER_BOOT_QUEUE] = BootQueue.size();
+    TabletCounters->Simple()[COUNTER_STOP_QUEUE] = StopQueue.size();
+
     if (ProcessQueuesScheduled || (!BootQueue && !StopQueue)) {
         return;
     }
@@ -652,6 +712,7 @@ void TController::RemoveWorker(const TWorkerId& id, const TActorContext& ctx) {
 
     RemoveQueue.erase(id);
     Workers.erase(id);
+    TabletCounters->Simple()[COUNTER_WORKERS] = Workers.size();
 
     auto replication = Find(id.ReplicationId());
     if (!replication) {

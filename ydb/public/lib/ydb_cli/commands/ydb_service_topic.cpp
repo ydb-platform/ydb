@@ -403,30 +403,32 @@ namespace {
         NYdb::NTopic::TDescribeTopicResult& describeResult) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
         auto& partitioningSettings = settings.BeginAlterPartitioningSettings();
+        auto& originPartitioningSettings = describeResult.GetTopicDescription().GetPartitioningSettings();
 
-        if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions())) {
+        if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != originPartitioningSettings.GetMinActivePartitions())) {
             partitioningSettings.MinActivePartitions(*MinActivePartitions_);
         }
 
-        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions())) {
+        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != originPartitioningSettings.GetMaxActivePartitions())) {
             partitioningSettings.MaxActivePartitions(*MaxActivePartitions_);
         }
 
-        auto autoPartitioningSettings = partitioningSettings.BeginAlterAutoPartitioningSettings();
+        auto& autoPartitioningSettings = partitioningSettings.BeginAlterAutoPartitioningSettings();
+        const auto& originalAutoPartitioningSettings = originPartitioningSettings.GetAutoPartitioningSettings();
 
-        if (GetAutoPartitioningStabilizationWindowSeconds().Defined() && *GetAutoPartitioningStabilizationWindowSeconds() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds()) {
+        if (GetAutoPartitioningStabilizationWindowSeconds().Defined() && *GetAutoPartitioningStabilizationWindowSeconds() != originalAutoPartitioningSettings.GetStabilizationWindow().Seconds()) {
             autoPartitioningSettings.StabilizationWindow(TDuration::Seconds(*GetAutoPartitioningStabilizationWindowSeconds()));
         }
 
-        if (GetAutoPartitioningStrategy().Defined() && *GetAutoPartitioningStrategy() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()) {
+        if (GetAutoPartitioningStrategy().Defined() && *GetAutoPartitioningStrategy() != originalAutoPartitioningSettings.GetStrategy()) {
             autoPartitioningSettings.Strategy(*GetAutoPartitioningStrategy());
         }
 
-        if (GetAutoPartitioninDownUtilizationPercent().Defined() && *GetAutoPartitioninDownUtilizationPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent()) {
+        if (GetAutoPartitioninDownUtilizationPercent().Defined() && *GetAutoPartitioninDownUtilizationPercent() != originalAutoPartitioningSettings.GetDownUtilizationPercent()) {
             autoPartitioningSettings.DownUtilizationPercent(*GetAutoPartitioninDownUtilizationPercent());
         }
 
-        if (GetAutoPartitioningUpUtilizationPercent().Defined() && *GetAutoPartitioningUpUtilizationPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent()) {
+        if (GetAutoPartitioningUpUtilizationPercent().Defined() && *GetAutoPartitioningUpUtilizationPercent() != originalAutoPartitioningSettings.GetUpUtilizationPercent()) {
             autoPartitioningSettings.UpUtilizationPercent(*GetAutoPartitioningUpUtilizationPercent());
         }
 
@@ -835,6 +837,7 @@ namespace {
 
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
+        settings.AutoPartitioningSupport(true);
         settings.ConsumerName(Consumer_);
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {

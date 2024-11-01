@@ -89,7 +89,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this) {
+    , SysLocks(this)
+{
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -385,6 +386,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     // check schema changed
 
+    std::optional<NKikimrSchemeOp::TColumnTableSchema> schema;
     if (tableProto.HasSchemaPreset()) {
         Y_ABORT_UNLESS(!tableProto.HasSchema(), "Tables has either schema or preset");
 
@@ -398,7 +400,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         }
     } else {
         Y_ABORT_UNLESS(tableProto.HasSchema(), "Tables has either schema or preset");
-        *tableVerProto.MutableSchema() = tableProto.GetSchema();
+        schema = tableProto.GetSchema();
     }
 
     {
@@ -421,7 +423,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
 
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, db, Tiers);
+    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db, Tiers);
     InsertTable->RegisterPathInfo(pathId);
 
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
@@ -442,11 +444,12 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
+    std::optional<NKikimrSchemeOp::TColumnTableSchema> schema;
     if (alterProto.HasSchemaPreset()) {
         tableVerProto.SetSchemaPresetId(alterProto.GetSchemaPreset().GetId());
         TablesManager.AddSchemaVersion(alterProto.GetSchemaPreset().GetId(), version, alterProto.GetSchemaPreset().GetSchema(), db, Tiers);
     } else if (alterProto.HasSchema()) {
-        *tableVerProto.MutableSchema() = alterProto.GetSchema();
+        schema = alterProto.GetSchema();
     }
 
     const auto& ttlSettings = alterProto.GetTtlSettings(); // Note: Not valid behaviour for full alter implementation
@@ -459,7 +462,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     Schema::SaveTableInfo(db, pathId, tieringUsage);
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, db, Tiers);
+    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db, Tiers);
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const NOlap::TSnapshot& version,
@@ -695,7 +698,7 @@ void TColumnShard::SetupIndexation() {
                 bytesToIndex += data.BlobSize();
                 txBytesWrite += data.GetTxVolume();
                 dataToIndex.push_back(&data);
-                if (bytesToIndex >= (ui64)Limits.MaxInsertBytes || txBytesWrite >= NOlap::TGlobalLimits::TxWriteLimitBytes) {
+                if (bytesToIndex >= (ui64)Limits.MaxInsertBytes || txBytesWrite >= NOlap::TGlobalLimits::TxWriteLimitBytes || dataToIndex.size() > 500) {
                     StartIndexTask(std::move(dataToIndex), bytesToIndex);
                     dataToIndex.clear();
                     bytesToIndex = 0;

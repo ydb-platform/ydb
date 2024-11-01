@@ -97,8 +97,8 @@ class TTopicSession : public TActorBootstrapped<TTopicSession> {
 private:
     using TParserInputType = TSet<std::pair<TString, TString>>;
 
-    struct ClientsInfo {
-        ClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
+    struct TClientsInfo {
+        TClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
         {
@@ -151,7 +151,7 @@ private:
     ui64 LastMessageOffset = 0;
     bool IsWaitingEvents = false;
     bool IsStartParsingScheduled = false;
-    THashMap<NActors::TActorId, ClientsInfo> Clients;
+    THashMap<NActors::TActorId, TClientsInfo> Clients;
     THashSet<NActors::TActorId> ClientsWithoutPredicate;
     std::unique_ptr<TJsonParser> Parser;
     NConfig::TRowDispatcherConfig Config;
@@ -189,16 +189,16 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void DoParsing(bool force = false);
-    void DoFiltering(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& parsedValues);
-    void SendData(ClientsInfo& info);
+    void DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
+    void SendData(TClientsInfo& info);
     void UpdateParser();
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription);
-    void SendDataArrived(ClientsInfo& client);
+    void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
     void HandleNewEvents();
     TInstant GetMinStartingMessageTimestamp() const;
-    void AddDataToClient(ClientsInfo& client, ui64 offset, const TString& json);
+    void AddDataToClient(TClientsInfo& client, ui64 offset, const TString& json);
 
     std::pair<NYql::NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message);
 
@@ -215,9 +215,9 @@ private:
 
     void SendStatistic();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TVector<TVector<std::string_view>> RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues);
+    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
-    void UpdateFieldsIds(ClientsInfo& clientInfo);
+    void UpdateFieldsIds(TClientsInfo& clientInfo);
 
 private:
 
@@ -387,15 +387,15 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TVector<TVector<std::string_view>> TTopicSession::RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues) {
-    TVector<TVector<std::string_view>> result;
+TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> TTopicSession::RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
+    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> result;
     const auto& offsets = ParserSchema.FieldsMap;
     result.reserve(info.FieldsIds.size());
     for (auto fieldId : info.FieldsIds) {
         Y_ENSURE(fieldId < offsets.size(), "fieldId " << fieldId << ", offsets.size() " << offsets.size());
         auto offset = offsets[fieldId];
         Y_ENSURE(offset < parsedValues.size(), "offset " << offset << ", jsonBatch.size() " << parsedValues.size());
-        result.push_back(parsedValues[offset]); 
+        result.push_back(&parsedValues[offset]); 
     }
     return result;
 }
@@ -584,9 +584,9 @@ void TTopicSession::DoParsing(bool force) {
     }
 }
 
-void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& parsedValues) {
+void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
     Y_ENSURE(parsedValues, "Expected non empty schema");
-    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets.front() << ", last offset: " << offsets.back() << ", data:\n" << Parser->GetDebugString(parsedValues));
+    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets.front() << ", last offset: " << offsets.back());
 
     for (auto& [actorId, info] : Clients) {
         try {
@@ -601,7 +601,7 @@ void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<TVec
     Send(SelfId(), new TEvPrivate::TEvDataFiltered(offsets.back()));
 }
 
-void TTopicSession::SendData(ClientsInfo& info) {
+void TTopicSession::SendData(TClientsInfo& info) {
     info.DataArrivedSent = false;
     if (info.Buffer.empty()) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
@@ -639,7 +639,7 @@ void TTopicSession::SendData(ClientsInfo& info) {
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
 }
 
-void TTopicSession::UpdateFieldsIds(ClientsInfo& info) {
+void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {
     for (auto name : info.Settings.GetSource().GetColumns()) {
         auto it = FieldsIndexes.find(name);
         if (it == FieldsIndexes.end()) {
@@ -650,6 +650,15 @@ void TTopicSession::UpdateFieldsIds(ClientsInfo& info) {
             info.FieldsIds.push_back(it->second);
         }
     }
+}
+
+bool HasJsonColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
+    for (const auto& type : sourceParams.GetColumnTypes()) {
+        if (type.Contains("Json")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
@@ -678,6 +687,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         UpdateFieldsIds(clientInfo);
 
         TString predicate = clientInfo.Settings.GetSource().GetPredicate();
+
+        // TODO: remove this when the re-parsing is removed from pq read actor
+        if (predicate.empty() && HasJsonColumns(clientInfo.Settings.GetSource())) {
+            predicate = "WHERE TRUE";
+        }
+
         if (!predicate.empty()) {
             clientInfo.Filter = NewJsonFilter(
                 columns,
@@ -710,7 +725,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
 }
 
-void TTopicSession::AddDataToClient(ClientsInfo& info, ui64 offset, const TString& json) {
+void TTopicSession::AddDataToClient(TClientsInfo& info, ui64 offset, const TString& json) {
     if (info.NextMessageOffset && offset < info.NextMessageOffset) {
         return;
     }
@@ -836,7 +851,7 @@ void TTopicSession::StopReadSession() {
     TopicClient.Reset();
 }
 
-void TTopicSession::SendDataArrived(ClientsInfo& info) {
+void TTopicSession::SendDataArrived(TClientsInfo& info) {
     if (info.Buffer.empty() || info.DataArrivedSent) {
         return;
     }

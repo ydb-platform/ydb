@@ -19,6 +19,7 @@ public:
     YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
     YDB_READONLY_DEF(TFsPath, DataFiles);
     YDB_READONLY_FLAG(CheckCanonical, false);
+    YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
 };
 
 class TClickbenchWorkloadGenerator final: public TWorkloadGeneratorBase {

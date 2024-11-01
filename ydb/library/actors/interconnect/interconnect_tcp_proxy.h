@@ -565,6 +565,19 @@ namespace NActors {
         void HandleTerminate();
 
         void PassAway() override;
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Disconnection management
+
+        static constexpr size_t NumDisconnectsSize = 60;
+        std::array<ui32, NumDisconnectsSize> NumDisconnects;
+        size_t NumDisconnectsIndex = 0;
+        ui32 NumDisconnectsInLastHour = 0;
+        ui64 FirstDisconnectWindowMinutes = 0;
+
+        void RegisterDisconnect();
+        ui32 GetDisconnectCountInLastHour();
+        void ShiftDisconnectWindow(TMonotonic now);
     };
 
 }

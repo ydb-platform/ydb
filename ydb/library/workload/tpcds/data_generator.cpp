@@ -1,5 +1,4 @@
 #include "data_generator.h"
-#include "driver.h"
 #include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <library/cpp/charset/wide.h>
 #include <util/string/escape.h>
@@ -64,12 +63,10 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TPositions TTpcdsWor
     split_work(tableNum, &result.FirstRow, &result.Count);
     if (useState && owner.StateProcessor && owner.StateProcessor->GetState().contains(tdef->name)) {
         result.Position = owner.StateProcessor->GetState().at(tdef->name).Position;
-        result.Count -= std::min<i64>(result.Count, result.Position);
 
         //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
         while (result.Position && !allowedModules.contains((result.FirstRow + result.Position) % 6)) {
             --result.Position;
-            ++result.Count;
         }
     }
     //this magic is needed for SCD to work correctly. See setSCDKeys in ydb/library/benchmarks/gen/tpcds-dbgen/scd.c
@@ -130,12 +127,11 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TBulkDataGenerator(c
     : IBulkDataGenerator(getTdefsByNumber(tableNum)->name, CalcCountToGenerate(owner, tableNum, true).Count)
     , TableNum(tableNum)
     , Owner(owner)
-    , TableSize(CalcCountToGenerate(owner, tableNum, false).Count)
 {}
 
 TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::GenerateDataPortion() {
     TDataPortions result;
-    if (TableSize == 0) {
+    if (GetSize() == 0) {
         return result;
     }
     TContexts ctxs;
@@ -150,6 +146,11 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcds
     auto positions = CalcCountToGenerate(Owner, TableNum, !Generated);
     if (!Generated) {
         Generated = positions.Position;
+        result.push_back(MakeIntrusive<TDataPortion>(
+            GetFullTableName(tdef->name),
+            TDataPortion::TSkip(),
+            Generated
+        ));
         if (const ui32 toSkip = positions.FirstRow + positions.Position - 1) {
             row_skip(TableNum, toSkip);
             if (tdef->flags & FL_PARENT) {
@@ -160,7 +161,7 @@ TTpcdsWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpcds
             resetCountCount();
         }
     }
-    const auto count = TableSize > Generated ? std::min(ui64(TableSize - Generated), Owner.Params.BulkSize) : 0;
+    const auto count = GetSize() > Generated ? std::min(ui64(GetSize() - Generated), Owner.Params.BulkSize) : 0;
     if (!count) {
         return result;
     }

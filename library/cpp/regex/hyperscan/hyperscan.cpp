@@ -10,6 +10,7 @@
 #include <contrib/libs/hyperscan/runtime_avx512/hs_runtime.h>
 
 #include <util/generic/singleton.h>
+#include <util/system/sanitizers.h>
 
 namespace NHyperscan {
     using TSerializedDatabase = THolder<char, TDeleter<decltype(&free), &free>>;
@@ -18,7 +19,8 @@ namespace NHyperscan {
 
     namespace NPrivate {
         ERuntime DetectCurrentRuntime() {
-            if (NX86::HaveAVX512F() && NX86::HaveAVX512BW()) {
+            // TODO: Remove MSanIsOn check upon DEVTOOLSSUPPORT-49258 resolution
+            if (NX86::HaveAVX512F() && NX86::HaveAVX512BW() && !NSan::MSanIsOn()) {
                 return ERuntime::AVX512;
             } else if (NX86::HaveAVX() && NX86::HaveAVX2()) {
                 return ERuntime::AVX2;

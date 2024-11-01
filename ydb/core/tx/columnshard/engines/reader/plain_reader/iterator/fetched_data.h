@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -16,7 +17,7 @@ namespace NKikimr::NOlap {
 
 class TFetchedData {
 protected:
-    using TBlobs = THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>;
+    using TBlobs = THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Table);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
@@ -59,7 +60,7 @@ public:
         }
     }
 
-    void AddDefaults(THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>&& blobs) {
+    void AddDefaults(THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>&& blobs) {
         for (auto&& i : blobs) {
             AFL_VERIFY(Blobs.emplace(i.first, std::move(i.second)).second);
         }
@@ -103,7 +104,6 @@ public:
         } else {
             AddFilter(*filter);
         }
-        
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {

@@ -9,6 +9,16 @@
 
 #include <boost/locale/config.hpp>
 
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+#    define BOOST_LOCALE_FOREACH_CHAR_I_CHAR8_T(F) F(char8_t)
+#    define BOOST_LOCALE_FOREACH_CHAR_I2_CHAR8_T(F) F(char8_t)
+#elif defined(__cpp_char8_t)
+#    define BOOST_LOCALE_FOREACH_CHAR_I_CHAR8_T(F) F(char8_t)
+#    define BOOST_LOCALE_FOREACH_CHAR_I2_CHAR8_T(F)
+#else
+#    define BOOST_LOCALE_FOREACH_CHAR_I_CHAR8_T(F)
+#    define BOOST_LOCALE_FOREACH_CHAR_I2_CHAR8_T(F)
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
 #    define BOOST_LOCALE_FOREACH_CHAR_I_CHAR16_T(F) F(char16_t)
 #else
@@ -23,6 +33,15 @@
 #define BOOST_LOCALE_FOREACH_CHAR(F)        \
     F(char)                                 \
     F(wchar_t)                              \
+    BOOST_LOCALE_FOREACH_CHAR_I_CHAR8_T(F)  \
+    BOOST_LOCALE_FOREACH_CHAR_I_CHAR16_T(F) \
+    BOOST_LOCALE_FOREACH_CHAR_I_CHAR32_T(F)
+
+// Same but only where std::basic_string<C> is available
+#define BOOST_LOCALE_FOREACH_CHAR_STRING(F) \
+    F(char)                                 \
+    F(wchar_t)                              \
+    BOOST_LOCALE_FOREACH_CHAR_I2_CHAR8_T(F) \
     BOOST_LOCALE_FOREACH_CHAR_I_CHAR16_T(F) \
     BOOST_LOCALE_FOREACH_CHAR_I_CHAR32_T(F)
 

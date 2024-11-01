@@ -61,7 +61,7 @@ struct TSharedPageCacheConfig {
     TIntrusivePtr<TSharedPageCacheCounters> Counters;
     ui32 ActivePagesReservationPercent = 50;
 
-    TReplacementPolicy ReplacementPolicy = TReplacementPolicy::ThreeLeveledLRU;
+    TReplacementPolicy ReplacementPolicy = TReplacementPolicy::S3FIFO;
 };
 
 IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config);

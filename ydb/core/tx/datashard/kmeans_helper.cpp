@@ -101,10 +101,11 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
-        Y_ABORT_UNLESS(it != types.end());
-        NScheme::ProtoFromTypeInfo(it->second, type);
-        uploadTypes->emplace_back(it->first, type);
-        types.erase(it);
+        if (it != types.end()) {
+            NScheme::ProtoFromTypeInfo(it->second, type);
+            uploadTypes->emplace_back(it->first, type);
+            types.erase(it);
+        }
     };
     for (const auto& column : table.KeyColumnIds) {
         addType(table.Columns.at(column).Name);

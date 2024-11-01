@@ -1,6 +1,7 @@
 #pragma once
 #include "column_record.h"
 #include "constructor_meta.h"
+#include "data_accessor.h"
 #include "index_chunk.h"
 #include "portion_info.h"
 
@@ -45,9 +46,7 @@ private:
 
         TAddressBlobId(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx)
             : Address(address)
-            , BlobIdx(blobIdx)
-        {
-
+            , BlobIdx(blobIdx) {
         }
     };
     std::vector<TAddressBlobId> BlobIdxs;
@@ -74,7 +73,8 @@ public:
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords, const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial) {
+    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords,
+        const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial) {
         MetaConstructor.FillMetaInfo(firstLastRecords, deletionsCount, minMaxSpecial, snapshotSchema.GetIndexInfo());
     }
 
@@ -105,14 +105,13 @@ public:
         , SchemaVersion(portion.GetSchemaVersionOptional())
         , ShardingVersion(portion.GetShardingVersionOptional())
         , CommitSnapshot(portion.GetCommitSnapshotOptional())
-        , InsertWriteId(portion.GetInsertWriteIdOptional())
-    {
+        , InsertWriteId(portion.GetInsertWriteIdOptional()) {
         if (withMetadata) {
             MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
         if (withBlobs) {
-            Indexes = portion.GetIndexes();
-            Records = portion.GetRecords();
+            Indexes = portion.Indexes;
+            Records = portion.Records;
             BlobIds = portion.BlobIds;
         }
     }
@@ -138,6 +137,25 @@ public:
         return !!RemoveSnapshot;
     }
 
+    static void Validate(const TColumnRecord& rec) {
+        AFL_VERIFY(rec.GetColumnId());
+    }
+
+    static ui32 GetRecordsCount(const TColumnRecord& rec) {
+        return rec.GetMeta().GetRecordsCount();
+    }
+
+    static void Validate(const TIndexChunk& rec) {
+        AFL_VERIFY(rec.GetIndexId());
+        if (const auto* blobData = rec.GetBlobDataOptional()) {
+            AFL_VERIFY(blobData->size());
+        }
+    }
+
+    static ui32 GetRecordsCount(const TIndexChunk& rec) {
+        return rec.GetRecordsCount();
+    }
+
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
         ui32 entityId = 0;
@@ -151,17 +169,33 @@ public:
             return sb;
         };
 
+        std::optional<ui32> recordsCount;
+        ui32 recordsCountCurrent = 0;
         for (auto&& i : chunks) {
+            Validate(i);
             if (entityId != i.GetEntityId()) {
+                if (entityId) {
+                    if (recordsCount) {
+                        AFL_VERIFY(recordsCountCurrent == *recordsCount);
+                    } else {
+                        recordsCount = recordsCountCurrent;
+                    }
+                }
                 AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
                 AFL_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
+                recordsCountCurrent = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)("details", debugString());
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)(
+                                                  "details", debugString());
                 chunkIdx = i.GetChunkIdx();
             }
+            recordsCountCurrent += GetRecordsCount(i);
             AFL_VERIFY(i.GetEntityId());
+        }
+        if (recordsCount) {
+            AFL_VERIFY(recordsCountCurrent == *recordsCount);
         }
     }
 
@@ -222,12 +256,12 @@ public:
     }
 
     void SetSchemaVersion(const ui64 version) {
-//        AFL_VERIFY(version);
+        //        AFL_VERIFY(version);
         SchemaVersion = version;
     }
 
     void SetShardingVersion(const ui64 version) {
-//        AFL_VERIFY(version);
+        //        AFL_VERIFY(version);
         ShardingVersion = version;
     }
 
@@ -242,14 +276,15 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-    void LoadRecord(const TIndexInfo& indexInfo, const TColumnChunkLoadContext& loadContext);
+    void LoadRecord(const TColumnChunkLoadContext& loadContext);
 
     ui32 GetRecordsCount() const {
+        AFL_VERIFY(Records.size());
         ui32 result = 0;
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetNumRows();
+                result += i.GetMeta().GetRecordsCount();
                 columnIdFirst = i.ColumnId;
             }
         }
@@ -374,10 +409,7 @@ public:
         Indexes.emplace_back(chunk);
     }
 
-    TPortionInfo Build(const bool needChunksNormalization);
-    std::shared_ptr<TPortionInfo> BuildPtr(const bool needChunksNormalization) {
-        return std::make_shared<TPortionInfo>(Build(needChunksNormalization));
-    }
+    TPortionDataAccessor Build(const bool needChunksNormalization);
 };
 
 class TPortionConstructors {

@@ -25,20 +25,16 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
     if (!NextLevel || Portions.size() < 10) {
         return 0;
     }
-    if (TInstant::Now() - *PredOptimization < TDuration::Seconds(180)) {
-        if (PortionsInfo.GetCount() <= 100 || PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < (1 << 20)) {
-            return 0;
-        }
-    } else {
-        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < (512 << 10)) {
+    if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {
+        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < (1 << 20)) {
             return 0;
         }
     }
 
-    THashSet<ui64> portionIds;
     const ui64 affectedRawBytes =
         NextLevel->GetAffectedPortionBytes(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
     /*
+    THashSet<ui64> portionIds;
     auto chain =
         targetLevel->GetAffectedPortions(Portions.begin()->GetPortion()->IndexKeyStart(), Portions.rbegin()->GetPortion()->IndexKeyEnd());
     ui64 affectedRawBytes = 0;

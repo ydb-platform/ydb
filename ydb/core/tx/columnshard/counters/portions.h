@@ -15,6 +15,7 @@ private:
     YDB_READONLY(i64, RawBytes, 0);
     YDB_READONLY(i64, Count, 0);
     YDB_READONLY(i64, RecordsCount, 0);
+    YDB_READONLY(i64, ChunksCount, 0);
 
 public:
     NJson::TJsonValue SerializeToJson() const {
@@ -23,6 +24,7 @@ public:
         result.InsertValue("raw_bytes", RawBytes);
         result.InsertValue("count", Count);
         result.InsertValue("records_count", RecordsCount);
+        result.InsertValue("chunks_count", ChunksCount);
         return result;
     }
 
@@ -45,11 +47,12 @@ public:
         result.RawBytes = RawBytes + item.RawBytes;
         result.Count = Count + item.Count;
         result.RecordsCount = RecordsCount + item.RecordsCount;
+        result.ChunksCount = ChunksCount + item.ChunksCount;
         return result;
     }
 
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p);
-    void RemovePortion(const std::shared_ptr<TPortionInfo>& p);
+    void AddPortion(const std::shared_ptr<const TPortionInfo>& p);
+    void RemovePortion(const std::shared_ptr<const TPortionInfo>& p);
 
     void AddPortion(const TPortionInfo& p);
     void RemovePortion(const TPortionInfo& p);
@@ -120,9 +123,8 @@ public:
         RawBytes = agents.RawBytes->GetClient();
     }
 
-    void AddPortion(const std::shared_ptr<NOlap::TPortionInfo>& p);
-
-    void RemovePortion(const std::shared_ptr<NOlap::TPortionInfo>& p);
+    void AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p);
+    void RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p);
 };
 
 }   // namespace NKikimr::NColumnShard

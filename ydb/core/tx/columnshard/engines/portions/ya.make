@@ -11,6 +11,7 @@ SRCS(
     meta.cpp
     common.cpp
     index_chunk.cpp
+    data_accessor.cpp
 )
 
 PEERDIR(

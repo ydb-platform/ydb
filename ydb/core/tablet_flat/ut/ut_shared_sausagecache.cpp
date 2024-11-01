@@ -131,6 +131,7 @@ void RestartAndClearCache(TMyEnvBase& env) {
 void SwitchPolicy(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy) {
     auto configure = MakeHolder<TEvSharedPageCache::TEvConfigure>();
     configure->Record.SetReplacementPolicy(policy);
+    configure->Record.SetMemoryLimit(8_MB);
     env->Send(MakeSharedPageCacheId(), TActorId{}, configure.Release());
     WaitEvent(env, TEvSharedPageCache::EvConfigure);
 }
@@ -144,6 +145,8 @@ Y_UNIT_TEST(Limits) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
 
     // write 300 rows, each ~100KB (~30MB)
     for (i64 key = 0; key < 300; ++key) {
@@ -204,6 +207,8 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -320,7 +325,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 92, 12}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
 
     RestartAndClearCache(env);
 
@@ -329,7 +334,7 @@ Y_UNIT_TEST(S3FIFO) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
     }
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 10), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 100, 14, 2}));
 
     retried = {};
@@ -338,7 +343,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 92}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 19, 2}));
 
     retried = {};
     for (i64 key = 99; key >= 0; --key) {
@@ -346,7 +351,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 28}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 21, 3}));
 
     RestartAndClearCache(env);
 
@@ -364,7 +369,7 @@ Y_UNIT_TEST(S3FIFO) {
         env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) }, true);
     }
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 10), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{99, 99, 13, 1}));
 
     // read the key again
@@ -389,7 +394,7 @@ Y_UNIT_TEST(S3FIFO) {
     }
     LogCounters(counters);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 28}));
+    UNIT_ASSERT_VALUES_EQUAL(retried, (TVector<ui32>{100, 28, 4, 1}));
 }
 
 Y_UNIT_TEST(ClockPro) {
@@ -510,6 +515,8 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {

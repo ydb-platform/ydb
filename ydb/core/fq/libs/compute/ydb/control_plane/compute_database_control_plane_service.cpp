@@ -11,6 +11,7 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
@@ -342,7 +343,7 @@ public:
         switch (controlPlane.type_case()) {
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
             case NConfig::TYdbComputeControlPlane::kSingle:
-                CreateSingleClientActors(controlPlane.GetSingle());
+                CreateSingleClientActors();
             break;
             case NConfig::TYdbComputeControlPlane::kCms:
                 CreateCmsClientActors(controlPlane.GetCms(), controlPlane.GetDatabasesCacheReloadPeriod());
@@ -361,11 +362,13 @@ public:
         if (connection.GetCertificateFile()) {
             settings.CertificateRootCA = StripString(TFileInput(connection.GetCertificateFile()).ReadAll());
         }
+        settings.Headers[NYdb::YDB_DATABASE_HEADER] = connection.GetDatabase();
         return settings;
     }
 
-    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const auto& connection) {
+    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
         NGrpcActorClient::TGrpcClientSettings settings;
+        const auto& connection = config.GetExecutionConnection();
         settings.Endpoint = connection.GetEndpoint();
         settings.EnableSsl = connection.GetUseSsl();
         if (connection.GetCertificateFile()) {
@@ -375,20 +378,17 @@ public:
         return settings;
     }
 
-    static NGrpcActorClient::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
-        return CreateGrpcClientSettings(config.GetControlPlaneConnection());
-    }
-
-    void CreateSingleClientActors(const NConfig::TYdbComputeControlPlane::TSingle& singleConfig) {
+    void CreateSingleClientActors() {
         auto globalLoadConfig = Config.GetYdb().GetLoadControlConfig();
         if (globalLoadConfig.GetEnable()) {
             TActorId clientActor;
             auto monitoringEndpoint = globalLoadConfig.GetMonitoringEndpoint();
-            auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(singleConfig.GetConnection()))->CreateProvider();
+            const auto& databaseConnection = globalLoadConfig.GetDatabaseConnection();
+            auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(databaseConnection))->CreateProvider();
             if (monitoringEndpoint) {
-                clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, singleConfig.GetConnection().GetDatabase(), credentialsProvider).release());
+                clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, databaseConnection.GetDatabase(), credentialsProvider).release());
             } else {
-                clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(singleConfig.GetConnection()), credentialsProvider).release());
+                clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(databaseConnection), credentialsProvider).release());
             }
             MonitoringActorId = Register(CreateDatabaseMonitoringActor(clientActor, globalLoadConfig, Counters).release());
         }
@@ -408,11 +408,12 @@ public:
             if (loadConfig.GetEnable()) {
                 TActorId clientActor;
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
-                auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider();
+                const auto& databaseConnection = loadConfig.GetDatabaseConnection();
+                auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(databaseConnection))->CreateProvider();
                 if (monitoringEndpoint) {
-                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, databaseConnection.GetDatabase(), credentialsProvider).release());
                 } else {
-                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(databaseConnection), credentialsProvider).release());
                 }
                 databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, databaseCounters).release());
             }
@@ -432,11 +433,12 @@ public:
             if (loadConfig.GetEnable()) {
                 TActorId clientActor;
                 auto monitoringEndpoint = loadConfig.GetMonitoringEndpoint();
-                auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider();
+                const auto& databaseConnection = loadConfig.GetDatabaseConnection();
+                auto credentialsProvider = CredentialsProviderFactory(GetYdbCredentialSettings(databaseConnection))->CreateProvider();
                 if (monitoringEndpoint) {
-                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, config.GetControlPlaneConnection().GetDatabase(), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringRestClientActor(monitoringEndpoint, databaseConnection.GetDatabase(), credentialsProvider).release());
                 } else {
-                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(config), credentialsProvider).release());
+                    clientActor = Register(CreateMonitoringGrpcClientActor(CreateGrpcClientSettings(databaseConnection), credentialsProvider).release());
                 }
                 databaseMonitoringActor = Register(CreateDatabaseMonitoringActor(clientActor, loadConfig, databaseCounters).release());
             }

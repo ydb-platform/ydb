@@ -52,7 +52,9 @@ namespace {
                                         "Every row is a separate binary data on a separate line"},
         { EDataFormat::ProtoJsonBase64, "Protobuf in json format, binary strings are encoded with base64" },
         { EDataFormat::Csv, "CSV format" },
+        { EDataFormat::CsvWithHeader, "CSV format with header" },
         { EDataFormat::Tsv, "TSV format" },
+        { EDataFormat::TsvWithHeader, "TSV format with header" },
         { EDataFormat::Parquet, "Parquet format" },
     };
 
@@ -688,10 +690,16 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
         FormatResultSetJson(resultSet, &Output, EBinaryStringEncoding::Base64);
         break;
     case EDataFormat::Csv:
-        PrintCsv(resultSet, ",");
+        PrintCsv(resultSet, ",", false);
+        break;
+    case EDataFormat::CsvWithHeader:
+        PrintCsv(resultSet, ",", true);
         break;
     case EDataFormat::Tsv:
-        PrintCsv(resultSet, "\t");
+        PrintCsv(resultSet, "\t", false);
+        break;
+    case EDataFormat::TsvWithHeader:
+        PrintCsv(resultSet, "\t", true);
         break;
     case EDataFormat::Parquet:
         ParquetPrinter->Print(resultSet);
@@ -790,9 +798,18 @@ void TResultSetPrinter::PrintJsonArray(const TResultSet& resultSet, EBinaryStrin
     }
 }
 
-void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim) {
+void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim, bool withHeader) {
     const TVector<TColumn>& columns = resultSet.GetColumnsMeta();
     TResultSetParser parser(resultSet);
+    if (withHeader) {
+        for (ui32 i = 0; i < columns.size(); ++i) {
+            Output << columns[i].Name;
+            if (i < columns.size() - 1) {
+                Output << delim;
+            }
+        }
+        Output << Endl;
+    }
     while (parser.TryNextRow()) {
         for (ui32 i = 0; i < columns.size(); ++i) {
             Output << FormatValueJson(parser.GetValue(i), EBinaryStringEncoding::Unicode);

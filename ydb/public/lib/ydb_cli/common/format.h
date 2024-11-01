@@ -119,7 +119,7 @@ private:
 
     void PrintPretty(const TResultSet& resultSet);
     void PrintJsonArray(const TResultSet& resultSet, EBinaryStringEncoding encoding);
-    void PrintCsv(const TResultSet& resultSet, const char* delim);
+    void PrintCsv(const TResultSet& resultSet, const char* delim, bool withHeader);
 
     bool FirstPart = true;
     bool PrintedSomething = false;

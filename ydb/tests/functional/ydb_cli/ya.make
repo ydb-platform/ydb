@@ -1,11 +1,13 @@
 PY3TEST()
 
 TEST_SRCS(
+    conftest.py
     test_ydb_backup.py
     test_ydb_table.py
     test_ydb_scripting.py
     test_ydb_impex.py
     test_ydb_flame_graph.py
+    test_ydb_scheme.py
     test_ydb_sql.py
 )
 

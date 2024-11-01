@@ -60,6 +60,8 @@ public:
 
         TopicSession = Runtime.Register(NewTopicSession(
             topicPath,
+            GetDefaultPqEndpoint(),
+            GetDefaultPqDatabase(),
             Config,
             RowDispatcherActorId,
             0,
@@ -98,8 +100,8 @@ public:
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
         settings.AddColumns("value");
-        settings.AddColumnTypes("Uint64");
-        settings.AddColumnTypes("String");
+        settings.AddColumnTypes("[DataType; Uint64]");
+        settings.AddColumnTypes("[DataType; String]");
         if (!emptyPredicate) {
             settings.SetPredicate("WHERE true");
         }
@@ -336,30 +338,29 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName, 50);
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
-        StartSession(ReadActorId2, source);
+        StartSession(ReadActorId2, source); // slow session
 
         size_t messagesSize = 5;
-        for (size_t i = 0; i < messagesSize; ++i) {
-            const std::vector<TString> data = { Json1 };
-            PQWrite(data, topicName);
-        }
+        auto writeMessages = [&]() {
+            for (size_t i = 0; i < messagesSize; ++i) {
+                const std::vector<TString> data = { Json1 };
+                PQWrite(data, topicName);
+            }
+            Sleep(TDuration::MilliSeconds(100));
+            Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
+        };
+        
+        writeMessages();
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
 
         auto readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT(readMessages == messagesSize);
 
         // Reading from yds is stopped.
-
-        for (size_t i = 0; i < messagesSize; ++i) {
-            const std::vector<TString> data = { Json1 };
-            PQWrite(data, topicName);
-        }
-        Sleep(TDuration::MilliSeconds(100));
-        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
+        writeMessages();
 
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT(readMessages == 0);
-
         readMessages = ReadMessages(ReadActorId2);
         UNIT_ASSERT(readMessages == messagesSize);
 
@@ -369,11 +370,14 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT(readMessages == messagesSize);
 
-        readMessages = ReadMessages(ReadActorId2);
-        UNIT_ASSERT(readMessages == messagesSize);
+        writeMessages();
+        StopSession(ReadActorId2, source);      // delete slow client, clear unread buffer
+        Sleep(TDuration::MilliSeconds(100));
+        Runtime.DispatchEvents({}, Runtime.GetCurrentTime() - TDuration::MilliSeconds(1));
 
+        readMessages = ReadMessages(ReadActorId1);
+        UNIT_ASSERT(readMessages == messagesSize);
         StopSession(ReadActorId1, source);
-        StopSession(ReadActorId2, source);
     }
 
      Y_UNIT_TEST_F(TwoSessionsWithDifferentSchemes, TFixture) {
@@ -383,7 +387,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto source1 = BuildSource(topicName);
         auto source2 = BuildSource(topicName);
         source2.AddColumns("field1");
-        source2.AddColumnTypes("String");
+        source2.AddColumnTypes("[DataType; String]");
 
         StartSession(ReadActorId1, source1);
         StartSession(ReadActorId2, source2);
@@ -391,7 +395,6 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         TString json1 = "{\"dt\":101,\"value\":\"value1\", \"field1\":\"field1\"}";
         TString json2 = "{\"dt\":102,\"value\":\"value2\", \"field1\":\"field2\"}";
 
-        Sleep(TDuration::Seconds(3));
         PQWrite({ json1, json2 }, topicName);
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { "{\"dt\":101,\"value\":\"value1\"}", "{\"dt\":102,\"value\":\"value2\"}" });
@@ -399,7 +402,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         auto source3 = BuildSource(topicName);
         source3.AddColumns("field2");
-        source3.AddColumnTypes("String");
+        source3.AddColumnTypes("[DataType; String]");
         auto readActorId3 = Runtime.AllocateEdgeActor();
         StartSession(readActorId3, source3);
 

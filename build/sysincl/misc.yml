@@ -45,6 +45,14 @@
     - complex.h:     contrib/libs/libm/include/complex.h
     - math.h:        contrib/libs/libm/include/math.h
 
+- source_filter: "^contrib/libs/jemalloc/"
+  includes:
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
+
+- source_filter: "^contrib/libs/libunwind/"
+  includes:
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
+
 - source_filter: "^contrib/tools/bison/"
   includes:
     - error.h:       contrib/tools/bison/lib/error.h

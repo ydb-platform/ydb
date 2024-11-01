@@ -128,10 +128,9 @@ public:
                 ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", e.what()));
                 return false;
             }
-        } else {
-            const auto& params(Event->Get()->Request.GetParams());
-            Params2Proto(params, request);
         }
+        const auto& params(Event->Get()->Request.GetParams());
+        Params2Proto(params, request);
         if (!ValidateRequest(request)) {
             return false;
         }

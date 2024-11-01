@@ -1,9 +1,9 @@
-#include "yt/yt/library/profiling/solomon/registry.h"
 #include <gtest/gtest.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
 
 #include <yt/yt/library/profiling/solomon/exporter.h>
+#include <yt/yt/library/profiling/solomon/registry.h>
 
 namespace NYT::NProfiling {
 namespace {
@@ -40,6 +40,19 @@ TEST(TSolomonExporter, MemoryLeak)
     EXPECT_FALSE(spack->empty());
 
     exporter->Stop();
+}
+
+TEST(TSolomonExporter, MemoryLeakWithSelfProfiling)
+{
+    auto registry = New<TSolomonRegistry>();
+    auto counter = TProfiler{registry, "yt"}.Counter("/foo");
+
+    auto config = New<TSolomonExporterConfig>();
+    config->GridStep = TDuration::Seconds(1);
+    config->EnableCoreProfilingCompatibility = true;
+    config->EnableSelfProfiling = true;
+
+    auto exporter = New<TSolomonExporter>(config, registry);
 }
 
 TEST(TSolomonExporter, ReadJsonHistogram)

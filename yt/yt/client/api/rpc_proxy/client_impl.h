@@ -130,9 +130,9 @@ public:
         const TAlterReplicationCardOptions& options = {}) override;
 
     // Distributed table client
-    TFuture<ITableWriterPtr> CreateParticipantTableWriter(
-        const TDistributedWriteCookiePtr& cookie,
-        const TParticipantTableWriterOptions& options) override;
+    TFuture<ITableWriterPtr> CreateFragmentTableWriter(
+        const TFragmentWriteCookiePtr& cookie,
+        const TFragmentTableWriterOptions& options) override;
 
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
@@ -277,6 +277,10 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobStderrOptions& options) override;
+
+    TFuture<std::vector<TJobTraceEvent>> GetJobTrace(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NApi::TGetJobTraceOptions& options) override;
 
     TFuture<TSharedRef> GetJobFailContext(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -581,7 +585,7 @@ public:
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config) override;
 
 private:

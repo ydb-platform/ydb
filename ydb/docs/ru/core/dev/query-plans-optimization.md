@@ -16,7 +16,7 @@ SELECT season_id, episode_id
 
 Построим план для данного запроса, в {{ ydb-short-name }} это можно сделать двумя способами:
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - {{ ydb-short-name }} CLI
 
@@ -67,7 +67,7 @@ ALTER TABLE episodes
 
 Построим план того же запроса с использованием вторичного индекса `title_index`. Обратите внимание, что вторичный индекс надо явно указать в запросе через конструкцию `VIEW`.
 
-{% list tabs %}
+{% list tabs group=tool %}
 
 - {{ ydb-short-name }} CLI
 

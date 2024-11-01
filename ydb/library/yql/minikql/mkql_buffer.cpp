@@ -1,6 +1,6 @@
 #include "mkql_buffer.h"
 
-#include <ydb/library/yql/utils/rope_over_buffer.h>
+#include <ydb/library/yql/utils/rope/rope_over_buffer.h>
 
 namespace NKikimr {
 

@@ -590,4 +590,68 @@ void TSchemeShard::ScheduleTableStatsBatch(const TActorContext& ctx) {
     }
 }
 
+void TSchemeShard::UpdateShardMetrics(
+    const TShardIdx& shardIdx,
+    const TPartitionStats& newStats)
+{
+    if (newStats.HasBorrowedData)
+        ShardsWithBorrowed.insert(shardIdx);
+    else
+        ShardsWithBorrowed.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_BORROWED_DATA].Set(ShardsWithBorrowed.size());
+
+    if (newStats.HasLoanedData)
+        ShardsWithLoaned.insert(shardIdx);
+    else
+        ShardsWithLoaned.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_LOANED_DATA].Set(ShardsWithLoaned.size());
+
+    THashMap<TShardIdx, TPartitionMetrics>::insert_ctx insertCtx;
+    auto it = PartitionMetricsMap.find(shardIdx, insertCtx);
+    if (it != PartitionMetricsMap.end()) {
+        const auto& metrics = it->second;
+        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].DecrementFor(metrics.SearchHeight);
+        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].DecrementFor(metrics.HoursSinceFullCompaction);
+        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].DecrementFor(metrics.RowDeletes);
+    } else {
+        it = PartitionMetricsMap.insert_direct(std::make_pair(shardIdx, TPartitionMetrics()), insertCtx);
+    }
+
+    auto& metrics = it->second;
+
+    metrics.SearchHeight = newStats.SearchHeight;
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].IncrementFor(metrics.SearchHeight);
+
+    metrics.RowDeletes = newStats.RowDeletes;
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].IncrementFor(metrics.RowDeletes);
+
+    auto now = AppData()->TimeProvider->Now();
+    auto compactionTime = TInstant::Seconds(newStats.FullCompactionTs);
+    if (now >= compactionTime)
+        metrics.HoursSinceFullCompaction = (now - compactionTime).Hours();
+    else
+        metrics.HoursSinceFullCompaction = 0;
+
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].IncrementFor(metrics.HoursSinceFullCompaction);
+}
+
+void TSchemeShard::RemoveShardMetrics(const TShardIdx& shardIdx) {
+    ShardsWithBorrowed.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_BORROWED_DATA].Set(ShardsWithBorrowed.size());
+
+    ShardsWithLoaned.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_LOANED_DATA].Set(ShardsWithLoaned.size());
+
+    auto it = PartitionMetricsMap.find(shardIdx);
+    if (it == PartitionMetricsMap.end())
+        return;
+
+    const auto& metrics = it->second;
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].DecrementFor(metrics.SearchHeight);
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].DecrementFor(metrics.HoursSinceFullCompaction);
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].DecrementFor(metrics.RowDeletes);
+
+    PartitionMetricsMap.erase(it);
+}
+
 }}

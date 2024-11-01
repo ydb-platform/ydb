@@ -596,5 +596,6 @@ message TEvRequestScaleRecommendation {
 }
 
 message TEvResponseScaleRecommendation {
-    optional uint32 RecommendedNodes = 1;
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint32 RecommendedNodes = 2;
 }

@@ -140,10 +140,11 @@ void gf_vect_mul_init(unsigned char c, unsigned char* gftbl);
  * 		only use 2nd element is used.
  * @param src   Pointer to src data array. Must be aligned to 32B.
  * @param dest  Pointer to destination data array. Must be aligned to 32B.
+ * @returns 0 pass, other fail
  */
 
-void gf_vect_mul_base(int len, unsigned char *a, unsigned char *src,
-			unsigned char *dest);
+int gf_vect_mul_base(int len, unsigned char *a, unsigned char *src,
+                      unsigned char *dest);
 
 #ifdef __cplusplus
 }

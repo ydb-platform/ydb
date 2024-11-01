@@ -62,7 +62,7 @@ void ValidateSortColumns(const std::vector<TColumnSortSchema>& columns)
 {
     ValidateKeyColumnCount(columns.size());
 
-    THashSet<TString> names;
+    THashSet<std::string> names;
     for (const auto& column : columns) {
         if (!names.insert(column.Name).second) {
             THROW_ERROR_EXCEPTION("Duplicate sort column name %Qv",
@@ -77,9 +77,11 @@ void ToProto(
     NProto::TSortColumnsExt* protoSortColumns,
     const TSortColumns& sortColumns)
 {
+    using NYT::ToProto;
+
     for (const auto& sortColumn : sortColumns) {
-        protoSortColumns->add_names(sortColumn.Name);
-        protoSortColumns->add_sort_orders(static_cast<int>(sortColumn.SortOrder));
+        protoSortColumns->add_names(ToProto(sortColumn.Name));
+        protoSortColumns->add_sort_orders(ToProto<int>(sortColumn.SortOrder));
     }
 }
 

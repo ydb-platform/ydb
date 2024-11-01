@@ -476,7 +476,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
                 }
             }
 
-            options.ResultOut->Write(str.Data(), str.Size());
+            options.ResultOut->Write(str.data(), str.size());
         }
     }
 

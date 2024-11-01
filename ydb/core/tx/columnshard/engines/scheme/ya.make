@@ -7,6 +7,8 @@ SRCS(
     index_info.cpp
     tier_info.cpp
     column_features.cpp
+    schema_diff.cpp
+    objects_cache.cpp
 )
 
 PEERDIR(

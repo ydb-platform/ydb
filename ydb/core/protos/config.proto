@@ -381,10 +381,11 @@ message TLogConfig {
     optional bool UseLocalTimestamps = 9 [default = false];
     optional string BackendFileName = 10;
     optional string SysLogService = 11;
-    optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
+    optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog/file
     optional TUAClientConfig UAClientConfig = 13;
     optional uint64 TimeThresholdMs = 14 [default = 1000];
     optional bool IgnoreUnknownComponents = 15 [default = true];
+    optional string TenantName = 16;
 }
 
 message TInterconnectConfig {
@@ -617,6 +618,11 @@ message TConveyorConfig {
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
     optional double WorkersCountDouble = 5;
+}
+
+message TPrioritiesQueueConfig {
+    optional bool Enabled = 1 [default = true];
+    optional uint32 Limit = 2 [default = 32];
 }
 
 message TLimiterConfig {
@@ -1194,6 +1200,17 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 CdcInitialScanReadAheadLo = 19 [(ControlOptions) = {
+            Description: "Override for CDC initial scan readahead (low watermark)",
+            MinValue: 0,
+            MaxValue: 67108864,
+            DefaultValue: 0 }];
+        optional uint64 CdcInitialScanReadAheadHi = 20 [(ControlOptions) = {
+            Description: "Override for CDC initial scan readahead (high watermark)",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1394,17 +1411,6 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 200 }];
-        optional uint64 UseNoopSchedulerHDD = 3 [(ControlOptions) = {
-            Description: "Enables noop scheduler for HDD disks only",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0 }];
-        optional uint64 UseNoopSchedulerSSD = 4 [(ControlOptions) = {
-            Description: "Enables noop scheduler for SSD, NVME",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0 }];
-
     }
 
     message TBlobStorageControllerControls {
@@ -1437,8 +1443,9 @@ message TMeteringConfig {
 
 message TAuditConfig {
     enum EFormat {
-        JSON = 1;
-        TXT = 2;
+        JSON = 1;                // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        TXT = 2;                 // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        JSON_LOG_COMPATIBLE = 3; // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
     }
 
     message TStderrBackend {
@@ -1595,6 +1602,7 @@ message THiveConfig {
     optional uint64 MaxPingsInFlight = 78 [default = 1000];
     optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
     optional string CutHistoryAllowList = 79 [default = "DataShard"];
+    optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
 }
 
 message TBlobCacheConfig {
@@ -1647,6 +1655,8 @@ message TColumnShardConfig {
     optional uint32 LagForCompactionBeforeTieringsMs = 22 [default = 3600000];
     optional uint32 OptimizerFreshnessCheckDurationMs = 23 [default = 300000];
     optional uint32 SmallPortionDetectSizeLimit = 24 [default = 1048576];  // 1 << 20
+    optional bool ColumnChunksV0Usage = 25 [default = true];
+    optional bool ColumnChunksV1Usage = 26 [default = true];
 }
 
 message TSchemeShardConfig {
@@ -1669,7 +1679,7 @@ message TSchemeShardConfig {
     repeated TInFlightCounterConfig InFlightCounterConfig = 4;
 
     // number of shards per table
-    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 10];
+    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
 }
 
 message TCompactionConfig {
@@ -2037,9 +2047,10 @@ message TAppConfig {
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
-	optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
+    optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

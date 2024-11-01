@@ -18,4 +18,4 @@ As {{ ydb-short-name }} is a distributed system typically running on a cluster, 
 
 * In [asynchronous replication](../../concepts/async-replication.md) between two {{ ydb-short-name }} databases, one serves as a client to the other.
 
-By default, data in transit encryption is disabled and must be enabled separately for each protocol. They can either share the same set of TLS certificates or use dedicated ones. For instructions on how to enable TLS, refer to the [{#T}](../../deploy/configuration/config.md) section.
+By default, data in transit encryption is disabled and must be enabled separately for each protocol. They can either share the same set of TLS certificates or use dedicated ones. For instructions on how to enable TLS, refer to the [{#T}](../../reference/configuration/tls.md) section.

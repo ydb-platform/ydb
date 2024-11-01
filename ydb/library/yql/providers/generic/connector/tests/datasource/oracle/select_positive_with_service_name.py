@@ -246,7 +246,7 @@ class Factory:
                     datetime.datetime(1970, 1, 1, 0, 0, 0, 000000),
                     datetime.datetime(1970, 1, 1, 1, 1, 1, 111111),
                     datetime.datetime(1970, 1, 1, 2, 1, 1, 111111),
-                    datetime.datetime(1970, 1, 1, 2, 2, 12, 111111),
+                    datetime.datetime(1970, 1, 1, 2, 12, 1, 111111),
                     '{ "TODO" : "unicode" }',
                 ],
             ],

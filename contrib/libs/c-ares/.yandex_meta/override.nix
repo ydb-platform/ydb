@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "1.33.1";
+  version = "1.34.2";
 
   src = fetchFromGitHub {
     owner = "c-ares";
     repo = "c-ares";
     rev= "v${version}";
-    hash = "sha256-aLHTvyAcCNY0mr96D68Ubf4RL0zmU7ARSdjQ59+2Pv0=";
+    hash = "sha256-KGNOc3l+bWifWFnBOLtL0ASJTuYayBOAE6g6gNsl5xk=";
   };
 
   patches = [];

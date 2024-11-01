@@ -94,7 +94,7 @@ private:
                     replicaInfo->ReplicaId = FromProto<TTableReplicaId>(protoReplicaInfo.replica_id());
                     replicaInfo->ClusterName = protoReplicaInfo.cluster_name();
                     replicaInfo->ReplicaPath = protoReplicaInfo.replica_path();
-                    replicaInfo->Mode = ETableReplicaMode(protoReplicaInfo.mode());
+                    replicaInfo->Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                     tableInfo->Replicas.push_back(replicaInfo);
                 }
 
@@ -103,9 +103,8 @@ private:
                     TIndexInfo indexInfo{
                         .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
                         .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
-                        .Predicate = protoIndexInfo.has_predicate()
-                            ? std::make_optional(FromProto<TString>(protoIndexInfo.predicate()))
-                            : std::nullopt,
+                        .Predicate = YT_PROTO_OPTIONAL(protoIndexInfo, predicate),
+                        .UnfoldedColumn = YT_PROTO_OPTIONAL(protoIndexInfo, unfolded_column),
                     };
                     THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
                         "Unsupported secondary index kind %Qlv (client not up-to-date)",

@@ -3422,8 +3422,31 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     } else if (ns == "datetime2" && (name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
-    } else if (ns == "pg") {
-        const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
+    } else if (ns == "pg" || ns == "pgagg" || ns == "pgproc") {
+        bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
+        bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
+        if (!isAggregateFunc && !isNormalFunc) {
+            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: " << name);
+        }
+
+        if (isAggregateFunc && isNormalFunc) {
+            if (ns == "pg") {
+                return new TInvalidBuiltin(pos, TStringBuilder() << "Ambigious function: " << name << ", use either PgAgg:: or PgProc:: namespace");
+            } else if (ns == "pgagg") {
+                isNormalFunc = false;
+            } else {
+                isAggregateFunc = false;
+            }
+        }
+
+        if (isAggregateFunc && ns == "pgproc") {
+            return new TInvalidBuiltin(pos, TStringBuilder() << "Invalid namespace for aggregation function: " << name << ", use either Pg:: or PgAgg:: namespace");
+        }
+
+        if (isNormalFunc && ns == "pgagg") {
+            return new TInvalidBuiltin(pos, TStringBuilder() << "Invalid namespace for normal function: " << name << ", use either Pg:: or PgProc:: namespace");
+        }
+
         if (isAggregateFunc) {
             if (aggMode == EAggregateMode::Distinct) {
                 return new TInvalidBuiltin(pos, "Distinct is not supported yet for PG aggregation ");
@@ -3431,6 +3454,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             return BuildAggrFuncFactoryCallback(name, "", EAggrFuncTypeCallback::PG)(pos, args, aggMode, false);
         } else {
+            YQL_ENSURE(isNormalFunc);
             TVector<TNodePtr> pgCallArgs;
             pgCallArgs.push_back(BuildLiteralRawString(pos, name));
             pgCallArgs.insert(pgCallArgs.end(), args.begin(), args.end());

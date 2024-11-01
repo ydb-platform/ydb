@@ -1538,9 +1538,16 @@ Y_UNIT_TEST(ObfuscatePragma) {
 }
 
 Y_UNIT_TEST(CreateView) {
-    TCases cases = {
-        {"creAte vIEw TheView wiTh (security_invoker = trUE) As SELect 1",
-            "CREATE VIEW TheView WITH (security_invoker = TRUE) AS\nSELECT\n\t1;\n"},
+    TCases cases = {{
+            "creAte vIEw TheView As SELect 1",
+            "CREATE VIEW TheView AS\nSELECT\n\t1;\n"
+        }, {
+            "creAte vIEw If Not ExIsTs TheView As SELect 1",
+            "CREATE VIEW IF NOT EXISTS TheView AS\nSELECT\n\t1;\n"
+        }, {
+            "creAte vIEw TheView wiTh (option = tRuE) As SELect 1",
+            "CREATE VIEW TheView WITH (option = TRUE) AS\nSELECT\n\t1;\n"
+        }
     };
 
     TSetup setup;
@@ -1548,9 +1555,13 @@ Y_UNIT_TEST(CreateView) {
 }
 
 Y_UNIT_TEST(DropView) {
-    TCases cases = {
-        {"dRop viEW theVIEW",
-            "DROP VIEW theVIEW;\n"},
+    TCases cases = {{
+            "dRop viEW theVIEW",
+            "DROP VIEW theVIEW;\n"
+        }, {
+            "dRop viEW iF EXistS theVIEW",
+            "DROP VIEW IF EXISTS theVIEW;\n"
+        }
     };
 
     TSetup setup;
@@ -1579,10 +1590,10 @@ Y_UNIT_TEST(BackupCollectionOperations) {
     TCases cases = {
         {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")",
             "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\");\n"},
-        {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")    DATabase",
-            "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\") DATABASE;\n"},
-        {"creAte  BackuP colLection `-naMe` wIth (a = \"b\")    tabLe      `tbl1`      , TablE `tbl2`",
-            "CREATE BACKUP COLLECTION `-naMe` WITH (a = \"b\") TABLE `tbl1`, TABLE `tbl2`;\n"},
+        {"creAte  BackuP colLection `-naMe`     DATabase wIth (a = \"b\")",
+            "CREATE BACKUP COLLECTION `-naMe` DATABASE WITH (a = \"b\");\n"},
+        {"creAte  BackuP colLection    `-naMe`   (   tabLe      `tbl1`      , TablE `tbl2`) wIth (a = \"b\")",
+            "CREATE BACKUP COLLECTION `-naMe` (TABLE `tbl1`, TABLE `tbl2`) WITH (a = \"b\");\n"},
         {"alTer bACKuP coLLECTION naMe resEt (b, c), seT (x=y, z=false)",
             "ALTER BACKUP COLLECTION naMe\n\tRESET (b, c),\n\tSET (x = y, z = FALSE);\n"},
         {"alTer bACKuP coLLECTION naMe aDD         DATAbase",

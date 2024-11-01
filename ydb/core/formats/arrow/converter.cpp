@@ -31,8 +31,8 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
         }
         case NScheme::NTypeIds::JsonDocument: {
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf());
-            if (!binaryJson.Defined()) {
-                errorMessage = "Invalid JSON for JsonDocument provided";
+            if (binaryJson.IsFail()) {
+                errorMessage = "Invalid JSON for JsonDocument provided: " + binaryJson.GetErrorMessage();
                 return false;
             }
             const auto saved = memPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
@@ -98,8 +98,9 @@ static arrow::Status ConvertColumn(const NScheme::TTypeInfo colType, std::shared
                     }
                 } else {
                     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(valueBuf);
-                    if (!binaryJson.Defined()) {
-                        return arrow::Status::SerializationError("Cannot serialize json: ", valueBuf);
+                    if (binaryJson.IsFail()) {
+                        return arrow::Status::SerializationError("Cannot serialize json (", binaryJson.GetErrorMessage(),
+                            "): ", valueBuf.SubStr(0, Min(valueBuf.Size(), size_t{1024})));
                     }
                     auto appendResult = builder.Append(binaryJson->Data(), binaryJson->Size());
                     if (!appendResult.ok()) {

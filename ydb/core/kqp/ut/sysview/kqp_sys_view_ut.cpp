@@ -731,14 +731,15 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             ])", actual);
         }
 
-        while (true)
+        for (size_t attempt = 0; attempt < 30; ++attempt)
         {
-            Cerr << "... SELECT from partition_stats" << Endl;
+            Cerr << "... SELECT from partition_stats, attempt " << attempt << Endl;
             auto result = session.ExecuteDataQuery(R"(
                 SELECT OwnerId, PartIdx, Path, PathId, TabletId, 
                     RowCount, RowUpdates, RowReads, RangeReadRows,
                     IF(FollowerId = 0, 'L', 'F') AS LeaderFollower
                 FROM `/Root/.sys/partition_stats`
+                WHERE RowCount != 0
                 ORDER BY PathId, PartIdx, LeaderFollower;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             AssertSuccessResult(result);
@@ -752,11 +753,13 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             // Leader and follower have different row stats
             TString actual = FormatResultSetYson(rs);
             CompareYson(R"([
-                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[0u];[0u];[0u];[2u];"F"];
+                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[0u];[0u];[2u];"F"];
                 [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[4u];[1u];[0u];"L"]
             ])", actual);
-            break;
+            return;
         }
+
+        Y_FAIL("Timeout waiting for from partition_stats");
     }    
 }
 

@@ -9,10 +9,10 @@
 
 SCRIPT_DIR="$(dirname $(readlink -f "$0"))"
 UDFS_DIR="${SCRIPT_DIR}/../../udfs"
-if [ -d "${SCRIPT_DIR}/../../../../../yql" ]; then
-UDFS_DIR="${UDFS_DIR};${SCRIPT_DIR}/../../../../../yql/udfs"
+if [ -d "${SCRIPT_DIR}/../../../../../../yql" ]; then
+UDFS_DIR="${UDFS_DIR};${SCRIPT_DIR}/../../../../../../yql/udfs"
 fi
-if [ -d "${SCRIPT_DIR}/../../../../../yql" ]; then
+if [ -d "${SCRIPT_DIR}/../../../../../../yql" ]; then
 PG_EXT_OPT="--pg-ext pg_ext.txt"
 else
 PG_EXT_OPT=

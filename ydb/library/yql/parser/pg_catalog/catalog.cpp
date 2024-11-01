@@ -2362,6 +2362,24 @@ void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
     }
 }
 
+bool HasProc(const TString& name, EProcKind kind) {
+    const auto& catalog = TCatalog::Instance();
+    auto procIdPtr = catalog.State->ProcByName.FindPtr(to_lower(name));
+    if (!procIdPtr) {
+        return false;
+    }
+
+    for (const auto& id : *procIdPtr) {
+        const auto& d = catalog.State->Procs.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->Kind == kind) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool HasReturnSetProc(const TString& name) {
     const auto& catalog = TCatalog::Instance();
     auto procIdPtr = catalog.State->ProcByName.FindPtr(to_lower(name));
@@ -3835,6 +3853,9 @@ TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
 
         protoProc->SetIsStrict(desc.IsStrict);
         protoProc->SetLang(desc.Lang);
+        protoProc->SetResultType(desc.ResultType);
+        protoProc->SetReturnSet(desc.ReturnSet);
+        protoProc->SetKind((ui32)desc.Kind);
     }
 
     TVector<TTableInfoKey> extTables;
@@ -4104,6 +4125,9 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
             desc.Src = protoProc.GetSrc();
             desc.IsStrict = protoProc.GetIsStrict();
             desc.Lang = protoProc.GetLang();
+            desc.ResultType = protoProc.GetResultType();
+            desc.ReturnSet = protoProc.GetReturnSet();
+            desc.Kind = (EProcKind)protoProc.GetKind();
             for (const auto t : protoProc.GetArgType()) {
                 desc.ArgTypes.push_back(t);
             }

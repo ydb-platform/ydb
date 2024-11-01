@@ -8,6 +8,7 @@ ENDIF()
 
 SRCS(
     sensor_ut.cpp
+    sensor_service_ut.cpp
     name_conflicts_ut.cpp
     profiler_ut.cpp
     solomon_ut.cpp

@@ -50,6 +50,13 @@ def build_nm_bundle_path(p):
     return os.path.join(p, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME)
 
 
+def build_nm_store_path(moddir: str) -> str:
+    nots_store_path = os.getenv("NOTS_STORE_PATH", os.path.join(home_dir(), ".nots"))
+    build_path = os.path.join(nots_store_path, "nm_store", moddir)
+
+    return build_path
+
+
 def extract_package_name_from_path(p):
     # if we have scope prefix then we are using the first two tokens, otherwise - only the first one
     parts = p.split("/", 2)

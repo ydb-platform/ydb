@@ -425,6 +425,8 @@ class CancelScope(BaseCancelScope):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> bool | None:
+        del exc_tb
+
         if not self._active:
             raise RuntimeError("This cancel scope is not active")
         if current_task() is not self._host_task:
@@ -441,42 +443,46 @@ class CancelScope(BaseCancelScope):
                 "current cancel scope"
             )
 
-        self._active = False
-        if self._timeout_handle:
-            self._timeout_handle.cancel()
-            self._timeout_handle = None
+        try:
+            self._active = False
+            if self._timeout_handle:
+                self._timeout_handle.cancel()
+                self._timeout_handle = None
 
-        self._tasks.remove(self._host_task)
-        if self._parent_scope is not None:
-            self._parent_scope._child_scopes.remove(self)
-            self._parent_scope._tasks.add(self._host_task)
+            self._tasks.remove(self._host_task)
+            if self._parent_scope is not None:
+                self._parent_scope._child_scopes.remove(self)
+                self._parent_scope._tasks.add(self._host_task)
 
-        host_task_state.cancel_scope = self._parent_scope
+            host_task_state.cancel_scope = self._parent_scope
 
-        # Undo all cancellations done by this scope
-        if self._cancelling is not None:
-            while self._cancel_calls:
-                self._cancel_calls -= 1
-                if self._host_task.uncancel() <= self._cancelling:
-                    break
+            # Undo all cancellations done by this scope
+            if self._cancelling is not None:
+                while self._cancel_calls:
+                    self._cancel_calls -= 1
+                    if self._host_task.uncancel() <= self._cancelling:
+                        break
 
-        # We only swallow the exception iff it was an AnyIO CancelledError, either
-        # directly as exc_val or inside an exception group and there are no cancelled
-        # parent cancel scopes visible to us here
-        not_swallowed_exceptions = 0
-        swallow_exception = False
-        if exc_val is not None:
-            for exc in iterate_exceptions(exc_val):
-                if self._cancel_called and isinstance(exc, CancelledError):
-                    if not (swallow_exception := self._uncancel(exc)):
+            # We only swallow the exception iff it was an AnyIO CancelledError, either
+            # directly as exc_val or inside an exception group and there are no cancelled
+            # parent cancel scopes visible to us here
+            not_swallowed_exceptions = 0
+            swallow_exception = False
+            if exc_val is not None:
+                for exc in iterate_exceptions(exc_val):
+                    if self._cancel_called and isinstance(exc, CancelledError):
+                        if not (swallow_exception := self._uncancel(exc)):
+                            not_swallowed_exceptions += 1
+                    else:
                         not_swallowed_exceptions += 1
-                else:
-                    not_swallowed_exceptions += 1
 
-        # Restart the cancellation effort in the closest visible, cancelled parent
-        # scope if necessary
-        self._restart_cancellation_in_parent()
-        return swallow_exception and not not_swallowed_exceptions
+            # Restart the cancellation effort in the closest visible, cancelled parent
+            # scope if necessary
+            self._restart_cancellation_in_parent()
+            return swallow_exception and not not_swallowed_exceptions
+        finally:
+            self._host_task = None
+            del exc_val
 
     @property
     def _effectively_cancelled(self) -> bool:
@@ -683,6 +689,26 @@ class _AsyncioTaskStatus(abc.TaskStatus):
         _task_states[task].parent_id = self._parent_id
 
 
+async def _wait(tasks: Iterable[asyncio.Task[object]]) -> None:
+    tasks = set(tasks)
+    waiter = get_running_loop().create_future()
+
+    def on_completion(task: asyncio.Task[object]) -> None:
+        tasks.discard(task)
+        if not tasks and not waiter.done():
+            waiter.set_result(None)
+
+    for task in tasks:
+        task.add_done_callback(on_completion)
+        del task
+
+    try:
+        await waiter
+    finally:
+        while tasks:
+            tasks.pop().remove_done_callback(on_completion)
+
+
 class TaskGroup(abc.TaskGroup):
     def __init__(self) -> None:
         self.cancel_scope: CancelScope = CancelScope()
@@ -701,50 +727,53 @@ class TaskGroup(abc.TaskGroup):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> bool | None:
-        if exc_val is not None:
-            self.cancel_scope.cancel()
-            if not isinstance(exc_val, CancelledError):
-                self._exceptions.append(exc_val)
-
         try:
-            if self._tasks:
-                with CancelScope() as wait_scope:
-                    while self._tasks:
-                        try:
-                            await asyncio.wait(self._tasks)
-                        except CancelledError as exc:
-                            # Shield the scope against further cancellation attempts,
-                            # as they're not productive (#695)
-                            wait_scope.shield = True
-                            self.cancel_scope.cancel()
+            if exc_val is not None:
+                self.cancel_scope.cancel()
+                if not isinstance(exc_val, CancelledError):
+                    self._exceptions.append(exc_val)
 
-                            # Set exc_val from the cancellation exception if it was
-                            # previously unset. However, we should not replace a native
-                            # cancellation exception with one raise by a cancel scope.
-                            if exc_val is None or (
-                                isinstance(exc_val, CancelledError)
-                                and not is_anyio_cancellation(exc)
-                            ):
-                                exc_val = exc
-            else:
-                # If there are no child tasks to wait on, run at least one checkpoint
-                # anyway
-                await AsyncIOBackend.cancel_shielded_checkpoint()
+            try:
+                if self._tasks:
+                    with CancelScope() as wait_scope:
+                        while self._tasks:
+                            try:
+                                await _wait(self._tasks)
+                            except CancelledError as exc:
+                                # Shield the scope against further cancellation attempts,
+                                # as they're not productive (#695)
+                                wait_scope.shield = True
+                                self.cancel_scope.cancel()
 
-            self._active = False
-            if self._exceptions:
-                raise BaseExceptionGroup(
-                    "unhandled errors in a TaskGroup", self._exceptions
-                )
-            elif exc_val:
-                raise exc_val
-        except BaseException as exc:
-            if self.cancel_scope.__exit__(type(exc), exc, exc.__traceback__):
-                return True
+                                # Set exc_val from the cancellation exception if it was
+                                # previously unset. However, we should not replace a native
+                                # cancellation exception with one raise by a cancel scope.
+                                if exc_val is None or (
+                                    isinstance(exc_val, CancelledError)
+                                    and not is_anyio_cancellation(exc)
+                                ):
+                                    exc_val = exc
+                else:
+                    # If there are no child tasks to wait on, run at least one checkpoint
+                    # anyway
+                    await AsyncIOBackend.cancel_shielded_checkpoint()
 
-            raise
+                self._active = False
+                if self._exceptions:
+                    raise BaseExceptionGroup(
+                        "unhandled errors in a TaskGroup", self._exceptions
+                    )
+                elif exc_val:
+                    raise exc_val
+            except BaseException as exc:
+                if self.cancel_scope.__exit__(type(exc), exc, exc.__traceback__):
+                    return True
 
-        return self.cancel_scope.__exit__(exc_type, exc_val, exc_tb)
+                raise
+
+            return self.cancel_scope.__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            del exc_val, exc_tb, self._exceptions
 
     def _spawn(
         self,
@@ -1731,9 +1760,10 @@ class Lock(BaseLock):
         self._waiters: deque[tuple[asyncio.Task, asyncio.Future]] = deque()
 
     async def acquire(self) -> None:
+        task = cast(asyncio.Task, current_task())
         if self._owner_task is None and not self._waiters:
             await AsyncIOBackend.checkpoint_if_cancelled()
-            self._owner_task = current_task()
+            self._owner_task = task
 
             # Unless on the "fast path", yield control of the event loop so that other
             # tasks can run too
@@ -1746,7 +1776,9 @@ class Lock(BaseLock):
 
             return
 
-        task = cast(asyncio.Task, current_task())
+        if self._owner_task == task:
+            raise RuntimeError("Attempted to acquire an already held Lock")
+
         fut: asyncio.Future[None] = asyncio.Future()
         item = task, fut
         self._waiters.append(item)
@@ -1762,9 +1794,13 @@ class Lock(BaseLock):
         self._waiters.remove(item)
 
     def acquire_nowait(self) -> None:
+        task = cast(asyncio.Task, current_task())
         if self._owner_task is None and not self._waiters:
-            self._owner_task = current_task()
+            self._owner_task = task
             return
+
+        if self._owner_task is task:
+            raise RuntimeError("Attempted to acquire an already held Lock")
 
         raise WouldBlock
 

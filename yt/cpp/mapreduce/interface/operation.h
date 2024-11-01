@@ -17,11 +17,12 @@
 #include <library/cpp/type_info/type_info.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/variant.h>
 #include <util/generic/vector.h>
 #include <util/generic/maybe.h>
 #include <util/system/file.h>
 #include <util/system/types.h>
+
+#include <variant>
 
 namespace NYT {
 
@@ -3043,6 +3044,70 @@ struct TGetFailedJobInfoOptions
     ///
     /// @brief How much of stderr tail should be downloaded.
     FLUENT_FIELD_DEFAULT(ui64, StderrTailSize, 64 * 1024);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+///
+/// @brief Options for @ref NYT::IClient::GetJobTrace.
+struct TGetJobTraceOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TGetJobTraceOptions;
+    /// @endcond
+
+    ///
+    /// @brief Id of the job.
+    FLUENT_FIELD_OPTION(TJobId, JobId);
+
+    ///
+    /// @brief Id of the trace.
+    FLUENT_FIELD_OPTION(TJobTraceId, TraceId);
+
+    ///
+    /// @brief Search for traces with time >= `FromTime`.
+    FLUENT_FIELD_OPTION(i64, FromTime);
+
+    ///
+    /// @brief Search for traces with time <= `ToTime`.
+    FLUENT_FIELD_OPTION(i64, ToTime);
+
+    ///
+    /// @brief Search for traces with event index >= `FromEventIndex`.
+    FLUENT_FIELD_OPTION(i64, FromEventIndex);
+
+    ///
+    /// @brief Search for traces with event index >= `ToEventIndex`.
+    FLUENT_FIELD_OPTION(i64, ToEventIndex);
+};
+
+///
+/// @brief Response for @ref NYT::IOperation::GetJobTrace.
+struct TJobTraceEvent
+{
+    ///
+    /// @brief Id of the operation.
+    TOperationId OperationId;
+
+    ///
+    /// @brief Id of the job.
+    TJobId JobId;
+
+    ///
+    /// @brief Id of the trace.
+    TJobTraceId TraceId;
+
+    ///
+    /// @brief Index of the trace event.
+    i64 EventIndex;
+
+    ///
+    /// @brief Raw evenr in json format.
+    TString Event;
+
+    ///
+    /// @brief Time of the event.
+    TInstant EventTime;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

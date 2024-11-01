@@ -31,6 +31,7 @@
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #ifndef GRND_RANDOM
 #include <sys/random.h>
 #endif
@@ -51,6 +52,43 @@
 # define __SI_PAD_SIZE        ((__SI_MAX_SIZE / sizeof (int)) - 4)
 #else
 # define __SI_PAD_SIZE        ((__SI_MAX_SIZE / sizeof (int)) - 3)
+#endif
+#endif
+
+
+#if !defined(SYS_newfstatat)
+#if defined(__x86_64__)
+    #define SYS_newfstatat 262
+#elif defined(__i386__)
+    #error Unsupported syscall
+#elif defined(__aarch64__)
+    #define SYS_newfstatat 79
+#elif defined(__arm__)
+    #error Unsupported syscall
+#elif defined(__powerpc__)
+    #define SYS_newfstatat 291
+#else
+#error Unsupported platform
+#endif
+#endif
+
+#if !defined(SYS_clone3)
+    #define SYS_clone3 435
+#endif
+
+#if !defined(SYS_rseq)
+#if defined(__x86_64__)
+    #define SYS_rseq 334
+#elif defined(__i386__)
+    #define SYS_rseq 386
+#elif defined(__aarch64__)
+    #define SYS_rseq 293
+#elif defined(__arm__)
+    #define SYS_rseq 398
+#elif defined(__powerpc__)
+    #define SYS_rseq 387
+#else
+#error Unsupported platform
 #endif
 #endif
 
@@ -308,6 +346,7 @@ int main(int argc, char **argv) {
                 Allow(clock_gettime),
                 Allow(clock_nanosleep),
                 Allow(clone),
+                Allow(clone3),
                 Allow(close),
 #ifndef _arm64_
                 Allow(creat),
@@ -378,6 +417,7 @@ int main(int argc, char **argv) {
                 Allow(munlockall),
                 Allow(munmap),
                 Allow(nanosleep),
+                Allow(newfstatat),
 #ifndef _arm64_
                 Allow(open),
 #endif
@@ -399,6 +439,7 @@ int main(int argc, char **argv) {
 #ifndef _arm64_
                 Allow(rmdir),
 #endif
+                Allow(rseq),
                 Allow(rt_sigaction),
                 Allow(rt_sigpending),
                 Allow(rt_sigprocmask),

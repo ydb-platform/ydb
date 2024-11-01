@@ -641,6 +641,7 @@ private:
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         pipeline->Add(CreateYtPeepholeTransformer(State_, {}), "Peephole");
         pipeline->Add(CreateYtWideFlowTransformer(State_), "WideFlow");
+        pipeline->Add(CreateYtBlockInputTransformer(State_), "BlockInput");
     }
 
     void AfterOptimize(TTransformationPipeline*) const final {}

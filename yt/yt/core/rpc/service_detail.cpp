@@ -587,6 +587,14 @@ public:
         return ExecutionTime_;
     }
 
+    void RecordThrottling(TDuration throttleDuration) override
+    {
+        ThrottlingTime_ = ThrottlingTime_ ? *ThrottlingTime_ + throttleDuration : throttleDuration;
+        if (ExecutionTime_) {
+            *ExecutionTime_ -= throttleDuration;
+        }
+    }
+
     TTraceContextPtr GetTraceContext() const override
     {
         return TraceContext_;
@@ -711,6 +719,7 @@ private:
     std::optional<TInstant> RunInstant_;
     std::optional<TInstant> ReplyInstant_;
     std::optional<TInstant> CancelInstant_;
+    std::optional<TDuration> ThrottlingTime_;
 
     std::optional<TDuration> ExecutionTime_;
     std::optional<TDuration> TotalTime_;
@@ -1018,6 +1027,9 @@ private:
 
         ReplyInstant_ = NProfiling::GetInstant();
         ExecutionTime_ = RunInstant_ ? *ReplyInstant_ - *RunInstant_ : TDuration();
+        if (RunInstant_ && ThrottlingTime_) {
+            *ExecutionTime_ -= *ThrottlingTime_;
+        }
         TotalTime_ = *ReplyInstant_ - ArriveInstant_;
 
         MethodPerformanceCounters_->ExecutionTimeCounter.Record(*ExecutionTime_);
@@ -1121,7 +1133,7 @@ private:
                 TraceContext_->AddTag(RequestUser, builder.Flush());
             }
         }
-        YT_LOG_EVENT_WITH_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
+        YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
     }
 
     void LogResponse() override
@@ -1168,7 +1180,7 @@ private:
         if (TraceContext_ && TraceContext_->IsRecorded()) {
             TraceContext_->AddTag(ResponseInfoAnnotation, logMessage);
         }
-        YT_LOG_EVENT_WITH_ANCHOR(Logger, LogLevel_, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
+        YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
     }
 
 
@@ -1240,7 +1252,7 @@ private:
             ToProto(header.mutable_realm_id(), GetRealmId());
         }
         header.set_sequence_number(payload->SequenceNumber);
-        header.set_codec(static_cast<int>(payload->Codec));
+        header.set_codec(ToProto(payload->Codec));
 
         auto message = CreateStreamingPayloadMessage(header, payload->Attachments);
 
@@ -1860,7 +1872,7 @@ void TServiceBase::OnRequestAuthenticated(
                 return;
             }
         }
-        requestHeader.set_user(ToProto<TProtobufString>(authResult.User));
+        requestHeader.set_user(ToProto(authResult.User));
 
         auto* credentialsExt = requestHeader.MutableExtension(
             NRpc::NProto::TCredentialsExt::credentials_ext);

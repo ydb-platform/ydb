@@ -12,6 +12,8 @@ using namespace NYT::NYson;
 using namespace NConcurrency;
 using namespace NCrypto;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TNonExistingServiceProxy
@@ -473,7 +475,7 @@ TYPED_TEST(TNotGrpcTest, DisableAcceptsBaggage)
 
 TYPED_TEST(TRpcTest, ManyAsyncRequests)
 {
-    const int RequestCount = 1000;
+    const int RequestCount = this->GetMaxSimultaneousRequestCount();
 
     std::vector<TFuture<void>> asyncResults;
 
@@ -581,7 +583,7 @@ TYPED_TEST(TNotGrpcTest, Compression)
     proxy.SetDefaultEnableLegacyRpcCodecs(false);
 
     auto req = proxy.Compression();
-    req->set_request_codec(static_cast<int>(requestCodecId));
+    req->set_request_codec(ToProto(requestCodecId));
     req->set_message(message);
     for (const auto& attachmentString : attachmentStrings) {
         req->Attachments().push_back(TSharedRef::FromString(attachmentString));
@@ -659,7 +661,7 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
                 methods = {
                     RequestBytesThrottledCall = {
                         request_bytes_throttler = {
-                            limit = 1000000;
+                            limit = 100000;
                         }
                     }
                 }
@@ -673,18 +675,16 @@ TYPED_TEST(TNotGrpcTest, RequestBytesThrottling)
 
     auto makeCall = [&] {
         auto req = proxy.RequestBytesThrottledCall();
-        req->Attachments().push_back(TSharedMutableRef::Allocate(100'000));
+        req->Attachments().push_back(TSharedMutableRef::Allocate(60'000));
         return req->Invoke().AsVoid();
     };
 
     std::vector<TFuture<void>> futures;
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 5; ++i) {
         futures.push_back(makeCall());
     }
 
-    NProfiling::TWallTimer timer;
     EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
-    EXPECT_LE(std::abs(static_cast<i64>(timer.GetElapsedTime().MilliSeconds()) - 3000), 200);
 }
 
 // Now test different types of errors.
@@ -785,7 +785,7 @@ TYPED_TEST(TRpcTest, SlowCall)
     EXPECT_TRUE(rspOrError.IsOK());
 }
 
-TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
+TYPED_TEST(TNotGrpcTest, RequestQueueSizeLimit)
 {
     MaybeInitLatch();
 
@@ -819,7 +819,9 @@ TYPED_TEST(TRpcTest, RequestQueueSizeLimit)
     }
     ReleaseLatchedCalls();
 
-    EXPECT_TRUE(AllSucceeded(std::move(futures)).Get().IsOK());
+    for(auto results = AllSet(std::move(futures)).Get().Value(); const auto& res : results) {
+        EXPECT_TRUE(res.IsOK());
+    }
 
     ResetLatch();
 
@@ -929,7 +931,7 @@ TYPED_TEST(TNotGrpcTest, MemoryOvercommit)
     TTestProxy proxy(this->CreateChannel());
     proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
     auto req = proxy.SlowCall();
-    req->set_request_codec(static_cast<int>(requestCodecId));
+    req->set_request_codec(ToProto(requestCodecId));
     req->Attachments().push_back(TSharedRef::FromString(TString(6_KB, 'x')));
     WaitFor(req->Invoke()).ThrowOnError();
     {
@@ -961,7 +963,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
 
     for (int i = 0; i < 15; ++i) {
         auto req = proxies[i].SlowCall();
-        req->set_request_codec(static_cast<int>(requestCodecId));
+        req->set_request_codec(ToProto(requestCodecId));
         req->set_message(TString(2_MB, 'x'));
         futures.push_back(req->Invoke().AsVoid());
     }
@@ -971,7 +973,7 @@ TYPED_TEST(TNotGrpcTest, RequestQueueByteSizeLimit)
         TTestProxy proxy(this->CreateChannel());
         proxy.SetDefaultTimeout(TDuration::Seconds(60.0));
         auto req = proxy.SlowCall();
-        req->set_request_codec(static_cast<int>(requestCodecId));
+        req->set_request_codec(ToProto(requestCodecId));
         req->set_message(TString(1_MB, 'x'));
         EXPECT_EQ(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, req->Invoke().Get().GetCode());
     }

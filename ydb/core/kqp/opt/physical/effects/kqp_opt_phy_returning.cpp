@@ -204,7 +204,7 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (!upsert.Input().Maybe<TDqPrecompute>() && !upsert.Input().Maybe<TDqPhyPrecompute>()) {
+    if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>()) {
         return node;
     }
 
@@ -226,7 +226,7 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (!del.Input().Maybe<TDqPrecompute>() && !del.Input().Maybe<TDqPhyPrecompute>()) {
+    if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>()) {
         return node;
     }
 

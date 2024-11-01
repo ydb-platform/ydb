@@ -529,6 +529,10 @@ TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TString& sess
         request.set_include_set_val(true);
     }
 
+    if (settings.WithShardNodesInfo_) {
+        request.set_include_shard_nodes_info(true);
+    }
+
     auto promise = NewPromise<TDescribeTableResult>();
 
     auto extractor = [promise, settings]

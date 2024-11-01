@@ -15,6 +15,7 @@ private:
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
+    std::optional<ui64> WaitingCompactionPriority;
 
     std::shared_ptr<TBackgroundControllerCounters> Counters;
     bool ActiveCleanupPortions = false;
@@ -25,20 +26,34 @@ public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
         : Counters(std::move(counters)) {
     }
-
     THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
+
+    void UpdateWaitingPriority(const ui64 priority) {
+        if (!WaitingCompactionPriority || *WaitingCompactionPriority < priority) {
+            WaitingCompactionPriority = priority;
+        }
+    }
+
+    void ResetWaitingPriority() {
+        WaitingCompactionPriority.reset();
+    }
+
+    std::optional<ui64> GetWaitingPriorityOptional() {
+        return WaitingCompactionPriority;
+    }
 
     void CheckDeadlines();
     void CheckDeadlinesIndexation();
 
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
-        Y_ABORT_UNLESS(ActiveCompactionInfo.erase(info.GetPathId()));
+        auto it = ActiveCompactionInfo.find(info.GetPathId());
+        AFL_VERIFY(it != ActiveCompactionInfo.end());
+        if (it->second.Finish()) {
+            ActiveCompactionInfo.erase(it);
+        }
         Counters->OnCompactionFinish(info.GetPathId());
-    }
-    const TCurrentCompaction& GetActiveCompaction() const {
-        return ActiveCompactionInfo;
     }
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();

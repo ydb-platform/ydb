@@ -38,11 +38,13 @@ NTableClient::TUnversionedOwningRow MakeRow(
 class TNamedValue
 {
 public:
-    struct TAny {
+    struct TAny
+    {
         TString Value;
     };
 
-    struct TComposite {
+    struct TComposite
+    {
         TString Value;
     };
 

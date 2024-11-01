@@ -170,8 +170,8 @@ TDuration TRetryEventsQueue::TRetryState::RandomizeDelay(TDuration baseDelay) {
 }
 
 void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
-    stream << "RetryQueue: id " << EventQueueId << ", NextSeqNo " 
-        << NextSeqNo << ", MyConfirmedSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
+    stream << "id " << EventQueueId << ", NextSeqNo "
+        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
 }
 
 

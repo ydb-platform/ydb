@@ -451,6 +451,12 @@ message TMoveIndex {
     optional TRemapIndexPathId ReMapIndex = 3;
 }
 
+
+message TCreateIncrementalBackupSrc {
+    optional TSendSnapshot SendSnapshot = 1;
+    optional TCreateCdcStreamNotice CreateCdcStreamNotice = 2;
+}
+
 message TFlatSchemeTransaction {
     optional NKikimrSchemeOp.TTableDescription CreateTable = 1;
     optional NKikimrSchemeOp.TTableDescription DropTable = 2;
@@ -482,6 +488,7 @@ message TFlatSchemeTransaction {
     optional TMoveIndex MoveIndex = 21;
 
     optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
+    optional TCreateIncrementalBackupSrc CreateIncrementalBackupSrc = 23;
 }
 
 message TDistributedEraseTransaction {
@@ -847,7 +854,7 @@ message TEvObjectStorageListingResponse {
     optional uint32 Status = 2;
     optional string ErrorDescription = 3;
     repeated string CommonPrefixesRows = 4;
-    repeated bytes ContentsRows = 5;        // TSerializedCellVec
+    repeated bytes ContentsRows = 5; // TSerializedCellVec
     optional bool MoreRows = 6;
 }
 
@@ -1198,10 +1205,24 @@ message TEvGetRSInfoResponse {
         optional uint64 SeqNo = 6;
     }
 
+    message TExpectation {
+        optional uint64 Source = 1;
+        optional uint64 TxId = 2;
+        optional uint64 Step = 3;
+    }
+
+    message TPipe {
+        optional uint64 Destination = 1;
+        optional uint64 OutReadSets = 2;
+        optional bool Subscribed = 3;
+    }
+
     optional TStatus Status = 1;
     repeated TOutRSInfo OutReadSets = 2;
     repeated TRSAckInfo OutRSAcks = 3;
     repeated TRSAckInfo DelayedRSAcks = 4;
+    repeated TExpectation Expectations = 5;
+    repeated TPipe Pipes = 6;
 }
 
 message TEvGetDataHistogramRequest {

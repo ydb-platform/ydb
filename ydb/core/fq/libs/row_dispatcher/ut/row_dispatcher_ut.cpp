@@ -28,6 +28,8 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
 
     NActors::TActorId RegisterTopicSession(
         const TString& /*topicPath*/,
+        const TString& /*endpoint*/,
+        const TString& /*database*/,
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         ui32 /*partitionId*/,

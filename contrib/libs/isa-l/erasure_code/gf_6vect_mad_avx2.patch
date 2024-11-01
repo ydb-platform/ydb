@@ -1,6 +1,0 @@
-182,186d181
-< %ifidn __OUTPUT_FORMAT__, macho64
-< global _gf_6vect_mad_avx2:ISAL_SYM_TYPE_FUNCTION
-< func(_gf_6vect_mad_avx2)
-< %endif
-< 

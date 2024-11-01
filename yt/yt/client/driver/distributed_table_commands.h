@@ -45,8 +45,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 // -> Cookie
-class TParticipantWriteTableCommand
-    : public TTypedCommand<NApi::TParticipantTableWriterOptions>
+class TWriteTableFragmentCommand
+    : public TTypedCommand<NApi::TFragmentTableWriterOptions>
     , private TWriteTableCommand
 {
 public:
@@ -54,7 +54,7 @@ public:
     // ambiguity in dispatch.
     void Execute(ICommandContextPtr context) override;
 
-    REGISTER_YSON_STRUCT_LITE(TParticipantWriteTableCommand);
+    REGISTER_YSON_STRUCT_LITE(TWriteTableFragmentCommand);
 
     static void Register(TRegistrar registrar);
 

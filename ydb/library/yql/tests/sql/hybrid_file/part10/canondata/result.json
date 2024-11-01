@@ -1245,6 +1245,20 @@
             "uri": "https://{canondata_backend}/1130705/2dbc543e7e2156e1086b7eff9aaab72ade9022c4/resource.tar.gz#test.test_in-in_with_list_dict-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[in-large_in_YQL-19183--Debug]": [
+        {
+            "checksum": "9cf3548e7c262c9a9f1d9fd7924cfb92",
+            "size": 593,
+            "uri": "https://{canondata_backend}/1881367/943a50aaa7841517b3581cb3efc1c4693dfe6c56/resource.tar.gz#test.test_in-large_in_YQL-19183--Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[in-large_in_YQL-19183--Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1881367/943a50aaa7841517b3581cb3efc1c4693dfe6c56/resource.tar.gz#test.test_in-large_in_YQL-19183--Plan_/plan.txt"
+        }
+    ],
     "test.test[insert-merge_publish--Debug]": [
         {
             "checksum": "64ebc7e15210475430faab9682fa1c41",
@@ -2825,6 +2839,20 @@
             "checksum": "c2530f6062efb684059762f4a4406db3",
             "size": 3868,
             "uri": "https://{canondata_backend}/1130705/2dbc543e7e2156e1086b7eff9aaab72ade9022c4/resource.tar.gz#test.test_select-where_cast-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[seq_mode-simple2-default.txt-Debug]": [
+        {
+            "checksum": "12da801b7096b8db59ccb8ca21687fa2",
+            "size": 389,
+            "uri": "https://{canondata_backend}/1600758/0b2ec7f57dbbd2c69f7894fb1ef04f94367de8d9/resource.tar.gz#test.test_seq_mode-simple2-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[seq_mode-simple2-default.txt-Plan]": [
+        {
+            "checksum": "a3b64a2cf9903b3868a2dd88a18fc46e",
+            "size": 922,
+            "uri": "https://{canondata_backend}/1600758/0b2ec7f57dbbd2c69f7894fb1ef04f94367de8d9/resource.tar.gz#test.test_seq_mode-simple2-default.txt-Plan_/plan.txt"
         }
     ],
     "test.test[simple_columns-simple_columns_join_all-default.txt-Debug]": [

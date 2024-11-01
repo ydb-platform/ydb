@@ -54,7 +54,7 @@ struct TEvPrivate {
         EvStatus,
         EvDataAfterFilteration,
         EvDataFiltered,
-        EvPrintState,
+        EvSendStatistic,
         EvStartParsing,
         EvEnd
     };
@@ -63,7 +63,7 @@ struct TEvPrivate {
     // Events
     struct TEvPqEventsReady : public NActors::TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
     struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
-    struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
+    struct TEvSendStatistic : public NActors::TEventLocal<TEvSendStatistic, EvSendStatistic> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvStartParsing : public NActors::TEventLocal<TEvStartParsing, EvStartParsing> {};
 
@@ -85,7 +85,7 @@ struct TEvPrivate {
     };
 };
 
-ui64 PrintStatePeriodSec = 60;
+ui64 SendStatisticPeriodSec = 5;
 ui64 MaxBatchSizeBytes = 10000000;
 ui64 MaxHandledEvents = 1000;
 
@@ -97,8 +97,8 @@ class TTopicSession : public TActorBootstrapped<TTopicSession> {
 private:
     using TParserInputType = TSet<std::pair<TString, TString>>;
 
-    struct ClientsInfo {
-        ClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
+    struct TClientsInfo {
+        TClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
         {
@@ -110,7 +110,7 @@ private:
         NActors::TActorId ReadActorId;
         std::unique_ptr<TJsonFilter> Filter;        // empty if no predicate
         TQueue<std::pair<ui64, TString>> Buffer;
-        ui64 UsedSize = 0;
+        ui64 UnreadBytes = 0;
         bool DataArrivedSent = false;
         TMaybe<ui64> NextMessageOffset;
         ui64 LastSendedNextMessageOffset = 0;
@@ -137,6 +137,8 @@ private:
     };
 
     const TString TopicPath;
+    const TString Endpoint;
+    const TString Database;
     NActors::TActorId RowDispatcherActorId;
     ui32 PartitionId;
     NYdb::TDriver Driver;
@@ -149,11 +151,11 @@ private:
     ui64 LastMessageOffset = 0;
     bool IsWaitingEvents = false;
     bool IsStartParsingScheduled = false;
-    THashMap<NActors::TActorId, ClientsInfo> Clients;
+    THashMap<NActors::TActorId, TClientsInfo> Clients;
     THashSet<NActors::TActorId> ClientsWithoutPredicate;
     std::unique_ptr<TJsonParser> Parser;
     NConfig::TRowDispatcherConfig Config;
-    ui64 UsedSize = 0;
+    ui64 UnreadBytes = 0;
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
     TParserSchema ParserSchema;
@@ -163,6 +165,8 @@ private:
 public:
     explicit TTopicSession(
         const TString& topicPath,
+        const TString& endpoint,
+        const TString& database,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
         ui32 partitionId,
@@ -185,16 +189,16 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void DoParsing(bool force = false);
-    void DoFiltering(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& parsedValues);
-    void SendData(ClientsInfo& info);
+    void DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
+    void SendData(TClientsInfo& info);
     void UpdateParser();
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter = nullptr);
-    void SendDataArrived(ClientsInfo& client);
+    void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
     void HandleNewEvents();
     TInstant GetMinStartingMessageTimestamp() const;
-    void AddDataToClient(ClientsInfo& client, ui64 offset, const TString& json);
+    void AddDataToClient(TClientsInfo& client, ui64 offset, const TString& json);
 
     std::pair<NYql::NUdf::TUnboxedValuePod, i64> CreateItem(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message);
 
@@ -203,17 +207,17 @@ private:
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
-    void Handle(NFq::TEvPrivate::TEvPrintState::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&);
     void Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr&);
     void Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     void HandleException(const std::exception& err);
 
-    void PrintInternalState();
+    void SendStatistic();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TVector<TVector<std::string_view>> RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues);
+    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
-    void UpdateFieldsIds(ClientsInfo& clientInfo);
+    void UpdateFieldsIds(TClientsInfo& clientInfo);
 
 private:
 
@@ -223,7 +227,7 @@ private:
         hFunc(NFq::TEvPrivate::TEvDataAfterFilteration, Handle);
         hFunc(NFq::TEvPrivate::TEvStatus, Handle);
         hFunc(NFq::TEvPrivate::TEvDataFiltered, Handle);
-        hFunc(NFq::TEvPrivate::TEvPrintState, Handle);
+        hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         sFunc(NFq::TEvPrivate::TEvStartParsing, DoParsing);
@@ -242,12 +246,14 @@ private:
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
-        IgnoreFunc(NFq::TEvPrivate::TEvPrintState);
+        IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
     })
 };
 
 TTopicSession::TTopicSession(
     const TString& topicPath,
+    const TString& endpoint,
+    const TString& database,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
     ui32 partitionId,
@@ -256,6 +262,8 @@ TTopicSession::TTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
+    , Endpoint(endpoint)
+    , Database(database)
     , RowDispatcherActorId(rowDispatcherActorId)
     , PartitionId(partitionId)
     , Driver(std::move(driver))
@@ -276,7 +284,7 @@ void TTopicSession::Bootstrap() {
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
     Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
     Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvStatus());
-    Schedule(TDuration::Seconds(PrintStatePeriodSec), new NFq::TEvPrivate::TEvPrintState());
+    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
 }
 
 void TTopicSession::PassAway() {
@@ -290,8 +298,8 @@ void TTopicSession::SubscribeOnNextEvent() {
         return;
     }
 
-    if (Config.GetMaxSessionUsedMemory() && UsedSize > Config.GetMaxSessionUsedMemory()) {
-        LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UsedSize << " bytes), skip subscribing to WaitEvent()");
+    if (Config.GetMaxSessionUsedMemory() && UnreadBytes > Config.GetMaxSessionUsedMemory()) {
+        LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UnreadBytes << " bytes), skip subscribing to WaitEvent()");
         return;
     }
 
@@ -306,8 +314,8 @@ void TTopicSession::SubscribeOnNextEvent() {
 
 NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) const {
     NYdb::NTopic::TTopicClientSettings opts;
-    opts.Database(sourceParams.GetDatabase())
-        .DiscoveryEndpoint(sourceParams.GetEndpoint())
+    opts.Database(Database)
+        .DiscoveryEndpoint(Endpoint)
         .SslCredentials(NYdb::TSslCredentials(sourceParams.GetUseSsl()))
         .CredentialsProviderFactory(CredentialsProviderFactory);
     return opts;
@@ -379,15 +387,15 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TVector<TVector<std::string_view>> TTopicSession::RebuildJson(const ClientsInfo& info, const TVector<TVector<std::string_view>>& parsedValues) {
-    TVector<TVector<std::string_view>> result;
+TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> TTopicSession::RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
+    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> result;
     const auto& offsets = ParserSchema.FieldsMap;
     result.reserve(info.FieldsIds.size());
     for (auto fieldId : info.FieldsIds) {
         Y_ENSURE(fieldId < offsets.size(), "fieldId " << fieldId << ", offsets.size() " << offsets.size());
         auto offset = offsets[fieldId];
         Y_ENSURE(offset < parsedValues.size(), "offset " << offset << ", jsonBatch.size() " << parsedValues.size());
-        result.push_back(parsedValues[offset]); 
+        result.push_back(&parsedValues[offset]); 
     }
     return result;
 }
@@ -448,8 +456,8 @@ void TTopicSession::HandleNewEvents() {
         if (!ReadSession) {
             return;
         }
-        if (Config.GetMaxSessionUsedMemory() && UsedSize > Config.GetMaxSessionUsedMemory()) {
-            LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UsedSize << " bytes), stop reading from yds");
+        if (Config.GetMaxSessionUsedMemory() && UnreadBytes > Config.GetMaxSessionUsedMemory()) {
+            LOG_ROW_DISPATCHER_TRACE("Too much used memory (" << UnreadBytes << " bytes), stop reading from yds");
             break;
         }
         TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
@@ -576,9 +584,9 @@ void TTopicSession::DoParsing(bool force) {
     }
 }
 
-void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<TVector<std::string_view>>& parsedValues) {
+void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
     Y_ENSURE(parsedValues, "Expected non empty schema");
-    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets.front() << ", last offset: " << offsets.back() << ", data:\n" << Parser->GetDebugString(parsedValues));
+    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets.front() << ", last offset: " << offsets.back());
 
     for (auto& [actorId, info] : Clients) {
         try {
@@ -593,7 +601,7 @@ void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<TVec
     Send(SelfId(), new TEvPrivate::TEvDataFiltered(offsets.back()));
 }
 
-void TTopicSession::SendData(ClientsInfo& info) {
+void TTopicSession::SendData(TClientsInfo& info) {
     info.DataArrivedSent = false;
     if (info.Buffer.empty()) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
@@ -608,8 +616,8 @@ void TTopicSession::SendData(ClientsInfo& info) {
         ui64 batchSize = 0;
         while (!info.Buffer.empty()) {
             const auto& [offset, json] = info.Buffer.front();
-            info.UsedSize -= json.size();
-            UsedSize -= json.size();
+            info.UnreadBytes -= json.size();
+            UnreadBytes -= json.size();
             batchSize += json.size();
             NFq::NRowDispatcherProto::TEvMessage message;
             message.SetJson(json);
@@ -631,7 +639,7 @@ void TTopicSession::SendData(ClientsInfo& info) {
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
 }
 
-void TTopicSession::UpdateFieldsIds(ClientsInfo& info) {
+void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {
     for (auto name : info.Settings.GetSource().GetColumns()) {
         auto it = FieldsIndexes.find(name);
         if (it == FieldsIndexes.end()) {
@@ -642,6 +650,15 @@ void TTopicSession::UpdateFieldsIds(ClientsInfo& info) {
             info.FieldsIds.push_back(it->second);
         }
     }
+}
+
+bool HasJsonColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
+    for (const auto& type : sourceParams.GetColumnTypes()) {
+        if (type.Contains("Json")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
@@ -670,6 +687,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         UpdateFieldsIds(clientInfo);
 
         TString predicate = clientInfo.Settings.GetSource().GetPredicate();
+
+        // TODO: remove this when the re-parsing is removed from pq read actor
+        if (predicate.empty() && HasJsonColumns(clientInfo.Settings.GetSource())) {
+            predicate = "WHERE TRUE";
+        }
+
         if (!predicate.empty()) {
             clientInfo.Filter = NewJsonFilter(
                 columns,
@@ -696,20 +719,20 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         FatalError("Adding new client failed, " + CurrentExceptionMessage());
     }
     UpdateParser();
-    PrintInternalState();
+    SendStatistic();
     if (!ReadSession) { 
         Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
     }
 }
 
-void TTopicSession::AddDataToClient(ClientsInfo& info, ui64 offset, const TString& json) {
+void TTopicSession::AddDataToClient(TClientsInfo& info, ui64 offset, const TString& json) {
     if (info.NextMessageOffset && offset < info.NextMessageOffset) {
         return;
     }
     info.NextMessageOffset = offset + 1;
     info.Buffer.push(std::make_pair(offset, json));
-    info.UsedSize += json.size();
-    UsedSize += json.size();
+    info.UnreadBytes += json.size();
+    UnreadBytes += json.size();
     SendDataArrived(info);
 }
 
@@ -722,12 +745,15 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
         LOG_ROW_DISPATCHER_DEBUG("Wrong ClientSettings");
         return;
     }
+    auto& info = it->second;
+    UnreadBytes -= info.UnreadBytes;
     Clients.erase(it);
     ClientsWithoutPredicate.erase(ev->Sender);
     if (Clients.empty()) {
         StopReadSession();
     }
     UpdateParser();
+    SubscribeOnNextEvent();
 }
 
 void CollectColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, TSet<std::pair<TString, TString>>& columns) {
@@ -825,7 +851,7 @@ void TTopicSession::StopReadSession() {
     TopicClient.Reset();
 }
 
-void TTopicSession::SendDataArrived(ClientsInfo& info) {
+void TTopicSession::SendDataArrived(TClientsInfo& info) {
     if (info.Buffer.empty() || info.DataArrivedSent) {
         return;
     }
@@ -845,21 +871,27 @@ void TTopicSession::HandleException(const std::exception& e) {
     FatalError(TString("Internal error: exception: ") + e.what());
 }
 
-void TTopicSession::PrintInternalState() {
-    TStringStream str;
-    str << "Clients:\n";
-    str << "UsedSize: " << UsedSize << "\n";
+void TTopicSession::SendStatistic() {
+    TopicSessionStatistic stat;
+    stat.Common.UnreadBytes = UnreadBytes;
+    stat.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
+    stat.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
-        str << "    read actor id " << readActorId << ", buffer size " << info.Buffer.size() 
-        << ", used size: " << info.UsedSize << ", data arrived sent " << info.DataArrivedSent 
-        << ", next offset " << info.NextMessageOffset << "\n";
+        TopicSessionClientStatistic client;
+        client.PartitionId = PartitionId;
+        client.ReadActorId = readActorId;
+        client.UnreadRows = info.Buffer.size();
+        client.UnreadBytes = info.UnreadBytes;
+        client.Offset = info.NextMessageOffset.GetOrElse(0);
+        stat.Clients.emplace_back(std::move(client));
     }
-    LOG_ROW_DISPATCHER_DEBUG(str.Str());
+    auto event = std::make_unique<TEvRowDispatcher::TEvSessionStatistic>(stat);
+    Send(RowDispatcherActorId, event.release());
 }
 
-void TTopicSession::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
-    Schedule(TDuration::Seconds(PrintStatePeriodSec), new NFq::TEvPrivate::TEvPrintState());
-    PrintInternalState();
+void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
+    Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
+    SendStatistic();
 }
 
 } // namespace
@@ -868,6 +900,8 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPrintState::TPtr&) {
     
 std::unique_ptr<NActors::IActor> NewTopicSession(
     const TString& topicPath,
+    const TString& endpoint,
+    const TString& database,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
     ui32 partitionId,
@@ -875,7 +909,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway));
 }
 
 } // namespace NFq

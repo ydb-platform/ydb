@@ -21,9 +21,9 @@ select c_last_name
 	then household_demographics.hd_dep_count/ household_demographics.hd_vehicle_count
 	else null::int4
 	end)  > 1.2
-    and date_dim.d_year in (2000,2000+1,2000+2)
-    and store.s_county in ('Salem County','Terrell County','Arthur County','Oglethorpe County',
-                           'Lunenburg County','Perry County','Halifax County','Sumner County')
+    and date_dim.d_year in (1999,1999+1,1999+2)
+    and store.s_county in ('Williamson County','Williamson County','Williamson County','Williamson County',
+                           'Williamson County','Williamson County','Williamson County','Williamson County')
     group by ss_ticket_number,ss_customer_sk) dn,{{customer}}
     where ss_customer_sk = c_customer_sk
       and cnt between 15::int8 and 20::int8

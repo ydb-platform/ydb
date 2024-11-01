@@ -452,7 +452,7 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
       yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
   ```
 
-In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node servicing the `/Root/testdb` database is running. When connecting via SSH to a YDB dynamic node, it's convenient to use the construction `grpcs://hostname -f:2136` to obtain the FQDN.
+In the command examples listed above, `<node.ydb.tech>` represents the FQDN of the server hosting any dynamic node servicing the `/Root/testdb` database. When connecting via SSH to a {{ ydb-short-name }} dynamic node, it's convenient to use `grpcs://$(hostname -f):2136` to obtain the endpoint.
 
 
 ## Start using the created database {#try-first-db}

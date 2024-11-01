@@ -6,6 +6,7 @@ PEERDIR(
 )
 
 SRCS(
+    grpc_services/scheme.cpp
     grpc_services/scripting.cpp
     grpc_services/view.cpp
 )

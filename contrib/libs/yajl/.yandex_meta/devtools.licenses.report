@@ -1,0 +1,58 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     ISC                  56907e2ae1c24aa1ea6c6e49d6f73b01
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        api/yajl_common.h [4:14]
+        api/yajl_gen.h [4:14]
+        api/yajl_parse.h [4:14]
+        api/yajl_tree.h [4:14]
+        yajl.c [4:14]
+        yajl_alloc.c [4:14]
+        yajl_alloc.h [4:14]
+        yajl_buf.c [4:14]
+        yajl_buf.h [4:14]
+        yajl_bytestack.h [4:14]
+        yajl_encode.c [4:14]
+        yajl_encode.h [4:14]
+        yajl_gen.c [4:14]
+        yajl_lex.c [4:14]
+        yajl_lex.h [4:14]
+        yajl_parser.c [4:14]
+        yajl_parser.h [4:14]
+        yajl_tree.c [4:14]

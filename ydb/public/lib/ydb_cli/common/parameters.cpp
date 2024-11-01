@@ -193,13 +193,13 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
 
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     // Deprecated options with defaults:
-    if (!DeprecatedSkipRows.Empty()) {
+    if (!DeprecatedSkipRows.empty()) {
         SkipRows = FromString<size_t>(DeprecatedSkipRows);
     }
-    if (!DeprecatedBatchLimit.Empty()) {
+    if (!DeprecatedBatchLimit.empty()) {
         BatchLimit = FromString<size_t>(DeprecatedBatchLimit);
     }
-    if (!DeprecatedBatchMaxDelay.Empty()) {
+    if (!DeprecatedBatchMaxDelay.empty()) {
         BatchMaxDelay = FromString<TDuration>(DeprecatedBatchMaxDelay);
     }
 
@@ -276,8 +276,8 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         }
     }
 
-    if (InputFormat != EDataFormat::Csv && InputFormat != EDataFormat::Tsv && (!Columns.Empty()
-            || SkipRows != 0 || !DeprecatedSkipRows.Empty())) {
+    if (InputFormat != EDataFormat::Csv && InputFormat != EDataFormat::Tsv && (!Columns.empty()
+            || SkipRows != 0 || !DeprecatedSkipRows.empty())) {
         throw TMisuseException() << "Options \"--input-columns\" and  \"--input-skip-rows\" requires \"csv\" or \"tsv\" formats";
     }
     if (InputParamNames.empty() && InputFormat == EDataFormat::Raw) {

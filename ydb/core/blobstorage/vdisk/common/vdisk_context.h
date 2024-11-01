@@ -12,9 +12,11 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/base/ptr.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 namespace NKikimr {
+    namespace NPDisk {
+        struct TEvChunkReadResult;
+    }
     class TCostModel;
 
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -146,17 +148,7 @@ namespace NKikimr {
             }
         }
 
-        template <class TActorSystemOrCtx>
-        bool CheckPDiskResponseReadable(const TActorSystemOrCtx &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message = {}) {
-            if (!ev.Data.IsReadable()) {
-                LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                        VDISKP(VDiskLogPrefix,
-                            "CheckPDiskResponseReadable: not readable chunk from PDisk: %s",
-                            FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
-                return false;
-            }
-            return true;
-        }
+        bool CheckPDiskResponseReadable(const TActorContext &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message = {});
 
         TOutOfSpaceState &GetOutOfSpaceState() {
             return OutOfSpaceState;

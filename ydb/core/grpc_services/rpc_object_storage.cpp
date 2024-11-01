@@ -144,6 +144,19 @@ bool CellFromTuple(NScheme::TTypeInfo type,
         }
         break;
     }
+    case NScheme::NTypeIds::Decimal:
+    {
+        if (tupleValue.Haslow_128()) {
+            NYql::NDecimal::TInt128 int128 = NYql::NDecimal::FromHalfs(tupleValue.Getlow_128(), tupleValue.Gethigh_128());
+            auto &data = memoryOwner.emplace_back();
+            data.resize(sizeof(NYql::NDecimal::TInt128));
+            std::memcpy(data.Detach(), &int128, sizeof(NYql::NDecimal::TInt128));
+            c = TCell(data);                
+        } else {
+            CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Decimal in tuple at position %" PRIu32, position));
+        }
+        break;
+    }    
     default:
         CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, position));
         break;
@@ -697,6 +710,19 @@ private:
         }
     }
 
+    static TString NextPrefix(TString p) {
+        while (p) {
+            if (char next = (char)(((unsigned char)p.back()) + 1)) {
+                p.back() = next;
+                break;
+            } else {
+                p.pop_back(); // overflow, move to the next character
+            }
+        }
+
+        return p;
+    }
+
     void MakeShardRequest(ui32 idx, const NActors::TActorContext& ctx) {
         ui64 shardId = KeyRange->GetPartitions()[idx].ShardId;
 
@@ -770,6 +796,51 @@ private:
         }
     }
 
+    bool FindNextShard() {
+        if (CommonPrefixesRows.empty()) {
+            // Just move to the next shard if no folders were found previously.
+            CurrentShardIdx++;
+            return true;
+        }
+
+        TString prefixColumns = PrefixColumns.GetBuffer();
+        TString lastCommonPrefix = NextPrefix(CommonPrefixesRows.back());
+
+        TSerializedCellVec::UnsafeAppendCells({TCell(lastCommonPrefix.Data(), lastCommonPrefix.Size())}, prefixColumns);
+
+        TSerializedCellVec afterLastFolderPrefix;
+        afterLastFolderPrefix.Parse(prefixColumns);
+
+        auto& partitions = KeyRange->GetPartitions();
+        
+        for (CurrentShardIdx++; CurrentShardIdx < partitions.size(); CurrentShardIdx++) {
+            auto& partition = KeyRange->GetPartitions()[CurrentShardIdx];
+
+            auto& range = partition.Range;
+
+            if (range && range->EndKeyPrefix.GetCells().size() > 0) {
+                auto& endKeyPrefix = range->EndKeyPrefix;
+
+                // Check if range's end greater than the lookup key.
+                int cmp = CompareTypedCellVectors(
+                    endKeyPrefix.GetCells().data(),
+                    afterLastFolderPrefix.GetCells().data(),
+                    KeyColumnTypes.data(),
+                    afterLastFolderPrefix.GetCells().size()
+                );
+
+                if (cmp >= 0) {
+                    // Found a shard whose range end is greater than the lookup key.
+                    return true;
+                }
+            } else {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void Handle(TEvDataShard::TEvObjectStorageListingResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& shardResponse = ev->Get()->Record;
 
@@ -799,14 +870,19 @@ private:
             ContentsRows.emplace_back(shardResponse.GetContentsRows(i));
         }
 
-        bool hasMoreShards = CurrentShardIdx + 1 < KeyRange->GetPartitions().size();
+        auto& partitions = KeyRange->GetPartitions();
+        ui32 partitionsSize = partitions.size();
+
+        bool hasMoreShards = CurrentShardIdx + 1 < partitionsSize;
         bool maxKeysExhausted = MaxKeys <= ContentsRows.size() + CommonPrefixesRows.size();
 
         if (hasMoreShards &&
             !maxKeysExhausted &&
-            shardResponse.GetMoreRows())
-        {
-            ++CurrentShardIdx;
+            shardResponse.GetMoreRows()) {
+            if (!FindNextShard()) {
+                ReplySuccess(ctx, (hasMoreShards && shardResponse.GetMoreRows()) || maxKeysExhausted);
+                return;    
+            }
             MakeShardRequest(CurrentShardIdx, ctx);
         } else {
             ReplySuccess(ctx, (hasMoreShards && shardResponse.GetMoreRows()) || maxKeysExhausted);

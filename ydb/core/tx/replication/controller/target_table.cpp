@@ -1,10 +1,10 @@
+#include "event_util.h"
 #include "logging.h"
 #include "target_table.h"
 #include "util.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -25,23 +25,11 @@ class TTableWorkerRegistar: public TActorBootstrapped<TTableWorkerRegistar> {
         }
 
         for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
-            auto ev = MakeHolder<TEvService::TEvRunWorker>();
-            auto& record = ev->Record;
+            if (!partition.GetParentPartitionIds().empty()) {
+                continue;
+            }
 
-            auto& worker = *record.MutableWorker();
-            worker.SetReplicationId(ReplicationId);
-            worker.SetTargetId(TargetId);
-            worker.SetWorkerId(partition.GetPartitionId());
-
-            auto& readerSettings = *record.MutableCommand()->MutableRemoteTopicReader();
-            readerSettings.MutableConnectionParams()->CopyFrom(ConnectionParams);
-            readerSettings.SetTopicPath(SrcStreamPath);
-            readerSettings.SetTopicPartitionId(partition.GetPartitionId());
-            readerSettings.SetConsumerName(ReplicationConsumerName);
-
-            auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
-            PathIdFromPathId(DstPathId, writerSettings.MutablePathId());
-
+            auto ev = MakeTEvRunWorker(ReplicationId, TargetId, partition.GetPartitionId(), ConnectionParams, SrcStreamPath, DstPathId);
             Send(Parent, std::move(ev));
         }
 
@@ -122,6 +110,10 @@ TTargetTable::TTargetTable(TReplication* replication, ui64 id, const TString& sr
 
 TString TTargetTable::BuildStreamPath() const {
     return CanonizePath(ChildPath(SplitPath(GetSrcPath()), GetStreamName()));
+}
+
+TString TTargetTableBase::GetStreamPath() const {
+    return BuildStreamPath();
 }
 
 TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const TString& srcPath, const TString& dstPath)

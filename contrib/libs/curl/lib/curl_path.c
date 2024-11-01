@@ -98,8 +98,8 @@ CURLcode Curl_getworkingpath(struct Curl_easy *data,
   return CURLE_OK;
 }
 
-/* The original get_pathname() function came from OpenSSH sftp.c version
-   4.6p1. */
+/* The get_pathname() function is being borrowed from OpenSSH sftp.c
+   version 4.6p1. */
 /*
  * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
  *
@@ -115,37 +115,38 @@ CURLcode Curl_getworkingpath(struct Curl_easy *data,
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
-#define MAX_PATHLENGTH 65535 /* arbitrary long */
-
-CURLcode Curl_get_pathname(const char **cpp, char **path, const char *homedir)
+CURLcode Curl_get_pathname(const char **cpp, char **path, char *homedir)
 {
   const char *cp = *cpp, *end;
   char quot;
-  unsigned int i;
+  unsigned int i, j;
+  size_t fullPathLength, pathLength;
+  bool relativePath = false;
   static const char WHITESPACE[] = " \t\r\n";
-  struct dynbuf out;
-  CURLcode result;
 
   DEBUGASSERT(homedir);
-  *path = NULL;
-  *cpp = NULL;
-  if(!*cp || !homedir)
+  if(!*cp || !homedir) {
+    *cpp = NULL;
+    *path = NULL;
     return CURLE_QUOTE_ERROR;
-
-  Curl_dyn_init(&out, MAX_PATHLENGTH);
-
+  }
   /* Ignore leading whitespace */
   cp += strspn(cp, WHITESPACE);
+  /* Allocate enough space for home directory and filename + separator */
+  fullPathLength = strlen(cp) + strlen(homedir) + 2;
+  *path = malloc(fullPathLength);
+  if(!*path)
+    return CURLE_OUT_OF_MEMORY;
 
   /* Check for quoted filenames */
   if(*cp == '\"' || *cp == '\'') {
     quot = *cp++;
 
     /* Search for terminating quote, unescape some chars */
-    for(i = 0; i <= strlen(cp); i++) {
+    for(i = j = 0; i <= strlen(cp); i++) {
       if(cp[i] == quot) {  /* Found quote */
         i++;
+        (*path)[j] = '\0';
         break;
       }
       if(cp[i] == '\0') {  /* End of string */
@@ -158,45 +159,40 @@ CURLcode Curl_get_pathname(const char **cpp, char **path, const char *homedir)
           goto fail;
         }
       }
-      result = Curl_dyn_addn(&out, &cp[i], 1);
-      if(result)
-        return result;
+      (*path)[j++] = cp[i];
     }
 
-    if(!Curl_dyn_len(&out))
+    if(j == 0) {
       goto fail;
-
-    /* return pointer to second parameter if it exists */
-    *cpp = &cp[i] + strspn(&cp[i], WHITESPACE);
+    }
+    *cpp = cp + i + strspn(cp + i, WHITESPACE);
   }
   else {
     /* Read to end of filename - either to whitespace or terminator */
     end = strpbrk(cp, WHITESPACE);
     if(!end)
       end = strchr(cp, '\0');
-
     /* return pointer to second parameter if it exists */
     *cpp = end + strspn(end, WHITESPACE);
-
+    pathLength = 0;
+    relativePath = (cp[0] == '/' && cp[1] == '~' && cp[2] == '/');
     /* Handling for relative path - prepend home directory */
-    if(cp[0] == '/' && cp[1] == '~' && cp[2] == '/') {
-      result = Curl_dyn_add(&out, homedir);
-      if(!result)
-        result = Curl_dyn_addn(&out, "/", 1);
-      if(result)
-        return result;
+    if(relativePath) {
+      strcpy(*path, homedir);
+      pathLength = strlen(homedir);
+      (*path)[pathLength++] = '/';
+      (*path)[pathLength] = '\0';
       cp += 3;
     }
     /* Copy path name up until first "whitespace" */
-    result = Curl_dyn_addn(&out, cp, (end - cp));
-    if(result)
-      return result;
+    memcpy(&(*path)[pathLength], cp, (int)(end - cp));
+    pathLength += (int)(end - cp);
+    (*path)[pathLength] = '\0';
   }
-  *path = Curl_dyn_ptr(&out);
   return CURLE_OK;
 
 fail:
-  Curl_dyn_free(&out);
+  Curl_safefree(*path);
   return CURLE_QUOTE_ERROR;
 }
 

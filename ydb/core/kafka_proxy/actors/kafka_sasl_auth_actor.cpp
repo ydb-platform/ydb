@@ -54,7 +54,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
     }
     UserToken = ev->Get()->Token;
 
-    if (ClientAuthData.UserName.Empty()) {
+    if (ClientAuthData.UserName.empty()) {
         bool gotPermission = false;
         for (auto & sid : UserToken->GetGroupSIDs()) {
             if (sid == NKikimr::NGRpcProxy::V1::KafkaPlainAuthSid) {
@@ -134,12 +134,13 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
     auto password = tokens[2];
     size_t atPos = userAndDatabase.rfind('@');
     if (atPos == TString::npos) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "Database not provided.", "", ctx);
-        return false;
+        authData.UserName = "";
+        authData.Database = userAndDatabase;
+    } else {
+        authData.UserName = userAndDatabase.substr(0, atPos);
+        authData.Database = userAndDatabase.substr(atPos + 1);
     }
 
-    authData.UserName = userAndDatabase.substr(0, atPos);
-    authData.Database = userAndDatabase.substr(atPos + 1);
     authData.Password = password;
     return true;
 }
@@ -212,7 +213,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         else if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
     }
 
-    if (ClientAuthData.UserName.Empty()) {
+    if (ClientAuthData.UserName.empty()) {
         // ApiKey IAM authentification
         SendApiKeyRequest();
     } else {

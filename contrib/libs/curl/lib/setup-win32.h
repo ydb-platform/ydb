@@ -24,53 +24,18 @@
  *
  ***************************************************************************/
 
-#undef USE_WINSOCK
-/* ---------------------------------------------------------------- */
-/*                     Watt-32 TCP/IP SPECIFIC                      */
-/* ---------------------------------------------------------------- */
-#ifdef USE_WATT32
-#  include <tcp.h>
-#  undef byte
-#  undef word
-#  define HAVE_SYS_IOCTL_H
-#  define HAVE_SYS_SOCKET_H
-#  define HAVE_NETINET_IN_H
-#  define HAVE_NETDB_H
-#  define HAVE_ARPA_INET_H
-#  define SOCKET int
-/* ---------------------------------------------------------------- */
-/*               BSD-style lwIP TCP/IP stack SPECIFIC               */
-/* ---------------------------------------------------------------- */
-#elif defined(USE_LWIPSOCK)
-  /* Define to use BSD-style lwIP TCP/IP stack. */
-  /* #define USE_LWIPSOCK 1 */
-#  undef HAVE_GETHOSTNAME
-#  undef LWIP_POSIX_SOCKETS_IO_NAMES
-#  undef RECV_TYPE_ARG1
-#  undef RECV_TYPE_ARG3
-#  undef SEND_TYPE_ARG1
-#  undef SEND_TYPE_ARG3
-#  define HAVE_GETHOSTBYNAME_R
-#  define HAVE_GETHOSTBYNAME_R_6
-#  define LWIP_POSIX_SOCKETS_IO_NAMES 0
-#  define RECV_TYPE_ARG1 int
-#  define RECV_TYPE_ARG3 size_t
-#  define SEND_TYPE_ARG1 int
-#  define SEND_TYPE_ARG3 size_t
-#elif defined(_WIN32)
-#  define USE_WINSOCK 2
-#endif
-
 /*
- * Include header files for Windows builds before redefining anything.
+ * Include header files for windows builds before redefining anything.
  * Use this preprocessor block only to include or exclude windows.h,
- * winsock2.h or ws2tcpip.h. Any other Windows thing belongs
- * to any other further and independent block. Under Cygwin things work
- * just as under Linux (e.g. <sys/socket.h>) and the Winsock headers should
- * never be included when __CYGWIN__ is defined.
+ * winsock2.h or ws2tcpip.h. Any other windows thing belongs
+ * to any other further and independent block.  Under Cygwin things work
+ * just as under linux (e.g. <sys/socket.h>) and the winsock headers should
+ * never be included when __CYGWIN__ is defined.  configure script takes
+ * care of this, not defining HAVE_WINDOWS_H, HAVE_WINSOCK2_H,
+ * neither HAVE_WS2TCPIP_H when __CYGWIN__ is defined.
  */
 
-#ifdef _WIN32
+#ifdef HAVE_WINDOWS_H
 #  if defined(UNICODE) && !defined(_UNICODE)
 #    error "UNICODE is defined but _UNICODE is not defined"
 #  endif
@@ -78,7 +43,7 @@
 #    error "_UNICODE is defined but UNICODE is not defined"
 #  endif
 /*
- * Do not include unneeded stuff in Windows headers to avoid compiler
+ * Don't include unneeded stuff in Windows headers to avoid compiler
  * warnings and macro clashes.
  * Make sure to define this macro before including any Windows headers.
  */
@@ -88,14 +53,29 @@
 #  ifndef NOGDI
 #    define NOGDI
 #  endif
-#  include <winsock2.h>
-#  include <ws2tcpip.h>
+#  ifdef HAVE_WINSOCK2_H
+#    include <winsock2.h>
+#    ifdef HAVE_WS2TCPIP_H
+#      include <ws2tcpip.h>
+#    endif
+#  endif
 #  include <windows.h>
 #  include <winerror.h>
 #  include <tchar.h>
 #  ifdef UNICODE
      typedef wchar_t *(*curl_wcsdup_callback)(const wchar_t *str);
 #  endif
+#endif
+
+/*
+ * Define USE_WINSOCK to 2 if we have and use WINSOCK2 API, else
+ * undefine USE_WINSOCK.
+ */
+
+#undef USE_WINSOCK
+
+#ifdef HAVE_WINSOCK2_H
+#  define USE_WINSOCK 2
 #endif
 
 /*

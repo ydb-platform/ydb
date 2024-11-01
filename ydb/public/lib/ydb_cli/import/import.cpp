@@ -94,14 +94,14 @@ void InitCsvParser(TCsvParser& parser,
             headerRow = settings.HeaderRow_;
         }
         if (headerRow.EndsWith("\r\n")) {
-            headerRow.erase(headerRow.Size() - 2);
+            headerRow.erase(headerRow.size() - 2);
         }
         if (headerRow.EndsWith("\n")) {
-            headerRow.erase(headerRow.Size() - 1);
+            headerRow.erase(headerRow.size() - 1);
         }
         if (headerRow.EndsWith(settings.Delimiter_)) {
             removeLastDelimiter = true;
-            headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
+            headerRow.erase(headerRow.size() - settings.Delimiter_.size());
         }
         parser = TCsvParser(std::move(headerRow), settings.Delimiter_[0], settings.NullValue_, columnTypes);
         return;
@@ -472,15 +472,15 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
         if (line.empty()) {
             continue;
         }
-        readBytes += line.Size();
-        batchBytes += line.Size();
+        readBytes += line.size();
+        batchBytes += line.size();
 
         if (removeLastDelimiter) {
             if (!line.EndsWith(settings.Delimiter_)) {
                 return MakeStatus(EStatus::BAD_REQUEST,
                         "According to the header, lines should end with a delimiter");
             }
-            line.erase(line.Size() - settings.Delimiter_.Size());
+            line.erase(line.size() - settings.Delimiter_.size());
         }
 
         buffer.push_back(line);
@@ -573,7 +573,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
                         return MakeStatus(EStatus::BAD_REQUEST,
                                 "According to the header, lines should end with a delimiter");
                     }
-                    line.erase(line.Size() - settings.Delimiter_.Size());
+                    line.erase(line.size() - settings.Delimiter_.size());
                 }
                 buffer.push_back(line);
                 ++idx;

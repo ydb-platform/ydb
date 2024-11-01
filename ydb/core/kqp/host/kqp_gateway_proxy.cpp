@@ -10,6 +10,8 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
+#include <util/generic/overloaded.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NThreading;
@@ -135,6 +137,9 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
                 error = TStringBuilder() << "Unknown compression '" << family.Compression.GetRef() << "' for a column family";
                 return false;
             }
+        }
+        if (family.CompressionLevel) {
+            familyProto->set_compression_level(family.CompressionLevel.GetRef());
         }
     }
 
@@ -399,8 +404,6 @@ void FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     for (const auto& keyColumn : metadata.KeyColumnNames) {
         schema.AddKeyColumnNames(keyColumn);
     }
-
-    schema.SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
 }
 
 bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
@@ -530,6 +533,10 @@ public:
 
     void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
         Gateway->SetToken(cluster, token);
+    }
+
+    void SetClientAddress(const TString& clientAddress) override {
+        Gateway->SetClientAddress(clientAddress);
     }
 
     bool GetDatabaseForLoginOperation(TString& database) {
@@ -1116,6 +1123,170 @@ public:
         }
     }
 
+    TFuture<TGenericResult> CreateBackupCollection(const TString& cluster, const NYql::TCreateBackupCollectionSettings& settings) override {
+        CHECK_PREPARED_DDL(CreateBackupCollection);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(GetDatabase());
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateBackupCollection);
+
+            auto& op = *tx.MutableCreateBackupCollection();
+            op.SetName(pathPair.second);
+            op.SetPrefix(settings.Prefix);
+
+            if (settings.Settings.IncrementalBackupEnabled) {
+                op.MutableIncrementalBackupConfig();
+            }
+
+            auto errOpt = std::visit(
+                TOverloaded {
+                    [](const TCreateBackupCollectionSettings::TDatabase&) -> std::optional<TString> {
+                        return "Unimplemented";
+                    },
+                    [&](const TVector<TCreateBackupCollectionSettings::TTable>& tables) -> std::optional<TString> {
+                        auto& dstTables = *op.MutableExplicitEntryList();
+                        for (const auto& table : tables) {
+                            auto& entry = *dstTables.AddEntries();
+                            entry.SetType(NKikimrSchemeOp::TBackupCollectionDescription::TBackupEntry::ETypeTable);
+                            entry.SetPath(table.Path);
+                        }
+                        return std::nullopt;
+                    },
+            }, settings.Entries);
+
+            if (errOpt) {
+                return MakeFuture(ResultFromError<TGenericResult>(*errOpt));
+            }
+
+            op.MutableCluster();
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableCreateBackupCollection()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> AlterBackupCollection(const TString& cluster, const NYql::TAlterBackupCollectionSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterBackupCollection);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(GetDatabase());
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterBackupCollection);
+
+            auto& op = *tx.MutableAlterBackupCollection();
+            op.SetName(pathPair.second);
+            op.SetPrefix(settings.Prefix);
+
+            // TODO(innokentii): handle settings
+            // TODO(innokentii): add/remove entries
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableAlterBackupCollection()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const NYql::TDropBackupCollectionSettings& settings) override {
+        CHECK_PREPARED_DDL(DropBackupCollection);
+
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+            }
+
+            std::pair<TString, TString> pathPair;
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
+            }
+
+            NKikimrSchemeOp::TModifyScheme tx;
+            tx.SetWorkingDir(GetDatabase());
+            if (settings.Cascade) {
+                return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
+            } else {
+                tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropBackupCollection);
+            }
+
+            auto& op = *tx.MutableDrop();
+            op.SetName(pathPair.second);
+
+            if (IsPrepare()) {
+                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                auto& phyTx = *phyQuery.AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableDropBackupCollection()->Swap(&tx);
+
+                TGenericResult result;
+                result.SetSuccess();
+                return MakeFuture(result);
+            } else {
+                return Gateway->ModifyScheme(std::move(tx));
+            }
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) override {
         CHECK_PREPARED_DDL(CreateUser);
 
@@ -1517,9 +1688,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterColumnTable(const TString& cluster,
-        const TAlterColumnTableSettings& settings) override
-    {
+    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
         CHECK_PREPARED_DDL(AlterColumnTable);
 
         try {
@@ -1527,20 +1696,16 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!NSchemeHelpers::SplitTablePath(settings.Table, GetDatabase(), pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
             NKikimrSchemeOp::TModifyScheme schemeTx;
-            schemeTx.SetWorkingDir(pathPair.first);
 
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
-            NKikimrSchemeOp::TAlterColumnTable* alter = schemeTx.MutableAlterColumnTable();
-            alter->SetName(settings.Table);
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                return MakeFuture(errResult);
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();

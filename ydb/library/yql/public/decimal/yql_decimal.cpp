@@ -3,6 +3,7 @@
 #include <cstring>
 #include <ostream>
 #include <string>
+#include <charconv>
 
 namespace NYql {
 namespace NDecimal {
@@ -10,6 +11,10 @@ namespace NDecimal {
 static const TUint128 Ten(10U);
 
 TUint128 GetDivider(ui8 scale) {
+    if (scale > MaxPrecision) {
+        return Inf();
+    }
+
     TUint128 d(1U);
     while (scale--)
         d *= Ten;
@@ -17,11 +22,11 @@ TUint128 GetDivider(ui8 scale) {
 }
 
 bool IsError(TInt128 v) {
-    return v > Nan() || v < -Nan();
+    return v > Nan() || v < -Inf();
 }
 
 bool IsNan(TInt128 v) {
-    return v == Nan() || v == -Nan();
+    return v == Nan();
 }
 
 bool IsInf(TInt128 v) {
@@ -47,8 +52,6 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
         return "-inf";
     if (val == Nan())
         return "nan";
-    if (val == -Nan())
-        return "-nan";
 
     if (!IsNormal(val)) {
         return nullptr;
@@ -217,8 +220,16 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
             if (!len)
                 return Err();
 
-            const auto exp = std::atoi(++ptr);
-            if (!exp)
+            ++ptr;
+            if (ptr != s + str.size() && *ptr == '+') {
+                ++ptr;
+                if (ptr != s + str.size() && *ptr == '-')
+                    return Err();
+            }
+
+            int exp;
+            auto [finish, ec] = std::from_chars(ptr, s + str.size(), exp);
+            if (ec != std::errc() || finish != s + str.size())
                 return Err();
 
             const int p = precision, s = int(scale) + exp;
@@ -227,12 +238,23 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
                 FromString(str.Head(len), precision, std::min(s, p)):
                 FromString(str.Head(len), std::min(p - exp, int(MaxPrecision)), std::max(s, 0));
 
-            if (IsNan(r)) {
+            if (IsError(r) || IsNan(r)) {
                 return Err();
             }
 
+            if (IsInf(r)) {
+                auto p = str.data();
+                if (*p == '+' || *p == '-')
+                    ++p;
+
+                if (!std::isdigit(*p))
+                    return Err();
+
+                return r;
+            }
+
             if (const auto e = exp > 0 ? std::max(0, s - p) : std::min(0, s)) {
-                if (r && IsNormal(r)) {
+                if (r) {
                     if (exp > 0)
                         return Mul(r, GetDivider(+e));
                     if (exp < 0)

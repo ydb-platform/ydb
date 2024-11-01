@@ -212,9 +212,10 @@ private:
     TFuture<IChannelPtr> Channel_;
 };
 
-TConnectionConfigPtr GetPostprocessedConfig(TConnectionConfigPtr config)
+TConnectionConfigPtr GetPostprocessedConfigAndValidate(TConnectionConfigPtr config)
 {
     config->Postprocess();
+    ValidateConnectionConfig(config);
     return config;
 }
 
@@ -223,7 +224,7 @@ TConnectionConfigPtr GetPostprocessedConfig(TConnectionConfigPtr config)
 ////////////////////////////////////////////////////////////////////////////////
 
 TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options)
-    : Config_(GetPostprocessedConfig(std::move(config)))
+    : Config_(GetPostprocessedConfigAndValidate(std::move(config)))
     , ConnectionId_(TGuid::Create())
     , LoggingTag_(MakeConnectionLoggingTag(Config_, ConnectionId_))
     , ClusterId_(MakeConnectionClusterId(Config_))
@@ -290,9 +291,9 @@ IChannelPtr TConnection::CreateChannel(bool sticky)
     return CreateRoamingChannel(std::move(provider));
 }
 
-IChannelPtr TConnection::CreateChannelByAddress(const std::string& address)
+IChannelPtr TConnection::CreateChannelByAddress(const TString& address)
 {
-    return CachingChannelFactory_->CreateChannel(address);
+    return CachingChannelFactory_->CreateChannel(address.ConstRef());
 }
 
 TClusterTag TConnection::GetClusterTag() const

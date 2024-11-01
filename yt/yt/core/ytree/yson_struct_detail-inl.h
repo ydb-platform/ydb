@@ -593,6 +593,30 @@ inline void ResetOnLoad(TMap& parameter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+bool CompareValues(const T& lhs, const T& rhs)
+{
+    if constexpr (CRecursivelyEqualityComparable<typename TWrapperTraits<T>::TRecursiveUnwrapped>) {
+        return lhs == rhs;
+    } else {
+        return false;
+    }
+}
+
+template <class T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
+{
+    if constexpr (CRecursivelyEqualityComparable<typename TWrapperTraits<T>::TRecursiveUnwrapped>) {
+        if (!lhs || !rhs) {
+            return rhs == lhs;
+        }
+
+        return *lhs == *rhs;
+    } else {
+        return false;
+    }
+}
+
 } // namespace NPrivate
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -858,6 +882,12 @@ void TYsonStructParameter<TValue>::WriteSchema(const TYsonStructBase* self, NYso
 {
     // TODO(bulatman) What about constraints: minimum, maximum, default and etc?
     NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer);
+}
+
+template <class TValue>
+bool TYsonStructParameter<TValue>::CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const
+{
+    return NPrivate::CompareValues(FieldAccessor_->GetValue(lhsSelf), FieldAccessor_->GetValue(rhsSelf));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

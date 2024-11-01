@@ -298,7 +298,7 @@ public:
         }
         case IPathGenerator::EType::INTEGER: {
             i64 value = 0;
-            if (!TryFromString(dataValue.Data(), dataValue.size(), value)) {
+            if (!TryFromString(dataValue.data(), dataValue.size(), value)) {
                 ythrow yexception() << dataValue << " data is not a int64";
             }
             return fmtInteger(config.Digits, value);
@@ -329,7 +329,7 @@ public:
         }
         case IPathGenerator::EType::INTEGER: {
             int64_t value = 0;
-            if (!TryFromString(pathValue.Data(), pathValue.size(), value)) {
+            if (!TryFromString(pathValue.data(), pathValue.size(), value)) {
                 ythrow yexception() << pathValue << " value is not a int64";
             }
             return std::to_string(value);

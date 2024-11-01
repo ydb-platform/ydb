@@ -1,0 +1,195 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 06bdb153f7c9e585b90d3443f4a9ed60
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Daryle Walker and Stephen Cleary 2001-2002.
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/common_factor_ct.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 224f57df16325dd91014dfc45580545f
+BELONGS ya.make
+    License text:
+        //                 Copyright (C) 2001 Daryle Walker.
+        //                 Copyright (C) 2003 Vesa Karvonen.
+        //                 Copyright (C) 2003 Gennaro Prota.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/static_log2.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 45666b61e7d8667b41556a93c064e0e8
+BELONGS ya.make
+    License text:
+        //        Copyright (c) 2003-2004, 2008 Gennaro Prota
+        //            Copyright (c) 2022 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/integer_log2.hpp [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5cd4a0c580c53e0ce656cd3fe8597d92
+BELONGS ya.make
+    License text:
+         * Copyright Jens Maurer 2000
+         * Distributed under the Boost Software License, Version 1.0. (See
+         * accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer_traits.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6467921276eb670bf75f471586581d8f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7dfaa2a53a6b13ff30e70d1bb19164b4
+BELONGS ya.make
+    License text:
+        //                 Copyright (C) 2001 Daryle Walker.
+        //                 Copyright (C) 2003 Vesa Karvonen.
+        //                 Copyright (C) 2003 Gennaro Prota.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/static_log2.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8bc414876d610225acf7d931e3e8a898
+BELONGS ya.make
+    License text:
+         *  (C) Copyright Nick Thompson 2018.
+         *  Use, modification and distribution are subject to the
+         *  Boost Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/extended_euclidean.hpp [2:4]
+        include/boost/integer/mod_inverse.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93012328a02872a0d6cab3f5e94eeeb5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer_fwd.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b09edac6bc0b2db05bdae89ff848fba0
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Jeremy William Murphy 2016.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/common_factor_rt.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4a590731990d46da1db97cbe472aa42
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Daryle Walker 2001.
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/integer_mask.hpp [3:5]
+        include/boost/integer/static_min_max.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bbcd1acfe8595de9d40645962088e6b2
+BELONGS ya.make
+    License text:
+        //                 Copyright (C) 2001 Daryle Walker.
+        //                 Copyright (C) 2003 Vesa Karvonen.
+        //                 Copyright (C) 2003 Gennaro Prota.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/static_log2.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e09ea41bd5eb67cdd8fbe0f78743b80e
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Daryle Walker 2001-2002.
+        //  Distributed under the Boost Software License, Version 1.0. (See
+        //  accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/common_factor.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eaaa450f0bcecbc273ad0a9250e79ddc
+BELONGS ya.make
+    License text:
+        //        Copyright (c) 2003-2004, 2008 Gennaro Prota
+        //            Copyright (c) 2022 Andrey Semashev
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/integer/integer_log2.hpp [7:8]

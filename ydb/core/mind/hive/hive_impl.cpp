@@ -96,7 +96,7 @@ void THive::RestartPipeTx(ui64 tabletId) {
 }
 
 bool THive::TryToDeleteNode(TNodeInfo* node) {
-    if (node->CanBeDeleted()) {
+    if (node->CanBeDeleted(TActivationContext::Now())) {
         BLOG_I("TryToDeleteNode(" << node->Id << "): deleting");
         DeleteNode(node->Id);
         return true;
@@ -120,12 +120,15 @@ void THive::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
 void THive::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
     if (ev->Get()->TabletId == TabletID()) {
         BLOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
-        TNodeInfo* node = FindNode(ev->Get()->ClientId.NodeId());
+        auto nodeId = ev->Get()->ClientId.NodeId();
+        TNodeInfo* node = FindNode(nodeId);
         if (node != nullptr) {
             Erase(node->PipeServers, ev->Get()->ServerId);
             if (node->PipeServers.empty() && node->IsUnknown()) {
                 ObjectDistributions.RemoveNode(*node);
-                TryToDeleteNode(node);
+                if (TryToDeleteNode(node)) {
+                    Execute(CreateDeleteNode(nodeId));
+                }
             }
         }
     }
@@ -237,6 +240,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         if (tablet == nullptr) {
             continue;
         }
+        tablet->InWaitQueue = false;
         if (tablet->IsAlive()) {
             BLOG_D("tablet " << record.TabletId << " already alive, skipping");
             continue;
@@ -258,6 +262,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
                     BootQueue.AddToWaitQueue(record); // waiting for new node
+                    tablet->InWaitQueue = true;
                     continue;
                 }
             }
@@ -572,6 +577,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
         SendToRootHivePipe(request.Release());
     }
+    Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
     ProcessPendingOperations();
 }
 
@@ -1878,6 +1884,9 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         if (req.GetReturnMetrics()) {
             tabletInfo.MutableMetrics()->CopyFrom(info->GetResourceValues());
         }
+        if (info->InWaitQueue) {
+            tabletInfo.SetInWaitQueue(true);
+        }
         if (req.GetReturnChannelHistory()) {
             for (const auto& channel : info->TabletStorageInfo->Channels) {
                 auto& tabletChannel = *tabletInfo.AddTabletChannels();
@@ -3055,6 +3064,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, Handle);
         hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
+        hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle)
     }
 }
 
@@ -3159,6 +3169,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateDataCenterFollowers::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3422,13 +3433,16 @@ void THive::Handle(TEvPrivate::TEvLogTabletMoves::TPtr&) {
 }
 
 void THive::Handle(TEvPrivate::TEvDeleteNode::TPtr& ev) {
-    auto node = FindNode(ev->Get()->NodeId);
+    auto nodeId = ev->Get()->NodeId;
+    auto node = FindNode(nodeId);
     if (node == nullptr) {
         return;
     }
     node->DeletionScheduled = false;
     if (!node->IsAlive()) {
-        TryToDeleteNode(node);
+        if (TryToDeleteNode(node)) {
+            Execute(CreateDeleteNode(nodeId));
+        }
     }
 }
 
@@ -3460,8 +3474,157 @@ void THive::Handle(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
     Execute(CreateUpdateDcFollowers(ev->Get()->DataCenter));
 }
 
+template <typename TIt>
+ui32 THive::CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target) {
+    double maxOnWindow = *std::max_element(windowBegin, windowEnd);
+    double ratio = maxOnWindow / target;
+    return std::ceil(readyNodes * ratio);
+}
+
+void THive::MakeScaleRecommendation() {
+    BLOG_D("[MSR] Started making scale recommendation");
+
+    // TODO(pixcc): make following variables as configurable settings
+    constexpr TDuration NODE_INITILIZATION_TIME = TDuration::Seconds(30);
+    constexpr size_t MAX_HISTORY_SIZE = 15;
+    constexpr size_t SCALE_IN_WINDOW_SIZE = 5;
+    constexpr size_t SCALE_OUT_WINDOW_SIZE = 15;
+    constexpr double TARGET_AVG_CPU_USAGE_PERCENT = 0.66;
+    constexpr double CPU_USAGE_MARGIN = 0.2;
+
+    double cpuUsageSum = 0;
+    size_t readyNodesCount = 0;
+    for (auto& [id, node] : Nodes) {
+        if (!node.IsAlive()) {
+            BLOG_TRACE("[MSR] Skip node " << id << ", not alive");
+            continue;
+        }
+
+        if (node.StartTime + NODE_INITILIZATION_TIME > TActivationContext::Now()) {
+            BLOG_TRACE("[MSR] Skip node " << id << ", in initialization");
+            continue;
+        }
+
+        if (!node.AveragedNodeTotalCpuUsage.IsValueReady()) {
+            BLOG_TRACE("[MSR] Skip node " << id << ", no CPU usage value");
+            continue;
+        }
+
+        if (node.GetServicedDomain() != GetMySubDomainKey()) {
+            BLOG_TRACE("[MSR] Skip node " << id << ", serviced domain doesn't match");
+            continue;
+        }
+
+        double avgCpuUsage = node.AveragedNodeTotalCpuUsage.GetValue();
+        BLOG_TRACE("[MSR] Node " << id << " is ready, Avg CPU Usage " << avgCpuUsage);
+        ++readyNodesCount;
+
+        cpuUsageSum += avgCpuUsage;
+        node.AveragedNodeTotalCpuUsage.Clear();
+    }
+
+    auto& domain = Domains[GetMySubDomainKey()];
+    auto& avgCpuUsageHistory = domain.AvgCpuUsageHistory;
+
+    double avgCpuUsage = readyNodesCount != 0 ? cpuUsageSum / readyNodesCount : 0;
+    BLOG_TRACE("[MSR] Total Avg CPU Usage " << avgCpuUsage);
+
+    avgCpuUsageHistory.push_back(avgCpuUsage);
+    while (avgCpuUsageHistory.size() > MAX_HISTORY_SIZE) {
+        avgCpuUsageHistory.pop_front();
+    }
+    BLOG_TRACE("[MSR] Avg CPU Usage history " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
+
+    ui32 recommendedNodes = 0;
+
+    if (avgCpuUsageHistory.size() >= SCALE_IN_WINDOW_SIZE) {
+        auto scaleInWindowBegin = avgCpuUsageHistory.end() - SCALE_IN_WINDOW_SIZE;
+        auto scaleInWindowEnd = avgCpuUsageHistory.end();
+        double usageBottomThreshold = TARGET_AVG_CPU_USAGE_PERCENT - CPU_USAGE_MARGIN;
+
+        bool needScaleIn = std::all_of(
+            scaleInWindowBegin,
+            scaleInWindowEnd,
+            [usageBottomThreshold](double value){ return value < usageBottomThreshold; }
+        );
+
+        if (needScaleIn) {
+            recommendedNodes = CalculateRecommendedNodes(
+                scaleInWindowBegin,
+                scaleInWindowEnd,
+                readyNodesCount,
+                TARGET_AVG_CPU_USAGE_PERCENT
+            );
+            BLOG_D("[MSR] Need scale in: " << readyNodesCount << " -> " << recommendedNodes);
+        }
+    } else {
+        BLOG_D("[MSR] Not enough history data to scale in");
+    }
+
+    if (recommendedNodes == 0 && avgCpuUsageHistory.size() >= SCALE_OUT_WINDOW_SIZE) {
+        auto scaleOutWindowBegin = avgCpuUsageHistory.end() - SCALE_OUT_WINDOW_SIZE;
+        auto scaleOutWindowEnd = avgCpuUsageHistory.end();
+
+        bool needScaleOut = std::all_of(
+            scaleOutWindowBegin,
+            scaleOutWindowEnd,
+            [](double value){ return value > TARGET_AVG_CPU_USAGE_PERCENT; }
+        );
+
+        if (needScaleOut) {
+            recommendedNodes = CalculateRecommendedNodes(
+                scaleOutWindowBegin,
+                scaleOutWindowEnd,
+                readyNodesCount,
+                TARGET_AVG_CPU_USAGE_PERCENT
+            );
+            BLOG_D("[MSR] Need scale out: " << readyNodesCount << " -> " << recommendedNodes);
+        }
+    } else {
+        BLOG_D("[MSR] Not enough history data to scale out");
+    }
+
+    if (recommendedNodes != 0) {
+        domain.LastScaleRecommendation = TScaleRecommendation{
+            .Nodes = recommendedNodes,
+            .Timestamp = TActivationContext::Now()
+        };
+    }
+
+    Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());
+}
+
+void THive::Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr&) {
+    MakeScaleRecommendation();
+}
+
 void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvRequestScaleRecommendation(" << ev->Get()->Record.ShortDebugString() << ")");
     auto response = std::make_unique<TEvHive::TEvResponseScaleRecommendation>();
+
+    const auto& record = ev->Get()->Record;
+    if (!record.HasDomainKey()) {
+        response->Record.SetStatus(NKikimrProto::ERROR);
+        Send(ev->Sender, response.release());
+        return;
+    }
+
+    const TSubDomainKey domainKey(ev->Get()->Record.GetDomainKey());
+    if (!Domains.contains(domainKey)) {
+        response->Record.SetStatus(NKikimrProto::ERROR);
+        Send(ev->Sender, response.release());
+        return;
+    }
+
+    const TDomainInfo& domainInfo = Domains[domainKey];
+    if (domainInfo.LastScaleRecommendation.Empty()) {
+        response->Record.SetStatus(NKikimrProto::NOTREADY);
+        Send(ev->Sender, response.release());
+        return;
+    }
+
+    response->Record.SetStatus(NKikimrProto::OK);
+    response->Record.SetRecommendedNodes(domainInfo.LastScaleRecommendation->Nodes);
     Send(ev->Sender, response.release());
 }
 

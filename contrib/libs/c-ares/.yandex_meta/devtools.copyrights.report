@@ -1,0 +1,575 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0f195640bf540f098471ed5658bc51d7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998 Massachusetts Institute of Technology
+         * Copyright (c) 2010 Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_private.h [3:4]
+        src/lib/ares_process.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1603219f79de2a9f05d3f530d21680fd
+BELONGS ya.make
+    License text:
+         * Copyright (c) Massachusetts Institute of Technology
+         * Copyright (c) Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ares.h [3:4]
+        include/ares_dns.h [3:4]
+        include/ares_nameser.h [3:4]
+        src/lib/ares_addrinfo_localhost.c [3:4]
+        src/lib/ares_conn.c [3:4]
+        src/lib/ares_socket.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 169a51bc2a181587c3cadfcf8c1d7365
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012 by Gilles Chehade <gilles@openbsd.org>
+         * Copyright (c) 1996,1999 by Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/inet_net_pton.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1c99eb644d88ff8097bfa9bdd8e99c78
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024 Brad house
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/util/ares_uri.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39576df1509c67e327ee115665da4bfb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009 Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_data.c [3:3]
+        src/lib/ares_data.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 446ee43611aaf851683b4c03ccf758bc
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004-2006, 2008, 2009, 2011 Apple Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/thirdparty/apple/dnsinfo.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 48ffec1257b89f61dee97bd92eaea3b0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998 Massachusetts Institute of Technology
+         * Copyright (c) 2007 Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_init.c [3:4]
+        src/lib/ares_sysconfig.c [3:4]
+        src/lib/ares_sysconfig_files.c [3:4]
+        src/lib/ares_sysconfig_win.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4bfabf5a21c1373fd44a1a8d3224081a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2023 Brad House
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ares_dns_record.h [3:3]
+        src/lib/ares_hosts_file.c [3:3]
+        src/lib/ares_parse_into_addrinfo.c [3:4]
+        src/lib/ares_qcache.c [3:3]
+        src/lib/ares_update_servers.c [3:5]
+        src/lib/dsa/ares_htable.c [3:3]
+        src/lib/dsa/ares_htable.h [3:3]
+        src/lib/dsa/ares_htable_asvp.c [3:3]
+        src/lib/dsa/ares_htable_strvp.c [3:3]
+        src/lib/dsa/ares_htable_szvp.c [3:3]
+        src/lib/dsa/ares_llist.c [3:3]
+        src/lib/dsa/ares_slist.c [3:3]
+        src/lib/dsa/ares_slist.h [3:3]
+        src/lib/event/ares_event.h [3:3]
+        src/lib/include/ares_buf.h [3:3]
+        src/lib/include/ares_htable_asvp.h [3:3]
+        src/lib/include/ares_htable_strvp.h [3:3]
+        src/lib/include/ares_htable_szvp.h [3:3]
+        src/lib/include/ares_llist.h [3:3]
+        src/lib/legacy/ares_create_query.c [3:3]
+        src/lib/legacy/ares_parse_caa_reply.c [3:3]
+        src/lib/legacy/ares_parse_mx_reply.c [3:3]
+        src/lib/legacy/ares_parse_naptr_reply.c [3:3]
+        src/lib/legacy/ares_parse_ns_reply.c [3:3]
+        src/lib/legacy/ares_parse_ptr_reply.c [3:3]
+        src/lib/legacy/ares_parse_soa_reply.c [3:3]
+        src/lib/legacy/ares_parse_srv_reply.c [3:3]
+        src/lib/legacy/ares_parse_txt_reply.c [3:3]
+        src/lib/legacy/ares_parse_uri_reply.c [3:3]
+        src/lib/record/ares_dns_mapping.c [3:3]
+        src/lib/record/ares_dns_name.c [3:3]
+        src/lib/record/ares_dns_parse.c [3:3]
+        src/lib/record/ares_dns_private.h [3:3]
+        src/lib/record/ares_dns_record.c [3:3]
+        src/lib/record/ares_dns_write.c [3:3]
+        src/lib/str/ares_buf.c [3:3]
+        src/lib/util/ares_iface_ips.c [3:3]
+        src/lib/util/ares_iface_ips.h [3:3]
+        src/lib/util/ares_math.c [3:3]
+        src/lib/util/ares_rand.c [3:3]
+        src/lib/util/ares_threads.c [3:3]
+        src/lib/util/ares_threads.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 581a26659693b3672712a294efb19777
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000 Massachusetts Institute of Technology
+         * Copyright (c) The c-ares project and its contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_free_string.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 59a5d4a5ee570c05deb62c0668f64397
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE.md at line 4, src/lib/ares_addrinfo2hostent.c at line 4, src/lib/ares_close_sockets.c at line 4, src/lib/ares_destroy.c at line 4, src/lib/ares_free_hostent.c at line 4, src/lib/ares_freeaddrinfo.c at line 4, src/lib/ares_getenv.c at line 4, src/lib/ares_getenv.h at line 4, src/lib/ares_gethostbyaddr.c at line 4, src/lib/ares_init.c at line 4, src/lib/ares_library_init.c at line 4, src/lib/ares_options.c at line 4, src/lib/ares_private.h at line 4, src/lib/ares_process.c at line 4, src/lib/ares_query.c at line 4, src/lib/ares_search.c at line 4, src/lib/ares_send.c at line 4, src/lib/ares_strerror.c at line 4, src/lib/ares_sysconfig.c at line 4, src/lib/ares_sysconfig_files.c at line 4, src/lib/ares_sysconfig_win.c at line 4, src/lib/ares_timeout.c at line 4, src/lib/ares_update_servers.c at line 4, src/lib/ares_version.c at line 4, src/lib/include/ares_str.h at line 4, src/lib/legacy/ares_expand_string.c at line 4, src/lib/legacy/ares_fds.c at line 4, src/lib/legacy/ares_parse_a_reply.c at line 4, src/lib/legacy/ares_parse_aaaa_reply.c at line 4, src/lib/str/ares_str.c at line 4, src/lib/windows_port.c at line 4
+    License text:
+        Copyright (c) 1998 Massachusetts Institute of Technology  
+        Copyright (c) 2007 - 2023 Daniel Stenberg with many contributors, see AUTHORS
+        file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [3:5]
+        src/lib/ares_addrinfo2hostent.c [3:6]
+        src/lib/ares_close_sockets.c [3:4]
+        src/lib/ares_destroy.c [3:4]
+        src/lib/ares_free_hostent.c [3:4]
+        src/lib/ares_freeaddrinfo.c [3:4]
+        src/lib/ares_getenv.c [3:4]
+        src/lib/ares_getenv.h [3:4]
+        src/lib/ares_gethostbyaddr.c [3:4]
+        src/lib/ares_init.c [3:4]
+        src/lib/ares_library_init.c [3:4]
+        src/lib/ares_options.c [3:4]
+        src/lib/ares_private.h [3:4]
+        src/lib/ares_process.c [3:4]
+        src/lib/ares_query.c [3:4]
+        src/lib/ares_search.c [3:4]
+        src/lib/ares_send.c [3:4]
+        src/lib/ares_strerror.c [3:4]
+        src/lib/ares_sysconfig.c [3:4]
+        src/lib/ares_sysconfig_files.c [3:4]
+        src/lib/ares_sysconfig_win.c [3:4]
+        src/lib/ares_timeout.c [3:4]
+        src/lib/ares_update_servers.c [3:5]
+        src/lib/ares_version.c [3:4]
+        src/lib/include/ares_str.h [3:4]
+        src/lib/legacy/ares_expand_string.c [3:4]
+        src/lib/legacy/ares_fds.c [3:4]
+        src/lib/legacy/ares_parse_a_reply.c [3:4]
+        src/lib/legacy/ares_parse_aaaa_reply.c [3:5]
+        src/lib/str/ares_str.c [3:4]
+        src/lib/windows_port.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c49b190fc96e32ee1e8f2ea59984e79
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE.md at line 4
+    License text:
+        Copyright (c) 1998 Massachusetts Institute of Technology  
+        Copyright (c) 2007 - 2023 Daniel Stenberg with many contributors, see AUTHORS
+        file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 70af93267c7fff9c5904461bb7939043
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005 Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_inet_net_pton.h [3:3]
+        src/lib/legacy/ares_getsock.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 772d70e950c69b1a32c0a0047f47ee2d
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
+         * Copyright (C) 2018 The Android Open Source Project
+         * Copyright (C) 2019 Andrew Selivanov
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_sortaddrinfo.c [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 78db66be56803e72faf0c0319b5841bb
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
+         * Copyright (C) 2018 The Android Open Source Project
+         * Copyright (C) 2019 Andrew Selivanov
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_sortaddrinfo.c [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 85865ce667770443f065d82a66073a8b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998 Massachusetts Institute of Technology
+         * Copyright (c) 2008 Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_options.c [3:4]
+        src/lib/ares_update_servers.c [3:5]
+        src/lib/util/ares_timeval.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 960dbf90fade4be8db2ae541b9662785
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998, 2011, 2013 Massachusetts Institute of Technology
+         * Copyright (c) 2017 Christian Ammer
+         * Copyright (c) 2019 Andrew Selivanov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_getaddrinfo.c [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 98066aaf98df7e6fe716b166e095ddc4
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018 John Schember
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/str/ares_strsplit.c [3:3]
+        src/lib/str/ares_strsplit.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 998d598c0b2c4665183fefe5ae17d48c
+BELONGS ya.make
+    License text:
+         * Copyright (c) Massachusetts Institute of Technology
+         * Copyright (c) Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ares.h [3:4]
+        include/ares_nameser.h [3:4]
+        include/ares_version.h [3:3]
+        src/lib/ares_addrinfo_localhost.c [3:4]
+        src/lib/windows_port.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a9fd87d904be8e622d0a1f64972520b3
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005, 2013 Dominick Meglio
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_getnameinfo.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b0ba0e82ac2b1e74adc884bf65ffb51a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
+         * Copyright (c) 1996-1999 by Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/inet_ntop.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b58dbe43b7469b7a9aa96d066da57b7e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998 Massachusetts Institute of Technology
+         * Copyright (c) 2005 Dominick Meglio
+         * Copyright (c) 2019 Andrew Selivanov
+         * Copyright (c) 2021 Brad House
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_addrinfo2hostent.c [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b631dfa8a965ca744a170d01122adde3
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998 Massachusetts Institute of Technology
+         * Copyright (c) 2005 Dominick Meglio
+         * Copyright (c) 2019 Andrew Selivanov
+         * Copyright (c) 2021 Brad House
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_addrinfo2hostent.c [3:6]
+        src/lib/ares_freeaddrinfo.c [3:4]
+        src/lib/ares_getaddrinfo.c [3:5]
+        src/lib/ares_parse_into_addrinfo.c [3:4]
+        src/lib/ares_sortaddrinfo.c [7:10]
+        src/lib/legacy/ares_parse_a_reply.c [3:4]
+        src/lib/legacy/ares_parse_aaaa_reply.c [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7d1516b5e21748e16929fa3c23efeb8
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024 The c-ares project and its contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_sysconfig_mac.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c77c02a30f970451b71b72c5c8d97a70
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
+         * Copyright (c) 1996-1999 by Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/inet_ntop.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd267f8a3f59eba67ef2e3f6fc109f3b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024 Brad House
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_conn.h [3:3]
+        src/lib/ares_cookie.c [3:3]
+        src/lib/ares_metrics.c [3:3]
+        src/lib/ares_set_socket_functions.c [3:3]
+        src/lib/ares_socket.h [3:3]
+        src/lib/dsa/ares_array.c [3:3]
+        src/lib/dsa/ares_htable_dict.c [3:3]
+        src/lib/dsa/ares_htable_vpstr.c [3:3]
+        src/lib/dsa/ares_htable_vpvp.c [3:3]
+        src/lib/event/ares_event_configchg.c [3:3]
+        src/lib/event/ares_event_epoll.c [3:3]
+        src/lib/event/ares_event_kqueue.c [3:3]
+        src/lib/event/ares_event_poll.c [3:3]
+        src/lib/event/ares_event_select.c [3:3]
+        src/lib/event/ares_event_thread.c [3:3]
+        src/lib/event/ares_event_wake_pipe.c [3:3]
+        src/lib/event/ares_event_win32.c [3:3]
+        src/lib/event/ares_event_win32.h [3:3]
+        src/lib/include/ares_array.h [3:3]
+        src/lib/include/ares_htable_dict.h [3:3]
+        src/lib/include/ares_htable_vpstr.h [3:3]
+        src/lib/include/ares_htable_vpvp.h [3:3]
+        src/lib/record/ares_dns_multistring.c [3:3]
+        src/lib/record/ares_dns_multistring.h [3:3]
+        src/lib/util/ares_math.h [3:3]
+        src/lib/util/ares_rand.h [3:3]
+        src/lib/util/ares_time.h [3:3]
+        src/lib/util/ares_uri.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce0977756b380247a8bc4bd331fcaee5
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998 Massachusetts Institute of Technology
+         * Copyright (c) 2005 Dominick Meglio
+         * Copyright (c) 2019 Andrew Selivanov
+         * Copyright (c) 2021 Brad House
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_addrinfo2hostent.c [3:6]
+        src/lib/ares_ipv6.h [3:3]
+        src/lib/legacy/ares_parse_aaaa_reply.c [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e50787fed1e80434d7b808f2a2b6aaf3
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 Daniel Stenberg
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_cancel.c [3:3]
+        src/lib/ares_destroy.c [3:4]
+        src/lib/ares_library_init.c [3:4]
+        src/lib/ares_setup.h [3:3]
+        src/lib/config-win32.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e85d4cea18c1e08cc2c5c813f258c778
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998, 2011 Massachusetts Institute of Technology
+         * Copyright (c) The c-ares project and its contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/legacy/ares_expand_name.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f505d10c72d522acd9580354202cfa77
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012 by Gilles Chehade <gilles@openbsd.org>
+         * Copyright (c) 1996,1999 by Internet Software Consortium.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/inet_net_pton.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f528e0ce103c02c3071767b67846c26b
+BELONGS ya.make
+    License text:
+         * Copyright (c) John Schember
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_android.c [3:3]
+        src/lib/ares_android.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f7cc0654f141abfc3194dd95ce3ddda7
+BELONGS ya.make
+    License text:
+         * Copyright (C) The c-ares project and its contributors
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ares_build-ios.h [4:5]
+        include/ares_build-linux.h [4:5]
+        include/ares_dns.h [3:4]
+        src/lib/ares_close_sockets.c [3:4]
+        src/lib/ares_config-android.h [1:2]
+        src/lib/ares_config-linux.h [1:2]
+        src/lib/ares_config-osx.h [1:2]
+        src/lib/ares_conn.c [3:4]
+        src/lib/ares_free_hostent.c [3:4]
+        src/lib/ares_free_string.c [3:4]
+        src/lib/ares_getenv.c [3:4]
+        src/lib/ares_getenv.h [3:4]
+        src/lib/ares_gethostbyaddr.c [3:4]
+        src/lib/ares_gethostbyname.c [3:4]
+        src/lib/ares_query.c [3:4]
+        src/lib/ares_search.c [3:4]
+        src/lib/ares_send.c [3:4]
+        src/lib/ares_socket.c [3:4]
+        src/lib/ares_strerror.c [3:4]
+        src/lib/ares_timeout.c [3:4]
+        src/lib/ares_version.c [3:4]
+        src/lib/include/ares_mem.h [3:3]
+        src/lib/include/ares_str.h [3:4]
+        src/lib/legacy/ares_expand_name.c [3:4]
+        src/lib/legacy/ares_expand_string.c [3:4]
+        src/lib/legacy/ares_fds.c [3:4]
+        src/lib/str/ares_str.c [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fad8fe46bbe1d4c48e0cc175486c8a47
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998, 2011, 2013 Massachusetts Institute of Technology
+         * Copyright (c) 2017 Christian Ammer
+         * Copyright (c) 2019 Andrew Selivanov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/lib/ares_getaddrinfo.c [3:5]
+        src/lib/ares_gethostbyname.c [3:4]

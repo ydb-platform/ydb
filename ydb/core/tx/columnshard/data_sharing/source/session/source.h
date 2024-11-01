@@ -19,7 +19,7 @@ private:
     YDB_READONLY_DEF(std::set<ui64>, PathIds);
     TTabletId DestinationTabletId = TTabletId(0);
 protected:
-    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) override;
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) override;
     virtual THashSet<ui64> GetPathIdsForStart() const override {
         THashSet<ui64> result;
         for (auto&& i : PathIds) {

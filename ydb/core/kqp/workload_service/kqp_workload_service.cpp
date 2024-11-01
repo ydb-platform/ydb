@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 

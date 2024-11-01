@@ -4,7 +4,11 @@
 
 #include <ydb/library/actors/prof/tag.h>
 #include <library/cpp/cache/cache.h>
-#include <library/cpp/dwarf_backtrace/backtrace.h>
+
+#if defined(USE_DWARF_BACKTRACE)
+#   include <library/cpp/dwarf_backtrace/backtrace.h>
+#endif
+
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -207,6 +211,7 @@ class TAllocationAnalyzer {
     bool Prepared = false;
 
 private:
+#if defined(USE_DWARF_BACKTRACE)
     void PrintBackTrace(IOutputStream& out, void* const* stack, size_t size, const char* sep) {
         // TODO: ignore symbol cache for now - because of inlines.
         if (auto error = NDwarf::ResolveBacktrace(TArrayRef<const void* const>(stack, size), [&](const NDwarf::TLineInfo& info) {
@@ -219,6 +224,28 @@ private:
             out << sep;
         }
     }
+#else
+    void PrintBackTrace(IOutputStream& out, void* const* stack, size_t sz, const char* sep) {
+        char name[1024];
+        for (size_t i = 0; i < sz; ++i) {
+            TSymbol symbol;
+            auto it = SymbolCache.Find(stack[i]);
+            if (it != SymbolCache.End()) {
+                symbol = it.Value();
+            } else {
+                TResolvedSymbol rs = ResolveSymbol(stack[i], name, sizeof(name));
+                symbol = {rs.NearestSymbol, rs.Name};
+                SymbolCache.Insert(stack[i], symbol);
+            }
+
+            out << Hex((intptr_t)stack[i], HF_FULL) << " " << symbol.Name;
+            intptr_t offset = (intptr_t)stack[i] - (intptr_t)symbol.Address;
+            if (offset)
+                out << " +" << offset;
+            out << sep;
+        }
+    }
+#endif
 
     void PrintSample(IOutputStream& out, const tcmalloc::Profile::Sample* sample,
         const char* sep) const

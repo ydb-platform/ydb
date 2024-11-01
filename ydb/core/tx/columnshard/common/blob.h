@@ -21,7 +21,12 @@ public:
     virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
 };
 
-class TUnifiedBlobId;
+class TFakeGroupSelector: public IBlobGroupSelector {
+public:
+    virtual ui32 GetGroup(const TLogoBlobID& /*blobId*/) const override {
+        return 1;
+    }
+};
 
 class TUnifiedBlobId {
     // Id of a blob in YDB distributed storage
@@ -190,6 +195,16 @@ struct TBlobRange {
     TUnifiedBlobId BlobId;
     ui32 Offset;
     ui32 Size;
+
+    ui32 GetSize() const {
+        return Size;
+    }
+
+    ui32 GetOffset() const {
+        return Offset;
+    }
+
+    TString GetData(const TString& blobData) const;
 
     bool operator<(const TBlobRange& br) const {
         if (BlobId != br.BlobId) {

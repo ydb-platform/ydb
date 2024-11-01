@@ -1,0 +1,128 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a2b5d5a0c0eaf639c779415c0484b22
+BELONGS ya.make
+    License text:
+        //  Copyright Douglas Gregor 2004.
+        //  Copyright 2005 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function_equal.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 17fb6732a4d2890917643ed3e710bbe7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function/function_base.hpp [3:6]
+        include/boost/function/function_template.hpp [6:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4feddf5837ec6507c85e2af8198adbd4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function/function_base.hpp [3:6]
+        include/boost/function/function_template.hpp [6:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5789ac1ea1cab431bffdc8ab634e3c24
+BELONGS ya.make
+    License text:
+        //  Copyright (C) Douglas Gregor 2008
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function/function_fwd.hpp [2:2]
+        include/boost/function/function_typeof.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 79e7551f02d99afc8dd82a857068d461
+BELONGS ya.make
+    License text:
+        //  Copyright Douglas Gregor 2004.
+        //  Copyright 2005 Peter Dimov
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function_equal.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb55147ae1dc454d4781bbd8a6e366f9
+BELONGS ya.make
+    License text:
+        //  Copyright Douglas Gregor 2001-2003. Use, modification and
+        //  distribution is subject to the Boost Software License, Version
+        //  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f3d5b11267b04733324e332e93eecd5d
+BELONGS ya.make
+    License text:
+        //  Copyright Douglas Gregor 2002-2003. Use, modification and
+        //  distribution is subject to the Boost Software License, Version
+        //  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/function/function0.hpp [3:5]
+        include/boost/function/function1.hpp [3:5]
+        include/boost/function/function10.hpp [3:5]
+        include/boost/function/function2.hpp [3:5]
+        include/boost/function/function3.hpp [3:5]
+        include/boost/function/function4.hpp [3:5]
+        include/boost/function/function5.hpp [3:5]
+        include/boost/function/function6.hpp [3:5]
+        include/boost/function/function7.hpp [3:5]
+        include/boost/function/function8.hpp [3:5]
+        include/boost/function/function9.hpp [3:5]

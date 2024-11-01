@@ -1,9 +1,8 @@
 #include "columnar_statistics.h"
 
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/schema.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
-#include <yt/yt/client/table_client/versioned_row.h>
+#include "name_table.h"
+#include "unversioned_row.h"
+#include "versioned_row.h"
 
 #include <library/cpp/iterator/functools.h>
 
@@ -266,7 +265,7 @@ TLightweightColumnarStatistics TColumnarStatistics::MakeLightweightStatistics() 
     };
 }
 
-TNamedColumnarStatistics TColumnarStatistics::MakeNamedStatistics(const std::vector<TString>& names) const
+TNamedColumnarStatistics TColumnarStatistics::MakeNamedStatistics(const std::vector<std::string>& names) const
 {
     TNamedColumnarStatistics result;
     result.TimestampTotalWeight = TimestampTotalWeight;

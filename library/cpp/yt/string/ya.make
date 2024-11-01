@@ -8,6 +8,7 @@ SRCS(
     string.cpp
     format_string.cpp
     format.cpp
+    string_builder.cpp
 )
 
 PEERDIR(

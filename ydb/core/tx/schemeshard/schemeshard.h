@@ -51,7 +51,7 @@ public:
     }
 };
 
-struct TEvSchemeShard {
+namespace TEvSchemeShard {
     enum EEv {
         EvModifySchemeTransaction = EventSpaceBegin(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD),  // 271122432
         EvModifySchemeTransactionResult = EvModifySchemeTransaction + 1 * 512,

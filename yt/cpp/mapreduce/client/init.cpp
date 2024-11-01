@@ -159,7 +159,7 @@ void CommonInitialize(int argc, const char** argv)
     }
 
     auto logPath = TConfig::Get()->LogPath;
-    auto logger = logPath.Empty() ? CreateStdErrLogger(logLevel) : CreateFileLogger(logLevel, logPath);
+    auto logger = logPath.empty() ? CreateStdErrLogger(logLevel) : CreateFileLogger(logLevel, logPath);
     SetLogger(logger);
 
     TProcessState::Get()->SetCommandLine(argc, argv);

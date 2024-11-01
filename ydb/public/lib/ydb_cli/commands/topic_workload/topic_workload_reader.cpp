@@ -92,7 +92,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 
                 for (const auto& message : dataEvent->GetMessages()) {
                     ui64 fullTime = (now - message.GetCreateTime()).MilliSeconds();
-                    params.StatsCollector->AddReaderEvent(params.ReaderIdx, {message.GetData().Size(), fullTime});
+                    params.StatsCollector->AddReaderEvent(params.ReaderIdx, {message.GetData().size(), fullTime});
 
                     if (txSupport) {
                         txSupport->AppendRow(message.GetData());

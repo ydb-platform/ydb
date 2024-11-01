@@ -264,12 +264,12 @@ class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     std::set<ui32> SequentialEntityIds;
-    std::shared_ptr<TPortionInfo> Portion;
+    TPortionDataAccessor Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
     mutable THashMap<ui64, ui64> FingerprintedData;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
-        THashMap<TChunkAddress, TPortionInfo::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
+        THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(
@@ -280,32 +280,34 @@ private:
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
-        result.InsertValue("info", Portion->DebugString());
+        result.InsertValue("info", Portion.GetPortionInfo().DebugString());
+        result.InsertValue("commit", Portion.GetPortionInfo().GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
+        result.InsertValue("insert", (ui64)Portion.GetPortionInfo().GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
         return result;
     }
 
     virtual NJson::TJsonValue DoDebugJsonForMemory() const override {
         NJson::TJsonValue result = TBase::DoDebugJsonForMemory();
-        auto columns = Portion->GetColumnIds();
+        auto columns = Portion.GetColumnIds();
         for (auto&& i : SequentialEntityIds) {
             AFL_VERIFY(columns.erase(i));
         }
         //        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
         if (SequentialEntityIds.size()) {
-            result.InsertValue("min_memory_seq", Portion->GetMinMemoryForReadColumns(SequentialEntityIds));
-            result.InsertValue("min_memory_seq_blobs", Portion->GetColumnBlobBytes(SequentialEntityIds));
-            result.InsertValue("in_mem", Portion->GetColumnRawBytes(columns, false));
+            result.InsertValue("min_memory_seq", Portion.GetMinMemoryForReadColumns(SequentialEntityIds));
+            result.InsertValue("min_memory_seq_blobs", Portion.GetColumnBlobBytes(SequentialEntityIds));
+            result.InsertValue("in_mem", Portion.GetColumnRawBytes(columns, false));
         }
         result.InsertValue("columns_in_mem", JoinSeq(",", columns));
-        result.InsertValue("portion_id", Portion->GetPortionId());
-        result.InsertValue("raw", Portion->GetTotalRawBytes());
-        result.InsertValue("blob", Portion->GetTotalBlobBytes());
-        result.InsertValue("read_memory", GetColumnRawBytes(Portion->GetColumnIds()));
+        result.InsertValue("portion_id", Portion.GetPortionInfo().GetPortionId());
+        result.InsertValue("raw", Portion.GetPortionInfo().GetTotalRawBytes());
+        result.InsertValue("blob", Portion.GetPortionInfo().GetTotalBlobBytes());
+        result.InsertValue("read_memory", GetColumnRawBytes(Portion.GetColumnIds()));
         return result;
     }
     virtual void DoAbort() override;
     virtual ui64 GetPathId() const override {
-        return Portion->GetPathId();
+        return Portion.GetPortionInfo().GetPathId();
     }
     virtual bool DoAddSequentialEntityIds(const ui32 entityId) override {
         FingerprintedData.clear();
@@ -314,16 +316,22 @@ private:
 
 public:
     virtual bool DoAddTxConflict() override {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        if (Portion.GetPortionInfo().HasCommitSnapshot() || !Portion.GetPortionInfo().HasInsertWriteId()) {
+            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+            return true;
+        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion.GetPortionInfo().GetInsertWriteIdVerified())) {
+            GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion.GetPortionInfo().GetInsertWriteIdVerified());
+            return true;
+        }
         return false;
     }
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
-        return Portion->HasIndexes(indexIds);
+        return Portion.HasIndexes(indexIds);
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
-        return Portion->DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
+        return Portion.DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
     virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const override {
@@ -353,36 +361,38 @@ public:
                     selectedInMem.emplace(i);
                 }
             }
-            result = Portion->GetMinMemoryForReadColumns(selectedSeq) + Portion->GetColumnBlobBytes(selectedSeq) +
-                   Portion->GetColumnRawBytes(selectedInMem, false);
+            result = Portion.GetMinMemoryForReadColumns(selectedSeq) +
+                     Portion.GetColumnBlobBytes(selectedSeq, false) +
+                     Portion.GetColumnRawBytes(selectedInMem, false);
         } else {
-            result = Portion->GetColumnRawBytes(columnsIds, false);
+            result = Portion.GetColumnRawBytes(columnsIds, false);
         }
         FingerprintedData.emplace(fp, result);
         return result;
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {
-        return Portion->GetColumnBlobBytes(columnsIds, false);
+        return Portion.GetColumnBlobBytes(columnsIds, false);
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
-        return Portion->GetIndexRawBytes(indexIds, false);
+        return Portion.GetIndexRawBytes(indexIds, false);
     }
 
     const TPortionInfo& GetPortionInfo() const {
-        return *Portion;
+        return Portion.GetPortionInfo();
     }
 
-    std::shared_ptr<TPortionInfo> GetPortionInfoPtr() const {
-        return Portion;
+    const TPortionInfo::TConstPtr& GetPortionInfoPtr() const {
+        return Portion.GetPortionInfoPtr();
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(), portion->RecordSnapshotMax(),
+        : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(TSnapshot::Zero()),
+              portion->RecordSnapshotMax(TSnapshot::Zero()),
               portion->GetRecordsCount(), portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
-        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion)) {
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
     }
 };
 

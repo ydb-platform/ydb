@@ -13,15 +13,13 @@ private:
 
     class TPortionForEviction {
     private:
-        TPortionInfo PortionInfo;
+        TPortionDataAccessor PortionInfo;
         TPortionEvictionFeatures Features;
     public:
-        TPortionForEviction(const TPortionInfo& portion, TPortionEvictionFeatures&& features)
+        TPortionForEviction(const TPortionDataAccessor& portion, TPortionEvictionFeatures&& features)
             : PortionInfo(portion)
-            , Features(std::move(features))
-        {
-
-        }
+            , Features(std::move(features)) {
+        };
 
         TPortionEvictionFeatures& GetFeatures() {
             return Features;
@@ -31,11 +29,7 @@ private:
             return Features;
         }
 
-        const TPortionInfo& GetPortionInfo() const {
-            return PortionInfo;
-        }
-
-        TPortionInfo& MutablePortionInfo() {
+        const TPortionDataAccessor& GetPortionInfo() const {
             return PortionInfo;
         }
     };
@@ -55,13 +49,13 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : PortionsToEvict) {
-            result = predictor->AddPortion(p.GetPortionInfo());
+            result = predictor->AddPortion(p.GetPortionInfo().GetPortionInfoPtr());
         }
         return result;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
         const auto pred = [](const TPortionForEviction& p) {
-            return p.GetPortionInfo().GetAddress();
+            return p.GetPortionInfo().GetPortionInfo().GetAddress();
         };
         return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
     }
@@ -71,11 +65,11 @@ public:
         ui64 SumBlobsMemory = 0;
         ui64 MaxRawMemory = 0;
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) override {
-            if (MaxRawMemory < portionInfo.GetTotalRawBytes()) {
-                MaxRawMemory = portionInfo.GetTotalRawBytes();
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override {
+            if (MaxRawMemory < portionInfo->GetTotalRawBytes()) {
+                MaxRawMemory = portionInfo->GetTotalRawBytes();
             }
-            SumBlobsMemory += portionInfo.GetTotalBlobBytes();
+            SumBlobsMemory += portionInfo->GetTotalBlobBytes();
             return SumBlobsMemory + MaxRawMemory;
         }
     };
@@ -94,9 +88,8 @@ public:
     ui32 GetPortionsToEvictCount() const {
         return PortionsToEvict.size();
     }
-    void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
-        Y_ABORT_UNLESS(!info.Empty());
-        Y_ABORT_UNLESS(!info.HasRemoveSnapshot());
+    void AddPortionToEvict(const TPortionDataAccessor& info, TPortionEvictionFeatures&& features) {
+        AFL_VERIFY(!info.GetPortionInfo().HasRemoveSnapshot());
         PortionsToEvict.emplace_back(info, std::move(features));
     }
 

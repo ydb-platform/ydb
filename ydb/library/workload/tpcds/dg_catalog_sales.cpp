@@ -100,7 +100,7 @@ TTpcDSGeneratorCatalogSales::TTpcDSGeneratorCatalogSales(const TTpcdsWorkloadDat
     : TBulkDataGenerator(owner, CATALOG_SALES)
 {}
 
-void TTpcDSGeneratorCatalogSales::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorCatalogSales::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_CATALOG_SALES_TBL> catalogSalesList;
     TVector<W_CATALOG_RETURNS_TBL> catalogReturnsList;
     catalogReturnsList.reserve(ctxs.front().GetCount() * 14);
@@ -115,6 +115,8 @@ void TTpcDSGeneratorCatalogSales::GenerateRows(TContexts& ctxs) {
         }
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_CATALOG_SALES_TBL> writerSales(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_FIELD(writerSales, "cs_item_sk", cs_sold_item_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writerSales, cs_order_number);

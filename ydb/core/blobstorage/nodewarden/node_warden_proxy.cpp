@@ -1,4 +1,9 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
+
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
 using namespace NStorage;

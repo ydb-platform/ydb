@@ -705,7 +705,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         auto request = MakeSQLRequest("SELECT * FROM `/Root/table-1`");
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
-        auto &resp = reply->Record.GetRef().GetResponse();
+        auto &resp = reply->Record.GetResponse();
         UNIT_ASSERT_VALUES_EQUAL(resp.YdbResultsSize(), 1);
 
         if (waitForLocksStore)

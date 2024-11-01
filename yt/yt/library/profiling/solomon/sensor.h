@@ -121,7 +121,7 @@ public:
 
 private:
     std::vector<double> Bounds_;
-    std::vector<std::atomic<int>> Buckets_;
+    std::vector<std::atomic<i64>> Buckets_;
 
     // These two methods are not used.
     TSummarySnapshot<TDuration> GetSummary() override;

@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it_all_ut.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice_it.h>
+#include <ydb/core/base/appdata.h>
 
 #include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_datasnap.h>

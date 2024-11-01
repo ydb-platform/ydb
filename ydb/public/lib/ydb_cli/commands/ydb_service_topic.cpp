@@ -306,6 +306,11 @@ namespace {
             .Optional()
             .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, false);
+
+        config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
+            .Optional()
+            .Hidden()
+            .StoreResult(&PartitionsPerTablet_);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -347,6 +352,10 @@ namespace {
 
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
         settings.RetentionStorageMb(RetentionStorageMb_);
+
+        if (PartitionsPerTablet_.Defined()) {
+            settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
+        }
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);
@@ -394,30 +403,32 @@ namespace {
         NYdb::NTopic::TDescribeTopicResult& describeResult) {
         auto settings = NYdb::NTopic::TAlterTopicSettings();
         auto& partitioningSettings = settings.BeginAlterPartitioningSettings();
+        auto& originPartitioningSettings = describeResult.GetTopicDescription().GetPartitioningSettings();
 
-        if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions())) {
+        if (MinActivePartitions_.Defined() && (*MinActivePartitions_ != originPartitioningSettings.GetMinActivePartitions())) {
             partitioningSettings.MinActivePartitions(*MinActivePartitions_);
         }
 
-        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != describeResult.GetTopicDescription().GetPartitioningSettings().GetMaxActivePartitions())) {
+        if (MaxActivePartitions_.Defined() && (*MaxActivePartitions_ != originPartitioningSettings.GetMaxActivePartitions())) {
             partitioningSettings.MaxActivePartitions(*MaxActivePartitions_);
         }
 
-        auto autoPartitioningSettings = partitioningSettings.BeginAlterAutoPartitioningSettings();
+        auto& autoPartitioningSettings = partitioningSettings.BeginAlterAutoPartitioningSettings();
+        const auto& originalAutoPartitioningSettings = originPartitioningSettings.GetAutoPartitioningSettings();
 
-        if (GetAutoPartitioningStabilizationWindowSeconds().Defined() && *GetAutoPartitioningStabilizationWindowSeconds() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStabilizationWindow().Seconds()) {
+        if (GetAutoPartitioningStabilizationWindowSeconds().Defined() && *GetAutoPartitioningStabilizationWindowSeconds() != originalAutoPartitioningSettings.GetStabilizationWindow().Seconds()) {
             autoPartitioningSettings.StabilizationWindow(TDuration::Seconds(*GetAutoPartitioningStabilizationWindowSeconds()));
         }
 
-        if (GetAutoPartitioningStrategy().Defined() && *GetAutoPartitioningStrategy() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()) {
+        if (GetAutoPartitioningStrategy().Defined() && *GetAutoPartitioningStrategy() != originalAutoPartitioningSettings.GetStrategy()) {
             autoPartitioningSettings.Strategy(*GetAutoPartitioningStrategy());
         }
 
-        if (GetAutoPartitioninDownUtilizationPercent().Defined() && *GetAutoPartitioninDownUtilizationPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetDownUtilizationPercent()) {
+        if (GetAutoPartitioninDownUtilizationPercent().Defined() && *GetAutoPartitioninDownUtilizationPercent() != originalAutoPartitioningSettings.GetDownUtilizationPercent()) {
             autoPartitioningSettings.DownUtilizationPercent(*GetAutoPartitioninDownUtilizationPercent());
         }
 
-        if (GetAutoPartitioningUpUtilizationPercent().Defined() && *GetAutoPartitioningUpUtilizationPercent() != describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetUpUtilizationPercent()) {
+        if (GetAutoPartitioningUpUtilizationPercent().Defined() && *GetAutoPartitioningUpUtilizationPercent() != originalAutoPartitioningSettings.GetUpUtilizationPercent()) {
             autoPartitioningSettings.UpUtilizationPercent(*GetAutoPartitioningUpUtilizationPercent());
         }
 
@@ -826,6 +837,7 @@ namespace {
 
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
+        settings.AutoPartitioningSupport(true);
         settings.ConsumerName(Consumer_);
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {
@@ -895,6 +907,7 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
         config.Opts->AddLongOption("codec", description)
             .Optional()
+            .DefaultValue("RAW")
             .StoreResult(&CodecStr_);
         AllowedCodecs_ = allowedCodecs;
     }

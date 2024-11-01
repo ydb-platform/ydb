@@ -275,6 +275,9 @@ public:
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             type = "<pq group>";
             break;
+        case NKikimrSchemeOp::EPathTypeBackupCollection:
+            type = "<backup collection>";
+            break;
         default:
             type = "<unknown>";
             break;
@@ -486,6 +489,9 @@ public:
             break;
         case NKikimrSchemeOp::EPathTypeReplication:
             type = "<replication>";
+            break;
+        case NKikimrSchemeOp::EPathTypeBackupCollection:
+            type = "<backup collection>";
             break;
         default:
             type = "<unknown>";

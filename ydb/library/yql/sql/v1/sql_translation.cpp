@@ -39,7 +39,7 @@ void VisitAllFields(const NProtoBuf::Message& msg, Callback& callback) {
 struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) {
         if (const auto* token = dynamic_cast<const NSQLv1Generated::TToken*>(&message)) {
-            if (!Tokens.Empty()) {
+            if (!Tokens.empty()) {
                 Tokens << ' ';
             }
             Tokens << token->GetValue();
@@ -55,48 +55,67 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-bool RestoreContext(
-    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& contextRestorationQuery
+bool RecreateContext(
+    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& recreationQuery
 ) {
-    const TString queryName = "context restoration query";
+    if (!recreationQuery) {
+        return true;
+    }
+    const TString queryName = "context recreation query";
 
     const auto* ast = NSQLTranslationV1::SqlAST(
-        contextRestorationQuery, queryName, ctx.Issues,
+        recreationQuery, queryName, ctx.Issues,
         settings.MaxErrors, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena
     );
     if (!ast) {
         return false;
     }
 
-    TSqlQuery query(ctx, ctx.Settings.Mode, true);
-    auto node = query.Build(static_cast<const TSQLv1ParserAST&>(*ast));
+    TSqlQuery queryTranslator(ctx, ctx.Settings.Mode, true);
+    auto node = queryTranslator.Build(static_cast<const TSQLv1ParserAST&>(*ast));
 
     return node && node->Init(ctx, nullptr) && node->Translate(ctx);
 }
 
 TNodePtr BuildViewSelect(
-    const TRule_select_stmt& selectQuery,
+    const TRule_select_stmt& selectStatement,
     TContext& parentContext,
-    const TString& contextRestorationQuery
+    const TString& contextRecreationQuery
 ) {
-    TContext context(parentContext.Settings, {}, parentContext.Issues);
-    RestoreContext(context, context.Settings, contextRestorationQuery);
+    TIssues issues;
+    TContext context(parentContext.Settings, {}, issues);
+    if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
+        parentContext.Issues.AddIssues(issues);
+        return nullptr;
+    }
+    issues.Clear();
+
+    // Holds (among other things) subquery references.
+    // These references need to be passed to the parent context
+    // to be able to compile view queries with subqueries.
+    context.PushCurrentBlocks(&parentContext.GetCurrentBlocks());
 
     context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
 
-    TSqlSelect select(context, context.Settings.Mode);
-    TPosition pos;
-    auto source = select.Build(selectQuery, pos);
+    TSqlSelect selectTranslator(context, context.Settings.Mode);
+    TPosition pos = parentContext.Pos();
+    auto source = selectTranslator.Build(selectStatement, pos);
     if (!source) {
+        parentContext.Issues.AddIssues(issues);
         return nullptr;
     }
-    return BuildSelectResult(
+    auto node = BuildSelectResult(
         pos,
         std::move(source),
         false,
         false,
         context.Scoped
     );
+    if (!node) {
+        parentContext.Issues.AddIssues(issues);
+        return nullptr;
+    }
+    return node;
 }
 
 }
@@ -707,11 +726,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
         if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            index.IndexSettings = TVectorIndexSettings();
+            auto& vectorSettings = index.IndexSettings.emplace<TVectorIndexSettings>();
             if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
                 return false;
             }
-            const auto &vectorSettings = std::get<TVectorIndexSettings>(index.IndexSettings);
             if (!vectorSettings.Validate(Ctx)) {
                 return false;
             }
@@ -818,14 +836,14 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
                 Ctx.Error() << "Invalid distance: " << stringValue;
                 return false;
             }
-            vectorIndexSettings.Metric = value;
+            vectorIndexSettings.Distance = value;
         } else if (to_lower(id.Name) == "similarity") {
             const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
             if (!success) {
                 Ctx.Error() << "Invalid similarity: " << stringValue;
                 return false;
             }
-            vectorIndexSettings.Metric = value;
+            vectorIndexSettings.Similarity = value;
         } else if (to_lower(id.Name) == "vector_type") {
             const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
             if (!success) {
@@ -840,6 +858,20 @@ bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
                 return false;
             }
             vectorIndexSettings.VectorDimension = value;
+        } else if (to_lower(id.Name) == "clusters") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            if (!success || value > Max<ui32>()) {
+                Ctx.Error() << "Invalid clusters: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Clusters = value;
+        } else if (to_lower(id.Name) == "levels") {
+            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
+            if (!success || value > Max<ui32>()) {
+                Ctx.Error() << "Invalid levels: " << stringValue;
+                return false;
+            }
+            vectorIndexSettings.Levels = value;
         } else {
             Ctx.Error() << "Unknown index setting: " << id.Name;
             return false;
@@ -1535,15 +1567,59 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
     return nullptr;
 }
 
+bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
+        case TRule_family_setting_value::kAltFamilySettingValue1: {
+            // STRING_VALUE
+            const TString stringValue(ctx.Token(from.GetAlt_family_setting_value1().GetToken1()));
+            TNodePtr literal = BuildLiteralSmartString(ctx, stringValue);
+            if (!literal) {
+                return false;
+            }
+            to = literal;
+            break;
+        }
+        default:
+            return false;
+    }
+    return true;
+}
+
+bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
+        case TRule_family_setting_value::kAltFamilySettingValue2: {
+            // integer
+            TNodePtr literal = LiteralNumber(ctx, from.GetAlt_family_setting_value2().GetRule_integer1());
+            if (!literal) {
+                return false;
+            }
+            to = literal;
+            break;
+        }
+        default:
+            return false;
+    }
+    return true;
+}
+
 bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family) {
     TIdentifier id = IdEx(settingNode.GetRule_an_id1(), *this);
     const TRule_family_setting_value& value = settingNode.GetRule_family_setting_value3();
     if (to_lower(id.Name) == "data") {
-        const TString stringValue(Ctx.Token(value.GetToken1()));
-        family.Data = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, family.Data, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(id.Name) == "compression") {
-        const TString stringValue(Ctx.Token(value.GetToken1()));
-        family.Compression = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, family.Compression, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "compression_level") {
+        if (!StoreInt(value, family.CompressionLevel, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -4432,7 +4508,7 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
         TBlocks innerBlocks;
 
         const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
-        auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped) : nullptr;
+        auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped, Ctx.SeqMode) : nullptr;
         WarnUnusedNodes();
         Ctx.ScopeLevel--;
         Ctx.Scoped = saveScoped;
@@ -4545,7 +4621,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
         return false;
     }
 
-    auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped) : nullptr;
+    auto ret = hasValidBody ? BuildQuery(Ctx.Pos(), innerBlocks, false, Ctx.Scoped, Ctx.SeqMode) : nullptr;
     WarnUnusedNodes();
     Ctx.Scoped = saveScoped;
     Ctx.ScopeLevel--;
@@ -4883,7 +4959,7 @@ bool TSqlTranslation::ParseViewQuery(
     const TRule_select_stmt& query
 ) {
     TString queryText = CollectTokens(query);
-    TString contextRestorationQuery;
+    TString contextRecreationQuery;
     {
         const auto& service = Ctx.Scoped->CurrService;
         const auto& cluster = Ctx.Scoped->CurrCluster;
@@ -4891,19 +4967,19 @@ bool TSqlTranslation::ParseViewQuery(
 
         // TO DO: capture all runtime pragmas in a similar fashion.
         if (effectivePathPrefix != Ctx.Settings.PathPrefix) {
-            contextRestorationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
+            contextRecreationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
         }
 
         // TO DO: capture other compilation-affecting statements except USE.
         if (cluster.GetLiteral() && *cluster.GetLiteral() != Ctx.Settings.DefaultCluster) {
-            contextRestorationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
+            contextRecreationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
         }
     }
-    features["query_text"] = { Ctx.Pos(), contextRestorationQuery + queryText };
+    features["query_text"] = { Ctx.Pos(), contextRecreationQuery + queryText };
 
     // AST is needed for ready-made validation of CREATE VIEW statement.
     // Query is stored as plain text, not AST.
-    const auto viewSelect = BuildViewSelect(query, Ctx, contextRestorationQuery);
+    const auto viewSelect = BuildViewSelect(query, Ctx, contextRecreationQuery);
     if (!viewSelect) {
         return false;
     }

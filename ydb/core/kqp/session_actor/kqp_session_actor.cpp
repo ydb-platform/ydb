@@ -106,20 +106,6 @@ public:
     {}
 };
 
-std::unique_ptr<TEvKqp::TEvQueryResponse> AllocQueryResponse(const std::shared_ptr<TKqpQueryState>& state,
-    bool disableReqArena)
-{
-    auto resEv = std::make_unique<TEvKqp::TEvQueryResponse>();
-    auto reqArena = state->GetArena();
-    if (!disableReqArena && reqArena) {
-        resEv->Record.ReallocRef(reqArena);
-    } else {
-        auto arena = std::make_shared<google::protobuf::Arena>();
-        resEv->Record.Realloc(arena);
-    }
-    return resEv;
-}
-
 struct TKqpCleanupCtx {
     std::deque<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
     bool IsWaitingForWorkerToClose = false;
@@ -865,7 +851,9 @@ public:
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
+
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
+        QueryState->TxCtx->ApplyPhysicalQuery(phyQuery);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
         if (!success) {
@@ -927,7 +915,7 @@ public:
         FillCompileStatus(QueryState->CompileResult, QueryResponse->Record);
 
         auto ru = NRuCalc::CpuTimeToUnit(TDuration::MicroSeconds(QueryState->CompileStats.CpuTimeUs));
-        auto& record = QueryResponse->Record.GetRef();
+        auto& record = QueryResponse->Record;
         record.SetConsumedRu(ru);
 
         Cleanup(IsFatalError(record.GetYdbStatus()));
@@ -1236,7 +1224,7 @@ public:
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || Settings.TableService.GetEnableOlapSink())) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
-            if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution() || txCtx.HasOlapTable) {
+            if (!txCtx.CanDeferEffects()) {
                 request.UseImmediateEffects = true;
             }
         }
@@ -1255,7 +1243,7 @@ public:
 
     void FillGUCSettings() {
         if (Settings.Database) {
-            GUCSettings->Set("ydb_database", Settings.Database.substr(1, Settings.Database.Size() - 1));
+            GUCSettings->Set("ydb_database", Settings.Database.substr(1, Settings.Database.size() - 1));
         }
         if (Settings.UserName) {
             GUCSettings->Set("ydb_user", *Settings.UserName);
@@ -1266,10 +1254,11 @@ public:
         YQL_ENSURE(QueryState);
 
         auto userToken = QueryState->UserToken;
+        const TString clientAddress = QueryState->ClientAddress;
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
-        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken,
+        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
@@ -1701,8 +1690,8 @@ public:
 
     void ReplySuccess() {
         YQL_ENSURE(QueryState);
-        auto resEv = AllocQueryResponse(QueryState, QueryState->IsStreamResult());
-        auto *record = &resEv->Record.GetRef();
+        auto resEv = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto *record = &resEv->Record;
         auto *response = record->MutableResponse();
 
         if (QueryState->CompileResult) {
@@ -1793,10 +1782,12 @@ public:
             size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
-                    auto ydbResult = QueryState->QueryData->ExtractTrailingTxResult(
-                        phyQuery.GetResultBindings(i), response->GetArena());
 
-                    if (ydbResult) {
+                    if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
+                        auto ydbResult = QueryState->QueryData->GetYdbTxResult(
+                            phyQuery.GetResultBindings(i), response->GetArena(), {});
+
+                        YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
                         YQL_ENSURE(trailingResultsCount <= 1);
                         response->AddYdbResults()->Swap(ydbResult);
@@ -1814,7 +1805,7 @@ public:
             }
         }
 
-        resEv->Record.GetRef().SetYdbStatus(Ydb::StatusIds::SUCCESS);
+        resEv->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
         LOG_D("Create QueryResponse for action: " << QueryState->GetAction() << " with SUCCESS status");
 
         QueryResponse = std::move(resEv);
@@ -1855,7 +1846,7 @@ public:
             Transactions.AddToBeAborted(std::move(ctx));
         }
 
-        auto* record = &QueryResponse->Record.GetRef();
+        auto* record = &QueryResponse->Record;
         FillTxInfo(record->MutableResponse());
         record->SetConsumedRu(1);
 
@@ -1868,12 +1859,12 @@ public:
         ui64 proxyRequestId = request->Cookie;
         LOG_W("Reply query error, msg: " << message << " proxyRequestId: " << proxyRequestId);
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
-        response->Record.GetRef().SetYdbStatus(ydbStatus);
+        response->Record.SetYdbStatus(ydbStatus);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
         NYql::TIssues issues;
         issues.AddIssue(issue);
-        NYql::IssuesToMessage(issues, response->Record.GetRef().MutableResponse()->MutableQueryIssues());
-        AddTrailingInfo(response->Record.GetRef());
+        NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
+        AddTrailingInfo(response->Record);
 
         NDataIntegrity::LogIntegrityTrails(
             request->Get()->GetTraceId(),
@@ -1904,7 +1895,7 @@ public:
         YQL_ENSURE(QueryState);
         YQL_ENSURE(Counters);
 
-        auto& record = QueryResponse->Record.GetRef();
+        auto& record = QueryResponse->Record;
         auto& response = *record.MutableResponse();
         const auto& status = record.GetYdbStatus();
 
@@ -1954,10 +1945,8 @@ public:
     }
 
     void FillCompileStatus(const TKqpCompileResult::TConstPtr& compileResult,
-        TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& record)
+        NKikimrKqp::TEvQueryResponse& ev)
     {
-        auto& ev = record.GetRef();
-
         ev.SetYdbStatus(compileResult->Status);
 
         auto& response = *ev.MutableResponse();
@@ -2240,16 +2229,16 @@ public:
         LOG_W("Create QueryResponse for error on request, msg: " << message);
 
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
-        QueryResponse->Record.GetRef().SetYdbStatus(ydbStatus);
+        QueryResponse->Record.SetYdbStatus(ydbStatus);
 
-        auto* response = QueryResponse->Record.GetRef().MutableResponse();
+        auto* response = QueryResponse->Record.MutableResponse();
 
         Y_ENSURE(QueryState);
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
         }
 
-        FillStats(&QueryResponse->Record.GetRef());
+        FillStats(&QueryResponse->Record);
 
         if (issues) {
             for (auto& i : *issues) {

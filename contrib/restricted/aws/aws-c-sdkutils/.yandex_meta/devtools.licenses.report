@@ -1,0 +1,87 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           314e21a036e4ea071f111cb5deff83c1
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:175]
+
+KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [6:8]
+
+KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: Apache-2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        include/aws/sdkutils/aws_profile.h [3:3]
+        include/aws/sdkutils/endpoints_rule_engine.h [3:3]
+        include/aws/sdkutils/exports.h [6:6]
+        include/aws/sdkutils/partitions.h [3:3]
+        include/aws/sdkutils/private/endpoints_types_impl.h [3:3]
+        include/aws/sdkutils/private/endpoints_util.h [3:3]
+        include/aws/sdkutils/resource_name.h [3:3]
+        include/aws/sdkutils/sdkutils.h [5:5]
+        source/aws_profile.c [3:3]
+        source/endpoints_rule_engine.c [3:3]
+        source/endpoints_ruleset.c [3:3]
+        source/endpoints_standard_lib.c [3:3]
+        source/endpoints_types_impl.c [3:3]
+        source/endpoints_util.c [3:3]
+        source/partitions.c [3:3]
+        source/resource_name.c [3:3]
+        source/sdkutils.c [3:3]

@@ -869,7 +869,6 @@ def onadd_pytest_bin(fields, unit, *args):
         df.JdkForTests.value,
         df.ModuleLang.value,
         df.TestClasspath.value,
-        df.TestClasspathOrigins.value,
         df.TestClasspathDeps.value,
         df.TestJar.value,
         df.DockerImage.value,

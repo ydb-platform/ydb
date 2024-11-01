@@ -5,6 +5,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -147,6 +148,7 @@ public:
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
+                    .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
                     .Settings(BuildTopicReadSettings(clusterName, dqSettings, read->Pos(), format, ctx))
@@ -224,6 +226,8 @@ public:
                         srcDesc.SetEndpoint(TString(Value(setting)));
                     } else if (name == SharedReading) {
                         sharedReading = FromString<bool>(Value(setting));
+                    } else if (name == ReconnectPeriod) {
+                        srcDesc.SetReconnectPeriod(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -256,22 +260,24 @@ public:
                 const auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 for (const auto& item : rowSchema->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
-                    srcDesc.AddColumnTypes(FormatType(item->GetItemType()));
+                    srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }
 
                 NYql::NConnector::NApi::TPredicate predicateProto;
                 if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
                     TStringBuilder err;
                     if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                        ythrow yexception() << "Failed to serialize filter predicate for source: " << err;
+                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+                        predicateProto.Clear();
                     }
                 }
 
-                //sharedReading = true;
-                sharedReading = sharedReading && (format == "json_each_row");
+                sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);
                 if (sharedReading) {
-                    srcDesc.SetPredicate(predicateSql);
+                    if (format == "json_each_row") {
+                        srcDesc.SetPredicate(predicateSql);
+                    }
                     srcDesc.SetSharedReading(true);
                 }
                 protoSettings.PackFrom(srcDesc);
@@ -344,6 +350,7 @@ public:
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
         Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
+        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
 
         

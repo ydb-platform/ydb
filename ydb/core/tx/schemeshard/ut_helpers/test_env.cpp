@@ -546,6 +546,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
+    app.SetEnableBackupService(opts.EnableBackupService_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

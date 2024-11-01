@@ -23,15 +23,18 @@ public:
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
         RowDispatcher = Runtime.AllocateEdgeActor();
         Coordinator1 = Runtime.AllocateEdgeActor();
         Coordinator2 = Runtime.AllocateEdgeActor();
         Coordinator3 = Runtime.AllocateEdgeActor();
+    }
 
+    void Init(bool localMode = false) {
         NConfig::TRowDispatcherCoordinatorConfig config;
         config.SetCoordinationNodePath("row_dispatcher");
+        config.SetLocalMode(localMode);
         auto& database = *config.MutableDatabase();
         database.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         database.SetDatabase(GetEnv("YDB_DATABASE"));
@@ -42,7 +45,7 @@ public:
             Coordinator1,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
+            YqSharedResources,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -52,7 +55,7 @@ public:
             Coordinator2,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
+            YqSharedResources,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -62,7 +65,7 @@ public:
             Coordinator3,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
+            YqSharedResources,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -95,10 +98,12 @@ public:
     NActors::TActorId Coordinator2;
     NActors::TActorId Coordinator3;
     NActors::TActorId LeaderDetector;
+    TYqSharedResources::TPtr YqSharedResources;
 };
 
 Y_UNIT_TEST_SUITE(LeaderElectionTests) {
     Y_UNIT_TEST_F(Test1, TFixture) {
+        Init();
 
         auto coordinatorId1 = ExpectCoordinatorChanged();
         auto coordinatorId2 = ExpectCoordinatorChanged();
@@ -134,7 +139,15 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         auto coordinatorId6 = ExpectCoordinatorChanged();
         UNIT_ASSERT(coordinatorId6 != coordinatorId4);
     }
+
+    Y_UNIT_TEST_F(TestLocalMode, TFixture) {
+        Init(true);
+        auto coordinatorId1 = ExpectCoordinatorChanged();
+        auto coordinatorId2 = ExpectCoordinatorChanged();
+        auto coordinatorId3 = ExpectCoordinatorChanged();
+        TSet<NActors::TActorId> set {coordinatorId1, coordinatorId2, coordinatorId3};
+        UNIT_ASSERT(set.size() == 3);
+    }
 }
 
 }
-

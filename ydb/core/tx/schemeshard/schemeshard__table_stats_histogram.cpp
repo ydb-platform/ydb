@@ -6,7 +6,6 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 static bool IsIntegerType(NScheme::TTypeInfo type) {
-    // TODO: support pg types
     switch (type.GetTypeId()) {
     case NScheme::NTypeIds::Bool:
 
@@ -90,6 +89,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
             splitKey[i] = keyMed.GetCells()[i];
         } else {
             // med == lo and med != hi, so we want to find a value that is > med and <= hi
+            // TODO: support this optimization for integer pg types
             if (IsIntegerType(columnType) && !keyMed.GetCells()[i].IsNull()) {
                 // For integer types we can add 1 to med
                 ui64 val = 0;

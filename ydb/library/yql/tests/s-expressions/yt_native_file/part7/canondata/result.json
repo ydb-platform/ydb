@@ -3651,9 +3651,9 @@
     ],
     "test.test[Optimizers-SkipTakeOverMrTableContent-Debug]": [
         {
-            "checksum": "a34aece2e14516438508d94c6fd0d244",
-            "size": 1465,
-            "uri": "https://{canondata_backend}/212715/44bdabaff89ef65a8e0c6749e8dfc5802b2940d8/resource.tar.gz#test.test_Optimizers-SkipTakeOverMrTableContent-Debug_/opt.yql"
+            "checksum": "3d58836269e76e9b217b57163212d2c1",
+            "size": 1489,
+            "uri": "https://{canondata_backend}/1903280/50efcc7e54b8e6281c0437457b04968332c8b74b/resource.tar.gz#test.test_Optimizers-SkipTakeOverMrTableContent-Debug_/opt.yql"
         },
         {
             "checksum": "99a23a80241cdd0057583910f9155f61",

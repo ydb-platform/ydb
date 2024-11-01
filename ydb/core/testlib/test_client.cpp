@@ -4,6 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/driver_lib/run/auto_config_initializer.h>
 #include <ydb/core/driver_lib/run/config_helpers.h>
 #include <ydb/core/viewer/viewer.h>
@@ -50,6 +51,7 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
@@ -117,6 +119,7 @@
 #include <ydb/services/ext_index/service/executor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -521,7 +524,7 @@ namespace Tests {
         app.AddDomain(domain.Release());
     }
 
-    TVector<ui64> TServer::StartPQTablets(ui32 pqTabletsN) {
+    TVector<ui64> TServer::StartPQTablets(ui32 pqTabletsN, bool wait) {
         auto getChannelBind = [](const TString& storagePool) {
             TChannelBind bind;
             bind.SetStoragePoolName(storagePool);
@@ -556,7 +559,7 @@ namespace Tests {
             UNIT_ASSERT_EQUAL_C(createTabletReply->Record.GetOwner(), tabletId,
                                 createTabletReply->Record.GetOwner() << " != " << tabletId);
             ui64 id = createTabletReply->Record.GetTabletID();
-            while (true) {
+            while (wait) {
                 auto tabletCreationResult =
                     Runtime->GrabEdgeEventRethrow<TEvHive::TEvTabletCreationResult>(handle);
                 UNIT_ASSERT(tabletCreationResult);
@@ -664,7 +667,7 @@ namespace Tests {
         {
             // Compaction policy:
             NLocalDb::TCompactionPolicyPtr defaultPolicy = NLocalDb::CreateDefaultUserTablePolicy();
-            NKikimrSchemeOp::TCompactionPolicy defaultflatSchemePolicy;
+            NKikimrCompaction::TCompactionPolicy defaultflatSchemePolicy;
             defaultPolicy->Serialize(defaultflatSchemePolicy);
             auto &defaultCompactionPolicy = *profiles.AddCompactionPolicies();
             defaultCompactionPolicy.SetName("default");
@@ -672,7 +675,7 @@ namespace Tests {
 
             NLocalDb::TCompactionPolicy policy1;
             policy1.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy1;
+            NKikimrCompaction::TCompactionPolicy flatSchemePolicy1;
             policy1.Serialize(flatSchemePolicy1);
             auto &compactionPolicy1 = *profiles.AddCompactionPolicies();
             compactionPolicy1.SetName("compaction1");
@@ -681,7 +684,7 @@ namespace Tests {
             NLocalDb::TCompactionPolicy policy2;
             policy2.Generations.push_back({ 0, 8, 8, 128 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(1), true });
             policy2.Generations.push_back({ 40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024, NLocalDb::LegacyQueueIdToTaskName(2), false });
-            NKikimrSchemeOp::TCompactionPolicy flatSchemePolicy2;
+            NKikimrCompaction::TCompactionPolicy flatSchemePolicy2;
             policy2.Serialize(flatSchemePolicy2);
             auto &compactionPolicy2 = *profiles.AddCompactionPolicies();
             compactionPolicy2.SetName("compaction2");
@@ -801,6 +804,12 @@ namespace Tests {
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            if (Settings->EnableFeatureFlagsConfigurator) {
+                Runtime->RegisterService(
+                    MakeFeatureFlagsServiceID(),
+                    Runtime->Register(NConsole::CreateFeatureFlagsConfigurator(), nodeIdx),
+                    nodeIdx);
+            }
         }
         if (Settings->IsEnableMetadataProvider()) {
             NKikimrConfig::TMetadataProviderConfig cfgProto;
@@ -823,6 +832,11 @@ namespace Tests {
             auto* actor = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), new ::NMonitoring::TDynamicCounters());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
             auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());

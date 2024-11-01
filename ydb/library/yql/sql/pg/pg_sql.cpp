@@ -402,7 +402,7 @@ public:
         if (!Provider) {
             Provider = PgProviderName;
         }
-        Y_ENSURE(!Provider.Empty());
+        Y_ENSURE(!Provider.empty());
 
         for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
             const auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
@@ -3160,11 +3160,11 @@ public:
                                                   const TStringBuf schemaname,
                                                   const TStringBuf relname,
                                                   bool isSink, bool isScheme) {
-      if (!catalogname.Empty()) {
+      if (!catalogname.empty()) {
         AddError("catalogname is not supported");
         return {};
       }
-      if (relname.Empty()) {
+      if (relname.empty()) {
         AddError("relname should be specified");
         return {};
       }
@@ -3189,11 +3189,11 @@ public:
                                                const TStringBuf schemaname,
                                                const TStringBuf objectName,
                                                const TStringBuf pgObjectType) {
-        if (!catalogname.Empty()) {
+        if (!catalogname.empty()) {
             AddError("catalogname is not supported");
             return {};
         }
-        if (objectName.Empty()) {
+        if (objectName.empty()) {
             AddError("objectName should be specified");
             return {};
         }
@@ -5272,12 +5272,12 @@ private:
     }
 
     void ScanRows(const TString& query) {
-        QuerySize = query.Size();
+        QuerySize = query.size();
         RowStarts.push_back(0);
         TPosition position(0, 1);
         TTextWalker walker(position, true);
         auto prevRow = position.Row;
-        for (ui32 i = 0; i < query.Size(); ++i) {
+        for (ui32 i = 0; i < query.size(); ++i) {
             walker.Advance(query[i]);
             while (position.Row != prevRow) {
                 RowStarts.push_back(i);

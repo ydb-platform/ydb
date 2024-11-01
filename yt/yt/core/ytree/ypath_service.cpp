@@ -22,7 +22,7 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 #include <yt/yt/core/misc/checksum.h>
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -873,7 +873,7 @@ void TCachedYPathService::RebuildCache()
         auto yson = WaitFor(asyncYson)
             .ValueOrThrow();
 
-        ProfilingCounters_->ByteSize.Update(yson.AsStringBuf().Size());
+        ProfilingCounters_->ByteSize.Update(yson.AsStringBuf().size());
 
         UpdateCachedTree(ConvertToNode(yson));
     } catch (const std::exception& ex) {

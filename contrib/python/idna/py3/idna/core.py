@@ -9,45 +9,6 @@ from .intranges import intranges_contain
 _virama_combining_class = 9
 _alabel_prefix = b"xn--"
 _unicode_dots_re = re.compile("[\u002e\u3002\uff0e\uff61]")
-_ldh = (
-    48,
-    49,
-    50,
-    51,
-    52,
-    53,
-    54,
-    55,
-    56,
-    57,
-    95,
-    97,
-    98,
-    99,
-    100,
-    101,
-    102,
-    103,
-    104,
-    105,
-    106,
-    107,
-    108,
-    109,
-    110,
-    111,
-    112,
-    113,
-    114,
-    115,
-    116,
-    117,
-    118,
-    119,
-    120,
-    121,
-    122,
-)
 
 
 class IDNAError(UnicodeError):
@@ -380,16 +341,17 @@ def uts46_remap(domain: str, std3_rules: bool = True, transitional: bool = False
             uts46row = uts46data[code_point if code_point < 256 else bisect.bisect_left(uts46data, (code_point, "Z")) - 1]
             status = uts46row[1]
             replacement: Optional[str] = None
-            if std3_rules and code_point <= 0x7F:
-                if code_point not in _ldh:
-                    raise InvalidCodepoint(
-                        "Codepoint {} at position {} does not follow STD3 rules".format(_unot(code_point), pos + 1)
-                    )
             if len(uts46row) == 3:
                 replacement = uts46row[2]
-            if status == "V" or (status == "D" and not transitional):
+            if (
+                status == "V"
+                or (status == "D" and not transitional)
+                or (status == "3" and not std3_rules and replacement is None)
+            ):
                 output += char
-            elif replacement is not None and (status == "M" or (status == "D" and transitional)):
+            elif replacement is not None and (
+                status == "M" or (status == "3" and not std3_rules) or (status == "D" and transitional)
+            ):
                 output += replacement
             elif status != "I":
                 raise IndexError()

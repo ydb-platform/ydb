@@ -24,7 +24,7 @@ private:
 
 public:
     TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index);
-    std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription) const;
+    std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription, const bool withUncommitted) const;
     std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema,
         const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const;
 };

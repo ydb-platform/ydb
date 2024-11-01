@@ -1325,6 +1325,9 @@ struct Schema : NIceDb::Schema {
         struct AlterMainTableTxStatus : Column<32, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
         struct AlterMainTableTxDone : Column<33, NScheme::NTypeIds::Bool> {};
 
+        // Serialized as string NKikimrSchemeOp::TIndexCreationConfig protobuf.
+        struct CreationConfig : Column<34, NScheme::NTypeIds::String> { using Type = TString; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1359,7 +1362,8 @@ struct Schema : NIceDb::Schema {
             BuildKind,
             AlterMainTableTxId,
             AlterMainTableTxStatus,
-            AlterMainTableTxDone
+            AlterMainTableTxDone,
+            CreationConfig
         >;
     };
 
@@ -1823,6 +1827,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
     };
 
+    struct BackupCollection : Table<111> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Description: Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Description>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1932,7 +1946,8 @@ struct Schema : NIceDb::Schema {
         BuildColumnOperationSettings,
         View,
         BackgroundSessions,
-        ResourcePool
+        ResourcePool,
+        BackupCollection
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

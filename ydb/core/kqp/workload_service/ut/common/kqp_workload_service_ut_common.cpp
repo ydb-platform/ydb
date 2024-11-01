@@ -110,7 +110,7 @@ public:
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
         SendNotification<TEvQueryRunner::TEvExecutionFinished>();
 
-        Result_.Response = ev->Get()->Record.GetRef();
+        Result_.Response = ev->Get()->Record;
         Promise_.SetValue(Result_);
         PassAway();
     }
@@ -359,7 +359,7 @@ public:
                 new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest(), nodeIndex
             );
             auto response = GetRuntime()->GrabEdgeEvent<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
-            
+
             if (!response->Get()->Record.SystemStateInfoSize()) {
                 errorString = "empty system state info";
                 return false;
@@ -430,6 +430,14 @@ public:
         auto runerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings, GetRuntime()->GetNodeId(settings.NodeIndex_)), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
         return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runerActor, .EdgeActor = edgeActor};
+    }
+
+    void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
+        WaitFor(timeout, retryMessage, [this, query, settings](TString& errorString) {
+            auto result = ExecuteQuery(query, settings);
+            errorString = result.GetIssues().ToOneLineString();
+            return result.GetStatus() == EStatus::SUCCESS;
+        });
     }
 
     // Async query execution actions

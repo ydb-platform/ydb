@@ -10,7 +10,32 @@ description = 'Move vdisks out from overpopulated pdisks.'
 def add_options(p):
     p.add_argument('--max-replicating-pdisks', type=int, help='Limit number of maximum replicating PDisks in the cluster')
     p.add_argument('--only-from-overpopulated-pdisks', action='store_true', help='Move vdisks out only from pdisks with over expected slot count')
+    p.add_argument('--sort-by', choices=['slots', 'space_ratio'], default='slots', help='First to reassign disks with the most slots or with the highest space ratio')
+    p.add_argument('--storage-pool', type=str, help='Storage pool to balance')
+    p.add_argument('--max-donors-per-pdisk', type=int, default=0, help='Limit number of donors per pdisk')
     common.add_basic_format_options(p)
+
+
+def build_pdisk_statistics(base_config, pdisk_map, vsolts):
+    pdisks_statistics = {
+        pdisk_id: {
+            "PDiskId": pdisk_id,
+            "AvailableSize": pdisk.PDiskMetrics.AvailableSize,
+            "TotalSize": pdisk.PDiskMetrics.TotalSize,
+            "CandidateVSlots": [],
+            "DonorVSlots": [],
+        }
+        for pdisk_id, pdisk in pdisk_map.items()
+        if pdisk.PDiskMetrics.TotalSize > 0  # pdisk works
+    }
+    for vslot in vsolts:
+        pdisk_id = common.get_pdisk_id(vslot.VSlotId)
+        pdisks_statistics[pdisk_id]["CandidateVSlots"].append(vslot)
+    for vslot in base_config.VSlot:
+        for donor in vslot.Donors:
+            pdisk_id = common.get_pdisk_id(donor.VSlotId)
+            pdisks_statistics[pdisk_id]["DonorVSlots"].append(donor)
+    return pdisks_statistics
 
 
 def do(args):
@@ -18,11 +43,19 @@ def do(args):
         common.flush_cache()
 
         base_config = common.fetch_base_config()
+        storage_pools = common.fetch_storage_pools()
         node_mon_map = common.fetch_node_mon_map({vslot.VSlotId.NodeId for vslot in base_config.VSlot})
         vslot_map = common.build_vslot_map(base_config)
         pdisk_map = common.build_pdisk_map(base_config)
         pdisk_usage = common.build_pdisk_usage_map(base_config, count_donors=False)
         pdisk_usage_w_donors = common.build_pdisk_usage_map(base_config, count_donors=True)
+
+        storage_pool_names_map = common.build_storage_pool_names_map(storage_pools)
+        group_id_to_storage_pool_name_map = {
+            group_id: storage_pool_names_map[(group.BoxId, group.StoragePoolId)]
+            for group_id, group in common.build_group_map(base_config).items()
+            if (group.BoxId, group.StoragePoolId) != (0, 0)  # static group
+        }
 
         vdisks_groups_count_map = defaultdict(int)
         for group in base_config.Group:
@@ -82,12 +115,26 @@ def do(args):
 
         candidate_vslots = []
         if healthy_vslots_from_overpopulated_pdisks:
-            common.print_if_not_quiet(args, f'Found {len(healthy_vslots_from_overpopulated_pdisks)} vdisks from overpopulated pdisks', sys.stdout)
+            common.print_if_not_quiet(args, f'Found {len(healthy_vslots_from_overpopulated_pdisks)} vdisks in healthy groups from overpopulated pdisks', sys.stdout)
             candidate_vslots = healthy_vslots_from_overpopulated_pdisks
         elif healthy_vslots and not args.only_from_overpopulated_pdisks:
-            common.print_if_not_quiet(args, f'Found {len(healthy_vslots)} vdisks suitable for relocation', sys.stdout)
+            common.print_if_not_quiet(args, f'Found {len(healthy_vslots)} vdisks in healthy groups', sys.stdout)
             candidate_vslots = healthy_vslots
-        else:  # candidate_vslots is empty
+
+        if args.storage_pool is not None:
+            existing_storage_pools = set(group_id_to_storage_pool_name_map.values())
+            if args.storage_pool not in existing_storage_pools:
+                print(f"Storage pool {args.storage_pool} not found in existing storage pools: {existing_storage_pools}")
+                sys.exit(1)
+            candidate_vslots = [vslot for vslot in candidate_vslots if group_id_to_storage_pool_name_map[vslot.GroupId] == args.storage_pool]
+            common.print_if_not_quiet(args, f'Found {len(candidate_vslots)} vdisks in {args.storage_pool} sotrage pool', sys.stdout)
+
+        if args.max_donors_per_pdisk > 0:
+            donors_per_pdisk = common.build_donors_per_pdisk_map(base_config)
+            candidate_vslots = [vslot for vslot in candidate_vslots if donors_per_pdisk[common.get_pdisk_id(vslot.VSlotId)] < args.max_donors_per_pdisk]
+            common.print_if_not_quiet(args, f'Found {len(candidate_vslots)} vdisks with donors per pdisk < {args.max_donors_per_pdisk}', sys.stdout)
+
+        if len(candidate_vslots) == 0:
             common.print_if_not_quiet(args, 'No vdisks suitable for relocation found, waiting..', sys.stdout)
             time.sleep(10)
             continue
@@ -182,14 +229,29 @@ def do(args):
             return True
         # end of do_reassign()
 
-        vslots_by_pdisk_slot_usage = defaultdict(list)
-        for vslot in candidate_vslots:
-            pdisk_id = common.get_pdisk_id(vslot.VSlotId)
-            pdisk_slot_usage = pdisk_usage[pdisk_id]
-            vslots_by_pdisk_slot_usage[pdisk_slot_usage].append(vslot)
+        vslots_ordered_groups_to_reassign = None
+        if args.sort_by == 'slots':
+            vslots_by_pdisk_slot_usage = defaultdict(list)
+            for vslot in candidate_vslots:
+                pdisk_id = common.get_pdisk_id(vslot.VSlotId)
+                pdisk_slot_usage = pdisk_usage[pdisk_id]
+                vslots_by_pdisk_slot_usage[pdisk_slot_usage].append(vslot)
+            vslots_ordered_groups_to_reassign = [vslots for _, vslots in sorted(vslots_by_pdisk_slot_usage.items(), reverse=True)]
+        elif args.sort_by == 'space_ratio':
+            pdisks = {
+                pdisk_id: {
+                    "FreeSpaceRatio": float(pdisk.PDiskMetrics.AvailableSize) / float(pdisk.PDiskMetrics.TotalSize),
+                    "CandidateVSlots": [],
+                }
+                for pdisk_id, pdisk in pdisk_map.items()
+                if pdisk.PDiskMetrics.TotalSize > 0  # pdisk works
+            }
+            for vslot in candidate_vslots:
+                pdisk_id = common.get_pdisk_id(vslot.VSlotId)
+                pdisks[pdisk_id]["CandidateVSlots"].append(vslot)
+            vslots_ordered_groups_to_reassign = [info["CandidateVSlots"] for _, info in sorted(list(pdisks.items()), key=lambda x: x[1]["FreeSpaceRatio"])]
 
-        # check vslots from pdisks with the highest slot usage first
-        for pdisk_slot_usage, vslots in sorted(vslots_by_pdisk_slot_usage.items(), reverse=True):
+        for vslots in vslots_ordered_groups_to_reassign:
             random.shuffle(vslots)
             for vslot in vslots:
                 if do_reassign(vslot, False):

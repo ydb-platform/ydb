@@ -1,0 +1,815 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05894dd5e4177359f7667049b9377980
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/parser/logical_combination.h [2:2]
+        src/util/graph_undirected.h [2:2]
+        src/util/logical.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1942d1946b0cb94f5ed6cff68e676e12
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004-2006 Intel Corporation - All Rights Reserved
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/crc32.c [43:43]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2594e47a0a16675bf535be6215e19672
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/nfa/rdfa_graph.cpp [2:2]
+        src/nfa/rdfa_graph.h [2:2]
+        src/nfa/tamarama.c [2:2]
+        src/nfa/tamarama.h [2:2]
+        src/nfa/tamarama_internal.h [2:2]
+        src/rose/rose_build_long_lit.h [2:2]
+        src/rose/stream_long_lit.h [2:2]
+        src/rose/stream_long_lit_hash.h [2:2]
+        src/som/som_operation.h [2:2]
+        src/util/clique.h [2:2]
+        src/util/fatbit_build.cpp [2:2]
+        src/util/fatbit_build.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2b117c34922a89ef35097526aa5ce98e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2022, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/parser/utf8_validate.cpp [2:2]
+        src/runtime.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2b5233bf2512c320b05c45b623a76e39
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2023, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/stream_compress_impl.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2b68f540d88813a56538df81b21ad0bd
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2018, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/nfagraph/ng_violet.cpp [2:2]
+        src/util/ue2_graph.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 44665d72146d6ca8387cc34b47c6ed15
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2021, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/compiler/compiler.cpp [2:2]
+        src/hs.cpp [2:2]
+        src/hs_compile.h [2:2]
+        src/nfa/mcclellancompile.cpp [2:2]
+        src/rose/program_runtime.c [2:2]
+        src/util/simd_utils.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 46f8b1e28887be66473a94b9fff421ef
+BELONGS ya.make
+    License text:
+        Copyright (c) 2004-2006, Intel Corporation
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [37:38]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 56bcc3a14ff99d0f48da4188c48e3f3a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2023, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/scratch.c [2:2]
+        src/scratch.h [2:2]
+        src/state.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 59904f3d4998fdc080793ad19c4c54cb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hwlm/noodle_engine_avx512.c [2:2]
+        src/nfa/rdfa.cpp [2:2]
+        src/parser/control_verbs.h [2:2]
+        src/parser/control_verbs.rl6 [2:2]
+        src/rose/rose_build_dedupe.cpp [2:2]
+        src/rose/rose_build_engine_blob.cpp [2:2]
+        src/rose/rose_build_exclusive.h [2:2]
+        src/rose/rose_build_lit_accel.cpp [2:2]
+        src/rose/rose_build_lit_accel.h [2:2]
+        src/rose/rose_build_misc.h [2:2]
+        src/rose/rose_build_resources.h [2:2]
+        src/stream_compress.c [2:2]
+        src/stream_compress.h [2:2]
+        src/util/bytecode_ptr.h [2:2]
+        src/util/hash_dynamic_bitset.h [2:2]
+        src/util/insertion_ordered.h [2:2]
+        src/util/intrinsics.h [2:2]
+        src/util/math.h [2:2]
+        src/util/multibit_compress.h [2:2]
+        src/util/noncopyable.h [2:2]
+        src/util/operators.h [2:2]
+        src/util/small_vector.h [2:2]
+        src/util/unordered.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6391196b1fd203d7ad6956b8ef6b669b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2020, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rose/rose_build_instructions.cpp [2:2]
+        src/rose/rose_build_instructions.h [2:2]
+        src/util/arch.h [2:2]
+        src/util/cpuid_inline.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6443950cec567e72e1bbf863aa7faf00
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2020, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/database.c [2:2]
+        src/database.h [2:2]
+        src/fdr/teddy.c [2:2]
+        src/fdr/teddy_compile.cpp [2:2]
+        src/hs.h [2:2]
+        src/nfa/limex_compile.cpp [2:2]
+        src/nfa/limex_compile.h [2:2]
+        src/nfa/limex_exceptional.h [2:2]
+        src/nfa/limex_internal.h [2:2]
+        src/nfa/nfa_api_dispatch.c [2:2]
+        src/nfa/nfa_build_util.cpp [2:2]
+        src/nfa/nfa_build_util.h [2:2]
+        src/nfa/nfa_internal.h [2:2]
+        src/nfa/vermicelli.h [2:2]
+        src/nfa/vermicelli_sse.h [2:2]
+        src/nfagraph/ng_limex.cpp [2:2]
+        src/nfagraph/ng_limex.h [2:2]
+        src/rose/rose_build_bytecode.cpp [2:2]
+        src/rose/rose_build_lookaround.cpp [2:2]
+        src/rose/rose_program.h [2:2]
+        src/smallwrite/smallwrite_build.cpp [2:2]
+        src/util/cpuid_flags.c [2:2]
+        src/util/target_info.cpp [2:2]
+        src/util/target_info.h [2:2]
+        src/util/uniform_ops.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64781db6332ddf13b4473282805e75ad
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2019, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/report.h [2:2]
+        src/rose/rose_build_matchers.cpp [2:2]
+        src/rose/rose_build_program.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 653f52025a0e666c760b8ff771c18d09
+BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtime_corei7/ya.make ya.make
+    License text:
+         * Copyright (c) 2015-2019, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        runtime_avx2/hs_common.h [2:2]
+        runtime_avx512/hs_common.h [2:2]
+        runtime_core2/hs_common.h [2:2]
+        runtime_corei7/hs_common.h [2:2]
+        src/compiler/compiler.h [2:2]
+        src/fdr/fdr_compile.cpp [2:2]
+        src/fdr/fdr_confirm.h [2:2]
+        src/fdr/fdr_confirm_compile.cpp [2:2]
+        src/fdr/fdr_confirm_runtime.h [2:2]
+        src/hs_common.h [2:2]
+        src/hwlm/hwlm_literal.cpp [2:2]
+        src/hwlm/hwlm_literal.h [2:2]
+        src/parser/shortcut_literal.cpp [2:2]
+        src/rose/block.c [2:2]
+        src/rose/match.c [2:2]
+        src/rose/program_runtime.h [2:2]
+        src/rose/rose.h [2:2]
+        src/rose/rose_build_impl.h [2:2]
+        src/rose/rose_internal.h [2:2]
+        src/util/ue2string.cpp [2:2]
+        src/util/ue2string.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6dbc40c4bf9c0f89c1d7a1064c7cd4b3
+BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtime_corei7/ya.make ya.make
+    License text:
+         * Copyright (c) 2015-2018, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        runtime_avx2/hs_runtime.h [2:2]
+        runtime_avx512/hs_runtime.h [2:2]
+        runtime_core2/hs_runtime.h [2:2]
+        runtime_corei7/hs_runtime.h [2:2]
+        src/grey.cpp [2:2]
+        src/grey.h [2:2]
+        src/hs_runtime.h [2:2]
+        src/nfa/accel_dfa_build_strat.h [2:2]
+        src/nfa/goughcompile.cpp [2:2]
+        src/nfa/mcclellan.c [2:2]
+        src/nfa/mcclellan_common_impl.h [2:2]
+        src/nfa/mcclellan_internal.h [2:2]
+        src/nfa/mcclellancompile.h [2:2]
+        src/nfagraph/ng.cpp [2:2]
+        src/nfagraph/ng.h [2:2]
+        src/nfagraph/ng_calc_components.cpp [2:2]
+        src/nfagraph/ng_haig.cpp [2:2]
+        src/nfagraph/ng_mcclellan.cpp [2:2]
+        src/nfagraph/ng_repeat.cpp [2:2]
+        src/nfagraph/ng_stop.cpp [2:2]
+        src/nfagraph/ng_stop.h [2:2]
+        src/rose/catchup.c [2:2]
+        src/rose/catchup.h [2:2]
+        src/rose/match.h [2:2]
+        src/rose/rose_build_add.cpp [2:2]
+        src/rose/rose_build_merge.cpp [2:2]
+        src/rose/rose_build_misc.cpp [2:2]
+        src/rose/rose_graph.h [2:2]
+        src/rose/rose_in_graph.h [2:2]
+        src/rose/runtime.h [2:2]
+        src/rose/stream.c [2:2]
+        src/ue2common.h [2:2]
+        src/util/bitfield.h [2:2]
+        src/util/multibit.h [2:2]
+        src/util/report.h [2:2]
+        src/util/report_manager.cpp [2:2]
+        src/util/report_manager.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6fb2319e3a2b91a95a6fe913104899d7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017-2018, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/compiler/expression_info.h [2:2]
+        src/util/graph_small_color_map.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 78782e4543af79c258ead9d7a165d876
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2019-2021, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/hs_internal.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ba9cb80d3dee6e526379bccc8de74870
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2017, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fdr/teddy.h [2:2]
+        src/hs_valid_platform.c [2:2]
+        src/nfa/mcsheng_compile.h [2:2]
+        src/nfa/tamaramacompile.cpp [2:2]
+        src/nfa/tamaramacompile.h [2:2]
+        src/nfagraph/ng_violet.h [2:2]
+        src/rose/rose_build_engine_blob.h [2:2]
+        src/rose/rose_build_exclusive.cpp [2:2]
+        src/rose/rose_build_groups.cpp [2:2]
+        src/rose/rose_build_groups.h [2:2]
+        src/rose/rose_build_long_lit.cpp [2:2]
+        src/rose/rose_build_matchers.h [2:2]
+        src/util/accel_scheme.h [2:2]
+        src/util/clique.cpp [2:2]
+        src/util/dump_util.h [2:2]
+        src/util/hash.h [2:2]
+        src/util/simd_utils.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL badc23068da09e9ee5d2d616e9a1161c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2020, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/fdr/teddy_avx2.c [2:2]
+        src/fdr/teddy_runtime_common.h [2:2]
+        src/nfa/mcsheng.c [2:2]
+        src/nfa/mcsheng.h [2:2]
+        src/nfa/mcsheng_compile.cpp [2:2]
+        src/nfa/mcsheng_data.c [2:2]
+        src/nfa/mcsheng_internal.h [2:2]
+        src/nfa/sheng.c [2:2]
+        src/nfa/sheng.h [2:2]
+        src/nfa/sheng_defs.h [2:2]
+        src/nfa/sheng_impl.h [2:2]
+        src/nfa/sheng_impl4.h [2:2]
+        src/nfa/sheng_internal.h [2:2]
+        src/nfa/shengcompile.cpp [2:2]
+        src/nfa/shengcompile.h [2:2]
+        src/rose/rose_build_program.cpp [2:2]
+        src/rose/validate_mask.h [2:2]
+        src/rose/validate_shufti.h [2:2]
+        src/util/copybytes.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce190d0dc63fbede469d35d6d09b1aab
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2016, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/compiler/error.cpp [2:2]
+        src/fdr/fdr_loadval.h [2:2]
+        src/nfa/callback.h [2:2]
+        src/nfa/castle.c [2:2]
+        src/nfa/castle.h [2:2]
+        src/nfa/castle_internal.h [2:2]
+        src/nfa/dfa_build_strat.h [2:2]
+        src/nfa/gough.c [2:2]
+        src/nfa/gough.h [2:2]
+        src/nfa/lbr.h [2:2]
+        src/nfa/lbr_common_impl.h [2:2]
+        src/nfa/limex.h [2:2]
+        src/nfa/limex_64.c [2:2]
+        src/nfa/limex_accel.h [2:2]
+        src/nfa/limex_common_impl.h [2:2]
+        src/nfa/limex_context.h [2:2]
+        src/nfa/limex_limits.h [2:2]
+        src/nfa/limex_native.c [2:2]
+        src/nfa/limex_runtime.h [2:2]
+        src/nfa/limex_simd128.c [2:2]
+        src/nfa/limex_simd256.c [2:2]
+        src/nfa/limex_simd384.c [2:2]
+        src/nfa/limex_simd512.c [2:2]
+        src/nfa/limex_state_impl.h [2:2]
+        src/nfa/mcclellan.h [2:2]
+        src/nfa/mcclellandump.h [2:2]
+        src/nfa/mpv.c [2:2]
+        src/nfa/mpv.h [2:2]
+        src/nfa/mpv_internal.h [2:2]
+        src/nfa/nfa_api.h [2:2]
+        src/nfa/nfa_api_queue.h [2:2]
+        src/nfa/nfa_kind.h [2:2]
+        src/nfa/repeatcompile.cpp [2:2]
+        src/nfa/trufflecompile.h [2:2]
+        src/nfagraph/ng_execute.cpp [2:2]
+        src/nfagraph/ng_holder.cpp [2:2]
+        src/nfagraph/ng_misc_opt.h [2:2]
+        src/nfagraph/ng_som_add_redundancy.cpp [2:2]
+        src/nfagraph/ng_uncalc_components.cpp [2:2]
+        src/nfagraph/ng_uncalc_components.h [2:2]
+        src/parser/ComponentCondReference.h [2:2]
+        src/parser/prefilter.cpp [2:2]
+        src/parser/ucp_table.cpp [2:2]
+        src/parser/unsupported.cpp [2:2]
+        src/rose/infix.h [2:2]
+        src/rose/init.c [2:2]
+        src/rose/init.h [2:2]
+        src/rose/rose_build_util.h [2:2]
+        src/rose/rose_build_width.cpp [2:2]
+        src/rose/rose_types.h [2:2]
+        src/som/som_runtime.c [2:2]
+        src/util/charreach.cpp [2:2]
+        src/util/compare.h [2:2]
+        src/util/exhaust.h [2:2]
+        src/util/fatbit.h [2:2]
+        src/util/graph_range.h [2:2]
+        src/util/multibit.c [2:2]
+        src/util/multibit_internal.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e6a7da132551d7d672f392b8cbebda6f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018-2020, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/parser/logical_combination.cpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec0537a229e1880f54c1d10e8cd723c3
+BELONGS ya.make
+    License text:
+        Copyright (c) 2015, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [1:1]
+        LICENSE [3:3]
+        hs_version.h [2:2]
+        src/allocator.h [2:2]
+        src/compiler/error.h [2:2]
+        src/crc32.h [2:2]
+        src/fdr/engine_description.cpp [2:2]
+        src/fdr/fdr_compile_util.cpp [2:2]
+        src/hwlm/hwlm_internal.h [2:2]
+        src/nfa/gough_internal.h [2:2]
+        src/nfa/goughcompile_accel.cpp [2:2]
+        src/nfa/goughcompile_dump.h [2:2]
+        src/nfa/lbr_internal.h [2:2]
+        src/nfa/limex_ring.h [2:2]
+        src/nfa/nfa_api_util.h [2:2]
+        src/nfa/nfa_rev_api.h [2:2]
+        src/nfa/rdfa_merge.h [2:2]
+        src/nfa/repeat.h [2:2]
+        src/nfa/repeat_internal.h [2:2]
+        src/nfa/repeatcompile.h [2:2]
+        src/nfa/shufti.h [2:2]
+        src/nfa/truffle.h [2:2]
+        src/nfa/vermicelli_run.h [2:2]
+        src/nfagraph/ng_anchored_acyclic.cpp [2:2]
+        src/nfagraph/ng_anchored_acyclic.h [2:2]
+        src/nfagraph/ng_anchored_dots.h [2:2]
+        src/nfagraph/ng_cyclic_redundancy.h [2:2]
+        src/nfagraph/ng_edge_redundancy.h [2:2]
+        src/nfagraph/ng_equivalence.h [2:2]
+        src/nfagraph/ng_fixed_width.h [2:2]
+        src/nfagraph/ng_haig.h [2:2]
+        src/nfagraph/ng_literal_decorated.h [2:2]
+        src/nfagraph/ng_mcclellan.h [2:2]
+        src/nfagraph/ng_netflow.h [2:2]
+        src/nfagraph/ng_prefilter.h [2:2]
+        src/nfagraph/ng_prune.h [2:2]
+        src/nfagraph/ng_puff.h [2:2]
+        src/nfagraph/ng_redundancy.h [2:2]
+        src/nfagraph/ng_region_redundancy.h [2:2]
+        src/nfagraph/ng_revacc.h [2:2]
+        src/nfagraph/ng_sep.cpp [2:2]
+        src/nfagraph/ng_sep.h [2:2]
+        src/nfagraph/ng_small_literal_set.h [2:2]
+        src/nfagraph/ng_som_add_redundancy.h [2:2]
+        src/nfagraph/ng_width.h [2:2]
+        src/parser/AsciiComponentClass.cpp [2:2]
+        src/parser/AsciiComponentClass.h [2:2]
+        src/parser/Component.cpp [2:2]
+        src/parser/Component.h [2:2]
+        src/parser/ComponentAlternation.cpp [2:2]
+        src/parser/ComponentAlternation.h [2:2]
+        src/parser/ComponentAssertion.cpp [2:2]
+        src/parser/ComponentAssertion.h [2:2]
+        src/parser/ComponentAtomicGroup.cpp [2:2]
+        src/parser/ComponentAtomicGroup.h [2:2]
+        src/parser/ComponentBackReference.cpp [2:2]
+        src/parser/ComponentBackReference.h [2:2]
+        src/parser/ComponentBoundary.cpp [2:2]
+        src/parser/ComponentBoundary.h [2:2]
+        src/parser/ComponentByte.cpp [2:2]
+        src/parser/ComponentByte.h [2:2]
+        src/parser/ComponentClass.cpp [2:2]
+        src/parser/ComponentClass.h [2:2]
+        src/parser/ComponentCondReference.cpp [2:2]
+        src/parser/ComponentEUS.cpp [2:2]
+        src/parser/ComponentEUS.h [2:2]
+        src/parser/ComponentEmpty.cpp [2:2]
+        src/parser/ComponentEmpty.h [2:2]
+        src/parser/ComponentRepeat.cpp [2:2]
+        src/parser/ComponentRepeat.h [2:2]
+        src/parser/ComponentSequence.cpp [2:2]
+        src/parser/ComponentSequence.h [2:2]
+        src/parser/ComponentVisitor.cpp [2:2]
+        src/parser/ComponentVisitor.h [2:2]
+        src/parser/ComponentWordBoundary.cpp [2:2]
+        src/parser/ComponentWordBoundary.h [2:2]
+        src/parser/ConstComponentVisitor.cpp [2:2]
+        src/parser/ConstComponentVisitor.h [2:2]
+        src/parser/Utf8ComponentClass.cpp [2:2]
+        src/parser/Utf8ComponentClass.h [2:2]
+        src/parser/dump.h [2:2]
+        src/parser/parser_util.cpp [2:2]
+        src/parser/position.h [2:2]
+        src/parser/position_dump.h [2:2]
+        src/parser/position_info.h [2:2]
+        src/parser/prefilter.h [2:2]
+        src/parser/shortcut_literal.h [2:2]
+        src/parser/ucp_table.h [2:2]
+        src/parser/unsupported.h [2:2]
+        src/parser/utf8_validate.h [2:2]
+        src/rose/miracle.h [2:2]
+        src/rose/rose_build_castle.h [2:2]
+        src/rose/rose_build_infix.h [2:2]
+        src/rose/rose_build_width.h [2:2]
+        src/rose/rose_in_dump.h [2:2]
+        src/rose/rose_in_util.h [2:2]
+        src/smallwrite/smallwrite_internal.h [2:2]
+        src/som/slot_manager_dump.h [2:2]
+        src/som/som_runtime.h [2:2]
+        src/som/som_stream.c [2:2]
+        src/som/som_stream.h [2:2]
+        src/util/alloc.cpp [2:2]
+        src/util/charreach_util.h [2:2]
+        src/util/compile_context.cpp [2:2]
+        src/util/compile_context.h [2:2]
+        src/util/compile_error.cpp [2:2]
+        src/util/compile_error.h [2:2]
+        src/util/depth.cpp [2:2]
+        src/util/dump_mask.cpp [2:2]
+        src/util/dump_mask.h [2:2]
+        src/util/join.h [2:2]
+        src/util/order_check.h [2:2]
+        src/util/pack_bits.h [2:2]
+        src/util/partial_store.h [2:2]
+        src/util/pqueue.h [2:2]
+        src/util/scatter.h [2:2]
+        src/util/scatter_runtime.h [2:2]
+        src/util/state_compress.h [2:2]
+        src/util/unaligned.h [2:2]
+        src/util/unicode_def.h [2:2]
+        src/util/unicode_set.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f5216e1f34680f615cf0259d3a834876
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015-2017, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/alloc.c [2:2]
+        src/compiler/asserts.cpp [2:2]
+        src/compiler/asserts.h [2:2]
+        src/crc32.c [2:2]
+        src/fdr/engine_description.h [2:2]
+        src/fdr/fdr.c [2:2]
+        src/fdr/fdr.h [2:2]
+        src/fdr/fdr_compile.h [2:2]
+        src/fdr/fdr_compile_internal.h [2:2]
+        src/fdr/fdr_engine_description.cpp [2:2]
+        src/fdr/fdr_engine_description.h [2:2]
+        src/fdr/fdr_internal.h [2:2]
+        src/fdr/flood_compile.cpp [2:2]
+        src/fdr/flood_runtime.h [2:2]
+        src/fdr/teddy_compile.h [2:2]
+        src/fdr/teddy_engine_description.cpp [2:2]
+        src/fdr/teddy_engine_description.h [2:2]
+        src/fdr/teddy_internal.h [2:2]
+        src/hs_version.c [2:2]
+        src/hwlm/hwlm.c [2:2]
+        src/hwlm/hwlm.h [2:2]
+        src/hwlm/hwlm_build.cpp [2:2]
+        src/hwlm/hwlm_build.h [2:2]
+        src/hwlm/noodle_build.cpp [2:2]
+        src/hwlm/noodle_build.h [2:2]
+        src/hwlm/noodle_engine.c [2:2]
+        src/hwlm/noodle_engine.h [2:2]
+        src/hwlm/noodle_engine_avx2.c [2:2]
+        src/hwlm/noodle_engine_sse.c [2:2]
+        src/hwlm/noodle_internal.h [2:2]
+        src/nfa/accel.c [2:2]
+        src/nfa/accel.h [2:2]
+        src/nfa/accel_dfa_build_strat.cpp [2:2]
+        src/nfa/accelcompile.cpp [2:2]
+        src/nfa/accelcompile.h [2:2]
+        src/nfa/castlecompile.cpp [2:2]
+        src/nfa/castlecompile.h [2:2]
+        src/nfa/dfa_build_strat.cpp [2:2]
+        src/nfa/dfa_min.cpp [2:2]
+        src/nfa/dfa_min.h [2:2]
+        src/nfa/goughcompile.h [2:2]
+        src/nfa/goughcompile_internal.h [2:2]
+        src/nfa/goughcompile_reg.cpp [2:2]
+        src/nfa/lbr.c [2:2]
+        src/nfa/limex_accel.c [2:2]
+        src/nfa/limex_runtime_impl.h [2:2]
+        src/nfa/limex_shuffle.h [2:2]
+        src/nfa/mcclellancompile_util.cpp [2:2]
+        src/nfa/mcclellancompile_util.h [2:2]
+        src/nfa/mpvcompile.cpp [2:2]
+        src/nfa/mpvcompile.h [2:2]
+        src/nfa/rdfa.h [2:2]
+        src/nfa/rdfa_merge.cpp [2:2]
+        src/nfa/repeat.c [2:2]
+        src/nfa/shufti.c [2:2]
+        src/nfa/shufticompile.cpp [2:2]
+        src/nfa/shufticompile.h [2:2]
+        src/nfa/truffle.c [2:2]
+        src/nfa/trufflecompile.cpp [2:2]
+        src/nfagraph/ng_anchored_dots.cpp [2:2]
+        src/nfagraph/ng_asserts.cpp [2:2]
+        src/nfagraph/ng_asserts.h [2:2]
+        src/nfagraph/ng_builder.cpp [2:2]
+        src/nfagraph/ng_builder.h [2:2]
+        src/nfagraph/ng_calc_components.h [2:2]
+        src/nfagraph/ng_cyclic_redundancy.cpp [2:2]
+        src/nfagraph/ng_depth.cpp [2:2]
+        src/nfagraph/ng_depth.h [2:2]
+        src/nfagraph/ng_dominators.cpp [2:2]
+        src/nfagraph/ng_dominators.h [2:2]
+        src/nfagraph/ng_dump.h [2:2]
+        src/nfagraph/ng_edge_redundancy.cpp [2:2]
+        src/nfagraph/ng_equivalence.cpp [2:2]
+        src/nfagraph/ng_execute.h [2:2]
+        src/nfagraph/ng_expr_info.cpp [2:2]
+        src/nfagraph/ng_expr_info.h [2:2]
+        src/nfagraph/ng_extparam.cpp [2:2]
+        src/nfagraph/ng_extparam.h [2:2]
+        src/nfagraph/ng_fixed_width.cpp [2:2]
+        src/nfagraph/ng_fuzzy.cpp [2:2]
+        src/nfagraph/ng_fuzzy.h [2:2]
+        src/nfagraph/ng_holder.h [2:2]
+        src/nfagraph/ng_is_equal.cpp [2:2]
+        src/nfagraph/ng_is_equal.h [2:2]
+        src/nfagraph/ng_lbr.cpp [2:2]
+        src/nfagraph/ng_lbr.h [2:2]
+        src/nfagraph/ng_limex_accel.cpp [2:2]
+        src/nfagraph/ng_limex_accel.h [2:2]
+        src/nfagraph/ng_literal_analysis.cpp [2:2]
+        src/nfagraph/ng_literal_analysis.h [2:2]
+        src/nfagraph/ng_literal_component.cpp [2:2]
+        src/nfagraph/ng_literal_component.h [2:2]
+        src/nfagraph/ng_literal_decorated.cpp [2:2]
+        src/nfagraph/ng_mcclellan_internal.h [2:2]
+        src/nfagraph/ng_misc_opt.cpp [2:2]
+        src/nfagraph/ng_netflow.cpp [2:2]
+        src/nfagraph/ng_prefilter.cpp [2:2]
+        src/nfagraph/ng_prune.cpp [2:2]
+        src/nfagraph/ng_puff.cpp [2:2]
+        src/nfagraph/ng_redundancy.cpp [2:2]
+        src/nfagraph/ng_region.cpp [2:2]
+        src/nfagraph/ng_region.h [2:2]
+        src/nfagraph/ng_region_redundancy.cpp [2:2]
+        src/nfagraph/ng_repeat.h [2:2]
+        src/nfagraph/ng_reports.cpp [2:2]
+        src/nfagraph/ng_reports.h [2:2]
+        src/nfagraph/ng_restructuring.cpp [2:2]
+        src/nfagraph/ng_restructuring.h [2:2]
+        src/nfagraph/ng_revacc.cpp [2:2]
+        src/nfagraph/ng_small_literal_set.cpp [2:2]
+        src/nfagraph/ng_som.cpp [2:2]
+        src/nfagraph/ng_som.h [2:2]
+        src/nfagraph/ng_som_util.cpp [2:2]
+        src/nfagraph/ng_som_util.h [2:2]
+        src/nfagraph/ng_split.cpp [2:2]
+        src/nfagraph/ng_split.h [2:2]
+        src/nfagraph/ng_squash.cpp [2:2]
+        src/nfagraph/ng_squash.h [2:2]
+        src/nfagraph/ng_utf8.cpp [2:2]
+        src/nfagraph/ng_utf8.h [2:2]
+        src/nfagraph/ng_util.cpp [2:2]
+        src/nfagraph/ng_util.h [2:2]
+        src/nfagraph/ng_vacuous.cpp [2:2]
+        src/nfagraph/ng_vacuous.h [2:2]
+        src/nfagraph/ng_width.cpp [2:2]
+        src/parser/Parser.h [2:2]
+        src/parser/Parser.rl6 [2:2]
+        src/parser/buildstate.cpp [2:2]
+        src/parser/buildstate.h [2:2]
+        src/parser/check_refs.cpp [2:2]
+        src/parser/check_refs.h [2:2]
+        src/parser/parse_error.cpp [2:2]
+        src/parser/parse_error.h [2:2]
+        src/rose/counting_miracle.h [2:2]
+        src/rose/rose_build.h [2:2]
+        src/rose/rose_build_add_internal.h [2:2]
+        src/rose/rose_build_add_mask.cpp [2:2]
+        src/rose/rose_build_anchored.cpp [2:2]
+        src/rose/rose_build_anchored.h [2:2]
+        src/rose/rose_build_castle.cpp [2:2]
+        src/rose/rose_build_compile.cpp [2:2]
+        src/rose/rose_build_convert.cpp [2:2]
+        src/rose/rose_build_convert.h [2:2]
+        src/rose/rose_build_dump.h [2:2]
+        src/rose/rose_build_infix.cpp [2:2]
+        src/rose/rose_build_lookaround.h [2:2]
+        src/rose/rose_build_merge.h [2:2]
+        src/rose/rose_build_role_aliasing.cpp [2:2]
+        src/rose/rose_build_role_aliasing.h [2:2]
+        src/rose/rose_build_scatter.cpp [2:2]
+        src/rose/rose_build_scatter.h [2:2]
+        src/rose/rose_common.h [2:2]
+        src/rose/rose_in_util.cpp [2:2]
+        src/smallwrite/smallwrite_build.h [2:2]
+        src/som/slot_manager.cpp [2:2]
+        src/som/slot_manager.h [2:2]
+        src/som/slot_manager_internal.h [2:2]
+        src/som/som.h [2:2]
+        src/util/alloc.h [2:2]
+        src/util/bitutils.h [2:2]
+        src/util/boundary_reports.h [2:2]
+        src/util/charreach.h [2:2]
+        src/util/container.h [2:2]
+        src/util/cpuid_flags.h [2:2]
+        src/util/depth.h [2:2]
+        src/util/determinise.h [2:2]
+        src/util/dump_charclass.h [2:2]
+        src/util/flat_containers.h [2:2]
+        src/util/graph.h [2:2]
+        src/util/make_unique.h [2:2]
+        src/util/masked_move.c [2:2]
+        src/util/masked_move.h [2:2]
+        src/util/multibit_build.cpp [2:2]
+        src/util/multibit_build.h [2:2]
+        src/util/partitioned_set.h [2:2]
+        src/util/popcount.h [2:2]
+        src/util/queue_index_factory.h [2:2]
+        src/util/simd_types.h [2:2]
+        src/util/state_compress.c [2:2]
+        src/util/verify_types.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd6578dd286e9257f73d8cc59e377eb7
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2005-2009 Jongsoo Park <jongsoo.park -at- gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost-patched/graph/dominator_tree.hpp [2:2]

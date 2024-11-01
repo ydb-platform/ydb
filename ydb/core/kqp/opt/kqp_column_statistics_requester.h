@@ -18,7 +18,7 @@ using namespace NYql::NNodes;
  * Then it requests column statistics for these attributes from the column statistics service
  * and stores it into a TTypeAnnotationContext. 
  */
-class TKqpColumnStatisticsRequester : public TSyncTransformerBase {
+class TKqpColumnStatisticsRequester : public TGraphTransformerBase {
 public:
     TKqpColumnStatisticsRequester(
         const TKikimrConfiguration::TPtr& config,
@@ -36,6 +36,10 @@ public:
 
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final; 
+
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final;
+
+    IGraphTransformer::TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
     void Rewind() override {}
 
@@ -55,6 +59,16 @@ private:
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> KqpTableByExprNode;
     THashMap<TString, THashSet<TString>> ColumnsByTableName;
+
+    //////////////////////////////////////////////////////////////
+    /* for waiting response with column statistics */
+    struct TColumnStatisticsResponse : public NYql::IKikimrGateway::TGenericResult {
+        THashMap<TString, TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
+    };
+    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    NThreading::TPromise<void> AsyncReadiness;
+
+    //////////////////////////////////////////////////////////////
 
     const TKikimrConfiguration::TPtr& Config;
     TTypeAnnotationContext& TypesCtx;

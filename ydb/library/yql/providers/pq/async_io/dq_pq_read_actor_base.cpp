@@ -36,6 +36,7 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
         partitionState->SetOffset(offset);
+        SRC_LOG_D("SessionId: " << GetSessionId() << " SaveState: partition " << partition << ", offset: " << offset);
     }
 
     stateProto.SetStartingMessageTimestampMs(StartingMessageTimestamp.MilliSeconds());

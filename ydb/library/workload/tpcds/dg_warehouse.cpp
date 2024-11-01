@@ -12,12 +12,14 @@ TTpcDSGeneratorWarehouse::TTpcDSGeneratorWarehouse(const TTpcdsWorkloadDataIniti
     : TBulkDataGenerator(owner, WAREHOUSE)
 {}
 
-void TTpcDSGeneratorWarehouse::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorWarehouse::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_WAREHOUSE_TBL> warehouseList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_warehouse(&warehouseList[i], ctxs.front().GetStart() + i);
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_WAREHOUSE_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, w_warehouse_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, w_warehouse_id);

@@ -222,6 +222,10 @@ void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString());
+    if (Config.GetLocalMode()) {
+        TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId));
+        return;
+    }
     ProcessState();
 }
 

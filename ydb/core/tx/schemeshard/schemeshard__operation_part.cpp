@@ -89,7 +89,7 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
     } \
     \
     bool TSubOperation::HandleReply(TEvType::TPtr& ev, TOperationContext& context) { \
-        return Progress(context, &ISubOperationState::HandleReply, ev, context);     \
+        return Progress(context, &ISubOperationState::HandleReply, ev);     \
     }
 
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)

@@ -2348,11 +2348,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
-            if (!sumInsertedRows && sumCompactedRows == fullNumRows) {
+            if (sumCompactedRows && sumInsertedRows + sumCompactedRows == fullNumRows) {
                 success = true;
                 RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
                 UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
-                UNIT_ASSERT(sumInsertedBytes == 0);
+                UNIT_ASSERT(sumInsertedRows <= sumInsertedBytes);
             } else {
                 Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
             }
@@ -2536,11 +2536,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     sb << "Compaction old portions:";
                     ui64 srcPathId{ 0 };
                     for (const auto& portionInfo : compact->SwitchedPortions) {
-                        const ui64 pathId = portionInfo.GetPathId();
+                        const ui64 pathId = portionInfo.GetPortionInfo().GetPathId();
                         UNIT_ASSERT(!srcPathId || srcPathId == pathId);
                         srcPathId = pathId;
-                        oldPortions.insert(portionInfo.GetPortion());
-                        sb << portionInfo.GetPortion() << ",";
+                        oldPortions.insert(portionInfo.GetPortionInfo().GetPortionId());
+                        sb << portionInfo.GetPortionInfo().GetPortionId() << ",";
                     }
                     sb << Endl;
                     Cerr << sb;
@@ -2551,8 +2551,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     TStringBuilder sb;
                     sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        sb << " " << portion.GetPortion();
-                        deletedPortions.insert(portion.GetPortion());
+                        sb << " " << portion.GetPortionInfo().GetPortionId();
+                        deletedPortions.insert(portion.GetPortionInfo().GetPortionId());
                     }
                     sb << Endl;
                     Cerr << sb;

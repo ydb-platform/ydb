@@ -266,6 +266,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> KeyTypeHelper;
         NActors::TActorId ParentId;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         google::protobuf::Any LookupSource; //provider specific data source
         const NKikimr::NMiniKQL::TStructType* KeyType;
         const NKikimr::NMiniKQL::TStructType* PayloadType;
@@ -287,6 +288,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IRandomProvider *const RandomProvider;
+        NWilson::TTraceId TraceId;
     };
 
     struct TInputTransformArguments {
@@ -299,6 +301,7 @@ public:
         const THashMap<TString, TString>& SecureParams;
         const THashMap<TString, TString>& TaskParams;
         const NActors::TActorId& ComputeActorId;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;

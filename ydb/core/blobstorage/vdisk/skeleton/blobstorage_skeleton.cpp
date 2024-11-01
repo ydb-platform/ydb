@@ -2824,7 +2824,7 @@ namespace NKikimr {
             , SelfVDiskId(GInfo->GetVDiskId(VCtx->ShortSelfVDisk))
             , Arena(std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate))
             , VDiskMonGroup(VCtx->VDiskCounters, "subsystem", "state")
-            , ReplMonGroup(VCtx->VDiskCounters, "subsystem", "state")
+            , ReplMonGroup(VCtx->VDiskCounters, "subsystem", "repl")
             , SyncLogIFaceGroup(VCtx->VDiskCounters, "subsystem", "synclog")
             , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(
                 VCtx->VDiskCounters, "subsystem", "interface"))

@@ -27,6 +27,8 @@
 #include <sys/select.h>
 #endif
 
+#define ENABLE_CURLX_PRINTF
+/* use our own printf() functions */
 #include "curlx.h"
 
 #include "tool_cfgable.h"
@@ -34,7 +36,6 @@
 #include "tool_operate.h"
 #include "tool_util.h"
 #include "tool_msgs.h"
-#include "tool_sleep.h"
 
 #include "memdebug.h" /* keep this as LAST include */
 
@@ -88,7 +89,7 @@ size_t tool_read_cb(char *buffer, size_t sz, size_t nmemb, void *userdata)
       config->readbusy = TRUE;
       return CURL_READFUNC_PAUSE;
     }
-    /* since size_t is unsigned we cannot return negative values fine */
+    /* since size_t is unsigned we can't return negative values fine */
     rc = 0;
   }
   if((per->uploadfilesize != -1) &&
@@ -123,33 +124,8 @@ int tool_readbusy_cb(void *clientp,
   (void)ulnow;  /* unused */
 
   if(config->readbusy) {
-    /* lame code to keep the rate down because the input might not deliver
-       anything, get paused again and come back here immediately */
-    static long rate = 500;
-    static struct timeval prev;
-    static curl_off_t ulprev;
-
-    if(ulprev == ulnow) {
-      /* it did not upload anything since last call */
-      struct timeval now = tvnow();
-      if(prev.tv_sec)
-        /* get a rolling average rate */
-        /* rate = rate - rate/4 + tvdiff(now, prev)/4; */
-        rate -= rate/4 - tvdiff(now, prev)/4;
-      prev = now;
-    }
-    else {
-      rate = 50;
-      ulprev = ulnow;
-    }
-    if(rate >= 50) {
-      /* keeps the looping down to 20 times per second in the crazy case */
-      config->readbusy = FALSE;
-      curl_easy_pause(per->curl, CURLPAUSE_CONT);
-    }
-    else
-      /* sleep half a period */
-      tool_go_sleep(25);
+    config->readbusy = FALSE;
+    curl_easy_pause(per->curl, CURLPAUSE_CONT);
   }
 
   return per->noprogress? 0 : CURL_PROGRESSFUNC_CONTINUE;

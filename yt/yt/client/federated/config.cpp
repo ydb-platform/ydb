@@ -15,6 +15,9 @@ void TFederationConfig::Register(TRegistrar registrar)
         .GreaterThan(TDuration::Zero())
         .Default(TDuration::Seconds(60));
 
+    registrar.Parameter("check_cypress_root", &TThis::CheckCypressRoot)
+        .Default(true);
+
     registrar.Parameter("cluster_retry_attempts", &TThis::ClusterRetryAttempts)
         .GreaterThanOrEqual(0)
         .Default(3);

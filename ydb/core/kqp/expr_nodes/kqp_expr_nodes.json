@@ -546,10 +546,9 @@
             "Match": {"Type": "Callable", "Name": "KqpTableSinkSettings"},
             "Children": [
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
-                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "InconsistentWrite", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Mode", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 1, "Name": "InconsistentWrite", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Mode", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },
         {

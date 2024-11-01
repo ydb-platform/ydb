@@ -51,7 +51,7 @@ namespace NBoot {
         };
 
         struct TCompactionChanges {
-            NKikimrSchemeOp::ECompactionStrategy Strategy = NKikimrSchemeOp::CompactionStrategyUnset;
+            NKikimrCompaction::ECompactionStrategy Strategy = NKikimrCompaction::CompactionStrategyUnset;
             THashMap<ui64, TString> KeyValues;
         };
 

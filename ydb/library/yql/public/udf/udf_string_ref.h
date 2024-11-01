@@ -35,6 +35,10 @@ public:
     inline constexpr ui32 Size() const noexcept { return Size_; }
     inline constexpr bool Empty() const noexcept { return Size_ == 0; }
 
+    inline constexpr TDataType data() const noexcept { return Data_; }
+    inline constexpr ui32 size() const noexcept { return Size_; }
+    inline constexpr bool empty() const noexcept { return Size_ == 0; }
+
 protected:
     TDataType Data_ = nullptr;
     ui32 Size_ = 0U;
@@ -144,14 +148,14 @@ private:
     template<typename TStringType>
     struct TByData {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.Data();
+            return buf.data();
         }
     };
 
     template<typename TStringType>
     struct TBySize {
         static constexpr auto Get(const TStringType& buf) noexcept {
-            return buf.Size();
+            return buf.size();
         }
     };
 

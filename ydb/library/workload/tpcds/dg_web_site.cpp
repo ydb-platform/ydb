@@ -14,13 +14,15 @@ TTpcDSGeneratorWebSite::TTpcDSGeneratorWebSite(const TTpcdsWorkloadDataInitializ
     : TBulkDataGenerator(owner, WEB_SITE)
 {}
 
-void TTpcDSGeneratorWebSite::GenerateRows(TContexts& ctxs) {
+void TTpcDSGeneratorWebSite::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
     TVector<W_WEB_SITE_TBL> webSiteList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_web_site(NULL, ctxs.front().GetStart() + i);
         webSiteList[i] = g_w_web_site;
         tpcds_row_stop(TableNum);
     }
+    g.Release();
+
     TCsvItemWriter<W_WEB_SITE_TBL> writer(ctxs.front().GetCsv().Out);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, web_site_sk);
     CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, web_site_id);

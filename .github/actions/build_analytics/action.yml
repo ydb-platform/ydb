@@ -30,12 +30,9 @@ runs:
       shell: bash
       run: |
         set -ex
-        # FIXME: target name may be not the same as dir name
-        export TARGET_NAME=`basename ${{ inputs.build_target }}`
-        export TARGET_DIR=${{ inputs.build_target }}
         export build_preset="${{ inputs.build_preset }}" 
         export build_target="${{ inputs.build_target }}" 
-        ./ya tool bloat --linker-map $TARGET_DIR/$TARGET_NAME.map.lld --input $TARGET_DIR/$TARGET_NAME --save-html ya_bloat_html --save-json bloat.json
+        ./ya tool bloat --linker-map ydb/apps/ydbd/ydbd.map.lld --input ydb/apps/ydbd/ydbd --save-html ya_bloat_html --save-json bloat.json
         ./ydb/ci/build_bloat/template_bloat.py -j bloat.json -o template_bloat -t template_bloat_html
         ./ydb/ci/build_bloat/main.py --build-dir . --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact
         ./ydb/ci/build_bloat/ydb_upload.py --html-dir-cpp html_cpp_impact --html-dir-headers html_headers_impact

@@ -223,7 +223,7 @@ struct TDataRow {
         std::vector<TCell> cells(value.Cells().data(), value.Cells().data() + value.Cells().size());
 
         auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
-        UNIT_ASSERT(binaryJson.Defined());
+        UNIT_ASSERT(binaryJson.IsSuccess());
 
         cells[19] = TCell(binaryJson->Data(), binaryJson->Size());
         return TOwnedCellVec(cells);
@@ -454,7 +454,7 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
     TString err;
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Start(TDataRow::MakeYdbSchema(), 0, 0, err);
-    UNIT_ASSERT_C(err.Empty(), err);
+    UNIT_ASSERT_C(err.empty(), err);
 
     for (const TDataRow& row : rows) {
         NKikimr::TDbTupleRef key;

@@ -16,7 +16,7 @@
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>

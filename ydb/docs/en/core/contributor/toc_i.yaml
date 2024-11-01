@@ -7,6 +7,10 @@ items:
   href: manage-releases.md
 - name: Core
   items:
+  - name: General schema
+    href: general-schema.md
+  - name: Distributed storage
+    href: distributed-storage.md
   - name: LocalDB
     items:
     - name: Persistent uncommitted changes

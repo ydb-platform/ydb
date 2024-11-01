@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/db_pool/db_pool.h>
 
 #include <ydb/core/fq/libs/common/debug_info.h>

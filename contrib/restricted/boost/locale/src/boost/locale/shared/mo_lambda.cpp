@@ -22,7 +22,7 @@ namespace boost { namespace locale { namespace gnu_gettext { namespace lambda {
 
     namespace { // anon
         template<class TExp, typename... Ts>
-        expr_ptr make_expr(Ts... ts)
+        expr_ptr make_expr(Ts&&... ts)
         {
             return expr_ptr(new TExp(std::forward<Ts>(ts)...));
         }

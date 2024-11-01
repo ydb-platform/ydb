@@ -49,4 +49,17 @@ if [ $retVal -ne 0 ]; then
   exit $retVal
 fi
 
+/ydb -p ${PROFILE} yql -s '
+    CREATE TABLE dummy_table (name String, cnt Uint64, PRIMARY KEY(name));
+    COMMIT;
+    INSERT INTO dummy_table (name, cnt) SELECT "db", COUNT(*) FROM db;
+    COMMIT;
+  '
+
+retVal=$?
+if [ $retVal -ne 0 ]; then
+  echo $retVal
+  exit $retVal
+fi
+
 echo $(date +"%T.%6N") "SUCCESS"

@@ -28,8 +28,8 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             NKikimrTxColumnShard::TInternalOperationData metaProto;
             Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
 
-            auto operation = std::make_shared<TWriteOperation>(
-                writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec), granuleShardingVersionId, NEvWrite::EModificationType::Upsert);
+            auto operation = std::make_shared<TWriteOperation>(0, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
+                granuleShardingVersionId, NEvWrite::EModificationType::Upsert, false);
             operation->FromProto(metaProto);
             LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
             AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
@@ -201,11 +201,11 @@ void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 
 void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const ui64 /*txId*/) {
 }
 
-TWriteOperation::TPtr TOperationsManager::RegisterOperation(
-    const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType) {
+TWriteOperation::TPtr TOperationsManager::RegisterOperation(const ui64 pathId, const ui64 lockId, const ui64 cookie,
+    const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool portionsWriting) {
     auto writeId = BuildNextOperationWriteId();
-    auto operation = std::make_shared<TWriteOperation>(
-        writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(), granuleShardingVersionId, mType);
+    auto operation = std::make_shared<TWriteOperation>(pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(),
+        granuleShardingVersionId, mType, portionsWriting);
     Y_ABORT_UNLESS(Operations.emplace(operation->GetWriteId(), operation).second);
     GetLockVerified(operation->GetLockId()).MutableWriteOperations().emplace_back(operation);
     GetLockVerified(operation->GetLockId()).AddWrite();

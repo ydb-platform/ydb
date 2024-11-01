@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/testlib
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/lib/ut_helpers
 )
 
 YQL_LAST_ABI_VERSION()

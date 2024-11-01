@@ -18,6 +18,8 @@
 
 namespace NYql {
 
+class TQContext;
+
 enum class TYtTableIntent: ui32 {
     Read        = 1 << 0,
     View        = 1 << 1, // Read via view
@@ -49,7 +51,8 @@ struct TYtViewDescription {
     TExprNode::TPtr CompiledSql; // contains Read! to self/self_raw tables
     const TTypeAnnotationNode* RowType = nullptr; // Filled only if scheme requested
 
-    bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion, TExprContext& ctx,
+    bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
+        const TString& viewId, const TQContext& qContext, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, 
         bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
     void CleanupCompiledSQL();
@@ -71,12 +74,12 @@ struct TYtTableDescriptionBase {
     bool IgnoreTypeV3 = false;
 
     bool Fill(const TString& provider, const TString& cluster, const TString& table, const TStructExprType* type,
-        const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
+        const TString& viewSql, ui16 syntaxVersion, const TQContext& qContext, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
         bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
     void CleanupCompiledSQL();
     bool FillViews(const TString& provider, const TString& cluster, const TString& table, const THashMap<TString, TString>& metaAttrs,
-        TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
+        const TQContext& qContext, TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
         bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
 };
 

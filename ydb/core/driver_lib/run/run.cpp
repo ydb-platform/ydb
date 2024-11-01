@@ -128,6 +128,7 @@
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
+#include <ydb/services/view/grpc_service.h>
 
 #include <ydb/core/fq/libs/init/init.h>
 
@@ -240,7 +241,7 @@ public:
             appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
         }
 
-        appData->FeatureFlags = Config.GetFeatureFlags();
+        appData->InitFeatureFlags(Config.GetFeatureFlags());
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
@@ -610,6 +611,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["replication"] = &hasReplication;
         TServiceCfg hasTabletService = services.empty();
         names["tablet_service"] = &hasTabletService;
+        TServiceCfg hasView = services.empty();
+        names["view"] = &hasView;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -895,6 +898,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 hasTabletService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
+        if (hasView) {
+            server.AddService(new NGRpcService::TGRpcViewService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasView.IsRlAllowed()));
+        }
+
         if (ModuleFactories) {
             for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxies[0])) {
                 server.AddService(service);
@@ -932,6 +940,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             opts.SetKeepAliveEnable(false);
         }
 
+        if (grpcConfig.HasEndpointId()) {
+            opts.SetEndpointId(grpcConfig.GetEndpointId());
+        }
+
         NConsole::SetGRpcLibraryFunction();
 
 #define GET_PATH_TO_FILE(GRPC_CONFIG, PRIMARY_FIELD, SECONDARY_FIELD) \
@@ -943,9 +955,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             const auto& pathToCertificateFile = GET_PATH_TO_FILE(grpcConfig, PathToCertificateFile, Cert);
             const auto& pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
 
-            Y_ABORT_UNLESS(!pathToCaFile.Empty(), "CA not set");
-            Y_ABORT_UNLESS(!pathToCertificateFile.Empty(), "Cert not set");
-            Y_ABORT_UNLESS(!pathToPrivateKeyFile.Empty(), "Key not set");
+            Y_ABORT_UNLESS(!pathToCaFile.empty(), "CA not set");
+            Y_ABORT_UNLESS(!pathToCertificateFile.empty(), "Cert not set");
+            Y_ABORT_UNLESS(!pathToPrivateKeyFile.empty(), "Key not set");
             sslOpts.SetPort(grpcConfig.GetSslPort());
             NYdbGrpc::TSslData sslData;
             sslData.Root = ReadFile(pathToCaFile);
@@ -973,6 +985,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 if (ex.GetHost())
                     xopts.SetHost(ex.GetHost());
 
+                if (ex.HasEndpointId()) {
+                    xopts.SetEndpointId(ex.GetEndpointId());
+                }
+
                 GRpcServers.push_back({ "grpc", new NYdbGrpc::TGRpcServer(xopts) });
                 fillFn(ex, *GRpcServers.back().second, xopts);
             }
@@ -981,23 +997,26 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 NYdbGrpc::TServerOptions xopts = opts;
                 xopts.SetPort(ex.GetSslPort());
 
+                if (ex.HasEndpointId()) {
+                    xopts.SetEndpointId(ex.GetEndpointId());
+                }
 
                 NYdbGrpc::TSslData sslData;
 
                 auto pathToCaFile = GET_PATH_TO_FILE(ex, PathToCaFile, CA);
-                if (pathToCaFile.Empty()) {
+                if (pathToCaFile.empty()) {
                     pathToCaFile = GET_PATH_TO_FILE(grpcConfig, PathToCaFile, CA);
                 }
                 sslData.Root = ReadFile(pathToCaFile);
 
                 auto pathToCertificateFile = GET_PATH_TO_FILE(ex, PathToCertificateFile, Cert);
-                if (pathToCertificateFile.Empty()) {
+                if (pathToCertificateFile.empty()) {
                     pathToCertificateFile = GET_PATH_TO_FILE(grpcConfig, PathToCertificateFile, Cert);
                 }
                 sslData.Cert = ReadFile(pathToCertificateFile);
 
                 auto pathToPrivateKeyFile = GET_PATH_TO_FILE(ex, PathToPrivateKeyFile, Key);
-                if (pathToPrivateKeyFile.Empty()) {
+                if (pathToPrivateKeyFile.empty()) {
                     pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
                 }
                 sslData.Key = ReadFile(pathToPrivateKeyFile);
@@ -1214,6 +1233,8 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
     );
 
     LogSettings->ClusterName = logConfig.HasClusterName() ? logConfig.GetClusterName() : "";
+    LogSettings->TenantName = runConfig.TenantName;
+    LogSettings->NodeId = runConfig.NodeId;
 
     if (logConfig.GetFormat() == "full") {
         LogSettings->Format = NLog::TSettings::PLAIN_FULL_FORMAT;
@@ -1592,6 +1613,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCompPriorities) {
+        sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
+    }
+
     if (serviceMask.EnableCompConveyor) {
         sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
     }
@@ -1739,8 +1764,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     THPTimer timer;
-    TIntrusivePtr<TDrainProgress> drainProgress(new TDrainProgress());
+    TIntrusivePtr<TDrainProgress> drainProgress;;
     if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported && ActorSystem) {
+        drainProgress = new TDrainProgress();
         drainProgress->OnSend();
         ActorSystem->Send(new IEventHandle(MakeTenantPoolRootID(), {}, new TEvLocal::TEvLocalDrainNode(drainProgress)));
     }
@@ -1751,7 +1777,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     DisableActorCallstack();
 
-    if (AppData->FeatureFlags.GetEnableDrainOnShutdown() && GracefulShutdownSupported) {
+    if (drainProgress) {
         for (ui32 i = 0; i < 300; i++) {
             auto cnt = drainProgress->GetOnlineTabletsEstimate();
             if (cnt > 0) {

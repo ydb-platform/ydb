@@ -1,0 +1,93 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 702e01edc98e47e56ed0509ce182ee5d
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/miniselect/median_of_ninthers.h at line 3
+    License text:
+        /*          Copyright Andrei Alexandrescu, 2016-.
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/miniselect/median_of_ninthers.h [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7776713baab3f172d0d3c56b0cf3c911
+BELONGS ya.make
+    License text:
+            Copyright (c) 2015 Orson Peters
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/miniselect/pdqselect.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cba5472f224743c3e1d5ec31132f192a
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/miniselect/floyd_rivest_select.h at line 3, include/miniselect/heap_select.h at line 3, include/miniselect/median_of_3_random.h at line 3, include/miniselect/median_of_medians.h at line 3, include/miniselect/median_of_ninthers.h at line 8, include/miniselect/pdqselect.h at line 26, include/miniselect/private/median_common.h at line 8
+    License text:
+        /*          Copyright Danila Kutenin, 2020-.
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/miniselect/floyd_rivest_select.h [1:3]
+        include/miniselect/heap_select.h [1:3]
+        include/miniselect/median_of_3_random.h [1:3]
+        include/miniselect/median_of_medians.h [1:3]
+        include/miniselect/median_of_ninthers.h [6:8]
+        include/miniselect/pdqselect.h [24:26]
+        include/miniselect/private/median_common.h [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e9835b7c854e0f098bedfc5ac2c84fe5
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/miniselect/private/median_common.h at line 3
+    License text:
+        /*          Copyright Andrei Alexandrescu, 2016-,
+         * Distributed under the Boost Software License, Version 1.0.
+         *    (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/miniselect/private/median_common.h [1:3]

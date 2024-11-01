@@ -246,7 +246,7 @@ public:
         if (WaitingOnly) {
             tabletIdIndex.reserve(Self->BootQueue.WaitQueue.size());
             for (const TBootQueue::TBootQueueRecord& rec : Self->BootQueue.WaitQueue) {
-                TTabletInfo* tablet = Self->FindTablet(rec.TabletId);
+                TTabletInfo* tablet = Self->FindTablet(rec.TabletId, rec.FollowerId);
                 if (tablet != nullptr) {
                     tabletIdIndex.push_back({tabletIndexFunction(*tablet), tablet});
                 }
@@ -837,6 +837,7 @@ public:
         UpdateConfig(db, "MinGroupUsageToBalance", configUpdates);
         UpdateConfig(db, "StorageBalancerInflight", configUpdates);
         UpdateConfig(db, "LessSystemTabletsMoves", configUpdates);
+        UpdateConfig(db, "ScaleRecommendationRefreshFrequency", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1185,6 +1186,7 @@ public:
         ShowConfig(out, "StorageBalancerInflight");
         ShowConfig(out, "LessSystemTabletsMoves");
         ShowConfigForBalancerIgnoreTabletTypes(out);
+        ShowConfig(out, "ScaleRecommendationRefreshFrequency");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
@@ -4356,7 +4358,7 @@ bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorConte
     TCgiParameters cgi(httpInfo->Cgi());
     TStringBuilder keyData;
     keyData << cgi.Get("tablet") << cgi.Get("owner") << cgi.Get("owner_idx");
-    if (keyData.Empty()) {
+    if (keyData.empty()) {
         ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
         return false;
     }

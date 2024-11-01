@@ -7,6 +7,7 @@ namespace NDriverClient {
 TClientCommandAdmin::TClientCommandAdmin()
     : TClientCommandTree("admin", {}, "YDB management and administration")
 {
+    AddCommand(std::make_unique<TClientCommandTablet>());
     AddCommand(std::make_unique<TClientCommandNode>());
     AddCommand(std::make_unique<TClientCommandDebug>());
     AddCommand(std::make_unique<TClientCommandBlobStorage>());

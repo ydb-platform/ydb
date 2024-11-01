@@ -292,12 +292,6 @@ namespace {
         };
     }
 
-    TAlterColumnTableSettings ParseAlterColumnTableSettings(TKiAlterTable alter) {
-        return TAlterColumnTableSettings{
-            .Table = TString(alter.Table())
-        };
-    }
-
     TSequenceSettings ParseSequenceSettings(const TCoNameValueTupleList& sequenceSettings) {
         TSequenceSettings result;
         for (const auto& setting: sequenceSettings) {
@@ -725,6 +719,34 @@ namespace {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
             return false;
+        }
+
+        return true;
+    }
+
+    bool ParseBackupCollectionSettings(
+        TBackupCollectionSettings& dstSettings,
+        const TCoNameValueTupleList& srcSettings,
+        TExprContext& ctx,
+        TPositionHandle pos)
+    {
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "incremental_backup_enabled") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (!TryFromString(value, dstSettings.IncrementalBackupEnabled)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "INCREMENTAL_BACKUP_ENABLED must be true or false"));
+                    return false;
+                }
+            } else if (name == "storage") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) != "cluster") {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "Only cluster STORAGE are currently supported"));
+                    return false;
+                }
+            }
         }
 
         return true;
@@ -1556,6 +1578,9 @@ public:
                                         return SyncError();
                                     }
 
+                                } else if (name == "compression_level") {
+                                    auto level = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                                    f->set_compression_level(level);
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                         TStringBuilder() << "Unknown column family setting name: " << name));
@@ -1697,19 +1722,24 @@ public:
                             YQL_ENSURE(indexSettings.Maybe<TCoNameValueTupleList>());
                             for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
+                                auto parseU32 = [] (const char* key, const TString& value) {
+                                    ui32 num = 0;
+                                    YQL_ENSURE(TryFromString(value, num), "Wrong " << key << ": " << value);
+                                    return num;
+                                };
+                                const auto value = vectorSetting.Value().Cast<TCoAtom>().StringValue();
                                 if (vectorSetting.Name().Value() == "distance") {
-                                    protoVectorSettings.set_distance(VectorIndexSettingsParseDistance(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseDistance(value));
                                 } else if (vectorSetting.Name().Value() == "similarity") {
-                                    protoVectorSettings.set_similarity(VectorIndexSettingsParseSimilarity(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_metric(VectorIndexSettingsParseSimilarity(value));
                                 } else if (vectorSetting.Name().Value() == "vector_type") {
-                                    protoVectorSettings.set_vector_type(VectorIndexSettingsParseVectorType(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_vector_type(VectorIndexSettingsParseVectorType(value));
                                 } else if (vectorSetting.Name().Value() == "vector_dimension") {
-                                    auto parseInt = [] (const TString vectorDimensionStr) {
-                                        ui32 vectorDimension;
-                                        YQL_ENSURE(TryFromString(vectorDimensionStr, vectorDimension), "Wrong vector_dimension: " << vectorDimensionStr);
-                                        return vectorDimension;
-                                    };
-                                    protoVectorSettings.set_vector_dimension(parseInt(vectorSetting.Value().Cast<TCoAtom>().StringValue()));
+                                    protoVectorSettings.mutable_settings()->set_vector_dimension(parseU32("vector_dimension", value));
+                                } else if (vectorSetting.Name().Value() == "clusters") {
+                                    protoVectorSettings.set_clusters(parseU32("clusters", value));
+                                } else if (vectorSetting.Name().Value() == "levels") {
+                                    protoVectorSettings.set_levels(parseU32("levels", value));
                                 } else {
                                     YQL_ENSURE(false, "Wrong vector setting name: " << vectorSetting.Name().Value());
                                 }
@@ -1971,10 +2001,11 @@ public:
             }
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
-            bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);
+            bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
 
             if (isTableStore) {
+                AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                         TStringBuilder() << "TABLESTORE with not COLUMN store"));
@@ -1982,7 +2013,7 @@ public:
                 }
                 future = Gateway->AlterTableStore(cluster, ParseAlterTableStoreSettings(maybeAlter.Cast()));
             } else if (isColumn) {
-                future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
+                future = Gateway->AlterColumnTable(cluster, std::move(alterTableRequest));
             } else {
                 TMaybe<TString> requestType;
                 if (!SessionCtx->Query().DocumentApiRestricted) {
@@ -2439,6 +2470,11 @@ public:
         }
 
         if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                ctx.AddError(TIssue("ANALYZE command is not supported because `EnableColumnStatistics` feature flag is off"));
+                return SyncError();            
+            }
+
             auto cluster = TString(maybeAnalyze.Cast().DataSink().Cluster());
 
             TAnalyzeSettings analyzeSettings = ParseAnalyzeSettings(maybeAnalyze.Cast());
@@ -2451,6 +2487,101 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing ANALYZE");
+        }
+
+        if (auto maybeCreateBackupCollection = TMaybeNode<TKiCreateBackupCollection>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto createBackupCollection = maybeCreateBackupCollection.Cast();
+
+            TCreateBackupCollectionSettings settings;
+            settings.Name = TString(createBackupCollection.BackupCollection());
+            settings.Prefix = TString(createBackupCollection.Prefix());
+
+            TVector<TCreateBackupCollectionSettings::TTable> tables;
+
+            for (auto entry: createBackupCollection.Entries()) {
+                auto type = entry.Type().Cast<TCoAtom>().StringValue();
+                if (type == "database") {
+                    ctx.AddError(TIssue(ctx.GetPosition(entry.Type().Pos()),
+                                        TStringBuilder() << "DATABASE is not implemented yet"));
+                    return SyncError();
+                } else if (type == "table") {
+                    YQL_ENSURE(entry.Path());
+                    auto path = entry.Path().Cast().StringValue();
+                    tables.emplace_back(TCreateBackupCollectionSettings::TTable{path});
+                }
+            }
+
+            settings.Entries = tables;
+
+            if (!ParseBackupCollectionSettings(settings.Settings, createBackupCollection.BackupCollectionSettings(), ctx, createBackupCollection.Pos())) {
+                return SyncError();
+            }
+
+            auto cluster = TString(createBackupCollection.DataSink().Cluster());
+            auto future = Gateway->CreateBackupCollection(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE BACKUP COLLECTION");
+        }
+
+        if (auto maybeAlterBackupCollection = TMaybeNode<TKiAlterBackupCollection>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto alterBackupCollection = maybeAlterBackupCollection.Cast();
+
+            TAlterBackupCollectionSettings settings;
+            settings.Name = TString(alterBackupCollection.BackupCollection());
+            settings.Prefix = TString(alterBackupCollection.Prefix());
+
+            if (!ParseBackupCollectionSettings(settings.Settings, alterBackupCollection.BackupCollectionSettings(), ctx, alterBackupCollection.Pos())) {
+                return SyncError();
+            }
+
+            auto cluster = TString(alterBackupCollection.DataSink().Cluster());
+            auto future = Gateway->AlterBackupCollection(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER BACKUP COLLECTION");
+        }
+
+        if (auto maybeDropBackupCollection = TMaybeNode<TKiDropBackupCollection>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto dropBackupCollection = maybeDropBackupCollection.Cast();
+
+            TDropBackupCollectionSettings settings;
+            settings.Name = TString(dropBackupCollection.BackupCollection());
+            settings.Prefix = TString(dropBackupCollection.Prefix());
+            settings.Cascade = (dropBackupCollection.Cascade().Value() == "1");
+
+            auto cluster = TString(dropBackupCollection.DataSink().Cluster());
+            auto future = Gateway->DropBackupCollection(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP BACKUP COLLECTION");
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

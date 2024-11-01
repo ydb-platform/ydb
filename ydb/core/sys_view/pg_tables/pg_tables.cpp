@@ -66,7 +66,7 @@ void TPgTablesScanBase::ExpandBatchWithStaticTables(const THolder<NKqp::TEvKqpCo
     for (const auto& tableDesc : NYql::NPg::GetStaticTables()) {
         TVector<TString> cellData;
         TVector<TCell> cells = MakePgTablesStaticRow(tableDesc, cellData);
-        if (!ConvertError_.Empty()) {
+        if (!ConvertError_.empty()) {
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, ConvertError_);
             return;
         }
@@ -139,7 +139,7 @@ void TPgTablesScanBase::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeRe
         const auto& tableName = childrenDescription.GetName();
         const auto& tableOwner = record.GetPathDescription().GetSelf().GetOwner();
         TVector<TCell> cells = MakePgTablesRow(tableName, tableOwner, cellData);
-        if (!ConvertError_.Empty()) {
+        if (!ConvertError_.empty()) {
             ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, ConvertError_);
             return;
         }

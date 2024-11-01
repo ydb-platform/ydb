@@ -1,0 +1,13 @@
+--- contrib/python/Werkzeug/py2/werkzeug/test.py	(index)
++++ contrib/python/Werkzeug/py2/werkzeug/test.py	(working tree)
+@@ -212,8 +212,8 @@ class _TestCookieJar(CookieJar):
+ 
+         if cvals:
+             environ["HTTP_COOKIE"] = "; ".join(cvals)
+-        else:
+-            environ.pop("HTTP_COOKIE", None)
++        #else:
++        #    environ.pop("HTTP_COOKIE", None)
+ 
+     def extract_wsgi(self, environ, headers):
+         """Extract the server's set-cookie headers as cookies into the

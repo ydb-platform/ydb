@@ -70,9 +70,8 @@ static CURLcode cf_haproxy_date_out_set(struct Curl_cfilter*cf,
 {
   struct cf_haproxy_ctx *ctx = cf->ctx;
   CURLcode result;
+  const char *tcp_version;
   const char *client_ip;
-  struct ip_quadruple ipquad;
-  int is_ipv6;
 
   DEBUGASSERT(ctx);
   DEBUGASSERT(ctx->state == HAPROXY_INIT);
@@ -82,20 +81,19 @@ static CURLcode cf_haproxy_date_out_set(struct Curl_cfilter*cf,
     result = Curl_dyn_addn(&ctx->data_out, STRCONST("PROXY UNKNOWN\r\n"));
   else {
 #endif /* USE_UNIX_SOCKETS */
-  result = Curl_conn_cf_get_ip_info(cf->next, data, &is_ipv6, &ipquad);
-  if(result)
-    return result;
-
   /* Emit the correct prefix for IPv6 */
+  tcp_version = cf->conn->bits.ipv6 ? "TCP6" : "TCP4";
   if(data->set.str[STRING_HAPROXY_CLIENT_IP])
     client_ip = data->set.str[STRING_HAPROXY_CLIENT_IP];
   else
-    client_ip = ipquad.local_ip;
+    client_ip = data->info.conn_local_ip;
 
   result = Curl_dyn_addf(&ctx->data_out, "PROXY %s %s %s %i %i\r\n",
-                         is_ipv6? "TCP6" : "TCP4",
-                         client_ip, ipquad.remote_ip,
-                         ipquad.local_port, ipquad.remote_port);
+                         tcp_version,
+                         client_ip,
+                         data->info.conn_primary_ip,
+                         data->info.conn_local_port,
+                         data->info.conn_primary_port);
 
 #ifdef USE_UNIX_SOCKETS
   }
@@ -127,28 +125,23 @@ static CURLcode cf_haproxy_connect(struct Curl_cfilter *cf,
     if(result)
       goto out;
     ctx->state = HAPROXY_SEND;
-    FALLTHROUGH();
+    /* FALLTHROUGH */
   case HAPROXY_SEND:
     len = Curl_dyn_len(&ctx->data_out);
     if(len > 0) {
-      ssize_t nwritten;
-      nwritten = Curl_conn_cf_send(cf->next, data,
-                                   Curl_dyn_ptr(&ctx->data_out), len, FALSE,
-                                   &result);
-      if(nwritten < 0) {
-        if(result != CURLE_AGAIN)
-          goto out;
-        result = CURLE_OK;
-        nwritten = 0;
-      }
-      Curl_dyn_tail(&ctx->data_out, len - (size_t)nwritten);
+      ssize_t written = Curl_conn_send(data, cf->sockindex,
+                                       Curl_dyn_ptr(&ctx->data_out),
+                                       len, &result);
+      if(written < 0)
+        goto out;
+      Curl_dyn_tail(&ctx->data_out, len - (size_t)written);
       if(Curl_dyn_len(&ctx->data_out) > 0) {
         result = CURLE_OK;
         goto out;
       }
     }
     ctx->state = HAPROXY_DONE;
-    FALLTHROUGH();
+    /* FALLTHROUGH */
   default:
     Curl_dyn_free(&ctx->data_out);
     break;
@@ -191,12 +184,11 @@ static void cf_haproxy_adjust_pollset(struct Curl_cfilter *cf,
 
 struct Curl_cftype Curl_cft_haproxy = {
   "HAPROXY",
-  CF_TYPE_PROXY,
+  0,
   0,
   cf_haproxy_destroy,
   cf_haproxy_connect,
   cf_haproxy_close,
-  Curl_cf_def_shutdown,
   Curl_cf_def_get_host,
   cf_haproxy_adjust_pollset,
   Curl_cf_def_data_pending,

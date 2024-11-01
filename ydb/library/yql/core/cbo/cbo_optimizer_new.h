@@ -31,11 +31,11 @@ enum EOptimizerNodeKind: ui32
 */
 struct IBaseOptimizerNode {
     EOptimizerNodeKind Kind;
-    std::shared_ptr<TOptimizerStatistics> Stats;
+    TOptimizerStatistics Stats;
 
     IBaseOptimizerNode(EOptimizerNodeKind k) : Kind(k) {}
-    IBaseOptimizerNode(EOptimizerNodeKind k, std::shared_ptr<TOptimizerStatistics> s) :
-        Kind(k), Stats(s) {}
+    IBaseOptimizerNode(EOptimizerNodeKind k, TOptimizerStatistics s) :
+        Kind(k), Stats(std::move(s)) {}
 
     virtual TVector<TString> Labels()=0;
     virtual void Print(std::stringstream& stream, int ntabs=0)=0;
@@ -201,27 +201,18 @@ struct IProviderContext {
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions, 
-        EJoinAlgoType joinAlgo,
-        EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
-
-    virtual TOptimizerStatistics ComputeJoinStats(
-        const TOptimizerStatistics& leftStats,
-        const TOptimizerStatistics& rightStats,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
         TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKind) = 0;
+        EJoinKind joinKin) = 0;
 };
 
 /**
@@ -233,27 +224,19 @@ struct TBaseProviderContext : public IProviderContext {
 
     double ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const override;
 
-    bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
-        const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
+    bool IsJoinApplicable(
+        const std::shared_ptr<IBaseOptimizerNode>& leftStats,
+        const std::shared_ptr<IBaseOptimizerNode>& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind) override;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const TVector<TString>& leftJoinKeys,
-        const TVector<TString>& rightJoinKeys,
-        EJoinAlgoType joinAlgo,
-        EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
-
-    virtual TOptimizerStatistics ComputeJoinStats(
-        const TOptimizerStatistics& leftStats,
-        const TOptimizerStatistics& rightStats,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
         TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
@@ -271,8 +254,8 @@ struct TRelOptimizerNode : public IBaseOptimizerNode {
     // Temporary solution to check if a LookupJoin is possible in KQP
     //void* Expr;
 
-    TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats) :
-        IBaseOptimizerNode(RelNodeType, stats), Label(label) { }
+    TRelOptimizerNode(TString label, TOptimizerStatistics stats) :
+        IBaseOptimizerNode(RelNodeType, std::move(stats)), Label(label) { }
     //TRelOptimizerNode(TString label, std::shared_ptr<TOptimizerStatistics> stats, const TExprNode::TPtr expr) :
     //    IBaseOptimizerNode(RelNodeType, stats), Label(label), Expr(expr) { }
     virtual ~TRelOptimizerNode() {}
@@ -290,9 +273,8 @@ struct TRelOptimizerNode : public IBaseOptimizerNode {
 struct TJoinOptimizerNode : public IBaseOptimizerNode {
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
     std::shared_ptr<IBaseOptimizerNode> RightArg;
-    const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> JoinConditions;
-    TVector<TString> LeftJoinKeys;
-    TVector<TString> RightJoinKeys;
+    TVector<NDq::TJoinColumn> LeftJoinKeys;
+    TVector<NDq::TJoinColumn> RightJoinKeys;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
     /////////////////// 'ANY' flag means leaving only one row from the join side.
@@ -303,7 +285,8 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
 
     TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        TVector<NDq::TJoinColumn> leftKeys,
+        TVector<NDq::TJoinColumn> rightKeys,
         const EJoinKind joinType,
         const EJoinAlgoType joinAlgo,
         bool leftAny,

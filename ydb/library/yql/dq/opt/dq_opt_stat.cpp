@@ -30,6 +30,17 @@ namespace {
         return attributeName;
     }
 
+    TString ExtractAlias(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            auto substr = attributeName.substr(0, idx);
+            if (auto idx2 = substr.find_last_of('.'); idx != TString::npos) {
+                substr = substr.substr(idx2+1);
+            }
+            return substr;
+        }
+        return TString();
+    }
+
     TVector<TString> InferLabels(std::shared_ptr<TOptimizerStatistics>& stats, TCoAtomList joinColumns) {
         if(stats->Labels) {
             return *stats->Labels;
@@ -261,14 +272,18 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
     leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
     rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
 
-    TVector<TString> leftJoinKeys;
-    TVector<TString> rightJoinKeys;
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
 
     for (size_t i=0; i<join.LeftKeysColumnNames().Size(); i++) {
-        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.LeftKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue());
+        leftJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
     for (size_t i=0; i<join.RightKeysColumnNames().Size(); i++) {
-        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.RightKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue());
+        rightJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
@@ -312,24 +327,37 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
     leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
     rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
 
-    TVector<TString> leftJoinKeys;
-    TVector<TString> rightJoinKeys;
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
 
     for (size_t i=0; i<join.LeftKeysColumnNames().Size(); i++) {
-        leftJoinKeys.push_back(RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.LeftKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.LeftKeysColumnNames().Item(i).StringValue());
+        leftJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
     for (size_t i=0; i<join.RightKeysColumnNames().Size(); i++) {
-        rightJoinKeys.push_back(RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue()));
+        auto alias = ExtractAlias(join.RightKeysColumnNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.RightKeysColumnNames().Item(i).StringValue());
+        rightJoinKeys.push_back(TJoinColumn(alias, attrName));
     }
 
     auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
+
+    auto joinAlgo = EJoinAlgoType::GraceJoin;
+    for (size_t i=0; i<join.Flags().Size(); i++) {
+        if (join.Flags().Item(i).StringValue() == "Broadcast") {
+            joinAlgo = EJoinAlgoType::MapJoin;
+            break;
+        }
+    }
+
     auto resStats = std::make_shared<TOptimizerStatistics>(
             ctx.ComputeJoinStats(
                 *leftStats,
                 *rightStats,
                 leftJoinKeys,
                 rightJoinKeys, 
-                EJoinAlgoType::GraceJoin,
+                joinAlgo,
                 ConvertToJoinKind(join.JoinKind().StringValue()),
                 FindCardHint(unionOfLabels, hints)
             )

@@ -558,7 +558,7 @@ EOperationBriefState CheckOperation(
             .Add(EOperationAttribute::Result)));
     Y_ABORT_UNLESS(attributes.BriefState,
         "get_operation for operation %s has not returned \"state\" field",
-        GetGuidAsString(operationId).Data());
+        GetGuidAsString(operationId).data());
     if (*attributes.BriefState == EOperationBriefState::Completed) {
         return EOperationBriefState::Completed;
     } else if (*attributes.BriefState == EOperationBriefState::Aborted || *attributes.BriefState == EOperationBriefState::Failed) {
@@ -2271,7 +2271,7 @@ public:
             }
             Y_ABORT_UNLESS(attributes.BriefState,
                 "get_operation for operation %s has not returned \"state\" field",
-                GetGuidAsString(OperationImpl_->GetId()).Data());
+                GetGuidAsString(OperationImpl_->GetId()).data());
             if (*attributes.BriefState != EOperationBriefState::InProgress) {
                 OperationImpl_->AsyncFinishOperation(attributes);
                 return PollBreak;
@@ -2440,7 +2440,7 @@ EOperationBriefState TOperation::TOperationImpl::GetBriefState()
     UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
         Y_ABORT_UNLESS(attributes.BriefState,
             "get_operation for operation %s has not returned \"state\" field",
-            GetGuidAsString(*Id_).Data());
+            GetGuidAsString(*Id_).data());
         result = *attributes.BriefState;
     });
     return result;
@@ -2527,8 +2527,8 @@ void TOperation::TOperationImpl::AnalyzeUnrecognizedSpec(TNode unrecognizedSpec)
         YT_LOG_INFO(
             "WARNING! Unrecognized spec for operation %s is not empty "
             "(fields added by the YT API library are excluded): %s",
-            GetGuidAsString(*Id_).Data(),
-            NodeToYsonString(unrecognizedSpec).Data());
+            GetGuidAsString(*Id_).data(),
+            NodeToYsonString(unrecognizedSpec).data());
     }
 }
 
@@ -2537,8 +2537,8 @@ void TOperation::TOperationImpl::OnStarted(const TOperationId& operationId)
     auto guard = Guard(Lock_);
     Y_ABORT_UNLESS(!Id_,
         "OnStarted() called with operationId = %s for operation with id %s",
-        GetGuidAsString(operationId).Data(),
-        GetGuidAsString(*Id_).Data());
+        GetGuidAsString(operationId).data(),
+        GetGuidAsString(*Id_).data());
     Id_ = operationId;
 
     Y_ABORT_UNLESS(!StartedPromise_.HasValue() && !StartedPromise_.HasException());
@@ -2662,7 +2662,7 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
     }
     Y_ABORT_UNLESS(attributes.BriefState,
         "get_operation for operation %s has not returned \"state\" field",
-        GetGuidAsString(*Id_).Data());
+        GetGuidAsString(*Id_).data());
     Y_ABORT_UNLESS(*attributes.BriefState != EOperationBriefState::InProgress);
 
     {

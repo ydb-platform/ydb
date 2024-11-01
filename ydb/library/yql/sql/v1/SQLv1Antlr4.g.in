@@ -600,12 +600,12 @@ alter_external_data_source_action:
 
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
-create_view_stmt: CREATE VIEW object_ref
+create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
     create_object_features?
     AS select_stmt
 ;
 
-drop_view_stmt: DROP VIEW object_ref;
+drop_view_stmt: DROP VIEW (IF EXISTS)? object_ref;
 
 upsert_object_stmt: UPSERT OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
@@ -652,11 +652,12 @@ create_table_entry:
   | an_id_schema
 ;
 
-create_backup_collection_stmt: CREATE backup_collection WITH LPAREN backup_collection_settings RPAREN database_or_table_list?;
+create_backup_collection_stmt: CREATE backup_collection create_backup_collection_entries? WITH LPAREN backup_collection_settings RPAREN;
 alter_backup_collection_stmt: ALTER backup_collection (alter_backup_collection_actions | alter_backup_collection_entries);
 drop_backup_collection_stmt: DROP backup_collection;
 
-database_or_table_list: DATABASE | table_list;
+create_backup_collection_entries: DATABASE | create_backup_collection_entries_many;
+create_backup_collection_entries_many: LPAREN table_list RPAREN;
 table_list: TABLE an_id_table (COMMA TABLE an_id_table)*;
 
 alter_backup_collection_actions: alter_backup_collection_action (COMMA alter_backup_collection_action)*;
@@ -796,7 +797,10 @@ table_setting_value:
 family_entry: FAMILY an_id family_settings;
 family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;
 family_settings_entry: an_id EQUALS family_setting_value;
-family_setting_value: STRING_VALUE;
+family_setting_value:
+        STRING_VALUE
+      | integer
+;
 
 split_boundaries:
       LPAREN literal_value_list (COMMA literal_value_list)* RPAREN
@@ -1719,7 +1723,6 @@ MINUS:         '-';
 TILDA:         '~';
 ASTERISK:      '*';
 SLASH:         '/';
-BACKSLASH:     '\\';
 PERCENT:       '%';
 SEMICOLON:     ';';
 DOT:           '.';
@@ -1731,9 +1734,6 @@ COLON:         ':';
 COMMAT:        '@';
 DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
-QUOTE_DOUBLE:  '"'; // This comment for fix syntax highlighting "
-QUOTE_SINGLE:  '\'';
-BACKTICK:      '`';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
 CARET:         '^';
@@ -1741,6 +1741,11 @@ NAMESPACE:     '::';
 ARROW:         '->';
 RBRACE_SQUARE: ']';
 LBRACE_SQUARE: '['; // pair ]
+
+fragment BACKSLASH:     '\\';
+fragment QUOTE_DOUBLE:  '"';
+fragment QUOTE_SINGLE:  '\'';
+fragment BACKTICK:      '`';
 
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');

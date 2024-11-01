@@ -9,16 +9,16 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TItem, class THash, class TEqual>
-void TExpiringSet<TItem, THash, TEqual>::SetTTl(TDuration ttl)
+void TExpiringSet<TItem, THash, TEqual>::SetTtl(TDuration ttl)
 {
-    TTl_ = ttl;
+    Ttl_ = ttl;
 }
 
 template <class TItem, class THash, class TEqual>
 void TExpiringSet<TItem, THash, TEqual>::Insert(TInstant now, const TItem& item)
 {
     Expire(now);
-    auto deadline = now + TTl_;
+    auto deadline = now + Ttl_;
     ItemToDeadline_[item] = deadline;
     ExpirationQueue_.push(TItemPack{.Items = {item}, .Deadline = deadline});
 }
@@ -28,7 +28,7 @@ template <class TItems>
 void TExpiringSet<TItem, THash, TEqual>::InsertMany(TInstant now, const TItems& items)
 {
     Expire(now);
-    auto deadline = now + TTl_;
+    auto deadline = now + Ttl_;
     for (const auto& item : items) {
         ItemToDeadline_[item] = deadline;
     }

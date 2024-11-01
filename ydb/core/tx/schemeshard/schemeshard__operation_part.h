@@ -74,8 +74,8 @@
     action(TEvBlobDepot::TEvApplyConfigResult,            NSchemeShard::TXTYPE_BLOB_DEPOT_CONFIG_RESULT) \
 \
     action(TEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \
-    action(TEvPrivate::TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
-    action(TEvPrivate::TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
+    action(TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
+    action(TEvPrivate::TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
 \
     action(TEvPersQueue::TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
 
@@ -250,6 +250,10 @@ protected:
     virtual TTxState::ETxState NextState(TTxState::ETxState state) const = 0;
     virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) = 0;
 
+    virtual TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext&) {
+        return SelectStateFunc(state);
+    }
+
     virtual void StateDone(TOperationContext& context) {
         auto state = NextState(GetState());
         SetState(state);
@@ -272,13 +276,18 @@ public:
         return State;
     }
 
+    void SetState(TTxState::ETxState state, TOperationContext& context) {
+        State = state;
+        StateFunc = SelectStateFunc(state, context);
+    }
+
     void SetState(TTxState::ETxState state) {
         State = state;
         StateFunc = SelectStateFunc(state);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        return Progress(context, &ISubOperationState::ProgressState, context);
+        return Progress(context, &ISubOperationState::ProgressState);
     }
 
     #define DefaultHandleReply(TEvType, ...) \
@@ -292,9 +301,9 @@ private:
     using TFunc = bool(ISubOperationState::*)(Args...);
 
     template <typename... Args>
-    bool Progress(TOperationContext& context, TFunc<Args...> func, Args&&... args) {
+    bool Progress(TOperationContext& context, TFunc<Args..., TOperationContext&> func, Args&&... args) {
         Y_ABORT_UNLESS(StateFunc);
-        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)...);
+        const bool isDone = std::invoke(func, StateFunc.Get(), std::forward<Args>(args)..., context);
         if (isDone) {
             StateDone(context);
         }
@@ -311,6 +320,13 @@ ISubOperation::TPtr MakeSubOperation(const TOperationId& id) {
 template <typename T, typename... Args>
 ISubOperation::TPtr MakeSubOperation(const TOperationId& id, const TTxTransaction& tx, Args&&... args) {
     return new T(id, tx, std::forward<Args>(args)...);
+}
+
+template <typename T, typename... Args>
+ISubOperation::TPtr MakeSubOperation(const TOperationId& id, TTxState::ETxState state, TOperationContext& context, Args&&... args) {
+    auto result = MakeHolder<T>(id, state, std::forward<Args>(args)...);
+    result->SetState(state, context);
+    return result.Release();
 }
 
 template <typename T, typename... Args>
@@ -628,6 +644,15 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxSt
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+
+// BackupCollection
+// Create
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
+
 
 }
 }

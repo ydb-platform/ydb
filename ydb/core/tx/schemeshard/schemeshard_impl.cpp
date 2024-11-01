@@ -10,6 +10,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
@@ -425,8 +426,8 @@ void TSchemeShard::Clear() {
 
     PartitionMetricsMap.clear();
 
-    if (CompactionQueue) {
-        CompactionQueue->Clear();
+    if (BackgroundCompactionQueue) {
+        BackgroundCompactionQueue->Clear();
         UpdateBackgroundCompactionQueueMetrics();
     }
 
@@ -1519,6 +1520,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateView:
     case TTxState::TxCreateContinuousBackup:
     case TTxState::TxCreateResourcePool:
+    case TTxState::TxCreateBackupCollection:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1554,6 +1556,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterView:
     case TTxState::TxAlterContinuousBackup:
     case TTxState::TxAlterResourcePool:
+    case TTxState::TxAlterBackupCollection:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1578,6 +1581,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropView:
     case TTxState::TxDropContinuousBackup:
     case TTxState::TxDropResourcePool:
+    case TTxState::TxDropBackupCollection:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -2347,7 +2351,13 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
 
         TTableInfo::TPtr tableInfo = Tables.at(pathId);
         extraData = tableInfo->SerializeAlterExtraData();
+    } else if (txState.TxType == TTxState::TxCopyTable) {
+        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+        PathIdFromPathId(txState.CdcPathId, proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        bool serializeRes = proto.SerializeToString(&extraData);
+        Y_ABORT_UNLESS(serializeRes);
     }
+
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
                 NIceDb::TUpdate<Schema::TxInFlightV2::TxType>((ui8)txState.TxType),
                 NIceDb::TUpdate<Schema::TxInFlightV2::TargetPathId>(txState.TargetPathId.LocalPathId),
@@ -2996,6 +3006,25 @@ void TSchemeShard::PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId
     }
 
     db.Table<Schema::ResourcePool>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::BackupCollection::AlterVersion>{backupCollection->AlterVersion},
+        NIceDb::TUpdate<Schema::BackupCollection::Description>{backupCollection->Description.SerializeAsString()}
+    );
+}
+
+void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (BackupCollections.contains(pathId)) {
+        BackupCollections.erase(pathId);
+        DecrementPathDbRefCount(pathId);
+    }
+
+    db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -3893,7 +3922,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
 
     // sanity check: by this time compaction queue and metrics must be updated already
     for (const auto& p: tableInfo->GetPartitions()) {
-        ShardRemoved(p.ShardIdx);
+        OnShardRemoved(p.ShardIdx);
     }
 
     Tables.erase(pathId);
@@ -4246,6 +4275,13 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetResourcePoolVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection: {
+                auto it = BackupCollections.find(pathId);
+                Y_ABORT_UNLESS(it != BackupCollections.end());
+                result.SetBackupCollectionVersion(it->second->AlterVersion);
+                generalVersion += result.GetBackupCollectionVersion();
+                break;
+            }
 
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
@@ -4327,7 +4363,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         GetPipeClientConfig(),
         new TPipeClientFactory(this)))
     , PipeTracker(*PipeClientCache)
-    , CompactionStarter(this)
+    , BackgroundCompactionStarter(this)
     , BorrowedCompactionStarter(this)
     , BackgroundCleaningStarter(this)
     , ShardDeleter(info->TabletID)
@@ -4416,8 +4452,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
 
     PipeClientCache->Detach(ctx);
 
-    if (CompactionQueue)
-        CompactionQueue->Shutdown(ctx);
+    if (BackgroundCompactionQueue)
+        BackgroundCompactionQueue->Shutdown(ctx);
 
     if (BorrowedCompactionQueue) {
         BorrowedCompactionQueue->Shutdown(ctx);
@@ -4721,6 +4757,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 
@@ -5061,6 +5098,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         break;
     case TPathElement::EPathType::EPathTypeResourcePool:
         TabletCounters->Simple()[COUNTER_RESOURCE_POOL_COUNT].Sub(1);
+        break;
+    case TPathElement::EPathType::EPathTypeBackupCollection:
+        TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");
@@ -6888,12 +6928,18 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
                 // note that queues might not contain the shard
-                ShardRemoved(p.ShardIdx);
+                OnShardRemoved(p.ShardIdx);
             }
         }
     }
 
     tableInfo->SetPartitioning(std::move(newPartitioning));
+}
+
+void TSchemeShard::OnShardRemoved(const TShardIdx& shardIdx) {
+    RemoveBackgroundCompaction(shardIdx);
+    RemoveBorrowedCompaction(shardIdx);
+    RemoveShardMetrics(shardIdx);
 }
 
 void TSchemeShard::FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx) {
@@ -7113,7 +7159,7 @@ void TSchemeShard::ConfigureBackgroundCompactionQueue(
     queueConfig.RowCountThreshold = config.GetRowCountThreshold();
     queueConfig.CompactSinglePartedShards = config.GetCompactSinglePartedShards();
 
-    TCompactionQueue::TConfig compactionConfig;
+    TBackgroundCompactionQueue::TConfig compactionConfig;
 
     // schemeshard specific
     compactionConfig.IsCircular = true;
@@ -7126,20 +7172,20 @@ void TSchemeShard::ConfigureBackgroundCompactionQueue(
     compactionConfig.MaxRate = config.GetMaxRate();
     compactionConfig.MinOperationRepeatDelay = TDuration::Seconds(config.GetMinCompactionRepeatDelaySeconds());
 
-    if (CompactionQueue) {
-        CompactionQueue->UpdateConfig(compactionConfig, queueConfig);
+    if (BackgroundCompactionQueue) {
+        BackgroundCompactionQueue->UpdateConfig(compactionConfig, queueConfig);
     } else {
-        CompactionQueue = new TCompactionQueue(
+        BackgroundCompactionQueue = new TBackgroundCompactionQueue(
             compactionConfig,
             queueConfig,
-            CompactionStarter);
-        ctx.RegisterWithSameMailbox(CompactionQueue);
+            BackgroundCompactionStarter);
+        ctx.RegisterWithSameMailbox(BackgroundCompactionQueue);
     }
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "BackgroundCompactionQueue configured: Timeout# " << compactionConfig.Timeout
                  << ", compact single parted# " << (queueConfig.CompactSinglePartedShards ? "yes" : "no")
-                 << ", Rate# " << CompactionQueue->GetRate()
+                 << ", Rate# " << BackgroundCompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", RoundInterval# " << compactionConfig.RoundInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit
@@ -7211,15 +7257,15 @@ void TSchemeShard::StartStopCompactionQueues() {
     // note, that we don't need to check current state of compaction queue
     if (IsServerlessDomain(TPath::Init(RootPathId(), this))) {
         if (EnableBackgroundCompactionServerless) {
-            CompactionQueue->Start();
+            BackgroundCompactionQueue->Start();
         } else {
-            CompactionQueue->Stop();
+            BackgroundCompactionQueue->Stop();
         }
     } else {
         if (EnableBackgroundCompaction) {
-            CompactionQueue->Start();
+            BackgroundCompactionQueue->Start();
         } else {
-            CompactionQueue->Stop();
+            BackgroundCompactionQueue->Stop();
         }
     }
 
@@ -7406,7 +7452,7 @@ void TSchemeShard::ConnectToSA() {
 
 TDuration TSchemeShard::SendBaseStatsToSA() {
     if (!EnableStatistics) {
-        return TDuration::Max();
+        return TDuration::Seconds(30);
     }
 
     if (!SAPipeClientId) {

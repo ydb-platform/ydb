@@ -120,7 +120,9 @@ void TTablesStorage::TTableExtractedGuard::UseAlterDataVerified() {
     TColumnTableInfo::TPtr alterInfo = Object->AlterData;
     Y_ABORT_UNLESS(alterInfo);
     alterInfo->AlterBody.Clear();
+    auto stats = Object->Stats;
     Object = alterInfo;
+    Object->Stats = stats;
 }
 
 std::unordered_set<TPathId> TTablesStorage::GetAllPathIds() const {

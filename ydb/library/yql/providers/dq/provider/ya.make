@@ -35,6 +35,7 @@ PEERDIR(
     library/cpp/yson
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_driver
+    ydb/library/yql/ast
     ydb/library/yql/core
     ydb/library/yql/core/issue
     ydb/library/yql/utils/backtrace
@@ -60,6 +61,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/minikql
+    ydb/library/yql/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

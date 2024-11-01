@@ -21,6 +21,7 @@
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -32,7 +33,7 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-using NSchemeShard::TEvSchemeShard;
+namespace TEvSchemeShard = NSchemeShard::TEvSchemeShard;
 using NTenantSlotBroker::TEvTenantSlotBroker;
 using NTenantSlotBroker::TSlotDescription;
 using ::NMonitoring::TDynamicCounterPtr;

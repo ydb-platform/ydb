@@ -72,7 +72,10 @@ public:
             TString Schema;
         };
 
-        using TDataType = std::variant<NYdb::TValue, TCsv, TArrow>;
+        struct TSkip {
+        };
+
+        using TDataType = std::variant<NYdb::TValue, TCsv, TArrow, TSkip>;
 
         template<class T>
         TDataPortion(const TString& table, T&& data, ui64 size)

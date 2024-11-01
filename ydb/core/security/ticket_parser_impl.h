@@ -180,13 +180,13 @@ protected:
                     CurrentDelay = Min(CurrentDelay * scaleFactor, ticketParser->MaxErrorRefreshTime - ticketParser->MinErrorRefreshTime);
                 }
             } else {
-                SetRefreshTime(now, ticketParser->RefreshTime - ticketParser->RefreshTime / 2);
+                SetRefreshTime(now, ticketParser->RefreshTime);
             }
         }
 
         template <typename T>
         void SetOkRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
-            SetRefreshTime(now, ticketParser->RefreshTime - ticketParser->RefreshTime / 2);
+            SetRefreshTime(now, ticketParser->RefreshTime);
         }
 
         void SetRefreshTime(TInstant now, TDuration delay) {
@@ -1721,6 +1721,8 @@ protected:
                 record.RefreshRetryableErrorImmediately = false;
                 GetDerived()->CanRefreshTicket(key, record);
                 Respond(record);
+                CounterTicketsErrors->Inc();
+                return;
             }
         } else {
             record.UnsetToken();

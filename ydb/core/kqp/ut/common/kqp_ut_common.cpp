@@ -135,6 +135,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+    ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -907,6 +908,11 @@ static void FillPlan(const NYdb::NTable::TScanQueryPart& streamPart, TCollectedS
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -918,6 +924,11 @@ static void FillPlan(const NYdb::NScripting::TYqlResultPart& streamPart, TCollec
         if (!plan.empty()) {
             res.PlanJson = plan;
         }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
+        }
     }
 }
 
@@ -928,6 +939,11 @@ static void FillPlan(const NYdb::NQuery::TExecuteQueryPart& streamPart, TCollect
         auto plan = res.QueryStats->query_plan();
         if (!plan.empty()) {
             res.PlanJson = plan;
+        }
+
+        auto ast = res.QueryStats->query_ast();
+        if (!ast.empty()) {
+            res.Ast = ast;
         }
     }
 }
@@ -1468,6 +1484,24 @@ NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
     return GetJoinOrderImpl(optRoot);
 }
 
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.GetMapSafe().contains("table")) {
+        NJson::TJsonValue res;
+        auto args = opt.GetMapSafe().at("args").GetArraySafe();
+        for (size_t i = 0; i < args.size(); ++i) {
+            res.AppendValue(GetJoinOrderFromDetailedJoinOrderImpl(args[i]));
+        }
+        return res;
+    }
+
+    return opt.GetMapSafe().at("table");
+}
+
+NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedDetailedJoinOrder) {
+    NJson::TJsonValue optRoot;
+    NJson::ReadJsonTree(deserializedDetailedJoinOrder, &optRoot, true);
+    return GetJoinOrderFromDetailedJoinOrderImpl(optRoot);
+}
 
 } // namspace NKqp
 } // namespace NKikimr

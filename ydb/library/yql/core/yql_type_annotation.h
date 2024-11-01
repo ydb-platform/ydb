@@ -273,6 +273,7 @@ enum class EBlockEngineMode {
 };
 
 struct TUdfCachedInfo {
+    TString NormalizedName;
     const TTypeAnnotationNode* FunctionType = nullptr;
     const TTypeAnnotationNode* RunConfigType = nullptr;
     const TTypeAnnotationNode* NormalizedUserType = nullptr;
@@ -293,7 +294,7 @@ inline TString SerializeBinary(const T& value) {
 
 template <typename T>
 inline T DeserializeBinary(const TString& value) {
-    return *(const T*)value.Data();
+    return *(const T*)value.data();
 }
 
 template <typename T>

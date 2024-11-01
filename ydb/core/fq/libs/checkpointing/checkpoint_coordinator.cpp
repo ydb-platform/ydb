@@ -73,7 +73,7 @@ void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
 
     int tasksSize = GetTasksSize();
     const auto& actorIds = ev->Get()->Record.GetActorId();
-    Y_ABORT_UNLESS(tasksSize == actorIds.size());
+    Y_ABORT_UNLESS(tasksSize == actorIds.size(), "tasksSize %d, actorIds size %d, graph id %s", tasksSize, int(actorIds.size()), CoordinatorId.GraphId.c_str());
 
     for (int i = 0; i < tasksSize; ++i) {
         const auto& task = GetTask(i);

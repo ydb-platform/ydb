@@ -22,4 +22,4 @@ FROM (
     JOIN `/Root/seasons`
         AS seasons
     ON episodes.series_id == seasons.series_id AND episodes.season_id == seasons.season_id
-);
+) ORDER BY series, season;

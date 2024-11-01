@@ -30,19 +30,19 @@ select
   customer_demographics.cd_marital_status,
   customer_demographics.cd_dep_count,
   count(*) cnt1,
-  avg(customer_demographics.cd_dep_count),
   min(customer_demographics.cd_dep_count),
-  sum(customer_demographics.cd_dep_count),
+  max(customer_demographics.cd_dep_count),
+  avg(customer_demographics.cd_dep_count),
   customer_demographics.cd_dep_employed_count,
   count(*) cnt2,
-  avg(customer_demographics.cd_dep_employed_count),
   min(customer_demographics.cd_dep_employed_count),
-  sum(cd_dep_employed_count),
+  max(customer_demographics.cd_dep_employed_count),
+  avg(customer_demographics.cd_dep_employed_count),
   customer_demographics.cd_dep_college_count,
   count(*) cnt3,
-  avg(customer_demographics.cd_dep_college_count),
   min(customer_demographics.cd_dep_college_count),
-  sum(customer_demographics.cd_dep_college_count)
+  max(customer_demographics.cd_dep_college_count),
+  avg(customer_demographics.cd_dep_college_count)
  from
   {{customer}} c 
   cross join {{customer_address}} ca 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tpcds.h"
+#include "driver.h"
 #include <library/cpp/object_factory/object_factory.h>
 #include <util/string/printf.h>
 
@@ -50,7 +51,7 @@ public:
 
         using TContexts = TVector<TContext>;
 
-        virtual void GenerateRows(TContexts& ctxs) = 0;
+        virtual void GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) = 0;
 
         int TableNum;
         ui64 Generated = 0;
@@ -62,63 +63,15 @@ public:
 
     private:
         TString GetFullTableName(const char* table) const;
-        static ui64 CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
+        struct TPositions {
+            ds_key_t FirstRow = 1;
+            ui64 Position = 0;
+            ds_key_t Count = 0;
+        };
+        static TPositions CalcCountToGenerate(const TTpcdsWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
         const TTpcdsWorkloadDataInitializerGenerator& Owner;
-        ui64 TableSize;
     };
 };
-
-template<class T>
-class TCsvItemWriter {
-public:
-    using TItem = T;
-    using TWriteFunction = std::function<void(const TItem&, IOutputStream&)>;
-    explicit TCsvItemWriter(IOutputStream& out)
-        : Out(out)
-    {}
-
-    void RegisterField(TStringBuf name, TWriteFunction writeFunc) {
-        Fields.emplace_back(name, writeFunc);
-    }
-    void Write(const TVector<TItem>& items) {
-        for(const auto& field: Fields) {
-            Out << field.Name;
-            if (&field + 1 != Fields.end()) {
-                Out << '|';
-            }
-        }
-        Out << Endl;
-        for(const auto& item: items) {
-            for(const auto& field: Fields) {
-                field.WriteFunction(item, Out);
-                if (&field + 1 != Fields.end()) {
-                    Out << '|';
-                }
-            }
-            Out << Endl;
-        }
-    }
-
-private:
-    struct TField {
-        TField(TStringBuf name, TWriteFunction func)
-            : Name(name)
-            , WriteFunction(func)
-        {}
-        TStringBuf Name;
-        TWriteFunction WriteFunction;
-    };
-    TVector<TField> Fields;
-    IOutputStream& Out;
-};
-
-#define CSV_WRITER_REGISTER_FIELD(writer, column_name, record_field) \
-    writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
-        out << item.record_field; \
-    });
-
-#define CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, column_name) \
-    CSV_WRITER_REGISTER_FIELD(writer, #column_name, column_name);
 
 #define CSV_WRITER_REGISTER_FIELD_KEY(writer, column_name, record_field) \
     writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \

@@ -32,7 +32,7 @@ TString ToString(const TParsedTokenList& tokens) {
         if (token.Name == "WS" || token.Name == "EOF") {
             continue;
         }
-        if (!reconstructedQuery.Empty()) {
+        if (!reconstructedQuery.empty()) {
             reconstructedQuery << ' ';
         }
         reconstructedQuery << token.Content;
@@ -571,7 +571,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ xmerge() */ plato.Input AS b USING (key);");
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join strategy: xmerge, code: 4534\n");
+        UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join hint: xmerge, code: 4534\n");
     }
 
     Y_UNIT_TEST(ReverseLabels) {
@@ -2533,8 +2533,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         const auto result = SqlToYql(R"(USE plato;
             CREATE TABLE table (
                 pk INT32 NOT NULL,
-                col String, 
-                INDEX idx GLOBAL USING vector_kmeans_tree 
+                col String,
+                INDEX idx GLOBAL USING vector_kmeans_tree
                     ON (col) COVER (col)
                     WITH (distance=cosine, vector_type=float, vector_dimension=1024,),
                 PRIMARY KEY (pk))
@@ -2543,11 +2543,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAddIndexVector) {
-        const auto result = SqlToYql(R"(USE plato; 
-            ALTER TABLE table ADD INDEX idx 
-                GLOBAL USING vector_kmeans_tree 
+        const auto result = SqlToYql(R"(USE plato;
+            ALTER TABLE table ADD INDEX idx
+                GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
-                WITH (distance=cosine, vector_type="float", vector_dimension=1024) 
+                WITH (distance=cosine, vector_type="float", vector_dimension=1024)
                 )");
         UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
     }
@@ -2558,11 +2558,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterTableAddIndexMissedParameter) {
-        ExpectFailWithError(R"(USE plato; 
-            ALTER TABLE table ADD INDEX idx 
-                GLOBAL USING vector_kmeans_tree 
+        ExpectFailWithError(R"(USE plato;
+            ALTER TABLE table ADD INDEX idx
+                GLOBAL USING vector_kmeans_tree
                 ON (col)
-                WITH (distance=cosine, vector_type=float) 
+                WITH (distance=cosine, vector_type=float)
                 )",
             "<main>:5:52: Error: vector_dimension should be set\n");
     }
@@ -2790,7 +2790,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             auto req = Sprintf(reqTpl, key.c_str(), value.c_str());
             auto res = SqlToYql(req);
             UNIT_ASSERT(res.Root);
-            
+
             TVerifyLineFunc verifyLine = [&key, &value](const TString& word, const TString& line) {
                 if (word == "Write") {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
@@ -4312,6 +4312,17 @@ select FormatType($f());
                                           "<main>:6:39: Error: Unknown correlation name: t\n");
     }
 
+    Y_UNIT_TEST(ErrOrderByIgnoredButCheckedForMissingColumns) {
+        auto req = "$src = SELECT key FROM (SELECT 1 as key, 2 as subkey) ORDER BY x; SELECT * FROM $src;";
+        ExpectFailWithError(req, "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n"
+                                 "<main>:1:64: Error: Column x is not in source column set\n");
+
+        req = "$src = SELECT key FROM plato.Input ORDER BY x; SELECT * FROM $src;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
+    }
+
     Y_UNIT_TEST(InvalidTtlInterval) {
         auto req = R"(
             USE plato;
@@ -5046,10 +5057,10 @@ Y_UNIT_TEST_SUITE(JsonValue) {
                 TStringBuilder query;
                 query << "$json = CAST(@@{\"key\": 1238}@@ as Json);\n"
                     << "SELECT JSON_VALUE($json, \"strict $.key\"";
-                if (!onEmpty.first.Empty()) {
+                if (!onEmpty.first.empty()) {
                     query << " " << onEmpty.first << " ON EMPTY";
                 }
-                if (!onError.first.Empty()) {
+                if (!onError.first.empty()) {
                     query << " " << onError.first << " ON ERROR";
                 }
                 query << ");\n";
@@ -5221,13 +5232,13 @@ Y_UNIT_TEST_SUITE(JsonQuery) {
                     TStringBuilder query;
                     query << R"($json = CAST(@@{"key": [123]}@@ as Json);
                     SELECT JSON_QUERY($json, "strict $.key" )" << wrap.first;
-                    if (!onEmpty.first.Empty()) {
+                    if (!onEmpty.first.empty()) {
                         if (wrap.first.StartsWith("WITH ")) {
                             continue;
                         }
                         query << " " << onEmpty.first << " ON EMPTY";
                     }
-                    if (!onError.first.Empty()) {
+                    if (!onError.first.empty()) {
                         query << " " << onError.first << " ON ERROR";
                     }
                     query << ");\n";
@@ -6705,6 +6716,28 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewIfNotExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                USE plato;
+                CREATE VIEW IF NOT EXISTS {} WITH (security_invoker = TRUE) AS SELECT 1;
+            )", name
+        ));
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
     Y_UNIT_TEST(CreateViewFromTable) {
         constexpr const char* path = "/PathPrefix/TheView";
         constexpr const char* query = R"(
@@ -6784,6 +6817,28 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
 
+    Y_UNIT_TEST(DropViewIfExists) {
+        constexpr const char* name = "TheView";
+        NYql::TAstParseResult res = SqlToYql(std::format(R"(
+                USE plato;
+                DROP VIEW IF EXISTS {};
+            )", name
+        ));
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, name);
+                UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+            }
+        };
+
+        TWordCountHive elementStat = { {"Write!"} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+    }
+
     Y_UNIT_TEST(CreateViewWithTablePrefix) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
@@ -6827,7 +6882,7 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
     }
-    
+
     Y_UNIT_TEST(YtAlternativeSchemaSyntax) {
         NYql::TAstParseResult res = SqlToYql(R"(
             SELECT * FROM plato.Input WITH schema(y Int32, x String not null);
@@ -6896,7 +6951,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma ValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;
@@ -6919,7 +6974,7 @@ Y_UNIT_TEST_SUITE(CompactNamedExprs) {
             pragma CompactNamedExprs;
             pragma DisableValidateUnusedExprs;
 
-            define subquery $x() as 
+            define subquery $x() as
                 select count(1, 2);
             end define;
             select 1;
@@ -7026,7 +7081,9 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '()))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
             }
         };
@@ -7040,20 +7097,20 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithDatabase) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection DATABASE WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    DATABASE;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '('('('type 'database)))))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('type 'database)"));
             }
         };
 
@@ -7066,22 +7123,23 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
     Y_UNIT_TEST(CreateBackupCollectionWithTables) {
         NYql::TAstParseResult res = SqlToYql(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection WITH (
+                CREATE BACKUP COLLECTION TestCollection (
+                    TABLE someTable,
+                    TABLE `prefix/anotherTable`
+                ) WITH (
                     STORAGE="local",
                     TAG="test" -- for testing purposes, not a real thing
-                )
-                    TABLE someTable,
-                    TABLE `prefix/anotherTable`;
+                );
             )sql");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"storage" '"local") '('"tag" '"test"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"local")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag" (String '"test"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('entries '('('('type 'table) '('path '"someTable")) '('('type 'table) '('path '"prefix/anotherTable")))))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'create"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"someTable")))#"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('('('type 'table) '('path '"prefix/anotherTable")))#"));
             }
         };
 
@@ -7099,18 +7157,13 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection TABLE;
-            )sql" , "<main>:3:56: Error: Unexpected token 'TABLE' : syntax error...\n\n");
+                CREATE BACKUP COLLECTION TABLE TestCollection;
+            )sql" , "<main>:3:47: Error: Unexpected token 'TestCollection' : syntax error...\n\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE `test`;
-            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
-
-        ExpectFailWithError(R"sql(
-                USE plato;
-                CREATE BACKUP COLLECTION TestCollection DATABASE, TABLE `test`;
-            )sql" , "<main>:3:56: Error: Unexpected token 'DATABASE' : syntax error...\n\n");
+                CREATE BACKUP COLLECTION DATABASE `test` TestCollection;
+            )sql" , "<main>:3:50: Error: Unexpected token '`test`' : syntax error...\n\n");
 
         ExpectFailWithError(R"sql(
                 USE plato;
@@ -7142,7 +7195,8 @@ Y_UNIT_TEST_SUITE(BackupCollection) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#(('mode 'alter))#");
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('settings '('('"storage" '"remote") '('"tag1" '"123"))))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"storage" (String '"remote")))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#(('"tag1" (String '"123"))))#");
                 UNIT_ASSERT_STRING_CONTAINS(line, R"#('('resetSettings '('"tag2" '"tag3")))#");
             }
         };
@@ -7343,7 +7397,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'incremental"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'Incremental"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
             }
         };
@@ -7364,8 +7418,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"#('"TestCollection")#"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'incremental"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backup"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'backupIncremental"));
             }
         };
 
@@ -7416,5 +7469,126 @@ Y_UNIT_TEST_SUITE(Restore) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(ColumnFamily) {
+    Y_UNIT_TEST(CompressionLevelCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                Value String FAMILY family1,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                ),
+                FAMILY family1 (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 3
+                )
+            );
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compression_level"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("5"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("3"));
+            }
+        };
+
+        TWordCountHive elementStat = { { TString("Write"), 0 }, { TString("compression_level"), 0 } };
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["compression_level"]);
+    }
+
+    Y_UNIT_TEST(FieldDataIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = 1,
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = 5
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "DATA value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = 2,
+                     COMPRESSION_LEVEL = 5
+                ),
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION value should be a string literal");
+    }
+
+    Y_UNIT_TEST(FieldCompressionLevelIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY default,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4",
+                     COMPRESSION_LEVEL = "5"
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
+    }
+
+    Y_UNIT_TEST(AlterCompressionCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION lz4;
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "Unexpected token 'lz4' : cannot match to any predicted input");
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+        )");
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+    }
+
+    Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
+        NYql::TAstParseResult res = SqlToYql(R"( use plato;
+            ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL "5";
+        )");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 1);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "COMPRESSION_LEVEL value should be an integer");
     }
 }

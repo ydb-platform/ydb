@@ -1324,21 +1324,21 @@ namespace {
             packageModuleName << Sep << part;
         }
 
-        auto queue = TVector<std::pair<TString, THttpURL>> {
-            {packageModuleName, ParseURL(url)}
+        auto queue = TVector<std::pair<TString, TString>> {
+            {packageModuleName, url}
         };
 
         while (queue) {
-            auto [prefix, httpUrl] = queue.back();
+            auto [prefix, url] = queue.back();
             queue.pop_back();
 
             TVector<TUrlListEntry> urlListEntries;
             try {
-                urlListEntries = ctx.UrlListerManager->ListUrl(httpUrl, token);
+                urlListEntries = ctx.UrlListerManager->ListUrl(url, token);
             } catch (const std::exception& e) {
                 ctx.AddError(*nameNode,
                     TStringBuilder()
-                        << "UrlListerManager: failed to list URL \"" << httpUrl.PrintS()
+                        << "UrlListerManager: failed to list URL \"" << url
                         << "\", details: " << e.what()
                 );
 
@@ -1356,7 +1356,7 @@ namespace {
                     }
 
                     if (!ctx.ModuleResolver->AddFromUrl(
-                        moduleName, urlListEntry.Url.PrintS(), token, ctx.Expr,
+                        moduleName, urlListEntry.Url, token, ctx.Expr,
                         ctx.SyntaxVersion, 0, nameNode->GetPosition()
                     )) {
                         return false;
@@ -3702,7 +3702,7 @@ private:
         if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Callable) {
             ui32 textLen = node.Content().size();
             SHA256_Update(&Sha, &textLen, sizeof(textLen));
-            SHA256_Update(&Sha, node.Content().Data(), textLen);
+            SHA256_Update(&Sha, node.Content().data(), textLen);
         }
 
         if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Argument || node.Type() == TExprNode::EType::World) {

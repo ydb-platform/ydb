@@ -745,6 +745,7 @@ namespace NYql::NConnector::NTest {
             DATA_SOURCE_INSTANCE_SUBBUILDER();
             SUBPROTO_BUILDER(Split, add_splits, NApi::TSplit, TSplitBuilder<TBuilder>);
             SETTER(Format, format);
+            SETTER(Filtering, filtering);
 
             TReadSplitsResultBuilder<TBuilder> Result() {
                 return TReadSplitsResultBuilder<TBuilder>(ResponseResult_, this);

@@ -4,6 +4,7 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 namespace NKikimr::NConsole {

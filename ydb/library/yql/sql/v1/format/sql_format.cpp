@@ -26,6 +26,7 @@ using namespace NSQLv1Generated;
 
 using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
+using NSQLTranslationV1::IsProbablyKeyword;
 using TTokenIterator = TParsedTokenList::const_iterator;
 
 TTokenIterator SkipWS(TTokenIterator curr, TTokenIterator end) {
@@ -55,7 +56,7 @@ bool Validate(const TParsedTokenList& query, const TParsedTokenList& formattedQu
             if (in->Name != out->Name) {
                 return false;
             }
-            if (AsciiEqualsIgnoreCase(in->Name, in->Content)) {
+            if (IsProbablyKeyword(*in)) {
                 if (!AsciiEqualsIgnoreCase(in->Content, out->Content)) {
                     return false;
                 }
@@ -479,7 +480,7 @@ private:
     using TMarkTokenStack = TVector<ui32>;
 
     void Out(TStringBuf s) {
-        for (ui32 i = 0; i < s.Size(); ++i) {
+        for (ui32 i = 0; i < s.size(); ++i) {
             Out(s[i], i == 0);
         }
     }
@@ -513,7 +514,7 @@ private:
     }
 
     void AddComment(TStringBuf text) {
-        if (text.StartsWith("--") && !SB.Empty() && SB.back() == '-') {
+        if (text.StartsWith("--") && !SB.empty() && SB.back() == '-') {
             Out(' ');
         }
 
@@ -1702,7 +1703,7 @@ private:
         AfterNamespace = (str == "::");
         AfterBracket = (str == "(" || str == "[" || str == "{" || str == "<|");
         AfterDot = (str == ".");
-        AfterDigits = !str.Empty() && AllOf(str, [](char c) { return c >= '0' && c <= '9'; });
+        AfterDigits = !str.empty() && AllOf(str, [](char c) { return c >= '0' && c <= '9'; });
         AfterQuestion = (str == "?");
         AfterLess = (str == "<");
         AfterKeyExpr = false;
@@ -2992,7 +2993,7 @@ public:
                 return false;
             }
 
-            if (addLine && !finalFormattedQuery.Empty()) {
+            if (addLine && !finalFormattedQuery.empty()) {
                 finalFormattedQuery << "\n";
             }
 

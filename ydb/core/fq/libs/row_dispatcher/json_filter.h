@@ -1,23 +1,23 @@
-
 #pragma once
 
-namespace NFq {
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+namespace NFq {
 
 class TJsonFilter {
 public:
     using TCallback = std::function<void(ui64, const TString&)>;
-    
+
 public:
     TJsonFilter(
-        const TVector<TString>& columns, 
+        const TVector<TString>& columns,
         const TVector<TString>& types,
         const TString& whereFilter,
         TCallback callback);
+
     ~TJsonFilter();
-    void Push(ui64 offset, const TList<TString>& value);
+
+    void Push(const TVector<ui64>& offsets, const TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*>& values);
     TString GetSql();
 
 private:

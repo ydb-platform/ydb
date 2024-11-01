@@ -158,6 +158,7 @@ public:
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
+        request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
         if (Action.empty() || Action == "execute-script" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -413,7 +414,7 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        Handle(ev->Get()->Record.GetRef());
+        Handle(ev->Get()->Record);
     }
 
     void HandleReply(TEvViewer::TEvViewerResponse::TPtr& ev) {

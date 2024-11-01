@@ -1254,7 +1254,7 @@ public:
         } else if (key == "amname") {
             CurrDesc_.AmName = value;
         } else if (key == "amtype") {
-            Y_ENSURE(value.Size() == 1);
+            Y_ENSURE(value.size() == 1);
             if ((char)EAmType::Index == value[0]) {
                 CurrDesc_.AmType = EAmType::Index;
             } else if ((char)EAmType::Table == value[0]) {
@@ -1931,7 +1931,7 @@ struct TCatalog : public IExtensionSqlBuilder {
 
         TString line = TStringBuilder() << "\"" << name << "\",\n";
         with_lock(ExportGuard) {
-            ExportFile->Write(line.Data(), line.Size());
+            ExportFile->Write(line.data(), line.size());
         }
     }
 
@@ -2360,6 +2360,24 @@ void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
             f(x.first, x.second);
         }
     }
+}
+
+bool HasProc(const TString& name, EProcKind kind) {
+    const auto& catalog = TCatalog::Instance();
+    auto procIdPtr = catalog.State->ProcByName.FindPtr(to_lower(name));
+    if (!procIdPtr) {
+        return false;
+    }
+
+    for (const auto& id : *procIdPtr) {
+        const auto& d = catalog.State->Procs.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->Kind == kind) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool HasReturnSetProc(const TString& name) {
@@ -3430,8 +3448,16 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
 }
 
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
+    TStringBuf realName = name;
+    TMaybe<ui32> aggId;
+    TStringBuf left, right;
+    if (realName.TrySplit('#', left, right)) {
+        aggId = FromString<ui32>(right);
+        realName = left;
+    }
+
     const auto& catalog = TCatalog::Instance();
-    auto aggIdPtr = catalog.State->AggregationsByName.FindPtr(to_lower(name));
+    auto aggIdPtr = catalog.State->AggregationsByName.FindPtr(to_lower(TString(realName)));
     if (!aggIdPtr) {
         throw yexception() << "No such aggregate: " << name;
     }
@@ -3439,6 +3465,10 @@ const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui3
     for (const auto& id : *aggIdPtr) {
         const auto& d = catalog.State->Aggregations.FindPtr(id);
         Y_ENSURE(d);
+        if (aggId && d->AggId != *aggId) {
+            continue;
+        }
+
         if (!ValidateAggregateArgs(*d, stateType, resultType)) {
             continue;
         }
@@ -3823,6 +3853,9 @@ TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
 
         protoProc->SetIsStrict(desc.IsStrict);
         protoProc->SetLang(desc.Lang);
+        protoProc->SetResultType(desc.ResultType);
+        protoProc->SetReturnSet(desc.ReturnSet);
+        protoProc->SetKind((ui32)desc.Kind);
     }
 
     TVector<TTableInfoKey> extTables;
@@ -4092,6 +4125,9 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
             desc.Src = protoProc.GetSrc();
             desc.IsStrict = protoProc.GetIsStrict();
             desc.Lang = protoProc.GetLang();
+            desc.ResultType = protoProc.GetResultType();
+            desc.ReturnSet = protoProc.GetReturnSet();
+            desc.Kind = (EProcKind)protoProc.GetKind();
             for (const auto t : protoProc.GetArgType()) {
                 desc.ArgTypes.push_back(t);
             }

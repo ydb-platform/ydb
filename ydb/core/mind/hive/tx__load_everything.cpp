@@ -706,9 +706,9 @@ public:
                     TFollowerId followerId = metricsRowset.GetValue<Schema::Metrics::FollowerID>();
                     auto* leaderOrFollower = tablet->FindTablet(followerId);
                     if (leaderOrFollower) {
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
-                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitiaizeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumCPU.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumCPU>());
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumMemory.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumMemory>());
+                        leaderOrFollower->MutableResourceMetricsAggregates().MaximumNetwork.InitializeFrom(metricsRowset.GetValueOrDefault<Schema::Metrics::MaximumNetwork>());
                         // do not reorder
                         leaderOrFollower->UpdateResourceUsage(metricsRowset.GetValueOrDefault<Schema::Metrics::ProtoMetrics>());
                     }
@@ -750,8 +750,9 @@ public:
 
         size_t numDeletedNodes = 0;
         size_t numDeletedRestrictions = 0;
+        TInstant now = TActivationContext::Now();
         for (auto itNode = Self->Nodes.begin(); itNode != Self->Nodes.end();) {
-            if (itNode->second.CanBeDeleted()) {
+            if (itNode->second.CanBeDeleted(now)) {
                 ++numDeletedNodes;
                 auto restrictionsRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Range(itNode->first).Select();
                 while (!restrictionsRowset.EndOfSet()) {

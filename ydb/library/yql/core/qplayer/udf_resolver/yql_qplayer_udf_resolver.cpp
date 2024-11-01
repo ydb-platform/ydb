@@ -11,11 +11,12 @@ namespace NYql::NCommon {
 namespace {
 
 const TString UdfResolver_LoadMetadata = "UdfResolver_LoadMetadata";
+const TString UdfResolver_ContainsModule = "UdfResolver_ContainsModule";
 
 TString MakeHash(const TString& str) {
     SHA256_CTX sha;
     SHA256_Init(&sha);
-    SHA256_Update(&sha, str.Data(), str.Size());
+    SHA256_Update(&sha, str.data(), str.size());
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_Final(hash, &sha);
     return TString((const char*)hash, sizeof(hash));
@@ -75,10 +76,20 @@ public:
 
     bool ContainsModule(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            ythrow yexception() << "Can't replay ContainsModule";
+            auto res = QContext_.GetReader()->Get({UdfResolver_ContainsModule, TString(moduleName)}).GetValueSync();
+            if (!res) {
+                ythrow yexception() << "Missing replay data";
+            }
+
+            return res->Value == "1";
         }
 
-        return Inner_->ContainsModule(moduleName);
+        auto ret = Inner_->ContainsModule(moduleName);
+        if (QContext_.CanWrite()) {
+            QContext_.GetWriter()->Put({UdfResolver_ContainsModule, TString(moduleName)}, ret ? "1" : "0").GetValueSync();
+        }
+
+        return ret;
     }
 
 private:
@@ -98,6 +109,7 @@ private:
 
     TString SaveValue(const TFunction* f) const {
         auto node = NYT::TNode()
+            ("NormalizedName", f->NormalizedName)
             ("CallableType", TypeToYsonNode(f->CallableType));
         if (f->NormalizedUserType && f->NormalizedUserType->GetKind() != ETypeAnnotationKind::Void) {
             node("NormalizedUserType", TypeToYsonNode(f->NormalizedUserType));
@@ -120,6 +132,12 @@ private:
 
     void LoadValue(TFunction* f, const TString& value, TExprContext& ctx) const {
         auto node = NYT::NodeFromYsonString(value);
+        if (node.HasKey("NormalizedName")) {
+            f->NormalizedName = node["NormalizedName"].AsString();
+        } else {
+            f->NormalizedName = f->Name;
+        }
+
         f->CallableType = ParseTypeFromYson(node["CallableType"], ctx);
         if (node.HasKey("NormalizedUserType")) {
             f->NormalizedUserType = ParseTypeFromYson(node["NormalizedUserType"], ctx);

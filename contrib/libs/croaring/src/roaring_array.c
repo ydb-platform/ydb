@@ -637,7 +637,7 @@ size_t ra_portable_deserialize_size(const char *buf, const size_t maxbytes) {
         memcpy(&size, buf, sizeof(int32_t));
         buf += sizeof(uint32_t);
     }
-    if (size > (1 << 16)) {
+    if (size > (1 << 16) || size < 0) {
         return 0;
     }
     char *bitmapOfRunContainers = NULL;

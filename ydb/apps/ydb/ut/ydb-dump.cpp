@@ -9,19 +9,24 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+#include <util/stream/file.h>
+#include <util/string/printf.h>
+
 Y_UNIT_TEST_SUITE(YdbDump) {
 
 Y_UNIT_TEST(NotNullTypeDump) {
+    const char* tableName = "TableWithNotNullTypeForDump";
     RunYdb({"-v", "yql", "-s",
-        R"(CREATE TABLE TableWithNotNullTypeForDump (
+        Sprintf(R"(CREATE TABLE %s (
             k Uint32 NOT NULL,
             v String NOT NULL,
             ov String,
             PRIMARY KEY(k));
-        )"},
+        )", tableName)},
         TList<TString>());
 
-    const TString output = RunYdb({"-v", "tools", "dump", "--scheme-only"}, TList<TString>());
+    const auto dumpPath = GetOutputPath() / "dump";
+    RunYdb({"-v", "tools", "dump", "--scheme-only", "--output", dumpPath.GetPath()}, TList<TString>());
 
     struct TFlags {
         const bool HasNullFlag;
@@ -35,6 +40,7 @@ Y_UNIT_TEST(NotNullTypeDump) {
         column_flags.emplace_back(TFlags{meta.has_not_null(), meta.type().has_optional_type()});
     };
 
+    const auto output = TFileInput(dumpPath / tableName / "scheme.pb").ReadAll();
     const TString token = "columns {";
     size_t start = 0;
     while (true) {

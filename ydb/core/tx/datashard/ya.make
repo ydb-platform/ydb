@@ -215,6 +215,7 @@ SRCS(
     type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
+    volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
 )
@@ -227,9 +228,10 @@ GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit_kind.h)
 GENERATE_ENUM_SERIALIZATION(operation.h)
+GENERATE_ENUM_SERIALIZATION(volatile_tx.h)
 
 RESOURCE(
-    index.html datashard/index.html
+    ui/index.html datashard/index.html
 )
 
 PEERDIR(
@@ -273,7 +275,6 @@ PEERDIR(
     ydb/library/minsketch
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/public/api/protos
-    ydb/public/lib/deprecated/kicli
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/services/lib/sharding

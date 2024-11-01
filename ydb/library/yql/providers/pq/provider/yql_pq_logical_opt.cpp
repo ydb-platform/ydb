@@ -257,7 +257,6 @@ public:
         
         auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "No predicate to pushdown"));
             return node;
         }
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";

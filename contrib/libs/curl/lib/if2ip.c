@@ -62,7 +62,7 @@
 
 /* ------------------------------------------------------------------ */
 
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
 /* Return the scope of the given address. */
 unsigned int Curl_ipv6_scope(const struct sockaddr *sa)
 {
@@ -97,17 +97,17 @@ unsigned int Curl_ipv6_scope(const struct sockaddr *sa)
 #if defined(HAVE_GETIFADDRS)
 
 if2ip_result_t Curl_if2ip(int af,
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
                           unsigned int remote_scope,
                           unsigned int local_scope_id,
 #endif
                           const char *interf,
-                          char *buf, size_t buf_size)
+                          char *buf, int buf_size)
 {
   struct ifaddrs *iface, *head;
   if2ip_result_t res = IF2IP_NOT_FOUND;
 
-#if defined(USE_IPV6) && \
+#if defined(ENABLE_IPV6) && \
     !defined(HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID)
   (void) local_scope_id;
 #endif
@@ -121,7 +121,7 @@ if2ip_result_t Curl_if2ip(int af,
             const char *ip;
             char scope[12] = "";
             char ipstr[64];
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
             if(af == AF_INET6) {
 #ifdef HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID
               unsigned int scopeid = 0;
@@ -182,12 +182,12 @@ if2ip_result_t Curl_if2ip(int af,
 #elif defined(HAVE_IOCTL_SIOCGIFADDR)
 
 if2ip_result_t Curl_if2ip(int af,
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
                           unsigned int remote_scope,
                           unsigned int local_scope_id,
 #endif
                           const char *interf,
-                          char *buf, size_t buf_size)
+                          char *buf, int buf_size)
 {
   struct ifreq req;
   struct in_addr in;
@@ -196,7 +196,7 @@ if2ip_result_t Curl_if2ip(int af,
   size_t len;
   const char *r;
 
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
   (void)remote_scope;
   (void)local_scope_id;
 #endif
@@ -216,15 +216,7 @@ if2ip_result_t Curl_if2ip(int af,
   memcpy(req.ifr_name, interf, len + 1);
   req.ifr_addr.sa_family = AF_INET;
 
-#if defined(__GNUC__) && defined(_AIX)
-/* Suppress warning inside system headers */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshift-sign-overflow"
-#endif
   if(ioctl(dummy, SIOCGIFADDR, &req) < 0) {
-#if defined(__GNUC__) && defined(_AIX)
-#pragma GCC diagnostic pop
-#endif
     sclose(dummy);
     /* With SIOCGIFADDR, we cannot tell the difference between an interface
        that does not exist and an interface that has no address of the
@@ -245,15 +237,15 @@ if2ip_result_t Curl_if2ip(int af,
 #else
 
 if2ip_result_t Curl_if2ip(int af,
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
                           unsigned int remote_scope,
                           unsigned int local_scope_id,
 #endif
                           const char *interf,
-                          char *buf, size_t buf_size)
+                          char *buf, int buf_size)
 {
     (void) af;
-#ifdef USE_IPV6
+#ifdef ENABLE_IPV6
     (void) remote_scope;
     (void) local_scope_id;
 #endif

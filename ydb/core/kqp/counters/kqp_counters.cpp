@@ -814,6 +814,18 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
 
+    /* sink writes */
+    WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
+    WriteActorsCount = KqpGroup->GetCounter("SinkWrites/WriteActorsCount", false);
+    WriteActorImmediateWrites = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWrites", true);
+    WriteActorImmediateWritesRetries = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWritesRetries", true);
+    WriteActorWritesSizeHistogram =
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
+    WriteActorWritesOperationsHistogram =
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesOperations", NMonitoring::ExponentialHistogram(20, 2, 1));
+    WriteActorWritesLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+
     /* sequencers */
 
     SequencerActorsCount = KqpGroup->GetCounter("Sequencer/ActorCount", false);
@@ -1262,7 +1274,7 @@ const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetDataShardTxR
 }
 
 TKqpDbCountersPtr TKqpCounters::GetDbCounters(const TString& database) {
-    if (!ActorSystem || !AppData(ActorSystem)->FeatureFlags.GetEnableDbCounters() || database.empty()) {
+    if (!ActorSystem || !DbWatcherActorId || database.empty()) {
         return {};
     }
 

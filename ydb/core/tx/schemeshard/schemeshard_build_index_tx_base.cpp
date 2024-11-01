@@ -139,18 +139,18 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             continue;
         }
 
+        TString id = TStringBuilder()
+            << buildId << "-"
+            << buildInfo.TablePathId.OwnerId << "-" << buildInfo.TablePathId.LocalPathId << "-"
+            << billed.GetUploadRows() + billed.GetReadRows() << "-" << billed.GetUploadBytes() + billed.GetReadBytes() << "-"
+            << processed.GetUploadRows() + processed.GetReadRows() << "-" << processed.GetUploadBytes() + processed.GetReadBytes();
+
         NIceDb::TNiceDb db(txc.DB);
 
         billed += toBill;
         Self->PersistBuildIndexBilled(db, buildInfo);
 
         ui64 requestUnits = RequestUnits(toBill);
-
-        TString id = TStringBuilder()
-            << buildId << "-"
-            << buildInfo.TablePathId.OwnerId << "-" << buildInfo.TablePathId.LocalPathId << "-"
-            << billed.GetUploadRows() + billed.GetReadRows() << "-" << billed.GetUploadBytes() + billed.GetReadBytes() << "-"
-            << processed.GetUploadRows() + processed.GetReadRows() << "-" << processed.GetUploadBytes() + processed.GetReadBytes();
 
         const TString billRecord = TBillRecord()
             .Id(id)

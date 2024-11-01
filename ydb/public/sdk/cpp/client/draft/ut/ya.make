@@ -11,6 +11,10 @@ ENDIF()
 
 FORK_SUBTESTS()
 
+PEERDIR(
+    ydb/public/sdk/cpp/client/ut/helpers
+)
+
 SRCS(
     ydb_scripting_response_headers_ut.cpp
 )

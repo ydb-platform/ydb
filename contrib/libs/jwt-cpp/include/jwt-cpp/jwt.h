@@ -106,7 +106,7 @@ namespace jwt {
 				if (BIO_write(pubkey_bio.get(), key.data(), len) != len)
 					throw rsa_exception("failed to load public key: bio_write failed");
 			}
-			
+
 			std::shared_ptr<EVP_PKEY> pkey(PEM_read_bio_PUBKEY(pubkey_bio.get(), nullptr, nullptr, (void*)password.c_str()), EVP_PKEY_free);
 			if (!pkey)
 				throw rsa_exception("failed to load public key: PEM_read_bio_PUBKEY failed:" + std::string(ERR_error_string(ERR_get_error(), NULL)));
@@ -124,7 +124,7 @@ namespace jwt {
 				throw rsa_exception("failed to load private key: PEM_read_bio_PrivateKey failed");
 			return pkey;
 		}
-		
+
 		/**
 		 * Convert a OpenSSL BIGNUM to a std::string
 		 * \param bn BIGNUM to convert
@@ -156,7 +156,7 @@ namespace jwt {
 	namespace algorithm {
 		/**
 		 * "none" algorithm.
-		 * 
+		 *
 		 * Returns and empty signature and checks if the given signature is empty.
 		 */
 		struct none {
@@ -519,7 +519,7 @@ namespace jwt {
 				const int size = RSA_size(key.get());
 
 				std::string padded(size, 0x00);
-				if (!RSA_padding_add_PKCS1_PSS_mgf1(key.get(), (unsigned char*)padded.data(), (const unsigned char*)hash.data(), md(), md(), -1))  
+				if (!RSA_padding_add_PKCS1_PSS_mgf1(key.get(), (unsigned char*)padded.data(), (const unsigned char*)hash.data(), md(), md(), -1))
 					throw signature_generation_exception("failed to create signature: RSA_padding_add_PKCS1_PSS_mgf1 failed");
 
 				std::string res(size, 0x00);
@@ -538,11 +538,11 @@ namespace jwt {
 
 				std::unique_ptr<RSA, decltype(&RSA_free)> key(EVP_PKEY_get1_RSA(pkey.get()), RSA_free);
 				const int size = RSA_size(key.get());
-				
+
 				std::string sig(size, 0x00);
 				if(!RSA_public_decrypt(static_cast<int>(signature.size()), (const unsigned char*)signature.data(), (unsigned char*)sig.data(), key.get(), RSA_NO_PADDING))
 					throw signature_verification_exception("Invalid signature");
-				
+
 				if(!RSA_verify_PKCS1_PSS_mgf1(key.get(), (const unsigned char*)hash.data(), md(), md(), (const unsigned char*)sig.data(), -1))
 					throw signature_verification_exception("Invalid signature");
 			}
@@ -577,7 +577,7 @@ namespace jwt {
 				res.resize(len);
 				return res;
 			}
-			
+
 			/// OpenSSL structure containing keys
 			std::shared_ptr<EVP_PKEY> pkey;
 			/// Hash generator function
@@ -972,7 +972,7 @@ namespace jwt {
 		 * \throws std::runtime_error If claim was not present
 		 * \throws std::bad_cast Claim was present but not a set (Should not happen in a valid token)
 		 */
-		std::set<std::string> get_audience() const { 
+		std::set<std::string> get_audience() const {
 			auto aud = get_payload_claim("aud");
 			if(aud.get_type() == jwt::claim::type::string) return { aud.as_string()};
 			else return aud.as_set();
@@ -1126,7 +1126,7 @@ namespace jwt {
 		std::string signature_base64;
 	public:
 		/**
-		 * Constructor 
+		 * Constructor
 		 * Parses a given token
 		 * \param token The token to parse
 		 * \throws std::invalid_argument Token is not in correct format
@@ -1502,19 +1502,22 @@ namespace jwt {
 				auto leeway = claims.count("exp") == 1 ? std::chrono::system_clock::to_time_t(claims.at("exp").as_date()) : default_leeway;
 				auto exp = jwt.get_expires_at();
 				if (time > exp + std::chrono::seconds(leeway))
-					throw token_verification_exception("token expired");
+					throw token_verification_exception("exp: token expired. now: " + std::to_string(std::chrono::system_clock::to_time_t(time)) + " , exp: "
+																				   + std::to_string(std::chrono::system_clock::to_time_t(exp + std::chrono::seconds(leeway))));
 			}
 			if (jwt.has_issued_at()) {
 				auto leeway = claims.count("iat") == 1 ? std::chrono::system_clock::to_time_t(claims.at("iat").as_date()) : default_leeway;
 				auto iat = jwt.get_issued_at();
 				if (time < iat - std::chrono::seconds(leeway))
-					throw token_verification_exception("token expired");
+					throw token_verification_exception("iat: token expired. now: " + std::to_string(std::chrono::system_clock::to_time_t(time)) + " , iat: "
+				                                                                   + std::to_string(std::chrono::system_clock::to_time_t(iat - std::chrono::seconds(leeway))));
 			}
 			if (jwt.has_not_before()) {
 				auto leeway = claims.count("nbf") == 1 ? std::chrono::system_clock::to_time_t(claims.at("nbf").as_date()) : default_leeway;
 				auto nbf = jwt.get_not_before();
 				if (time < nbf - std::chrono::seconds(leeway))
-					throw token_verification_exception("token expired");
+					throw token_verification_exception("nbf: token expired. now: " + std::to_string(std::chrono::system_clock::to_time_t(time)) + " , nbf: "
+				                                                                   + std::to_string(std::chrono::system_clock::to_time_t(nbf - std::chrono::seconds(leeway))));
 			}
 			for (auto& c : claims)
 			{

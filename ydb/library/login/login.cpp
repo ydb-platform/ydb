@@ -332,7 +332,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         expires_at = std::min(expires_at, now + request.Options.ExpiresAfter);
     }
     auto algorithm = jwt::algorithm::ps256(publicKey, privateKey);
-
+    Cerr << std::chrono::system_clock::to_time_t(now) << Endl;
+    Cerr << std::chrono::system_clock::to_time_t(expires_at) << Endl;
     auto token = jwt::create()
             .set_key_id(keyId)
             .set_subject(request.User)

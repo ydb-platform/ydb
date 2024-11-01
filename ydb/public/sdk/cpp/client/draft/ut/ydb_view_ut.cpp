@@ -1,5 +1,5 @@
-#include "helpers/grpc_server.h"
-#include "helpers/grpc_services/view.h"
+#include <ydb/public/sdk/cpp/client/ut/helpers/grpc_server.h>
+#include <ydb/public/sdk/cpp/client/ut/helpers/grpc_services/view.h>
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_view.h>
 

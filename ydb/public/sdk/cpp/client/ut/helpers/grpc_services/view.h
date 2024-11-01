@@ -6,8 +6,7 @@ namespace NYdb::NView {
 
 constexpr const char* DummyQueryText = "select 42";
 
-class TViewDummyService : public Ydb::View::V1::ViewService::Service
-{
+class TViewDummyService : public Ydb::View::V1::ViewService::Service {
 public:
     grpc::Status DescribeView(
         grpc::ServerContext* context,

@@ -4,8 +4,7 @@
 
 namespace NYdb::NScripting {
 
-class TMockSlyDbProxy : public Ydb::Scripting::V1::ScriptingService::Service
-{
+class TMockSlyDbProxy : public Ydb::Scripting::V1::ScriptingService::Service {
 public:
     grpc::Status ExecuteYql(
         grpc::ServerContext* context,

@@ -1,18 +1,9 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/client/draft)
 
-IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(1200)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
-
-FORK_SUBTESTS()
+SIZE(SMALL)
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/draft/ut/helpers
+    ydb/public/sdk/cpp/client/ut/helpers
 )
 
 SRCS(

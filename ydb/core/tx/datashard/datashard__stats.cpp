@@ -475,6 +475,7 @@ public:
         for (auto& ti : Self->TableInfos) {
             const ui32 localTableId = ti.second->LocalTid;
             const ui32 shadowTableId = ti.second->ShadowTid;
+            const ui64 tableId = ti.first;
 
             CheckIdleMemCompaction(*ti.second, txc, ctx);
 
@@ -493,16 +494,30 @@ public:
                 searchHeight = 0;
             }
 
+            TAutoPtr<TSubset> subsetForStats = txc.DB.Subset(localTableId, TEpoch::Max(), { }, { });
+            // Remove memtables from the subset as we only want to look at indexes for parts
+            subsetForStats->Frozen.clear();
+
+            auto schemeTableInfo = Self->Scheme().GetTableInfo(localTableId);
+            Y_ABORT_UNLESS(schemeTableInfo);
+            bool hasSchemaChanges = HasSchemaChanges(*subsetForStats, *schemeTableInfo, 
+                AppData(ctx)->FeatureFlags.GetEnableLocalDBBtreeIndex());
+
             if (!ti.second->StatsNeedUpdate) {
-                ti.second->Stats.MemRowCount = memRowCount;
-                ti.second->Stats.MemDataSize = memDataSize;
-                ti.second->Stats.SearchHeight = searchHeight;
+                auto& stats = ti.second->Stats;
+                stats.MemRowCount = memRowCount;
+                stats.MemDataSize = memDataSize;
+                stats.SearchHeight = searchHeight;
+                stats.HasSchemaChanges = hasSchemaChanges;
+
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats skipped at datashard " << Self->TabletID() << ", for tableId " << tableId
+                    << ": RowCount " << stats.DataStats.RowCount << ", DataSize " << stats.DataStats.DataSize.Size << ", IndexSize " << stats.DataStats.IndexSize.Size << ", PartCount " << stats.PartCount
+                    << (stats.HasSchemaChanges ? ", with schema changes" : ""));
+
                 continue;
             }
 
             const ui32 MaxBuckets = 500;
-
-            ui64 tableId = ti.first;
             ui64 rowCountResolution = gDbStatsRowCountResolution;
             ui64 dataSizeResolution = gDbStatsDataSizeResolution;
             ui32 histogramBucketsCount = gDbStatsHistogramBucketsCount;
@@ -530,15 +545,6 @@ public:
             if (shadowTableId) {
                 indexSize += txc.DB.GetTableIndexSize(shadowTableId);
             }
-
-            TAutoPtr<TSubset> subsetForStats = txc.DB.Subset(localTableId, TEpoch::Max(), { }, { });
-            // Remove memtables from the subset as we only want to look at indexes for parts
-            subsetForStats->Frozen.clear();
-
-            auto schemeTableInfo = Self->Scheme().GetTableInfo(localTableId);
-            Y_ABORT_UNLESS(schemeTableInfo);
-            bool hasSchemaChanges = HasSchemaChanges(*subsetForStats, *schemeTableInfo, 
-                AppData(ctx)->FeatureFlags.GetEnableLocalDBBtreeIndex());
 
             if (shadowTableId) {
                 // HACK: we combine subsets of different tables

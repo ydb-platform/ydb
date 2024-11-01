@@ -572,13 +572,19 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
 
-        // Note: stats is rebuilt only on restarts and compactions
-        RebootTablet(runtime, shard1, sender);
-
         WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
 
         CompactTable(runtime, shard1, tableId1, false);
 
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+
+        // turn off doesn't trigger compaction:
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+        // even after restart:
+        RebootTablet(runtime, shard1, sender);
         WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
     }
 
@@ -608,22 +614,40 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         {
             auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetHasSchemaChanges(), false);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetByKeyFilterSize(), 0);
         }
 
-        auto txId = AsyncSetEnableFilterByKey(server, "/Root", "table-1", true);
-        WaitTxNotification(server, sender, txId);
+        WaitTxNotification(server, sender,
+            AsyncSetEnableFilterByKey(server, "/Root", "table-1", true));
 
-        // TODO:
-        // Note: stats is rebuilt only on restarts and compactions
-        RebootTablet(runtime, shard1, sender);
-
-        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+        {
+            auto stats = WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetByKeyFilterSize(), 0);
+        }
 
         CompactTable(runtime, shard1, tableId1, false);
 
-        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+        {
+            auto stats = WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+            UNIT_ASSERT_GT(stats.GetTableStats().GetByKeyFilterSize(), 0);
+        }
+
+        WaitTxNotification(server, sender,
+            AsyncSetEnableFilterByKey(server, "/Root", "table-1", false));
+
+        {
+            auto stats = WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+            UNIT_ASSERT_GT(stats.GetTableStats().GetByKeyFilterSize(), 0);
+        }
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        {
+            auto stats = WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetByKeyFilterSize(), 0);
+        }
     }
 
-} // Y_UNIT_TEST_SUITE(DataShardStats)
+}
 
-} // namespace NKikimr
+}

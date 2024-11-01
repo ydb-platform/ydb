@@ -395,20 +395,24 @@ private:
                 YQL_ENSURE(column);
                 typeConstraint = column->TypeConstraint;
 
-                // TODO: support pg types
-                auto columnTypeId = column->Type.GetTypeId();
-                YQL_ENSURE(columnTypeId != NScheme::NTypeIds::Pg, "pg types are not supported");
-
-                // Decimal type is transformed into parametrized Decimal(22, 9).
-                if (columnTypeId == NYql::NProto::TypeIds::Decimal) {
+                switch (column->Type.GetTypeId()) {
+                case NScheme::NTypeIds::Pg: {
+                    // TODO: support pg types
+                    YQL_ENSURE(false, "pg types are not supported");
+                    break;
+                }
+                case NScheme::NTypeIds::Decimal: {
                     columnDataType = ctx.MakeType<TDataExprParamsType>(
-                        NUdf::GetDataSlot(columnTypeId),
-                        ToString(NScheme::DECIMAL_PRECISION),
-                        ToString(NScheme::DECIMAL_SCALE));
-                } else {
+                        EDataSlot::Decimal,
+                        ToString(column->Type.GetDecimalType().GetPrecision()),
+                        ToString(column->Type.GetDecimalType().GetScale()));
+                    break;
+                }
+                default:{
                     columnDataType = GetMkqlDataTypeAnnotation(
-                        TDataType::Create(columnTypeId, *MkqlCtx->TypeEnv),
-                        ctx);
+                        TDataType::Create(column->Type.GetTypeId(), *MkqlCtx->TypeEnv), ctx);
+                    break;
+                }
                 }
             }
 

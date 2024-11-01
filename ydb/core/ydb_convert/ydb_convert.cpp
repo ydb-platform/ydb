@@ -171,7 +171,6 @@ void ConvertYdbTypeToMiniKQLType(const Ydb::Type& input, NKikimrMiniKQL::TType& 
             break;
         }
         case Ydb::Type::kDecimalType: {
-            // TODO: Decimal parameters
             output.SetKind(NKikimrMiniKQL::ETypeKind::Data);
             auto data = output.MutableData();
             data->SetScheme(NYql::NProto::TypeIds::Decimal);
@@ -1168,7 +1167,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
     return ok;
 }
 
-bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool)
 {
     if (vp->Hasnull_flag_value()) {

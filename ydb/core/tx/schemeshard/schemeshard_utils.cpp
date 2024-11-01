@@ -495,7 +495,7 @@ bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TCol
         auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
 
         NScheme::TTypeInfo typeInfo;
-        if (!typeRegistry->GetTypeInfo(typeName, columnName, typeInfo, explain)) {
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
             return false; 
         }
 

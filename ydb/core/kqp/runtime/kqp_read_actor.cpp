@@ -369,9 +369,7 @@ public:
         KeyColumnTypes.reserve(Settings->GetKeyColumnTypes().size());
         for (size_t i = 0; i < Settings->KeyColumnTypesSize(); ++i) {
             NScheme::TTypeId typeId = Settings->GetKeyColumnTypes(i);
-            NScheme::TTypeInfo typeInfo = typeId == NScheme::NTypeIds::Pg ?
-                NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(Settings->GetKeyColumnTypeInfos(i).GetPgTypeId())) :
-                NScheme::TTypeInfo(typeId);
+            NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(typeId, Settings->GetKeyColumnTypeInfos(i));
             KeyColumnTypes.push_back(typeInfo);
         }
         Counters->ReadActorsCount->Inc();
@@ -1400,11 +1398,7 @@ public:
 private:
     NScheme::TTypeInfo MakeTypeInfo(const NKikimrTxDataShard::TKqpTransaction_TColumnMeta& info) {
         NScheme::TTypeId typeId = info.GetType();
-        if (typeId == NScheme::NTypeIds::Pg) {
-            return {NPg::TypeDescFromPgTypeId(info.GetTypeInfo().GetPgTypeId())};
-        } else {
-            return {typeId};
-        }
+        return NScheme::TypeInfoFromProto(typeId, info.GetTypeInfo());
     }
 
     void InitResultColumns() {

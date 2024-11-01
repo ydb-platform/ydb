@@ -884,7 +884,7 @@ namespace {
 
             case TTypeParser::ETypeKind::Decimal:
                 EnsureType(jsonValue, NJson::JSON_STRING);
-                ValueBuilder.Decimal(jsonValue.GetString());
+                ValueBuilder.Decimal(TDecimalValue(jsonValue.GetString(), TypeParser.GetDecimal().Precision, TypeParser.GetDecimal().Scale));
                 break;
 
             case TTypeParser::ETypeKind::Pg:

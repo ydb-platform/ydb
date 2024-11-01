@@ -1,5 +1,7 @@
 #include "schemeshard__operation_common_external_table.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
+
 #include <utility>
 
 namespace NKikimr::NSchemeShard::NExternalTable {
@@ -51,32 +53,6 @@ bool Validate(const TString& sourceType, const NKikimrSchemeOp::TExternalTableDe
         && ValidateDataSourcePath(desc.GetDataSourcePath(), errStr);
 }
 
-Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
-    Ydb::Type ydbType;
-    switch (typeInfo.GetTypeId()) {
-    case NScheme::NTypeIds::Pg : {
-        auto typeDesc = typeInfo.GetPgTypeDesc();
-        auto* pgProto = ydbType.mutable_pg_type();
-        pgProto->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pgProto->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));        
-        break;
-    }
-    case NScheme::NTypeIds::Decimal : {
-        auto decimalType = typeInfo.GetDecimalType();
-        auto* decimalProto = ydbType.mutable_decimal_type();
-        decimalProto->set_precision(decimalType.GetPrecision());
-        decimalProto->set_scale(decimalType.GetScale());        
-        break;
-    }
-    default : {
-        auto& item = notNull ? ydbType : *ydbType.mutable_optional_type()->mutable_item();
-        item.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(typeInfo.GetTypeId()));        
-        break;
-    }
-    }
-    return ydbType;
-}
-
 std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
     const TString& sourceType,
     const NKikimrSchemeOp::TExternalTableDescription& desc,
@@ -125,7 +101,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
         auto typeName = NMiniKQL::AdaptLegacyYqlType(col.GetType());
 
         NScheme::TTypeInfo typeInfo;
-        if (!typeRegistry->GetTypeInfo(typeName, colName, typeInfo, errStr)) {
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), col.GetTypeInfo(), typeName, colName, typeInfo, errStr)) {
             return std::make_pair(nullptr, errStr);
         }
 
@@ -142,7 +118,7 @@ std::pair<TExternalTableInfo::TPtr, TMaybe<TString>> CreateExternalTable(
 
         auto& schemaColumn= *schema.add_column();
         schemaColumn.set_name(colName);
-        *schemaColumn.mutable_type() = CreateYdbType(typeInfo, col.GetNotNull());
+        NScheme::ProtoFromTypeInfo(typeInfo, *schemaColumn.mutable_type(), col.GetNotNull());
     }
 
     try {

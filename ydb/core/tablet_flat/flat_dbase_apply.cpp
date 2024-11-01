@@ -52,8 +52,12 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         }
 
         std::optional<NKikimrProto::TTypeInfo> typeInfoProto;
-        if (delta.HasColumnTypeInfo())
+        if (delta.HasColumnTypeInfo()) {
             typeInfoProto = delta.GetColumnTypeInfo();
+        } else if (delta.GetColumnType() == NScheme::NTypeIds::Decimal) {
+            // Migration from table with no decimal typeInfo
+            typeInfoProto = NKikimr::NScheme::DefaultDecimalProto();
+        }
         changes |= AddColumnWithTypeInfo(table, delta.GetColumnName(), delta.GetColumnId(),
             delta.GetColumnType(), typeInfoProto, delta.GetNotNull(), null);
     } else if (action == TAlterRecord::DropColumn) {

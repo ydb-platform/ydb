@@ -165,7 +165,7 @@ protected:
         case NScheme::NTypeIds::Timestamp64:
             return NJson::TJsonValue(cell.AsValue<i64>());            
         case NScheme::NTypeIds::Decimal:
-            return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>()));
+            return NJson::TJsonValue(DecimalToString(cell.AsValue<std::pair<ui64, i64>>(), type));
         case NScheme::NTypeIds::DyNumber:
             return NJson::TJsonValue(DyNumberToString(cell.AsBuf()));
         case NScheme::NTypeIds::String:

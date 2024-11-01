@@ -110,7 +110,7 @@ namespace NKqp {
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
 
-    void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) {
+    void TTestHelper::ReadData(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) const {
         auto it = TableClient->StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
         TString result = StreamResultToYson(it, false, opStatus);
@@ -152,7 +152,7 @@ namespace NKqp {
             break;
         case NScheme::NTypeIds::Decimal: {
             TTypeBuilder builder;
-            builder.Decimal(TDecimalType(22, 9));
+            builder.Decimal(TDecimalType(TypeInfo.GetDecimalType().GetPrecision(), TypeInfo.GetDecimalType().GetScale()));
             str << builder.Build();
             break;
         }
@@ -165,8 +165,8 @@ namespace NKqp {
         return str;
     }
 
-    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(NScheme::TTypeId typeId) {
-        TypeInfo = NScheme::TTypeInfo(typeId);
+    TTestHelper::TColumnSchema& TTestHelper::TColumnSchema::SetType(const NScheme::TTypeInfo& typeInfo) {
+        TypeInfo = typeInfo;
         return *this;
     }
 
@@ -252,7 +252,7 @@ namespace NKqp {
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
-            return arrow::field(name, arrow::decimal(22, 9));
+            return arrow::field(name, arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()));
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:

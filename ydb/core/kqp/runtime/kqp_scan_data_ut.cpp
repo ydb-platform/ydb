@@ -37,7 +37,8 @@ struct TDataRow {
             {20, TTypeInfo(NTypeIds::Datetime64), ""},
             {21, TTypeInfo(NTypeIds::Timestamp64), ""},
             {22, TTypeInfo(NTypeIds::Interval64), ""},
-            {23, TTypeInfo(NTypeIds::Decimal), ""},
+            {23, TTypeInfo(NScheme::TDecimalType(22, 9)), ""},
+            {24, TTypeInfo(NScheme::TDecimalType(35, 10)), ""},
         };
     }
 
@@ -65,6 +66,7 @@ struct TDataRow {
     i64 Timestamp64;
     i64 Interval64;
     NYql::NDecimal::TInt128 Decimal;
+    NYql::NDecimal::TInt128 Decimal35;
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields = {
@@ -91,7 +93,8 @@ struct TDataRow {
             arrow::field("datetime64", arrow::date64()),
             arrow::field("timestamp64", arrow::date64()),
             arrow::field("interval64", arrow::date64()),
-            arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
+            arrow::field("dec", arrow::decimal(22, 9)),
+            arrow::field("dec35", arrow::decimal(35, 10)),
         };
 
         return std::make_shared<arrow::Schema>(std::move(fields));
@@ -180,6 +183,9 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
             } else if (colName == "dec") {
                 auto result = batchBuilder->GetFieldAs<arrow::Decimal128Builder>(colIndex++)->Append(reinterpret_cast<const char*>(&row.Decimal));
                 UNIT_ASSERT(result.ok());
+            } else if (colName == "dec35") {
+                auto result = batchBuilder->GetFieldAs<arrow::Decimal128Builder>(colIndex++)->Append(reinterpret_cast<const char*>(&row.Decimal35));
+                UNIT_ASSERT(result.ok());
             }
         }
     }
@@ -191,11 +197,11 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
 
 TVector<TDataRow> TestRows() {
     TVector<TDataRow> rows = {
-        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, -1, -1, -1, -1, 111},
-        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, -2, -2, -2, -2, 222},
-        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, -3, -3, -3, -3, 333},
-        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, -4, -4, -4, -4, 444},
-        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, -5, -5, -5, -5, 555},
+        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1"                       , "u1"                      , "{j:1}", "{y:1}", 0, 0, 0, 0, -1, -1, -1, -1, 111, 1111},
+        {false,  2,  2,  2,  2, 2, 2, 2, 2,  2.0f,  2.0, "s2"                       , "u2"                      , "{j:2}", "{y:2}", 0, 0, 0, 0, -2, -2, -2, -2, 222, 2222},
+        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3"                       , "u3"                      , "{j:3}", "{y:3}", 0, 0, 0, 0, -3, -3, -3, -3, 333, 3333},
+        {false, -4, -4, -4, -4, 4, 4, 4, 4,  4.0f,  4.0, "s4"                       , "u4"                      , "{j:4}", "{y:4}", 0, 0, 0, 0, -4, -4, -4, -4, 444, 4444},
+        {false, -5, -5, -5, -5, 5, 5, 5, 5,  5.0f,  5.0, "long5long5long5long5long5", "utflong5utflong5utflong5", "{j:5}", "{y:5}", 0, 0, 0, 0, -5, -5, -5, -5, 555, 5555},
     };
     return rows;
 }
@@ -209,7 +215,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         namespace NTypeIds = NScheme::NTypeIds;
         struct TTestCase {
             NUdf::TUnboxedValue Value;
-            NScheme::TTypeId Type;
+            NScheme::TTypeInfo Type;
             std::pair<ui64, ui64> ExpectedSizes;
         };
         TString pattern = "This string has 26 symbols";
@@ -217,6 +223,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         std::memcpy(str.Data(), pattern.data(), pattern.size());
         NUdf::TUnboxedValue containsLongString(NUdf::TUnboxedValuePod(std::move(str)));
         NYql::NDecimal::TInt128 decimalVal = 123456789012;
+        NYql::NDecimal::TInt128 decimal35Val = 987654321012;
         TVector<TTestCase> cases = {
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Bool        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Int32       , {16, 8 } },
@@ -229,7 +236,8 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Utf8        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Yson        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Json        , {16, 8 } },
-            {NUdf::TUnboxedValuePod(            ), NTypeIds::Decimal     , {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NScheme::TDecimalType(22, 9), {16, 8 } },
+            {NUdf::TUnboxedValuePod(            ), NScheme::TDecimalType(35, 10), {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Date        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Datetime    , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Timestamp   , {16, 8 } },
@@ -257,7 +265,8 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Datetime64  , {16, 8 } },
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Timestamp64 , {16, 8 } },
             {NUdf::TUnboxedValuePod(-12345678901), NTypeIds::Interval64  , {16, 8 } },
-            {NUdf::TUnboxedValuePod(decimalVal  ), NTypeIds::Decimal     , {16, 16} },
+            {NUdf::TUnboxedValuePod(decimalVal  ), NScheme::TDecimalType(22, 9), {16, 16} },
+            {NUdf::TUnboxedValuePod(decimal35Val  ), NScheme::TDecimalType(35, 10), {16, 16} },
             {NUdf::TUnboxedValuePod::Embedded("12charecters"), NTypeIds::String , {16, 12 } },
             {NUdf::TUnboxedValuePod::Embedded("foooo"), NTypeIds::String , {16, 8 } },
             {NUdf::TUnboxedValuePod::Embedded("FOOD!"), NTypeIds::Utf8   , {16, 8 } },
@@ -284,7 +293,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         scanData.AddData(batch, {}, factory);
 
         std::vector<NUdf::TUnboxedValue> container;
-        container.resize(24);
+        container.resize(TDataRow::MakeArrowSchema()->num_fields());
         std::vector<NUdf::TUnboxedValue*> containerPtr;
         for (auto&& i : container) {
             containerPtr.emplace_back(&i);
@@ -319,6 +328,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[21].Get<i64 >(), row.Timestamp64);
             UNIT_ASSERT_EQUAL(container[22].Get<i64 >(), row.Interval64 );
             UNIT_ASSERT_EQUAL(container[23].GetInt128(), row.Decimal    );
+            UNIT_ASSERT_EQUAL(container[24].GetInt128(), row.Decimal35  );
         }
 
         UNIT_ASSERT(scanData.IsEmpty());

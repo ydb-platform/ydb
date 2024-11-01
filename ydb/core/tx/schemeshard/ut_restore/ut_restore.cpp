@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
     }
 
     void Restore(TTestBasicRuntime& runtime, const TString& creationScheme, TVector<TTestData>&& data, ui32 readBatchSize = 128) {
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
         Restore(runtime, env, creationScheme, std::move(data), readBatchSize);
     }
 
@@ -688,6 +688,7 @@ value {
             << "-1597235696123456," // negative timestamp64
             << "-300500," // negative interval64
             << "3.321," // decimal
+            << "555555555555555.123456789," // decimal(35,10)
             << ".3321e1," // dynumber
             << "\"" << CGIEscapeRet("lorem ipsum") << "\"," // string
             << "\"" << CGIEscapeRet("lorem ipsum dolor sit amet") << "\"," // utf8
@@ -702,6 +703,7 @@ value {
             << "[\"" << TInstant::ParseIso8601("2020-08-12T00:00:00.000000Z").Days() << "\"];" // date
             << "[\"" << -1597235696 << "\"];" // datetime64
             << "[\"" << TInstant::ParseIso8601("2020-08-12T12:34:56.000000Z").Seconds() << "\"];" // datetime
+            << "[\"" << "555555555555555.123456789" << "\"];" // decimal(35,10)
             << "[\"" << "3.321" << "\"];" // decimal
             << "[\"" << 1.1234 << "\"];" // double
             << "[\"" << ".3321e1" << "\"];" // dynumber
@@ -725,7 +727,7 @@ value {
 
         const auto data = TTestData(std::move(csv), std::move(yson));
 
-        Restore(runtime, R"(
+        Restore(runtime, R"_(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "int32_value" Type: "Int32" }
@@ -745,6 +747,7 @@ value {
             Columns { Name: "timestamp64_value" Type: "Timestamp64" }
             Columns { Name: "interval64_value" Type: "Interval64" }
             Columns { Name: "decimal_value" Type: "Decimal" }
+            Columns { Name: "decimal35_value" Type: "Decimal(35,10)" }
             Columns { Name: "dynumber_value" Type: "DyNumber" }
             Columns { Name: "string_value" Type: "String" }
             Columns { Name: "utf8_value" Type: "Utf8" }
@@ -752,7 +755,7 @@ value {
             Columns { Name: "jsondoc_value" Type: "JsonDocument" }
             Columns { Name: "uuid_value" Type: "Uuid" }
             KeyColumnNames: ["key"]
-        )", {data}, data.Data.size() + 1);
+        )_", {data}, data.Data.size() + 1);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"}, {
             "key",
@@ -773,6 +776,7 @@ value {
             "timestamp64_value",
             "interval64_value",
             "decimal_value",
+            "decimal35_value",
             "dynumber_value",
             "string_value",
             "utf8_value",
@@ -1142,10 +1146,10 @@ value {
 
     Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "int32_value" Type: "Int32" }
@@ -1165,6 +1169,7 @@ value {
             Columns { Name: "timestamp64_value" Type: "Timestamp64" }
             Columns { Name: "interval64_value" Type: "Interval64" }
             Columns { Name: "decimal_value" Type: "Decimal" }
+            Columns { Name: "decimal35_value" Type: "Decimal(35,10)" }
             Columns { Name: "dynumber_value" Type: "DyNumber" }
             Columns { Name: "string_value" Type: "String" }
             Columns { Name: "utf8_value" Type: "Utf8" }
@@ -1172,7 +1177,7 @@ value {
             Columns { Name: "jsondoc_value" Type: "JsonDocument" }
             Columns { Name: "uuid_value" Type: "Uuid" }
             KeyColumnNames: ["key"]
-        )");
+        )_");
         env.TestWaitNotification(runtime, txId);
 
         const int partitionIdx = 0;
@@ -1185,6 +1190,7 @@ value {
         Y_ABORT_UNLESS(binaryJson.Defined());
 
         const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
+        const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
         const TString dynumber = *NDyNumber::ParseDyNumberString("18");
 
         char uuid[16];
@@ -1208,6 +1214,7 @@ value {
             TCell::Make<i64>(-14), // Timestamp64
             TCell::Make<i64>(-15), // Interval64
             TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
+            TCell::Make<std::pair<ui64, ui64>>(decimal35), // Decimal
             TCell(dynumber.data(), dynumber.size()), // Dynumber
             TCell(string.data(), string.size()), // String
             TCell(string.data(), string.size()), // Utf8
@@ -1261,6 +1268,7 @@ value {
             << "[\"" << 8 << "\"];" // date
             << "[\"" << -13 << "\"];" // datetime64
             << "[\"" << 9 << "\"];" // datetime
+            << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
             << "[\"" << "16.17" << "\"];" // decimal
             << "[\"" << 6.66 << "\"];" // double
             << "[\"" << ".18e2" << "\"];" // dynumber
@@ -1303,6 +1311,7 @@ value {
             "timestamp64_value",
             "interval64_value",
             "decimal_value",
+            "decimal35_value",
             "dynumber_value",
             "string_value",
             "utf8_value",

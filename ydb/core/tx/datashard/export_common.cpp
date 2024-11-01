@@ -76,11 +76,11 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     return scheme;
 }
 
-TString DecimalToString(const std::pair<ui64, i64>& loHi) {
+TString DecimalToString(const std::pair<ui64, i64>& loHi, const NScheme::TTypeInfo& typeInfo) {
     using namespace NYql::NDecimal;
 
     TInt128 val = FromHalfs(loHi.first, loHi.second);
-    return ToString(val, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+    return ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
 }
 
 TString DyNumberToString(TStringBuf data) {
@@ -94,12 +94,12 @@ TString DyNumberToString(TStringBuf data) {
     return result;
 }
 
-bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err) {
+bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err, const NScheme::TTypeInfo& typeInfo) {
     Y_UNUSED(err);
     using namespace NYql::NDecimal;
 
     TInt128 val = FromHalfs(loHi.first, loHi.second);
-    out << ToString(val, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
+    out << ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
     return true;
 }
 

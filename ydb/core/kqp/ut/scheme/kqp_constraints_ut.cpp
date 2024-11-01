@@ -969,6 +969,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         appConfig.MutableTableServiceConfig()->SetEnableSequences(false);
         appConfig.MutableTableServiceConfig()->SetEnableColumnsWithDefault(true);
         appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
+        appConfig.MutableFeatureFlags()->SetEnableParameterizedDecimal(true);
 
         TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
@@ -1169,6 +1170,22 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
          fCompareTable(R"(
             [
                 [[1u];["Old"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11"];[[2u];["New"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11"]
+            ]
+        )");
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/AlterTableAddNotNullColumn` ADD COLUMN Valuf35 Decimal(35,10) NOT NULL DEFAULT Decimal("155555555555555.11", 35, 10);
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+         fCompareTable(R"(
+            [
+                [[1u];["Old"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11";"155555555555555.11"];[[2u];["New"];1;7;-24;-25;1.;1.;"[123]";"{\"age\" : 22}";"1.11";"155555555555555.11"]
             ]
         )");
 

@@ -10,6 +10,7 @@
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -1067,11 +1068,9 @@ protected:
 
             for (auto& keyColumn : keyTypes) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");
-                if (columnType.TypeInfo) {
-                    *settings->AddKeyColumnTypeInfos() = *columnType.TypeInfo;
-                } else {
-                    *settings->AddKeyColumnTypeInfos() = NKikimrProto::TTypeInfo();
-                }
+                *settings->AddKeyColumnTypeInfos() = columnType.TypeInfo ?
+                    *columnType.TypeInfo :
+                    NKikimrProto::TTypeInfo();
                 settings->AddKeyColumnTypes(static_cast<ui32>(keyColumn.GetTypeId()));
             }
 
@@ -1362,18 +1361,8 @@ protected:
             for (ui32 i = 0; i < resultColsCount; ++i) {
                 taskMeta.ReadInfo.ResultColumnsTypes.emplace_back();
                 auto memberType = resultStructType->GetMemberType(i);
-                if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Pg) {
-                    const auto memberPgType = static_cast<NKikimr::NMiniKQL::TPgType*>(memberType);
-                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(memberPgType->GetTypeId()));
-                } else {
-                    if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
-                        memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
-                    }
-                    YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
-                        "Expected simple data types to be read from column shard");
-                    const auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
-                    taskMeta.ReadInfo.ResultColumnsTypes.back() = NScheme::TTypeInfo(memberDataType->GetSchemeType());
-                }
+                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(memberType);
+                taskMeta.ReadInfo.ResultColumnsTypes.back() = typeInfo;
             }
         }
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {

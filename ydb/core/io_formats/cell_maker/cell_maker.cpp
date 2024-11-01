@@ -81,16 +81,6 @@ namespace {
     }
 
     template <>
-    bool TryParse(TStringBuf value, NYql::NDecimal::TInt128& result) {
-        if (!NYql::NDecimal::IsValid(value)) {
-            return false;
-        }
-
-        result = NYql::NDecimal::FromString(value, NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
-        return true;
-    }
-
-    template <>
     bool TryParse(TStringBuf value, TMaybe<NBinaryJson::TBinaryJson>& result) {
         TString unescaped;
         if (!CheckedUnescape(value, unescaped)) {
@@ -114,6 +104,18 @@ namespace {
         Y_UNUSED(err);
         Y_UNUSED(typeInfo);
         Y_ABORT("TryParse with typeInfo is unimplemented");
+    }
+
+    template <>
+    bool TryParse(TStringBuf value, NYql::NDecimal::TInt128& result, TString& err, const NScheme::TTypeInfo& typeInfo) {
+        Y_UNUSED(err);
+        
+        if (!NYql::NDecimal::IsValid(value)) {
+            return false;
+        }
+
+        result = NYql::NDecimal::FromString(value, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+        return true;
     }
 
     template<>
@@ -202,6 +204,15 @@ namespace {
 
             return Conv(c, t, pool, conv);
         }
+
+        static bool Make(TCell& c, TStringBuf v, TMemoryPool& pool, TString& err, TConverter<T, U> conv, const NScheme::TTypeInfo& typeInfo) {
+            T t;
+            if (!TryParse(v, t, err, typeInfo)) {
+                return false;
+            }
+
+            return Conv(c, t, pool, conv);
+        }        
 
         static bool MakeDirect(TCell& c, const T& v, TMemoryPool& pool, TString&, TConverter<T, U> conv = &Implicit<T, U>) {
             return Conv(c, v, pool, conv);
@@ -320,7 +331,7 @@ bool MakeCell(TCell& cell, TStringBuf value, const NScheme::TTypeInfo& typeInfo,
     case NScheme::NTypeIds::DyNumber:
         return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value, pool, err, &DyNumberToStringBuf);
     case NScheme::NTypeIds::Decimal:
-        return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair);
+        return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value, pool, err, &Int128ToPair, typeInfo);
     case NScheme::NTypeIds::Pg:
         return TCellMaker<NPg::TConvertResult, TStringBuf>::Make(cell, value, pool, err, &PgToStringBuf, typeInfo);
     case NScheme::NTypeIds::Uuid:
@@ -392,7 +403,7 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
         case NScheme::NTypeIds::DyNumber:
             return TCellMaker<TMaybe<TString>, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &DyNumberToStringBuf);
         case NScheme::NTypeIds::Decimal:
-            return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair);
+            return TCellMaker<NYql::NDecimal::TInt128, std::pair<ui64, ui64>>::Make(cell, value.GetStringSafe(), pool, err, &Int128ToPair, typeInfo);
         case NScheme::NTypeIds::Uuid:
             return TCellMaker<TUuidHolder, TStringBuf>::Make(cell, value.GetStringSafe(), pool, err, &UuidToStringBuf);
         default:

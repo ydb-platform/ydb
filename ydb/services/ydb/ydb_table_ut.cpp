@@ -325,6 +325,43 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         }
     }
 
+    Y_UNIT_TEST(TestDecimal35) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        auto session = CreateSession(connection);
+
+        auto result = session.ExecuteDataQuery(R"___(
+            SELECT CAST("155555555555555.12345678" as Decimal(35,10));
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        TVector<TResultSet> resultSets = result.GetResultSets();
+        UNIT_ASSERT_EQUAL(resultSets.size(), 1);
+        UNIT_ASSERT_EQUAL(resultSets[0].ColumnsCount(), 1);
+        UNIT_ASSERT_EQUAL(resultSets[0].GetColumnsMeta().size(), 1);
+        auto column = resultSets[0].GetColumnsMeta()[0];
+        TTypeParser typeParser(column.Type);
+        typeParser.OpenOptional();
+        UNIT_ASSERT_EQUAL(typeParser.GetKind(), TTypeParser::ETypeKind::Decimal);
+
+        TResultSetParser rsParser(resultSets[0]);
+        while (rsParser.TryNextRow()) {
+            auto columnParser = std::move(rsParser.ColumnParser(0));
+            columnParser.OpenOptional();
+            auto decimalString = columnParser.GetDecimal().ToString();
+            UNIT_ASSERT_EQUAL(decimalString, "155555555555555.12345678");
+            UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Precision, 35);
+            UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Scale, 10);
+        }
+    }    
+
     Y_UNIT_TEST(TestDecimalFullStack) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -376,7 +413,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                         .Int32(count)
                         .Build()
                     .AddParam("$Value")
-                        .Decimal(TDecimalValue(decimalParams[count]))
+                        .Decimal(TDecimalValue(decimalParams[count], 22, 9))
                         .Build()
                     .Build();
                 auto result = session

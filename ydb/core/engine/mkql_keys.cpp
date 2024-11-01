@@ -1,8 +1,9 @@
 #include "mkql_keys.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
 
 #include <util/generic/maybe.h>
@@ -42,12 +43,10 @@ bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue
 NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType *type, bool &isOptional) {
     isOptional = false;
     if (type->GetKind() == TType::EKind::Pg) {
-        auto pgType = static_cast<TPgType*>(type);
-        auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(pgTypeId));
+        return NScheme::TypeInfoFromMiniKQLType(type);
     } else {
-        auto dataType = UnpackOptionalData(type, isOptional);
-        return NScheme::TTypeInfo(dataType->GetSchemeType());
+        isOptional = type->IsOptional();
+        return NScheme::TypeInfoFromMiniKQLType(type);
     }
 }
 

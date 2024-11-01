@@ -105,11 +105,12 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Float(1.183).Build()}});
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Double(1.183).Build()}});
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().DyNumber("1.183").Build()}});
-        CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Decimal(TString("1.183")).Build()}});
-        CommonTestParams("name", "inf", {{"$name", TValueBuilder().Decimal(TString("inf")).Build()}});
-        CommonTestParams("name", "-inf", {{"$name", TValueBuilder().Decimal(TString("-inf")).Build()}});
-        CommonTestParams("name", "nan", {{"$name", TValueBuilder().Decimal(TString("nan")).Build()}});
-        CommonTestParams("name", "-nan", {{"$name", TValueBuilder().Decimal(TString("-nan")).Build()}});
+        CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Decimal(TDecimalValue("1.183", 22, 9)).Build()}});
+        CommonTestParams("name", "155555555555555.183", {{"$name", TValueBuilder().Decimal(TDecimalValue("155555555555555.183", 35, 10)).Build()}});
+        CommonTestParams("name", "inf", {{"$name", TValueBuilder().Decimal(TDecimalValue("inf", 22, 9)).Build()}});
+        CommonTestParams("name", "-inf", {{"$name", TValueBuilder().Decimal(TDecimalValue("-inf", 22, 9)).Build()}});
+        CommonTestParams("name", "nan", {{"$name", TValueBuilder().Decimal(TDecimalValue("nan", 22, 9)).Build()}});
+        CommonTestParams("name", "-nan", {{"$name", TValueBuilder().Decimal(TDecimalValue("-nan", 22, 9)).Build()}});
         CommonTestParams("name", "550e8400-e29b-41d4-a716-446655440000", {{"$name", TValueBuilder().Uuid(TUuidValue("550e8400-e29b-41d4-a716-446655440000")).Build()}});
         CommonTestParams("name", "\"{\"\"a\"\":10, \"\"b\"\":\"\"string\"\"}\"", {{"$name", TValueBuilder().Json("{\"a\":10, \"b\":\"string\"}").Build()}});
         CommonTestParams("name", "строка", {{"$name", TValueBuilder().OptionalUtf8("строка").Build()}});
@@ -125,7 +126,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().Float(1.183).Build()));
         CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().Double(1.183).Build()));
         CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().DyNumber("1.183").Build()));
-        CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().Decimal(TString("1.183")).Build()));
+        CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().Decimal(TDecimalValue("1.183", 22, 9)).Build()));
         CommonTestValue("name", "550e8400-e29b-41d4-a716-446655440000", MakeStruct("name", TValueBuilder().Uuid(TUuidValue("550e8400-e29b-41d4-a716-446655440000")).Build()));
         CommonTestValue("name", "\"{\"\"a\"\":10, \"\"b\"\":\"\"string\"\"}\"", MakeStruct("name", TValueBuilder().Json("{\"a\":10, \"b\":\"string\"}").Build()));
         CommonTestValue("name", "строка", MakeStruct("name", TValueBuilder().OptionalUtf8("строка").Build()));

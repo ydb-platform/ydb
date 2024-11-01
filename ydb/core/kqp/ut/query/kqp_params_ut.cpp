@@ -607,7 +607,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             .AddParam("$ParamUint64").Uint64(20).Build()
             .AddParam("$ParamFloat").Float(30.5).Build()
             .AddParam("$ParamDouble").Double(40.5).Build()
-            .AddParam("$ParamDecimal").Decimal(TDecimalValue("50.5")).Build()
+            .AddParam("$ParamDecimal").Decimal(TDecimalValue("50.5", 22, 9)).Build()
+            .AddParam("$ParamDecimal35").Decimal(TDecimalValue("655555555555555.5", 35, 10)).Build()
             .AddParam("$ParamDyNumber").DyNumber("60.5").Build()
             .AddParam("$ParamString").String("StringValue").Build()
             .AddParam("$ParamUtf8").Utf8("Utf8Value").Build()
@@ -668,6 +669,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             DECLARE $ParamFloat AS Float;
             DECLARE $ParamDouble AS Double;
             DECLARE $ParamDecimal AS Decimal(22, 9);
+            DECLARE $ParamDecimal35 AS Decimal(35, 10);
             DECLARE $ParamDyNumber AS DyNumber;
             DECLARE $ParamString AS String;
             DECLARE $ParamUtf8 AS Utf8;
@@ -701,6 +703,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 $ParamFloat AS ValueFloat,
                 $ParamDouble AS ValueDouble,
                 $ParamDecimal AS ValueDecimal,
+                $ParamDecimal35 AS ValueDecimal35,
                 $ParamDyNumber AS ValueDyNumber,
                 $ParamString AS ValueString,
                 $ParamUtf8 AS ValueUtf8,
@@ -726,13 +729,13 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         auto actual = ReformatYson(FormatResultSetYson(result.GetResultSet(0)));
         auto expected1 = ReformatYson(R"([[
-            %true;-5;5u;-8;8u;-10;10u;-20;20u;30.5;40.5;"50.5";".605e2";"StringValue";"Utf8Value";"[{Value=50}]";
+            %true;-5;5u;-8;8u;-10;10u;-20;20u;30.5;40.5;"50.5";"655555555555555.5";".605e2";"StringValue";"Utf8Value";"[{Value=50}]";
             "[{\"Value\":60}]";"[{\"Value\":70}]";18271u;1578755093u;1578863917000000u;3600;"2022-03-14,GMT";
             "2022-03-14T00:00:00,GMT";"2022-03-14T00:00:00.123000,GMT";["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
             [["Key2";20u];["Key1";10u]]
         ]])");
         auto expected2 = ReformatYson(R"([[
-            %true;-5;5u;-8;8u;-10;10u;-20;20u;30.5;40.5;"50.5";".605e2";"StringValue";"Utf8Value";"[{Value=50}]";
+            %true;-5;5u;-8;8u;-10;10u;-20;20u;30.5;40.5;"50.5";"655555555555555.5";".605e2";"StringValue";"Utf8Value";"[{Value=50}]";
             "[{\"Value\":60}]";"[{\"Value\":70}]";18271u;1578755093u;1578863917000000u;3600;"2022-03-14,GMT";
             "2022-03-14T00:00:00,GMT";"2022-03-14T00:00:00.123000,GMT";["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
             [["Key1";10u];["Key2";20u]]
@@ -779,6 +782,212 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
+
+    Y_UNIT_TEST_TWIN(Decimal, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE Table (
+                Key Int32,
+                Value22 Decimal(22,9),
+                Value35 Decimal(35,10),
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        auto execUpsertQuery = [&] (const TString& query, const NYdb::TParams& params) -> std::tuple<NYdb::EStatus, TString> {
+            if (QueryService) {
+                auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                return {result.GetStatus(), result.GetIssues().ToString()};
+            }
+            else {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                return {result.GetStatus(), result.GetIssues().ToString()};
+            }
+        };
+
+        auto execSelectQuery = [&] (const TString& query, const NYdb::TParams& params) -> std::tuple<NYdb::EStatus, TString, TResultSet> {
+            if (QueryService) {
+                auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                return {result.GetStatus(), result.GetIssues().ToString(), result.GetResultSet(0)};
+            }
+            else {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                return {result.GetStatus(), result.GetIssues().ToString(), result.GetResultSet(0)};
+            }
+        };
+
+        // Good case
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("123.321", 22, 9)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("555555555555555.1234567890", 35, 10)).Build()
+                .Build();
+
+            // All upsert parameters are declared
+            {
+                auto [status, issues] = execUpsertQuery(Q1_(R"(
+                    DECLARE $key AS Int32;
+                    DECLARE $value22 AS Decimal(22,9);
+                    DECLARE $value35 AS Decimal(35,10);
+
+                    UPSERT INTO Table (Key, Value22, Value35) VALUES
+                        ($key, $value22, $value35);
+                )"), upsertParams);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+            }
+            // No upsert parameters is declared
+            {
+                auto [status, issues] = execUpsertQuery(Q1_(R"(
+                    UPSERT INTO Table (Key, Value22, Value35) VALUES
+                        ($key, $value22, $value35);
+                )"), upsertParams);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+            }            
+
+            TString expected = R"([[[1];["123.321"];["555555555555555.123456789"]]])";
+            auto selectParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("123.321", 22, 9)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("555555555555555.1234567890", 35, 10)).Build()
+                .Build();
+
+            // All select parameters are declared
+            {
+                auto [status, issues, resultSet] = execSelectQuery(Q1_(R"(
+                    DECLARE $key AS Int32;
+                    DECLARE $value22 AS Decimal(22,9);
+                    DECLARE $value35 AS Decimal(35,10);
+
+                    SELECT * FROM Table WHERE Key = $key AND Value22 = $value22 AND Value35 = $value35;
+                )"), selectParams);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+                CompareYson(expected, FormatResultSetYson(resultSet));
+            }
+
+            // No select parameters is declared
+            {
+                auto [status, issues, resultSet] = execSelectQuery(Q1_(R"(
+                    SELECT * FROM Table WHERE Key = $key AND Value22 = $value22 AND Value35 = $value35;
+                )"), selectParams);
+                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+                CompareYson(expected, FormatResultSetYson(resultSet));
+            }
+        }
+
+        // Declare decimal params mismatch
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("123.321", 35, 10)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("555555555555555.1234567890", 35, 10)).Build()
+                .Build();
+
+            auto [status, issues] = execUpsertQuery(Q1_(R"(
+                DECLARE $key AS Int32;
+                DECLARE $value22 AS Decimal(22,9);
+                DECLARE $value35 AS Decimal(35,10);
+
+                UPSERT INTO Table (Key, Value22, Value35) VALUES
+                    ($key, $value22, $value35);
+            )"), upsertParams);
+            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Parameter $value22 type mismatch");
+        }
+
+        // All upsert parameters are declared, upsert decimal params mismatch
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("123.321", 35, 10)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("555555555555555.1234567890", 35, 10)).Build()
+                .Build();
+
+            auto [status, issues] = execUpsertQuery(Q1_(R"(
+                DECLARE $key AS Int32;
+                DECLARE $value22 AS Decimal(35,10);
+                DECLARE $value35 AS Decimal(35,10);
+
+                UPSERT INTO Table (Key, Value22, Value35) VALUES
+                    ($key, $value22, $value35);
+            )"), upsertParams);
+            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Failed to convert input columns types to scheme types");
+        }
+
+        // No upsert parameters is declared, upsert decimal params mismatch
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("123.321", 35, 10)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("555555555555555.1234567890", 35, 10)).Build()
+                .Build();
+
+            auto [status, issues] = execUpsertQuery(Q1_(R"(
+                UPSERT INTO Table (Key, Value22, Value35) VALUES
+                    ($key, $value22, $value35);
+            )"), upsertParams);
+            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Failed to convert input columns types to scheme types");
+        }
+        // Good case: Upsert overflowed Decimal
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1001).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("12345678901234567890.1234567891", 22, 9)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("1234567890123456789012345678901234567890.1234567891", 35, 10)).Build()
+                .Build();
+
+            auto [status, issues] = execUpsertQuery(Q1_(R"(
+                DECLARE $key AS Int32;
+                DECLARE $value22 AS Decimal(22,9);
+                DECLARE $value35 AS Decimal(35,10);
+
+                UPSERT INTO Table (Key, Value22, Value35) VALUES
+                    ($key, $value22, $value35);
+            )"), upsertParams);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+        }
+        // Good case: Upsert inf Decimal
+        {
+            auto upsertParams = tableClient.GetParamsBuilder()
+                .AddParam("$key").Int32(1002).Build()
+                .AddParam("$value22").Decimal(TDecimalValue("inf", 22, 9)).Build()
+                .AddParam("$value35").Decimal(TDecimalValue("inf", 35, 10)).Build()
+                .Build();
+
+            auto [status, issues] = execUpsertQuery(Q1_(R"(
+                DECLARE $key AS Int32;
+                DECLARE $value22 AS Decimal(22,9);
+                DECLARE $value35 AS Decimal(35,10);
+
+                UPSERT INTO Table (Key, Value22, Value35) VALUES
+                    ($key, $value22, $value35);
+            )"), upsertParams);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+        }        
+        // Good case: select overflowed and inf decimal
+        {
+            auto emptyParams = tableClient.GetParamsBuilder().Build();
+            auto [status, issues, resultSet] = execSelectQuery(Q1_(R"(
+                SELECT * FROM Table WHERE Key IN (1001, 1002);
+            )"), emptyParams);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
+            TString expected = R"([
+                [[1001];["inf"];["inf"]];
+                [[1002];["inf"];["inf"]]
+            ])";
+            TString actual = FormatResultSetYson(resultSet);
+            CompareYson(expected, actual);
+        }
+    }
+
 }
 
 } // namespace NKqp

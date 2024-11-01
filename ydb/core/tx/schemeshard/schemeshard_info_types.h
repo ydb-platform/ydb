@@ -3413,8 +3413,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         auto& billed = indexInfo->Billed;
         billed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
         };
@@ -3462,8 +3462,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         auto& processed = shardStatus.Processed;
         processed = {
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadBytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
         };

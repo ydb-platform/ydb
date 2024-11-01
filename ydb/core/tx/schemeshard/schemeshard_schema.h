@@ -1316,8 +1316,8 @@ struct Schema : NIceDb::Schema {
 
         struct MaxRetries : Column<27, NScheme::NTypeIds::Uint32> {};
 
-        struct UploadRowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
-        struct UploadBytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
 
         struct BuildKind : Column<30, NScheme::NTypeIds::Uint32> {};
 
@@ -1366,8 +1366,8 @@ struct Schema : NIceDb::Schema {
             UnlockTxDone,
             CancelRequest,
             MaxRetries,
-            UploadRowsBilled,
-            UploadBytesBilled,
+            RowsBilled,
+            BytesBilled,
             BuildKind,
             AlterMainTableTxId,
             AlterMainTableTxStatus,
@@ -1446,8 +1446,8 @@ struct Schema : NIceDb::Schema {
         struct Message : Column<7, NScheme::NTypeIds::Utf8> {};
         struct UploadStatus : Column<8, NScheme::NTypeIds::Uint32> { using Type = Ydb::StatusIds::StatusCode; };
 
-        struct UploadRowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
-        struct UploadBytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ RowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct /*Upload*/ BytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
 
         struct ReadRowsProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<12, NScheme::NTypeIds::Uint64> {};
@@ -1462,8 +1462,8 @@ struct Schema : NIceDb::Schema {
             Status,
             Message,
             UploadStatus,
-            UploadRowsProcessed,
-            UploadBytesProcessed,
+            RowsProcessed,
+            BytesProcessed,
             ReadRowsProcessed,
             ReadBytesProcessed
         >;

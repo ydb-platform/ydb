@@ -142,8 +142,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         TString id = TStringBuilder()
             << buildId << "-"
             << buildInfo.TablePathId.OwnerId << "-" << buildInfo.TablePathId.LocalPathId << "-"
-            << billed.GetUploadRows() + billed.GetReadRows() << "-" << billed.GetUploadBytes() + billed.GetReadBytes() << "-"
-            << processed.GetUploadRows() + processed.GetReadRows() << "-" << processed.GetUploadBytes() + processed.GetReadBytes();
+            << billed.GetUploadRows() << "-" << billed.GetReadRows() << "-"
+            << billed.GetUploadBytes() << "-" << billed.GetReadBytes() << "-"
+            << processed.GetUploadRows() << "-" << processed.GetReadRows() << "-"
+            << processed.GetUploadBytes() << "-" << processed.GetReadBytes();
 
         NIceDb::TNiceDb db(txc.DB);
 

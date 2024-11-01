@@ -210,8 +210,8 @@ void TSchemeShard::PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexB
 
 void TSchemeShard::PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::UploadRowsBilled>(indexInfo.Billed.GetUploadRows()),
-        NIceDb::TUpdate<Schema::IndexBuild::UploadBytesBilled>(indexInfo.Billed.GetUploadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::RowsBilled>(indexInfo.Billed.GetUploadRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::BytesBilled>(indexInfo.Billed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuild::ReadRowsBilled>(indexInfo.Billed.GetReadRows()),
         NIceDb::TUpdate<Schema::IndexBuild::ReadBytesBilled>(indexInfo.Billed.GetReadBytes())
     );
@@ -223,8 +223,8 @@ void TSchemeShard::PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBu
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::Message>(shardStatus.DebugMessage),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadStatus>(shardStatus.UploadStatus),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadRowsProcessed>(shardStatus.Processed.GetUploadRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadBytesProcessed>(shardStatus.Processed.GetUploadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::RowsProcessed>(shardStatus.Processed.GetUploadRows()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::BytesProcessed>(shardStatus.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
     );
@@ -246,8 +246,8 @@ void TSchemeShard::PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuild
     shardStatus.Processed = {};
     db.Table<Schema::IndexBuildShardStatus>().Key(buildId, shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update(
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::Status>(shardStatus.Status),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadRowsProcessed>(shardStatus.Processed.GetUploadRows()),
-        NIceDb::TUpdate<Schema::IndexBuildShardStatus::UploadBytesProcessed>(shardStatus.Processed.GetUploadBytes()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::RowsProcessed>(shardStatus.Processed.GetUploadRows()),
+        NIceDb::TUpdate<Schema::IndexBuildShardStatus::BytesProcessed>(shardStatus.Processed.GetUploadBytes()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadRowsProcessed>(shardStatus.Processed.GetReadRows()),
         NIceDb::TUpdate<Schema::IndexBuildShardStatus::ReadBytesProcessed>(shardStatus.Processed.GetReadBytes())
     );

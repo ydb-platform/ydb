@@ -222,14 +222,15 @@ public:
             }
         }
         if (!cookieHeader.empty()) {
-            TString obfuscated = TString(cookieHeader);
-            NHttp::TCookies cookies(headers.Get("Cookie"));
-            for (auto& [name, value] : cookies.Cookies) {
-                TString obfuscatedValue = NKikimr::MaskTicket(value);
-                auto posValue = obfuscated.find(value);
-                if (posValue != TString::npos) {
-                    obfuscated.replace(posValue, value.size(), obfuscatedValue);
+            TStringBuf cookieParser(cookieHeader);
+            TStringBuilder obfuscated;
+            for (TStringBuf param = cookieParser.NextTok(';'); !param.empty(); param = cookieParser.NextTok(';')) {
+                param.SkipPrefix(" ");
+                TStringBuf name = param.NextTok('=');
+                if (!obfuscated.empty()) {
+                    obfuscated << ' ';
                 }
+                obfuscated << name << '=' << NKikimr::MaskTicket(param) << ';';
             }
             auto pos = data.find(cookieHeader);
             if (pos != TString::npos) {
@@ -237,16 +238,12 @@ public:
             }
         }
         if (!setCookieHeader.empty()) {
-            TStringBuf setCookieParser(setCookieHeader);
-            TStringBuf name = setCookieParser.NextTok('=');
-            TStringBuf value = setCookieParser.NextTok(';');
+            TStringBuf cookieParser(setCookieHeader);
+            TStringBuf name = cookieParser.NextTok('=');
+            TStringBuf value = cookieParser.NextTok(';');
             if (!name.empty()) {
-                TString obfuscatedValue = NKikimr::MaskTicket(value);
-                TString obfuscated = TString(setCookieHeader);
-                auto posValue = obfuscated.find(value);
-                if (posValue != TString::npos) {
-                    obfuscated.replace(posValue, value.size(), obfuscatedValue);
-                }
+                TStringBuilder obfuscated;
+                obfuscated << name << '=' << NKikimr::MaskTicket(value) << ';' << cookieParser;
                 auto pos = data.find(setCookieHeader);
                 if (pos != TString::npos) {
                     data.replace(pos, setCookieHeader.size(), obfuscated);

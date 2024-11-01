@@ -3,7 +3,7 @@
 #include "yql_user_data.h"
 #include <ydb/library/yql/providers/common/proto/udf_resolver.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>

@@ -2,7 +2,7 @@
 
 #include "lexer.h"
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

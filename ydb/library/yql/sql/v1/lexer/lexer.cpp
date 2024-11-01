@@ -1,6 +1,6 @@
 #include "lexer.h"
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
 #include <ydb/library/yql/parser/proto_ast/antlr3/proto_ast_antlr3.h>
 #include <ydb/library/yql/parser/proto_ast/antlr4/proto_ast_antlr4.h>

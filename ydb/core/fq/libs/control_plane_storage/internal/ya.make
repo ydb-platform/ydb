@@ -29,7 +29,7 @@ PEERDIR(
     ydb/core/mon
     ydb/library/protobuf_printer
     ydb/library/security
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/utils
     ydb/public/lib/fq
     ydb/public/sdk/cpp/client/ydb_scheme

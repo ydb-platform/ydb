@@ -14,7 +14,7 @@
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>

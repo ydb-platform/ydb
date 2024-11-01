@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <library/cpp/yson/consumer.h>

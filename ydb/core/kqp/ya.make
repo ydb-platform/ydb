@@ -38,7 +38,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/yql/core/services/mounts
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/utils/actor_log
     ydb/library/yql/utils/log
     ydb/public/api/protos

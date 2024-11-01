@@ -17,7 +17,7 @@
 
 //#include <yql/tools/yqlworker/dq/worker_manager/benchmark.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 

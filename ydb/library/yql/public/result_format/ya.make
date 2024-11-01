@@ -12,7 +12,7 @@ PEERDIR(
     library/cpp/yson
     library/cpp/yson/node
     library/cpp/string_utils/base64
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/utils
 )
 

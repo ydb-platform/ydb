@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 SRCS(

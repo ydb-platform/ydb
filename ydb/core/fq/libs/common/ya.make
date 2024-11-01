@@ -19,7 +19,7 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/events
     ydb/library/yql/providers/common/structured_token
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/public/api/protos
 )
 

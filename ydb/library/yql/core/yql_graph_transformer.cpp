@@ -1,7 +1,7 @@
 #include "yql_graph_transformer.h"
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 namespace NYql {
 

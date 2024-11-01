@@ -11,7 +11,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/table_creator/table_creator.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>

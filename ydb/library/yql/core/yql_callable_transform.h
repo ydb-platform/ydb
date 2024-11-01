@@ -6,8 +6,8 @@
 #include "yql_callable_names.h"
 
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/threading/future/future.h>

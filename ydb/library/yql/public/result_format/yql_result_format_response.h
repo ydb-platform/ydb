@@ -2,7 +2,7 @@
 
 #include "yql_result_format_common.h"
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/yson/node/node.h>
 

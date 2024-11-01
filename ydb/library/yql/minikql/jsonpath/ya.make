@@ -29,7 +29,7 @@ PEERDIR(
     ydb/library/rewrapper
     ydb/library/binary_json
     ydb/library/yql/minikql/dom
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/public/udf
     ydb/library/yql/ast
     ydb/library/yql/utils

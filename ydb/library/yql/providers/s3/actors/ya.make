@@ -44,7 +44,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/range_helpers
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/public/types
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/utils

@@ -20,7 +20,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/resource
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/parser/pg_catalog/proto
     ydb/library/yql/protos
     library/cpp/digest/md5

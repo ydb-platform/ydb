@@ -10,7 +10,7 @@
 #include <ydb/library/yql/core/sql_types/simple_types.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/public/issue/yql_issue_id.h>
+#include <yql/essentials/public/issue/yql_issue_id.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/charset/ci_string.h>

@@ -21,7 +21,7 @@ PEERDIR(
     ydb/core/kqp/workload_service/common
     ydb/core/protos
     ydb/library/db_pool/protos
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/utils
     ydb/library/yql/utils/actors
     ydb/public/api/grpc

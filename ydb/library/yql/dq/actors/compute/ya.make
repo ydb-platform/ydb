@@ -28,7 +28,7 @@ PEERDIR(
     ydb/library/yql/dq/tasks
     ydb/library/yql/minikql
     ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/core/quoter/public
 )
 

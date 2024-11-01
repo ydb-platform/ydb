@@ -14,7 +14,7 @@ PEERDIR(
     ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/library/yql/providers/common/proto
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/utils
     ydb/library/yql/utils/log
 )

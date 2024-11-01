@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/resource
     contrib/libs/protobuf
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/core/issue/protos
 )
 

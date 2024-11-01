@@ -33,8 +33,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/worker_manager/interface
     ydb/library/yql/providers/ydb/provider
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
     ydb/library/yql/sql/settings
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/ydb_table

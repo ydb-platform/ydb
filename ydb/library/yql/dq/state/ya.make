@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/core/issue/protos
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/proto

@@ -61,7 +61,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/minikql
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

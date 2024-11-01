@@ -80,8 +80,8 @@ PEERDIR(
     ydb/library/yql/providers/pq/task_meta
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/provider
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue
+    yql/essentials/public/issue/protos
     ydb/library/yql/sql/settings
     ydb/library/yql/utils
     ydb/library/yql/utils/actor_log

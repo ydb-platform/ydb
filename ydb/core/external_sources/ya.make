@@ -21,7 +21,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/common
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/path_generator
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/public/sdk/cpp/client/ydb_params
     ydb/public/sdk/cpp/client/ydb_value
 )

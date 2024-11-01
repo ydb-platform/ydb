@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/tasks_packer
     ydb/library/yql/providers/common/token_accessor/client
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/protos

@@ -5,7 +5,7 @@ PEERDIR(
     ydb/library/yql/minikql/dom
     ydb/library/yql/minikql/invoke_builtins/llvm14
     ydb/library/yql/minikql/jsonpath
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql/pg_dummy
 )

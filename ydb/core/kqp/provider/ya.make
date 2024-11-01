@@ -53,7 +53,7 @@ PEERDIR(
     ydb/library/yql/providers/result/provider
     ydb/library/yql/sql
     ydb/library/ydb_issue/proto
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/utils/log
 )
 

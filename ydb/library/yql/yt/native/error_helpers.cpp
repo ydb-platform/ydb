@@ -2,7 +2,7 @@
 
 #include <library/cpp/yson/writer.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_id.h>
+#include <yql/essentials/public/issue/yql_issue_id.h>
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 

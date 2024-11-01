@@ -22,7 +22,7 @@ PEERDIR(
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
     ydb/library/yql/core/file_storage
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/utils
     ydb/library/yql/utils/log
     ydb/library/yql/utils/threading

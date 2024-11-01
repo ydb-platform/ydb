@@ -9,7 +9,7 @@
 #include <ydb/library/yql/public/udf/udf_counter.h>
 #include <ydb/library/yql/public/udf/udf_registrator.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <library/cpp/yson/node/node.h>
 
 #include <library/cpp/logger/priority.h>

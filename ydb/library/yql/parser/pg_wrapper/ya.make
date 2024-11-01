@@ -84,7 +84,7 @@ PEERDIR(
     ydb/library/yql/parser/pg_catalog
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/providers/common/codec
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/public/decimal

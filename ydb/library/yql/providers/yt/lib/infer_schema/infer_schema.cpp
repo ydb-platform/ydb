@@ -1,7 +1,7 @@
 #include "infer_schema.h"
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/yexception.h>

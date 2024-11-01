@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/json/json_value.h>
 #include <ydb/library/rewrapper/re.h>

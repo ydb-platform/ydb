@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_id.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_id.h>
 
 #ifdef _win_
 #ifdef GetMessage

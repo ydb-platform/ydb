@@ -8,7 +8,7 @@
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/core/client/minikql_compile/compile_context.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr {

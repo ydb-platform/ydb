@@ -348,7 +348,7 @@ TString MakeCreateExternalDataSourceQuery(
 
 TMaybe<TString> DropSecretObjectQuery(const TString& name, const TString& folderId, const TVector<TString>& externalSourcesAccessSIDs) {
     const TString secretName1 = MakeSecretKeyName("f1", folderId, name);
-    const TString secretName2 = MakeSecretKeyName("f1", folderId, name);
+    const TString secretName2 = MakeSecretKeyName("f2", folderId, name);
     return TStringBuilder{}
             << MakeDropSecretAccessObjectsSql(secretName1, externalSourcesAccessSIDs)
             << MakeDropSecretObjectSql(secretName1)

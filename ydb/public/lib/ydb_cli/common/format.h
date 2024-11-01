@@ -104,7 +104,8 @@ private:
 
 class TResultSetPrinter {
 public:
-    TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; }, IOutputStream& output = Cout, size_t maxWidth = 0);
+    TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted = []() { return false; },
+        IOutputStream& output = Cout, size_t maxWidth = 0, bool csvWithHeader = false);
     ~TResultSetPrinter();
 
     void Print(const TResultSet& resultSet);
@@ -119,7 +120,7 @@ private:
 
     void PrintPretty(const TResultSet& resultSet);
     void PrintJsonArray(const TResultSet& resultSet, EBinaryStringEncoding encoding);
-    void PrintCsv(const TResultSet& resultSet, const char* delim, bool withHeader);
+    void PrintCsv(const TResultSet& resultSet, const char* delim);
 
     bool FirstPart = true;
     bool PrintedSomething = false;
@@ -128,6 +129,7 @@ private:
     std::unique_ptr<TResultSetParquetPrinter> ParquetPrinter;
     IOutputStream& Output;
     size_t MaxWidth;
+    bool CsvWithHeader;
 };
 
 class TQueryPlanPrinter {

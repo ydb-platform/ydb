@@ -410,8 +410,6 @@ public:
             return;
         }
 
-        EnsureStarted();
-
         TConfigEvent event{
             .Instant = GetCpuInstant(),
             .Config = std::move(config),
@@ -421,6 +419,7 @@ public:
         auto future = event.Promise.ToFuture();
 
         PushEvent(std::move(event));
+        EnsureStarted();
 
         DequeueExecutor_->ScheduleOutOfBand();
 

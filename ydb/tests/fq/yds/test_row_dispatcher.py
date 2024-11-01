@@ -294,7 +294,10 @@ class TestPqRowDispatcher(TestYdsBase):
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL))
-                WHERE time > 101UL or event = "event666";'''
+                WHERE time > 101UL and 
+                      data = "hello2" and 
+                    event IS NOT DISTINCT FROM "event2" and
+                    event IS DISTINCT FROM "event1";'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)

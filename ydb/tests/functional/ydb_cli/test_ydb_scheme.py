@@ -67,4 +67,4 @@ class TestSchemeDescribe:
                 ydb_cluster.nodes[1], database_path, ["scheme", "describe", "--format", "proto-json-base64", view]
             )
             description = output.splitlines()[1]
-            assert json.loads(description)["query_text"] == query
+            assert json.loads(description)["view_description"]["query_text"] == query

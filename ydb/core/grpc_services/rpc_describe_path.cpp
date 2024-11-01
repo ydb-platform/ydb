@@ -125,6 +125,17 @@ private:
                     for (const auto& child : pathDescription.GetChildren()) {
                         ConvertDirectoryEntry(child, result.add_children(), false);
                     }
+                } else {
+                    // fill type-specific description
+                    switch (pathDescription.GetSelf().GetPathType()) {
+                        case NKikimrSchemeOp::EPathTypeView: {
+                            Ydb::Scheme::ViewDescription& viewDescription = *result.mutable_view_description();
+                            *viewDescription.mutable_query_text() = pathDescription.GetViewDescription().GetQueryText();
+                            break;
+                        }
+                        default:
+                            break;
+                    }
                 }
                 return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
             }

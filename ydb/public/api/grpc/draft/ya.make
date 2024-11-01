@@ -17,7 +17,6 @@ SRCS(
     ydb_object_storage_v1.proto
     ydb_replication_v1.proto
     ydb_tablet_v1.proto
-    ydb_view_v1.proto
     ydb_ymq_v1.proto
 )
 

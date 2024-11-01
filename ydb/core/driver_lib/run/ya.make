@@ -175,7 +175,6 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/replication
     ydb/services/tablet
-    ydb/services/view
     ydb/services/ydb
 )
 

@@ -273,8 +273,6 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeCoordinationNode(driver);
     case NScheme::ESchemeEntryType::Replication:
         return DescribeReplication(driver);
-    case NScheme::ESchemeEntryType::View:
-        return DescribeView(driver);
     default:
         return DescribeEntryDefault(entry);
     }
@@ -583,19 +581,6 @@ int TCommandDescribe::DescribeReplication(const TDriver& driver) {
     ThrowOnError(result);
 
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintReplicationResponsePretty);
-}
-
-int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
-    Cout << "\nQuery text:\n" << result.GetViewDescription().GetQueryText() << Endl;
-    return EXIT_SUCCESS;
-}
-
-int TCommandDescribe::DescribeView(const TDriver& driver) {
-    NView::TViewClient client(driver);
-    auto result = client.DescribeView(Path, {}).ExtractValueSync();
-    ThrowOnError(result);
-
-    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
 }
 
 namespace {

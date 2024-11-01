@@ -14,7 +14,7 @@ class TDatabase;
 
 namespace NKikimr::NOlap {
 
-class TColumnChunkLoadContext;
+class TColumnChunkLoadContextV1;
 class TIndexChunkLoadContext;
 class TInsertedData;
 class TCommittedData;
@@ -30,6 +30,13 @@ class IDbWrapper {
 public:
     virtual ~IDbWrapper() = default;
 
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const = 0;
+    const IBlobGroupSelector& GetDsGroupSelectorVerified() const {
+        const auto* result = GetDsGroupSelector();
+        AFL_VERIFY(result);
+        return *result;
+    }
+
     virtual void Insert(const TInsertedData& data) = 0;
     virtual void Commit(const TCommittedData& data) = 0;
     virtual void Abort(const TInsertedData& data) = 0;
@@ -41,7 +48,7 @@ public:
 
     virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) = 0;
     virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
-    virtual bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) = 0;
+    virtual bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) = 0;
 
     virtual void WritePortion(const NOlap::TPortionInfo& portion) = 0;
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) = 0;
@@ -78,7 +85,7 @@ public:
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    bool LoadColumns(const std::function<void(const TColumnChunkLoadContext&)>& callback) override;
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
@@ -88,6 +95,10 @@ public:
     bool LoadCounters(const std::function<void(ui32 id, ui64 value)>& callback) override;
 
     virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override;
+
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return DsGroupSelector;
+    }
 
 private:
     NTable::TDatabase& Database;

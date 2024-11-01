@@ -18,7 +18,7 @@ TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::T
     return TConclusionStatus::Success();
 }
 
-TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context) {
+TChunkMeta::TChunkMeta(const TColumnChunkLoadContextV1& context) {
     DeserializeFromProto(context.GetMetaProto()).Validate();
 }
 
@@ -33,11 +33,11 @@ NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     return meta;
 }
 
-TColumnRecord::TColumnRecord(const TBlobRangeLink16::TLinkId blobLinkId, const TColumnChunkLoadContext& loadContext)
+TColumnRecord::TColumnRecord(const TColumnChunkLoadContextV1& loadContext)
     : Meta(loadContext)
     , ColumnId(loadContext.GetAddress().GetColumnId())
     , Chunk(loadContext.GetAddress().GetChunk())
-    , BlobRange(loadContext.GetBlobRange().BuildLink(blobLinkId)) {
+    , BlobRange(loadContext.GetBlobRange()) {
 }
 
 TColumnRecord::TColumnRecord(const TChunkAddress& address, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column)

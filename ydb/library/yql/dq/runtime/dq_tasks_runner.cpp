@@ -240,10 +240,10 @@ public:
 
         if (Context.TypeEnv) {
             YQL_ENSURE(std::addressof(alloc) == std::addressof(TypeEnv().GetAllocator()));
-        } else {            
+        } else {
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
-        
+
     }
 
     ~TDqTaskRunner() {
@@ -434,17 +434,23 @@ public:
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
-            auto ticket = cache->FindOrSubscribe(program.GetRaw());
-            if (!ticket.HasFuture()) {
-                entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
-                if (canBeCached && entry->Pattern->GetSuitableForCache()) {
-                    cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
-                    ticket.Close();
-                } else {
-                    cache->IncNotSuitablePattern();
+            auto future = cache->FindOrSubscribe(program.GetRaw());
+            if (!future.HasValue()) {
+                try {
+                    entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
+                    if (canBeCached && entry->Pattern->GetSuitableForCache()) {
+                        cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
+                    } else {
+                        cache->IncNotSuitablePattern();
+                        cache->NotifyPatternMissing(program.GetRaw());
+                    }
+                } catch (...) {
+                    // TODO: not sure if there may be exceptions in the first place.
+                    cache->NotifyPatternMissing(program.GetRaw());
+                    throw;
                 }
             } else {
-                entry = ticket.GetValueSync();
+                entry = future.GetValueSync();
             }
         }
 
@@ -828,7 +834,7 @@ public:
     const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
         return AllocatedHolder->ProgramParsed.CompGraph->GetHolderFactory();
     }
-    
+
     NKikimr::NMiniKQL::TScopedAlloc& GetAllocator() const override {
         return Alloc();
     }

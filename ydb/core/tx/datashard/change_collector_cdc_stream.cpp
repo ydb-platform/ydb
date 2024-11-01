@@ -53,7 +53,7 @@ namespace {
         Y_ABORT_UNLESS(cells.size() == types.size());
 
         for (TPos pos = 0; pos < cells.size(); ++pos) {
-            result.emplace_back(tags.at(pos), ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), types.at(pos)));
+            result.emplace_back(tags.at(pos), ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), types.at(pos).GetTypeId()));
         }
 
         return result;

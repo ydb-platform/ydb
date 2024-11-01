@@ -153,7 +153,7 @@ public:
         TVector<TRawTypeValue> key;
         key.reserve(keyCellVec.GetCells().size());
         for (size_t i = 0; i < keyCellVec.GetCells().size(); ++i) {
-            key.emplace_back(keyCellVec.GetCells()[i].AsRef(), userTable.KeyColumnTypes[i]);
+            key.emplace_back(keyCellVec.GetCells()[i].AsRef(), userTable.KeyColumnTypes[i].GetTypeId());
         }
 
         NTable::ERowOp rop = NTable::ERowOp::Absent;
@@ -241,7 +241,7 @@ public:
                     TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " is updating a primary key column " << tag);
                 return false;
             }
-            update.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type));
+            update.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type.GetTypeId()));
         }
         return true;
     }

@@ -90,7 +90,7 @@ void TDataShardUserDb::UpsertRow(
         }
 
         auto addExtendedOp = [&scheme, &tableInfo, &extendedOps](const ui64 columnTag, const ui64& columnValue) {
-            const NScheme::TTypeInfo vtype = scheme.GetColumnInfo(tableInfo, columnTag)->PType;
+            const NScheme::TTypeId vtype = scheme.GetColumnInfo(tableInfo, columnTag)->PType.GetTypeId();
             const char* ptr = static_cast<const char*>(static_cast<const void*>(&columnValue));
             TRawTypeValue rawTypeValue(ptr, sizeof(ui64), vtype);
             NIceDb::TUpdateOp extOp(columnTag, NTable::ECellOp::Set, rawTypeValue);

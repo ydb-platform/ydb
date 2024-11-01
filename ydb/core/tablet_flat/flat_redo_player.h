@@ -258,27 +258,12 @@ namespace NRedo {
             return buf - bufStart;
         }
 
-        NScheme::TTypeInfo GetTypeInfoFromRedoLog(ui16 typeId) {
-            switch (typeId) {
-            case NScheme::NTypeIds::Pg:
-                // TODO: support pg types
-                // Size is not known
-                Y_ABORT_UNLESS(false, "pg types are not supported");
-            case NScheme::NTypeIds::Decimal:
-                // The precision/scale are not necessary
-                // because only size is important
-                return NScheme::TTypeInfo(NScheme::TDecimalType::Default());
-            default:
-                return NScheme::TTypeInfo(typeId);
-            }
-        }
-
         ui32 ReadValue(const char* buf, ui32 maxSz, TRawTypeValue& val)
         {
             Y_ABORT_UNLESS(maxSz >= sizeof(TValue), "Buffer to small");
             const TValue* vp = (const TValue*)buf;
             Y_ABORT_UNLESS(maxSz >= sizeof(TValue) + vp->Size, "Value size execeeds the buffer size");
-            val = vp->IsNull() ? TRawTypeValue() : TRawTypeValue(vp + 1, vp->Size, GetTypeInfoFromRedoLog(vp->TypeId));
+            val = vp->IsNull() ? TRawTypeValue() : TRawTypeValue(vp + 1, vp->Size, vp->TypeId);
             return sizeof(TValue) + vp->Size;
         }
 
@@ -301,7 +286,7 @@ namespace NRedo {
             const TUpdate* up = (const TUpdate*)buf;
             Y_ABORT_UNLESS(maxSz >= sizeof(TUpdate) + up->Val.Size, "Value size execeeds the buffer size");
             bool null = TCellOp::HaveNoPayload(up->CellOp) || up->Val.IsNull();
-            uo = TUpdateOp(up->Tag, up->CellOp, null ? TRawTypeValue() : TRawTypeValue(up + 1, up->Val.Size, GetTypeInfoFromRedoLog(up->Val.TypeId)));
+            uo = TUpdateOp(up->Tag, up->CellOp, null ? TRawTypeValue() : TRawTypeValue(up + 1, up->Val.Size, up->Val.TypeId));
 
             Y_ABORT_UNLESS(up->CellOp == ELargeObj::Inline || (up->CellOp == ELargeObj::Extern && up->Val.Size == sizeof(ui32)));
 

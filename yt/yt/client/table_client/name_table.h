@@ -37,7 +37,7 @@ public:
     TStringBuf GetName(int id) const;
     TStringBuf GetNameOrThrow(int id) const;
 
-    std::vector<TString> GetNames() const;
+    std::vector<std::string> GetNames() const;
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
@@ -46,7 +46,7 @@ private:
 
     // String values are owned by IdToName_.
     // NB: Names may be SSO-strings, using a deque to avoid string view invalidation.
-    std::deque<TString> IdToName_;
+    std::deque<std::string> IdToName_;
     THashMap<TStringBuf, int> NameToId_;
     i64 ByteSize_ = 0;
 
@@ -97,7 +97,7 @@ private:
 
     // String values are owned by Names_
     // NB: Names may be SSO-strings, using a deque to avoid string view invalidation
-    mutable std::deque<TString> Names_;
+    mutable std::deque<std::string> Names_;
     mutable THashMap<TStringBuf, int> NameToId_;
 
 };

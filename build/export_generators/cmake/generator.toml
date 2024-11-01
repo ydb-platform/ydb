@@ -47,6 +47,10 @@ copy=[
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
 merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
 
+[targets.EXTRA_ONLY]
+template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
+merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }
+
 [targets.add_executable]
 template={ path="dir_cmake_lists.jinja", dest="CMakeLists{PLATFORM}.txt" }
 merge_platform_template={ path="merge_platforms_cmake_lists.jinja", dest="CMakeLists.txt" }

@@ -109,7 +109,7 @@ void TCheckPermissionCommand::Register(TRegistrar registrar)
     registrar.Parameter("user", &TThis::User);
     registrar.Parameter("permission", &TThis::Permission);
     registrar.Parameter("path", &TThis::Path);
-    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<std::string>>>(
         "columns",
         [] (TThis* command) -> auto& {
             return command->Options.Columns;

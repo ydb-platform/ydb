@@ -1,74 +1,96 @@
 #include "object.h"
-#include "behaviour.h"
-
-#include <ydb/core/tx/tiering/tier/checker.h>
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/uri/uri.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 
-NMetadata::IClassBehaviour::TPtr TTierConfig::GetBehaviour() {
-    static std::shared_ptr<TTierConfigBehaviour> result = std::make_shared<TTierConfigBehaviour>();
-    return result;
-}
-
-NJson::TJsonValue TTierConfig::GetDebugJson() const {
-    NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue(TDecoder::TierName, TierName);
-    NProtobufJson::Proto2Json(ProtoConfig, result.InsertValue(TDecoder::TierConfig, NJson::JSON_MAP));
-    return result;
-}
-
-bool TTierConfig::IsSame(const TTierConfig& item) const {
-    return TierName == item.TierName && ProtoConfig.SerializeAsString() == item.ProtoConfig.SerializeAsString();
-}
-
-bool TTierConfig::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r) {
-    if (!decoder.Read(decoder.GetTierNameIdx(), TierName, r)) {
-        return false;
-    }
-    if (!decoder.ReadDebugProto(decoder.GetTierConfigIdx(), ProtoConfig, r)) {
-        return false;
-    }
-    return ProtoConfig.HasObjectStorage();
-}
-
-NMetadata::NInternal::TTableRecord TTierConfig::SerializeToRecord() const {
-    NMetadata::NInternal::TTableRecord result;
-    result.SetColumn(TDecoder::TierName, NMetadata::NInternal::TYDBValue::Utf8(TierName));
-    result.SetColumn(TDecoder::TierConfig, NMetadata::NInternal::TYDBValue::Utf8(ProtoConfig.DebugString()));
-    return result;
-}
-
-NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const {
-    auto config = ProtoConfig.GetObjectStorage();
+NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const {
+    auto config = ProtoConfig;
     if (secrets) {
-        {
-            auto value = secrets->GetSecretValue(GetAccessKey());
-            if (value.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_TIERING)("error", "invalid_secret")("object", "access_key")("reason", value.GetErrorMessage());
-            }
-            config.SetAccessKey(value.DetachResult());
+        if (!secrets->GetSecretValue(GetAccessKey(), *config.MutableAccessKey())) {
+            AFL_ERROR(NKikimrServices::TX_TIERING)("error", "cannot_read_access_key")("secret", GetAccessKey().DebugString());
         }
-        {
-            auto value = secrets->GetSecretValue(GetSecretKey());
-            if (value.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_TIERING)("error", "invalid_secret")("object", "secret_key")("reason", value.GetErrorMessage());
-            }
-            config.SetSecretKey(value.DetachResult());
+        if (!secrets->GetSecretValue(GetSecretKey(), *config.MutableSecretKey())) {
+            AFL_ERROR(NKikimrServices::TX_TIERING)("error", "cannot_read_secret_key")("secret", GetSecretKey().DebugString());
         }
     }
     return config;
+}
+
+bool TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto) {
+    if (!proto.GetAuth().HasAws()) {
+        return false;
+    }
+
+    // TODO fix secret owner
+    {
+        auto makeSecretId = [](const TStringBuf& secret) -> TString {
+            return NMetadata::NSecret::TSecretId("a", secret).SerializeToString();   // ... and here
+        };
+        ProtoConfig.SetSecretKey(makeSecretId(proto.GetAuth().GetAws().GetAwsAccessKeyIdSecretName()));
+        ProtoConfig.SetAccessKey(makeSecretId(proto.GetAuth().GetAws().GetAwsSecretAccessKeySecretName()));
+    }
+
+    NUri::TUri url;
+    if (url.Parse(proto.GetLocation()) != NUri::TState::EParsed::ParsedOK) {
+        return false;
+    }
+
+    switch (url.GetScheme()) {
+        case NUri::TScheme::SchemeEmpty:
+            break;
+        case NUri::TScheme::SchemeHTTP:
+            ProtoConfig.SetScheme(::NKikimrSchemeOp::TS3Settings_EScheme_HTTP);
+            break;
+        case NUri::TScheme::SchemeHTTPS:
+            ProtoConfig.SetScheme(::NKikimrSchemeOp::TS3Settings_EScheme_HTTPS);
+            break;
+        default:
+            return false;
+    }
+
+    {
+        TStringBuf endpoint;
+        TStringBuf bucket;
+
+        TStringBuf host = url.GetHost();
+        TStringBuf path = url.GetField(NUri::TField::FieldPath);
+        if (path.StartsWith("/") && path.Size() > 1) {
+            bucket = path.Skip(1);
+            if (bucket.EndsWith("/")) {
+                bucket = bucket.Chop(1);
+            }
+            if (bucket.Contains("/")) {
+                return false;
+            }
+            endpoint = host;
+        } else {
+            if (!path.TrySplit('.', endpoint, bucket)) {
+                return false;
+            }
+        }
+
+        ProtoConfig.SetEndpoint(TString(endpoint));
+        ProtoConfig.SetBucket(TString(bucket));
+    }
+
+    return true;
 }
 
 NJson::TJsonValue TTierConfig::SerializeConfigToJson() const {
     NJson::TJsonValue result;
     NProtobufJson::Proto2Json(ProtoConfig, result);
     return result;
+}
+
+bool TTierConfig::IsSame(const TTierConfig& item) const {
+    return ProtoConfig.SerializeAsString() == item.ProtoConfig.SerializeAsString();
 }
 
 }

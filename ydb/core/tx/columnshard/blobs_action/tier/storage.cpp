@@ -55,7 +55,7 @@ void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) c
 
 void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager) {
     NKikimrSchemeOp::TS3Settings settings;
-    if (tierManager) {
+    if (tierManager && tierManager->IsReady()) {
         settings = tierManager->GetS3Settings();
     } else {
         settings.SetEndpoint("nowhere");

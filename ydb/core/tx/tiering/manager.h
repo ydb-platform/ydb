@@ -1,17 +1,15 @@
 #pragma once
-#include "external_data.h"
+#include "common.h"
 
 #include "abstract/manager.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
-
-#include <ydb/library/accessor/accessor.h>
 
 #include <functional>
 
@@ -24,9 +22,9 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 class TManager {
 private:
     ui64 TabletId = 0;
-    YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
-    YDB_READONLY_DEF(TTierConfig, Config);
-    YDB_READONLY_DEF(NActors::TActorId, StorageActorId);
+    NActors::TActorId TabletActorId;
+    TString TierName;
+    NActors::TActorId StorageActorId;
     std::optional<NKikimrSchemeOp::TS3Settings> S3Settings;
 public:
     const NKikimrSchemeOp::TS3Settings& GetS3Settings() const {
@@ -34,60 +32,88 @@ public:
         return *S3Settings;
     }
 
-    TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TTierConfig& config);
+    TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TString& tierName);
 
+    bool IsReady() const {
+        return !!S3Settings;
+    }
     TManager& Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
     bool Stop();
-    bool Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
-
-    TString GetTierName() const {
-        return GetConfig().GetTierName();
-    }
+    bool Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
 };
 }
 
 class TTiersManager: public ITiersManager {
 private:
+    friend class TTierRef;
+    class TTierRefGuard: public TMoveOnly {
+    private:
+        YDB_READONLY_DEF(TString, TierName);
+        TTiersManager* Owner;
+
+    public:
+        TTierRefGuard(const TString& tierName, TTiersManager& owner);
+        ~TTierRefGuard();
+
+        TTierRefGuard(TTierRefGuard&& other)
+            : TierName(other.TierName)
+            , Owner(other.Owner) {
+            other.Owner = nullptr;
+        }
+        TTierRefGuard& operator=(TTierRefGuard&& other) {
+            std::swap(Owner, other.Owner);
+            std::swap(TierName, other.TierName);
+            return *this;
+        }
+    };
+
+private:
     class TActor;
+    friend class TActor;
     using TManagers = std::map<TString, NTiers::TManager>;
+
     ui64 TabletId = 0;
     const TActorId TabletActorId;
     std::function<void(const TActorContext& ctx)> ShardCallback;
-    TActor* Actor = nullptr;
+    IActor* Actor = nullptr;
     TManagers Managers;
 
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
-    NMetadata::NFetcher::ISnapshot::TPtr Snapshot;
-    mutable NMetadata::NFetcher::ISnapshotsFetcher::TPtr ExternalDataManipulation;
+    using TTierRefCount = THashMap<TString, ui64>;
+    using TTierRefsByPathId = THashMap<ui64, std::vector<TTierRefGuard>>;
+    YDB_READONLY_DEF(TTierRefCount, TierRefCount);
+    YDB_READONLY_DEF(TTierRefsByPathId, UsedTiers);
+
+    using TTierByName = THashMap<TString, NTiers::TTierConfig>;
+    YDB_READONLY_DEF(TTierByName, TierConfigs);
+    YDB_READONLY_DEF(std::shared_ptr<NMetadata::NSecret::TSnapshot>, Secrets);
+
+private:
+    void OnConfigsUpdated(bool notifyShard = true);
+    void RegisterTier(const TString& name);
+    void UnregisterTier(const TString& name);
 
 public:
-    TTiersManager(const ui64 tabletId, const TActorId& tabletActorId,
-                std::function<void(const TActorContext& ctx)> shardCallback = {})
+    TTiersManager(const ui64 tabletId, const TActorId& tabletActorId, std::function<void(const TActorContext& ctx)> shardCallback = {})
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
         , ShardCallback(shardCallback)
-    {
+        , Secrets(std::make_shared<NMetadata::NSecret::TSnapshot>(TInstant::Zero())) {
     }
     TActorId GetActorId() const;
-    void TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshot, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
-    void EnablePathId(const ui64 /*pathId*/, const THashSet<TString>& /*usedTiers*/) {
-    }
-    void DisablePathId(const ui64 /*pathId*/) {
-    }
+    void EnablePathId(const ui64 pathId, const THashSet<TString>& usedTiers);
+    void DisablePathId(const ui64 pathId);
 
-    bool IsReady() const {
-        return !!Snapshot;
-    }
+    void UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+    void UpdateTierConfig(const NTiers::TTierConfig& config, const TString& tierName, const bool notifyShard = true);
+
+    TString DebugString();
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop(const bool needStopActor);
     virtual const std::map<TString, NTiers::TManager>& GetManagers() const override {
-        AFL_VERIFY(IsReady());
         return Managers;
     }
     virtual const NTiers::TManager* GetManagerOptional(const TString& tierId) const override;
-    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;
-
 };
 
 }

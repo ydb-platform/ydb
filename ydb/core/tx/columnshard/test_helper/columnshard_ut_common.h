@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/services/metadata/abstract/fetcher.h>
@@ -359,7 +360,7 @@ struct TTestSchema {
         return out;
     }
 
-    static NMetadata::NFetcher::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials);
+    static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
@@ -404,8 +405,9 @@ struct TTestSchema {
     }
 };
 
+void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender);
+
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);

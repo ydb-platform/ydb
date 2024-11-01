@@ -1,18 +1,18 @@
 #include "columnshard_ut_common.h"
 #include "shard_reader.h"
 
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
-#include <ydb/core/tx/data_events/common/modification_type.h>
-#include <ydb/core/tx/data_events/payload_helper.h>
-#include <ydb/core/protos/data_events.pb.h>
-
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/tiering/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/reader/sys_view/portions/portions.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NTxUT {
@@ -48,8 +48,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.UpdateCurrentTime(TInstant::Now());
 }
 
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot) {
-    auto event = std::make_unique<NMetadata::NProvider::TEvRefreshSubscriberData>(snapshot);
+void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
+    auto event = std::make_unique<TEvPrivate::TEvTieringModified>();
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 }
@@ -371,27 +371,21 @@ TSerializedTableRange MakeTestRange(std::pair<ui64, ui64> range, bool inclusiveF
                                  TConstArrayRef<TCell>(cellsTo), inclusiveTo);
 }
 
-NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
-    std::unique_ptr<NColumnShard::NTiers::TTiersSnapshot> cs(new NColumnShard::NTiers::TTiersSnapshot(Now()));
+THashMap<TString, NColumnShard::NTiers::TTierConfig> TTestSchema::BuildSnapshot(const TTableSpecials& specials) {
     if (specials.Tiers.empty()) {
-        return cs;
+        return {};
     }
+    THashMap<TString, NColumnShard::NTiers::TTierConfig> tiers;
     for (auto&& tier : specials.Tiers) {
         {
-            NKikimrSchemeOp::TStorageTierConfig cProto;
-            cProto.SetName(tier.Name);
-            *cProto.MutableObjectStorage() = tier.S3;
-            if (tier.Codec) {
-                cProto.MutableCompression()->SetCodec(tier.GetCodecId());
-            }
-            if (tier.CompressionLevel) {
-                cProto.MutableCompression()->SetLevel(*tier.CompressionLevel);
-            }
-            NColumnShard::NTiers::TTierConfig tConfig(tier.Name, cProto);
-            cs->MutableTierConfigs().emplace(tConfig.GetTierName(), tConfig);
+            NKikimrSchemeOp::TCompressionOptions compressionProto;
+            compressionProto.SetCodec(tier.GetCodecId());
+            compressionProto.SetLevel(*tier.CompressionLevel);
+            NColumnShard::NTiers::TTierConfig tConfig(tier.S3, compressionProto);
+            tiers.emplace(tier.Name, tConfig);
         }
     }
-    return cs;
+    return tiers;
 }
 
 void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& columns, const std::vector<NArrow::NTest::TTestColumn>& pk,

@@ -1,9 +1,13 @@
 #include "common.h"
 #include "manager.h"
-#include "external_data.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/tiering/fetcher.h>
+
+#include <ydb/library/table_creator/table_creator.h>
 #include <ydb/services/metadata/secret/fetcher.h>
+
+#include <util/string/vector.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -11,99 +15,125 @@ class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
     std::shared_ptr<TTiersManager> Owner;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SecretsFetcher;
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> SecretsSnapshot;
-    std::shared_ptr<NTiers::TTiersSnapshot> ConfigsSnapshot;
+    TActorId TieredStorageFetcher;
+
+private:
     TActorId GetExternalDataActorId() const {
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
-public:
-    TActor(std::shared_ptr<TTiersManager> owner)
-        : Owner(owner)
-        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
-    {
 
-    }
-    ~TActor() {
-        Owner->Stop(false);
+    void ScheduleRetryWatchObjects(std::unique_ptr<NTiers::TEvWatchSchemeObject> ev) const {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "retry_watch_objects");
+        constexpr static const TDuration RetryInterval = TDuration::Seconds(1);
+        ActorContext().Schedule(RetryInterval, std::make_unique<IEventHandle>(SelfId(), TieredStorageFetcher, ev.release()));
     }
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
+            hFunc(NTiers::TEvNotifySchemeObjectUpdated, Handle);
+            hFunc(NTiers::TEvNotifySchemeObjectDeleted, Handle);
+            hFunc(NTiers::TEvSchemeObjectResolutionFailed, Handle);
+            hFunc(NTiers::TEvWatchSchemeObject, Handle);
             default:
                 break;
         }
     }
 
-    void Bootstrap() {
-        Become(&TThis::StateMain);
-        AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
-        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation()));
-        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
-    }
-
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
-        if (auto configs = std::dynamic_pointer_cast<NTiers::TTiersSnapshot>(snapshot)) {
-            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "configs");
-            ConfigsSnapshot = configs;
-            if (SecretsSnapshot) {
-                Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);
-            } else {
-                ALS_DEBUG(NKikimrServices::TX_TIERING) << "Waiting secrets for update at tablet " << Owner->TabletId;
-            }
-        } else if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
+        if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
             AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "TEvRefreshSubscriberData")("snapshot", "secrets");
-            SecretsSnapshot = secrets;
-            if (ConfigsSnapshot) {
-                Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);
-            } else {
-                ALS_DEBUG(NKikimrServices::TX_TIERING) << "Waiting configs for update at tablet " << Owner->TabletId;
-            }
+            Owner->UpdateSecretsSnapshot(secrets);
         } else {
-            Y_ABORT_UNLESS(false, "unexpected behaviour");
+            Y_ABORT_UNLESS(false, "unexpected snapshot");
         }
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
-        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(Owner->GetExternalDataManipulation()));
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(SecretsFetcher));
         PassAway();
+    }
+
+    void Handle(NTiers::TEvNotifySchemeObjectUpdated::TPtr& ev) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", ev->Get()->GetObjectId())("type", "TIERED_STORAGE");
+        const TString& objectId = ev->Get()->GetObjectId();
+        const auto& description = ev->Get()->GetDescription();
+        if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
+            NTiers::TTierConfig tier;
+            AFL_VERIFY(tier.DeserializeFromProto(description.GetExternalDataSourceDescription()));
+            Owner->UpdateTierConfig(tier, objectId);
+        } else {
+            AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", objectId);
+        }
+    }
+
+    void Handle(NTiers::TEvNotifySchemeObjectDeleted::TPtr& ev) {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_deleted")("name", ev->Get()->GetObjectId())("type", "TIERED_STORAGE");
+    }
+
+    void Handle(NTiers::TEvSchemeObjectResolutionFailed::TPtr& ev) {
+        const TString objectId = ev->Get()->GetObjectId();
+        switch (ev->Get()->GetReason()) {
+            case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
+                AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_not_found")("name", objectId)("type", "TIERING_RULE");
+                break;
+            case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
+                ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchSchemeObject>(std::vector<TString>({ objectId })));
+                break;
+        }
+    }
+
+    void Handle(NTiers::TEvWatchSchemeObject::TPtr& ev) {
+        Send(TieredStorageFetcher, ev->Release());
+    }
+
+public:
+    TActor(std::shared_ptr<TTiersManager> owner)
+        : Owner(owner)
+        , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
+    {
+    }
+
+    void Bootstrap() {
+        AFL_INFO(NKikimrServices::TX_TIERING)("event", "start_subscribing_metadata");
+        TieredStorageFetcher = Register(new TSchemeObjectWatcher(SelfId()));
+        Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
+        Become(&TThis::StateMain);
+    }
+
+    ~TActor() {
+        Owner->Stop(false);
     }
 };
 
 namespace NTiers {
 
 TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Restarting tier '" << GetTierName() << "' at tablet " << TabletId;
-    if (Config.IsSame(config)) {
-        return *this;
-    }
+    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Restarting tier '" << TierName << "' at tablet " << TabletId;
     Stop();
-    Config = config;
-    Start(secrets);
+    Start(config, secrets);
     return *this;
 }
 
 bool TManager::Stop() {
     S3Settings.reset();
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' stopped at tablet " << TabletId;
+    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << TierName << "' stopped at tablet " << TabletId;
     return true;
 }
 
-bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    AFL_VERIFY(!S3Settings)("tier", GetTierName())("event", "already started");
-    S3Settings = Config.GetPatchedConfig(secrets);
-    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' started at tablet " << TabletId;
+bool TManager::Start(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+    AFL_VERIFY(!S3Settings)("tier", TierName)("event", "already started");
+    S3Settings = config.GetPatchedConfig(secrets);
+    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << TierName << "' started at tablet " << TabletId;
     return true;
 }
 
-TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TTierConfig& config)
+TManager::TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TString& tierName)
     : TabletId(tabletId)
     , TabletActorId(tabletActorId)
-    , Config(config)
-{
+    , TierName(tierName) {
 }
 
 NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
@@ -119,40 +149,68 @@ NArrow::NSerialization::TSerializerContainer ConvertCompression(const NKikimrSch
 }
 }
 
-void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs:"
-        << (snapshotExt ? " snapshots" : "") << (secrets ? " secrets" : "") << " at tablet " << TabletId;
+TTiersManager::TTierRefGuard::TTierRefGuard(const TString& tierName, TTiersManager& owner)
+    : TierName(tierName)
+    , Owner(&owner) {
+    if (!Owner->TierRefCount.contains(TierName)) {
+        Owner->RegisterTier(tierName);
+    }
+    ++Owner->TierRefCount[TierName];
+}
 
-    auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TTiersSnapshot>(snapshotExt);
-    Y_ABORT_UNLESS(snapshotPtr);
-    Snapshot = snapshotExt;
-    Secrets = secrets;
-    auto& snapshot = *snapshotPtr;
-    for (auto itSelf = Managers.begin(); itSelf != Managers.end(); ) {
-        auto it = snapshot.GetTierConfigs().find(itSelf->first);
-        if (it == snapshot.GetTierConfigs().end()) {
-            itSelf->second.Stop();
-            itSelf = Managers.erase(itSelf);
+TTiersManager::TTierRefGuard::~TTierRefGuard() {
+    if (Owner) {
+        auto findTier = Owner->TierRefCount.FindPtr(TierName);
+        AFL_VERIFY(findTier);
+        AFL_VERIFY(*findTier);
+        --*findTier;
+        if (!*findTier) {
+            AFL_VERIFY(Owner->TierRefCount.erase(TierName));
+            Owner->UnregisterTier(TierName);
+        }
+    }
+}
+
+void TTiersManager::OnConfigsUpdated(bool notifyShard) {
+    for (auto& [tierName, manager] : Managers) {
+        auto* findTierConfig = TierConfigs.FindPtr(tierName);
+        if (Secrets && findTierConfig) {
+            if (manager.IsReady()) {
+                manager.Restart(*findTierConfig, Secrets);
+            } else {
+                manager.Start(*findTierConfig, Secrets);
+            }
         } else {
-            itSelf->second.Restart(it->second, Secrets);
-            ++itSelf;
+            AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_reloading")("tier", tierName)("has_secrets", !!Secrets)(
+                "found_tier_config", !!findTierConfig);
         }
-    }
-    for (auto&& i : snapshot.GetTierConfigs()) {
-        auto tierName = i.second.GetTierName();
-        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Take config for tier '" << tierName << "' at tablet " << TabletId;
-        if (Managers.contains(tierName)) {
-            ALS_DEBUG(NKikimrServices::TX_TIERING) << "Ignore tier '" << tierName << "' at tablet " << TabletId;
-            continue;
-        }
-        NTiers::TManager localManager(TabletId, TabletActorId, i.second);
-        auto itManager = Managers.emplace(tierName, std::move(localManager)).first;
-        itManager->second.Start(Secrets);
     }
 
-    if (ShardCallback && TlsActivationContext) {
+    if (notifyShard && ShardCallback && TlsActivationContext) {
         ShardCallback(TActivationContext::AsActorContext());
     }
+
+    AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "configs_updated")("configs", DebugString());
+}
+
+void TTiersManager::RegisterTier(const TString& name) {
+    auto emplaced = Managers.emplace(name, NTiers::TManager(TabletId, TabletActorId, name));
+    AFL_VERIFY(emplaced.second);
+
+    auto* findConfig = TierConfigs.FindPtr(name);
+    if (Secrets && findConfig) {
+        emplaced.first->second.Start(*findConfig, Secrets);
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "skip_tier_manager_start")("tier", name)("has_secrets", !!Secrets)(
+            "found_tier_config", !!findConfig);
+    }
+}
+
+void TTiersManager::UnregisterTier(const TString& name) {
+    auto findManager = Managers.find(name);
+    AFL_VERIFY(findManager != Managers.end());
+    findManager->second.Stop();
+    Managers.erase(findManager);
 }
 
 TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
@@ -185,11 +243,37 @@ const NTiers::TManager* TTiersManager::GetManagerOptional(const TString& tierId)
     }
 }
 
-NMetadata::NFetcher::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManipulation() const {
-    if (!ExternalDataManipulation) {
-        ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
+void TTiersManager::EnablePathId(const ui64 pathId, const THashSet<TString>& usedTiers) {
+    AFL_VERIFY(Actor)("error", "tiers_manager_is_not_started");
+    auto& tierRefs = UsedTiers[pathId];
+    tierRefs.clear();
+    for (const TString& tierName : usedTiers) {
+        tierRefs.emplace_back(tierName, *this);
+        if (!TierConfigs.contains(tierName)) {
+            const auto& actorContext = NActors::TActivationContext::AsActorContext();
+            AFL_VERIFY(&actorContext)("error", "no_actor_context");
+            actorContext.Send(Actor->SelfId(), new NTiers::TEvWatchSchemeObject({ tierName }));
+        }
     }
-    return ExternalDataManipulation;
+    OnConfigsUpdated(false);
+}
+
+void TTiersManager::DisablePathId(const ui64 pathId) {
+    UsedTiers.erase(pathId);
+    OnConfigsUpdated(false);
+}
+
+void TTiersManager::UpdateSecretsSnapshot(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+    AFL_INFO(NKikimrServices::TX_TIERING)("event", "update_secrets")("tablet", TabletId);
+    AFL_VERIFY(secrets);
+    Secrets = secrets;
+    OnConfigsUpdated();
+}
+
+void TTiersManager::UpdateTierConfig(const NTiers::TTierConfig& config, const TString& tierName, const bool notifyShard) {
+    AFL_INFO(NKikimrServices::TX_TIERING)("event", "update_tier_config")("name", tierName)("tablet", TabletId);
+    TierConfigs[tierName] = config;
+    OnConfigsUpdated(notifyShard);
 }
 
 TActorId TTiersManager::GetActorId() const {
@@ -200,4 +284,36 @@ TActorId TTiersManager::GetActorId() const {
     }
 }
 
+TString TTiersManager::DebugString() {
+    TStringBuilder sb;
+    sb << "TIERS=";
+    if (TierConfigs) {
+        sb << "{";
+        for (const auto& [name, config] : TierConfigs) {
+            sb << name << ";";
+        }
+        sb << "}";
+    }
+    sb << ";USED_TIERS=";
+    {
+        sb << "{";
+        for (const auto& [pathId, tiers] : UsedTiers) {
+            sb << pathId << ":{";
+            for (const auto& tierRef : tiers) {
+                sb << tierRef.GetTierName() << ";";
+            }
+            sb << "}";
+        }
+        sb << "}";
+    }
+    sb << ";SECRETS=";
+    if (Secrets) {
+        sb << "{";
+        for (const auto& [name, config] : Secrets->GetSecrets()) {
+            sb << name.SerializeToString() << ";";
+        }
+        sb << "}";
+    }
+    return sb;
+}
 }

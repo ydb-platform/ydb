@@ -69,7 +69,7 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     }
 
     TPath dstPath = absPathSplit.IsAbsolute && parentPath ? parentPath->Child(TString(absPathSplit.back())) : rootPath.Child(name);
-    if (!dstPath.PathString().StartsWith(backupCollectionsDir + "/")) {
+    if (dstPath.PathString() != (backupCollectionsDir + "/" + absPathSplit.back())) {
         result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir);
         return std::nullopt;
     }

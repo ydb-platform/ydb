@@ -436,7 +436,7 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
       yql -s 'ALTER USER root PASSWORD "passw0rd"'
   ```
 
-  Replace the value `passw0rd` with the required password. Save the password in a separate file. Subsequent commands as the root user will be executed using the password passed with the `--password-file <path_to_user_password>` option. Additionally, the password can be saved in the connection profile, as described in the [documentation for {{ ydb-short-name }} CLI](../../reference/ydb-cli/profile/index.md).
+  Replace the value `passw0rd` with the required password and save it in a separate file. Subsequent commands as the root user will use the `--password-file <path_to_user_password>` option to pass the password. Alternatively, the password can be saved in the connection profile, as described in the [{{ ydb-short-name }} CLI documentation](../../reference/ydb-cli/profile/index.md).
 
 1. Create additional accounts:
 

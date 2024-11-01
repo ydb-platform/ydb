@@ -49,4 +49,28 @@ ui64 TSnapshotSchema::GetVersion() const {
     return IndexInfo.GetVersion();
 }
 
+bool TSnapshotSchema::IsCompatibleWithNextVersion(const TSnapshotSchema& nextSchema) const {
+    const auto& nextFields = nextSchema.GetSchema()->fields();
+    const auto& curFields = Schema->fields();
+    const ui32 curFieldCount = curFields.size();
+    if (nextFields.size() < curFieldCount) {
+        return false;
+    }
+    THashMap<std::string, const arrow::Field*> nextFieldMap;
+    for (const auto& field: nextFields) {
+        nextFieldMap[field->name()] = field.get();
+    }
+
+    for (ui32 fld = 0; fld < curFieldCount; fld++) {
+        auto iter = nextFieldMap.find(curFields[fld]->name());
+        if (iter == nextFieldMap.end()) {
+            return false;
+        }
+        if (!curFields[fld]->Equals(*iter->second)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }

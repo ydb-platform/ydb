@@ -104,14 +104,14 @@ void TSourceSession::ActualizeDestination(const NColumnShard::TColumnShard& shar
     }
 }
 
-void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemeHistory) {
+void TSourceSession::StartCursor(const NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory) {
     AFL_VERIFY(Cursor);
     AFL_VERIFY(Cursor->Start(shard.GetStoragesManager(), std::move(portions), std::move(schemeHistory), shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex()));
     ActualizeDestination(shard, shard.GetDataLocksManager());
 }
 
-TConclusionStatus TSourceSession::DoStart(NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) {
-    shard.Execute(new TTxStartSourceCursor(this, &shard, portions, "start_source_cursor"));
+TConclusionStatus TSourceSession::DoStart(NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions) {
+    shard.Execute(new TTxStartSourceCursor(this, &shard, std::move(portions), "start_source_cursor"));
     return TConclusionStatus::Success();
 }
 } // namespace NKikimr::NOlap::NDataSharing

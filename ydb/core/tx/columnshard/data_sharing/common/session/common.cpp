@@ -35,7 +35,7 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
         return TConclusionStatus::Fail("failed to start cursor: has external modifications");
     }
 
-    TConclusionStatus status = DoStart(shard, portionsByPath);
+    TConclusionStatus status = DoStart(shard, std::move(portionsByPath));
     if (status.Ok()) {
         State = EState::InProgress;
     }

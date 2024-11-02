@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h>
+#include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
 #include <ydb/library/conclusion/result.h>
@@ -78,7 +79,7 @@ private:
     THashMap<TString, THashSet<TUnifiedBlobId>> CurrentBlobIds;
 
 protected:
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) override;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions) override;
     virtual THashSet<ui64> GetPathIdsForStart() const override {
         THashSet<ui64> result;
         for (auto&& i : PathIds) {
@@ -123,7 +124,7 @@ public:
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckInitiatorFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& selfPtr);
 
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> ReceiveData(NColumnShard::TColumnShard* self, THashMap<ui64, NEvents::TPathIdData>&& data,
-        std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr);
+        std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr);
 
     NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor SerializeCursorToProto() const;
     [[nodiscard]] TConclusionStatus DeserializeCursorFromProto(const NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor& proto);

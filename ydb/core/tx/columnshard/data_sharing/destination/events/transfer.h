@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/protos/events.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
 #include <ydb/library/actors/core/event_pb.h>
@@ -84,7 +85,7 @@ struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NK
     TEvSendDataFromSource() = default;
 
     TEvSendDataFromSource(
-        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<ui64, TPathIdData>& pathIdData, TArrayRef<const NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemas) {
+        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<ui64, TPathIdData>& pathIdData, TArrayRef<const NOlap::TSchemaPresetVersionInfo> schemas) {
         Record.SetSessionId(sessionId);
         Record.SetPackIdx(packIdx);
         Record.SetSourceTabletId((ui64)sourceTabletId);
@@ -93,7 +94,7 @@ struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NK
         }
 
         for (auto&& i : schemas) {
-            *Record.AddSchemeHistory() = i;
+            *Record.AddSchemeHistory() = i.GetProto();
         }
     }
 };

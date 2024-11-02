@@ -9,15 +9,13 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
 
     NIceDb::TNiceDb db(txc.DB);
     for (auto info : SchemeHistory) {
-        db.Table<Schema::SchemaPresetVersionInfo>().Key(info.GetId(), info.GetSinceStep(), info.GetSinceTxId()).Update<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString());
+        info.SaveToLocalDb(db);
     }
 
     auto& index = Self->TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
 
     for (auto& info : SchemeHistory) {
-        NOlap::TSnapshot version(info.GetSinceStep(), info.GetSinceTxId());
-
-        index.RegisterOldSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(info));
+        index.RegisterOldSchemaVersion(info.GetSnapshot(), info.GetSchema());
     }
 
     TDbWrapper dbWrapper(txc.DB, nullptr);
@@ -48,7 +46,7 @@ void TTxDataFromSource::DoComplete(const TActorContext& /*ctx*/) {
     Session->SendCurrentCursorAck(*Self, SourceTabletId);
 }
 
-TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<ui64, NEvents::TPathIdData>&& portionsByPathId, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemas, const TTabletId sourceTabletId)
+TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<ui64, NEvents::TPathIdData>&& portionsByPathId, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const TTabletId sourceTabletId)
     : TBase(self)
     , Session(session)
     , PortionsByPathId(std::move(portionsByPathId))

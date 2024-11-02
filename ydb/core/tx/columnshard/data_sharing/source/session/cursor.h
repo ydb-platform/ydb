@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
+#include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
@@ -22,7 +23,7 @@ private:
     THashMap<ui64, NEvents::TPathIdData> PreviousSelected;
     THashMap<ui64, NEvents::TPathIdData> Selected;
     THashMap<TTabletId, TTaskForTablet> Links;
-    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> SchemeHistory;
+    std::vector<NOlap::TSchemaPresetVersionInfo> SchemeHistory;
     YDB_READONLY(ui64, StartPathId, 0);
     YDB_READONLY(ui64, StartPortionId, 0);
     YDB_READONLY(ui64, PackIdx, 0);
@@ -32,8 +33,8 @@ private:
     std::optional<ui64> NextPortionId = 0;
 
     // Begin/End of the next slice of SchemeHistory
-    ui64 NextSchemaBegin = 0;
-    ui64 NextSchemaEnd = 0;
+    ui64 NextSchemasIntervalBegin = 0;
+    ui64 NextSchemasIntervalEnd = 0;
 
     THashSet<TTabletId> LinksModifiedTablets;
     ui64 AckReceivedForPackIdx = 0;
@@ -95,8 +96,8 @@ public:
         return PreviousSelected;
     }
 
-    TArrayRef<const NKikimrTxColumnShard::TSchemaPresetVersionInfo> GetSelectedSchemas() const {
-        return TArrayRef<const NKikimrTxColumnShard::TSchemaPresetVersionInfo>(SchemeHistory.data() + NextSchemaBegin, NextSchemaEnd - NextSchemaBegin);
+    TArrayRef<const NOlap::TSchemaPresetVersionInfo> GetSelectedSchemas() const {
+        return TArrayRef<const NOlap::TSchemaPresetVersionInfo>(SchemeHistory.data() + NextSchemasIntervalBegin, NextSchemasIntervalEnd - NextSchemasIntervalBegin);
     }
 
     const THashMap<ui64, NEvents::TPathIdData>& GetSelected() const {
@@ -110,8 +111,8 @@ public:
     bool Next(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
 
     bool IsValid() {
-        AFL_VERIFY(NextSchemaBegin <= SchemeHistory.size());
-        return NextSchemaBegin < SchemeHistory.size() || Selected.size();
+        AFL_VERIFY(NextSchemasIntervalBegin <= SchemeHistory.size());
+        return NextSchemasIntervalBegin < SchemeHistory.size() || Selected.size();
     }
 
     TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext);
@@ -119,7 +120,7 @@ public:
     void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
     bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions,
-        std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index);
+        std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index);
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
         const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
 };

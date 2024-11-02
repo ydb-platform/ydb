@@ -170,6 +170,7 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
         ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeSnapshot(snapshot);
         AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
         if (snapshot == prevSchema->GetSnapshot()) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "attempting to register schema with existing snapshot");
             return;
         }
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(

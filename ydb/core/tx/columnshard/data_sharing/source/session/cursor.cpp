@@ -60,9 +60,9 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
 }
 
 bool TSourceCursor::NextSchemas() {
-    NextSchemaBegin = NextSchemaEnd;
+    NextSchemasIntervalBegin = NextSchemasIntervalEnd;
 
-    if (NextSchemaEnd == SchemeHistory.size()) {
+    if (NextSchemasIntervalEnd == SchemeHistory.size()) {
         return false;
     }
 
@@ -71,8 +71,8 @@ bool TSourceCursor::NextSchemas() {
 
     // limit the count of schemas to send based on their size in columns
     // maxColumnsToSend is pretty random value, so I don't care if columnsToSend would be greater then this value
-    for (; NextSchemaEnd < SchemeHistory.size() && columnsToSend < maxColumnsToSend; ++NextSchemaEnd) {
-        columnsToSend += SchemeHistory[NextSchemaEnd].GetSchema().ColumnsSize();
+    for (; NextSchemasIntervalEnd < SchemeHistory.size() && columnsToSend < maxColumnsToSend; ++NextSchemasIntervalEnd) {
+        columnsToSend += SchemeHistory[NextSchemasIntervalEnd].ColumnsSize();
     }
 
     ++PackIdx;
@@ -107,8 +107,8 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic TSourceCursor
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic result;
     result.SetStartPathId(StartPathId);
     result.SetStartPortionId(StartPortionId);
-    result.SetNextSchemaBegin(NextSchemaBegin);
-    result.SetNextSchemaEnd(NextSchemaEnd);
+    result.SetNextSchemasIntervalBegin(NextSchemasIntervalBegin);
+    result.SetNextSchemasIntervalEnd(NextSchemasIntervalEnd);
     if (NextPathId) {
         result.SetNextPathId(*NextPathId);
     }
@@ -132,7 +132,7 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor:
     }
 
     for (auto&& i : SchemeHistory) {
-        *result.AddSchemeHistory() = i;
+        *result.AddSchemeHistory() = i.GetProto();
     }
     return result;
 }
@@ -142,8 +142,8 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     StartPathId = proto.GetStartPathId();
     StartPortionId = proto.GetStartPortionId();
     PackIdx = proto.GetPackIdx();
-    NextSchemaBegin = proto.GetNextSchemaBegin();
-    NextSchemaEnd = proto.GetNextSchemaEnd();
+    NextSchemasIntervalBegin = proto.GetNextSchemasIntervalBegin();
+    NextSchemasIntervalEnd = proto.GetNextSchemasIntervalEnd();
     if (!PackIdx) {
         return TConclusionStatus::Fail("Incorrect proto cursor PackIdx value: " + proto.DebugString());
     }
@@ -164,7 +164,10 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     for (auto&& i : protoStatic.GetPathHashes()) {
         PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
     }
-    SchemeHistory = std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>(protoStatic.GetSchemeHistory().begin(), protoStatic.GetSchemeHistory().end());
+
+    for (auto&& i : protoStatic.GetSchemeHistory()) {
+        SchemeHistory.emplace_back(i);
+    }
     if (PathPortionHashes.empty()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "empty static cursor");
     } else {
@@ -191,7 +194,7 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
+    THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
     SchemeHistory = std::move(schemeHistory);
     AFL_VERIFY(!IsStartedFlag);
     std::map<ui64, std::map<ui32, TPortionDataAccessor>> local;

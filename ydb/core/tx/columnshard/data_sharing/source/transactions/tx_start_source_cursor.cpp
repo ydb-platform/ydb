@@ -1,13 +1,14 @@
 #include "tx_start_source_cursor.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxStartSourceCursor::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     using namespace NColumnShard;
 
-    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemeHistory;
+    std::vector<NOlap::TSchemaPresetVersionInfo> schemeHistory;
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -27,15 +28,7 @@ bool TTxStartSourceCursor::DoExecute(NTabletFlatExecutor::TTransactionContext& t
         }
     }
 
-    std::sort(schemeHistory.begin(), schemeHistory.end(), [](const auto& lhs, const auto& rhs) {
-        if (lhs.GetId() != rhs.GetId()) {
-            return lhs.GetId() < rhs.GetId();
-        }
-        if (lhs.GetSinceStep() != rhs.GetSinceStep()) {
-            return lhs.GetSinceStep() < rhs.GetSinceStep();
-        }
-        return lhs.GetSinceTxId() < rhs.GetSinceTxId();
-    });
+    std::sort(schemeHistory.begin(), schemeHistory.end());
 
     Session->StartCursor(*Self, std::move(Portions), std::move(schemeHistory));
     return true;

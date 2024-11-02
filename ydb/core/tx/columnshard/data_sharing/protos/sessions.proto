@@ -48,8 +48,8 @@ message TSourceSession {
         optional uint32 PackIdx = 5;
         optional uint32 AckReceivedForPackIdx = 6[default = 0];
         repeated uint64 LinksModifiedTablets = 7;
-        optional uint32 NextSchemaBegin = 8;
-        optional uint32 NextSchemaEnd = 9;
+        optional uint32 NextSchemasIntervalBegin = 8;
+        optional uint32 NextSchemasIntervalEnd = 9;
     }
 
     message TPathPortionsHash {

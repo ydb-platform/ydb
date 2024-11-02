@@ -17,7 +17,7 @@ protected:
     virtual void DoComplete(const TActorContext& ctx) override;
 
 public:
-    TTxStartSourceCursor(TSourceSession* session, NColumnShard::TColumnShard* self, THashMap<ui64, std::vector<TPortionDataAccessor>> portions, const TString& info)
+    TTxStartSourceCursor(TSourceSession* session, NColumnShard::TColumnShard* self, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, const TString& info)
         : TBase(self, info)
         , Session(session)
         , Portions(std::move(portions)) {

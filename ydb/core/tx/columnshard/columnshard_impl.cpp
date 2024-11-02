@@ -37,6 +37,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
@@ -1036,7 +1037,11 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
 
     const auto& schemeHistoryProto = ev->Get()->Record.GetSchemeHistory();
 
-    std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> schemas(schemeHistoryProto.begin(), schemeHistoryProto.end());
+    std::vector<NOlap::TSchemaPresetVersionInfo> schemas;
+
+    for (auto&& i : schemeHistoryProto) {
+        schemas.emplace_back(i);
+    }
 
     auto txConclusion = currentSession->ReceiveData(this, std::move(dataByPathId), std::move(schemas), ev->Get()->Record.GetPackIdx(), (NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), currentSession);
     if (!txConclusion) {

@@ -44,7 +44,7 @@ private:
 
 protected:
     TTransferContext TransferContext;
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) = 0;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions) = 0;
     virtual THashSet<ui64> GetPathIdsForStart() const = 0;
 
 public:

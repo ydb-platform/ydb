@@ -254,6 +254,36 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
+    def test_nested_types_without_predicate(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
+        )
+        self.init_topics("test_nested_types_without_predicate")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data Json NOT NULL, event String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": {"key": "value"}, "event": "event1"}',
+            '{"time": 102, "data": ["key1", "key2"], "event": "event2"}'
+        ]
+
+        self.write_stream(data)
+        expected = [
+            '{"key": "value"}',
+            '["key1", "key2"]'
+        ]
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
+        stop_yds_query(client, query_id)
+
+    @yq_v1
     def test_filter(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
@@ -264,7 +294,10 @@ class TestPqRowDispatcher(TestYdsBase):
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL))
-                WHERE time > 101UL or event = "event666";'''
+                WHERE time > 101 and
+                      data = "hello2" and
+                      event IS NOT DISTINCT FROM "event2" and
+                      event IS DISTINCT FROM "event1";'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
@@ -544,7 +577,7 @@ class TestPqRowDispatcher(TestYdsBase):
             INSERT INTO {YDS_CONNECTION}.`{output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL))
-                WHERE time > 200UL;'''
+                WHERE time > 200;'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)

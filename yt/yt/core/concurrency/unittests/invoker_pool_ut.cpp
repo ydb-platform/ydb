@@ -49,7 +49,7 @@ using IMockInvokerPoolPtr = TIntrusivePtr<IMockInvokerPool>;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TMockInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     explicit TMockInvoker(IInvokerPtr underlyingInvoker)

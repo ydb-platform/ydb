@@ -2,7 +2,7 @@
 // detail/select_reactor.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -228,6 +228,28 @@ private:
 
   // The thread that is running the reactor loop.
   boost::asio::detail::thread* thread_;
+
+  // Helper class to join and restart the reactor thread.
+  class restart_reactor : public operation
+  {
+  public:
+    restart_reactor(select_reactor* r)
+      : operation(&restart_reactor::do_complete),
+        reactor_(r)
+    {
+    }
+
+    BOOST_ASIO_DECL static void do_complete(void* owner, operation* base,
+        const boost::system::error_code& ec, std::size_t bytes_transferred);
+
+  private:
+    select_reactor* reactor_;
+  };
+
+  friend class restart_reactor;
+
+  // Operation used to join and restart the reactor thread.
+  restart_reactor restart_reactor_;
 #endif // defined(BOOST_ASIO_HAS_IOCP)
 
   // Whether the service has been shut down.

@@ -10,7 +10,7 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCancelableContext::TCancelableInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     TCancelableInvoker(

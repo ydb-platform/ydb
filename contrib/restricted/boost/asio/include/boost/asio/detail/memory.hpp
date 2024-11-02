@@ -2,7 +2,7 @@
 // detail/memory.hpp
 // ~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -60,6 +60,19 @@ using std::addressof;
 using boost::addressof;
 #endif // defined(BOOST_ASIO_HAS_STD_ADDRESSOF)
 
+#if defined(BOOST_ASIO_HAS_STD_TO_ADDRESS)
+using std::to_address;
+#else // defined(BOOST_ASIO_HAS_STD_TO_ADDRESS)
+template <typename T>
+inline T* to_address(T* p) { return p; }
+template <typename T>
+inline const T* to_address(const T* p) { return p; }
+template <typename T>
+inline volatile T* to_address(volatile T* p) { return p; }
+template <typename T>
+inline const volatile T* to_address(const volatile T* p) { return p; }
+#endif // defined(BOOST_ASIO_HAS_STD_TO_ADDRESS)
+
 } // namespace detail
 
 #if defined(BOOST_ASIO_HAS_CXX11_ALLOCATORS)
@@ -84,6 +97,7 @@ struct allocator_arg_t {};
 inline void* aligned_new(std::size_t align, std::size_t size)
 {
 #if defined(BOOST_ASIO_HAS_STD_ALIGNED_ALLOC) && defined(BOOST_ASIO_HAS_ALIGNOF)
+  align = (align < BOOST_ASIO_DEFAULT_ALIGN) ? BOOST_ASIO_DEFAULT_ALIGN : align;
   size = (size % align == 0) ? size : size + (align - size % align);
   void* ptr = std::aligned_alloc(align, size);
   if (!ptr)
@@ -93,6 +107,7 @@ inline void* aligned_new(std::size_t align, std::size_t size)
   }
   return ptr;
 #elif defined(BOOST_ASIO_HAS_BOOST_ALIGN) && defined(BOOST_ASIO_HAS_ALIGNOF)
+  align = (align < BOOST_ASIO_DEFAULT_ALIGN) ? BOOST_ASIO_DEFAULT_ALIGN : align;
   size = (size % align == 0) ? size : size + (align - size % align);
   void* ptr = boost::alignment::aligned_alloc(align, size);
   if (!ptr)
@@ -102,6 +117,7 @@ inline void* aligned_new(std::size_t align, std::size_t size)
   }
   return ptr;
 #elif defined(BOOST_ASIO_MSVC) && defined(BOOST_ASIO_HAS_ALIGNOF)
+  align = (align < BOOST_ASIO_DEFAULT_ALIGN) ? BOOST_ASIO_DEFAULT_ALIGN : align;
   size = (size % align == 0) ? size : size + (align - size % align);
   void* ptr = _aligned_malloc(size, align);
   if (!ptr)

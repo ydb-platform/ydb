@@ -2,6 +2,7 @@
 #include "yql_yt_provider_impl.h"
 #include "yql_yt_op_settings.h"
 #include "yql_yt_op_hash.h"
+#include "yql_yt_optimize.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
@@ -712,6 +713,11 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
     auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, *state->Types);
 
     TExprNode::TPtr optimized;
+    status = UpdateTableContentMemoryUsage(list, optimized, state, ctx, true);
+    if (status.Level == IGraphTransformer::TStatus::Error) {
+        return SyncStatus(status);
+    }
+
     bool hasNonDeterministicFunctions = false;
     status = PeepHoleOptimizeNode(list, optimized, ctx, *state->Types, typeTransformer.Get(), hasNonDeterministicFunctions);
     if (status.Level == IGraphTransformer::TStatus::Error) {

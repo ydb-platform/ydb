@@ -254,10 +254,10 @@ TLogManagerConfigPtr TLogManagerConfig::ApplyDynamic(const TLogManagerDynamicCon
     return mergedConfig;
 }
 
-TLogManagerConfigPtr TLogManagerConfig::CreateLogFile(const TString& path)
+TLogManagerConfigPtr TLogManagerConfig::CreateLogFile(const TString& path, ELogLevel logLevel)
 {
     auto rule = New<TRuleConfig>();
-    rule->MinLevel = ELogLevel::Trace;
+    rule->MinLevel = logLevel;
     rule->Writers.push_back(TString(DefaultFileWriterName));
 
     auto fileWriterConfig = New<TFileLogWriterConfig>();

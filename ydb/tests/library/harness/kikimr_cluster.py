@@ -22,6 +22,7 @@ DEFAULT_GRPC_PORT = 2135
 
 
 def kikimr_cluster_factory(configurator=None, config_path=None):
+    # TODO: remove current function, use explicit KiKiMR/ExternalKiKiMRCluster
     logger.info("Starting standalone YDB cluster")
     if config_path is not None:
         return ExternalKiKiMRCluster(config_path)
@@ -29,16 +30,11 @@ def kikimr_cluster_factory(configurator=None, config_path=None):
         return KiKiMR(configurator)
 
 
-def load_yaml(path):
-    with open(path, 'r') as r:
-        data = yaml.safe_load(r.read())
-    return data
-
-
 class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def __init__(self, config_path, binary_path=None, output_path=None):
         self.__config_path = config_path
-        self.__yaml_config = load_yaml(config_path)
+        with open(config_path, 'r') as r:
+            self.__yaml_config = yaml.safe_load(r.read())
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         self._slots = None
         self.__binary_path = binary_path if binary_path is not None else param_constants.kikimr_driver_path()

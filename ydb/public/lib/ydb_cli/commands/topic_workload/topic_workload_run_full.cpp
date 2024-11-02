@@ -39,9 +39,29 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .StoreResult(&Scenario.TopicName);
 
     // Specific params
-    config.Opts->AddLongOption('p', "producer-threads", "Number of producer threads.")
+    config.Opts->AddLongOption('p', "producer-threads", "Number of writer threads.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ProducerThreadCount);
+    config.Opts->AddLongOption("producers-per-thread",
+                               "Number of producers in every writer thread. "
+                               "Every producers writes to only one dedicated to it partition. "
+                               "If you want to write to all partitions set this param to the number of partitions in the topic. "
+                               "If you use transactions, they will span across all producers that will write during the transaction "
+                               "(e.g. if you have 100 messages per second, transaction commit interval 100ms and 100 producers per thread, "
+                               "in 100 ms commit interval only 10 messages will fit. All those 10 messages will be written by 10 different producers to 10 different partitions in the same transaction).")
+        .DefaultValue(1)
+        .StoreResult(&Scenario.ProducersPerThread);
+    config.Opts->AddLongOption("use-cpu-timestamp", "If specified, worload will use cpu current timestamp as message create ts to measure latency."
+                                                        " If not specified, will be used expected creation timestamp: e.g. "
+                                                        "if we have 100 messages per second rate, then first message is expected at 0ms of first second, second after 10ms elapsed,"
+                                                        " third after 20ms elapsed, 10th after 100ms elapsed and so on. "
+                                                        "This way 101 message is expected to be generated not earlier"
+                                                        " then 1 second and 10 ms after test start has passed."
+                                                        )
+        .DefaultValue(false)
+        .Optional()
+        .Hidden()
+        .StoreTrue(&Scenario.UseCpuTimestamp);
     config.Opts->AddLongOption('t', "consumer-threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerThreadCount);
@@ -67,15 +87,36 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.Opts->AddLongOption("direct", "Direct write to a partition node.")
         .Hidden()
         .StoreTrue(&Scenario.Direct);
+    config.Opts->AddLongOption("no-consumer", "Read without consumer")
+        .Hidden()
+        .StoreTrue(&Scenario.ReadWithoutConsumer);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
+
+    config.Opts->AddLongOption("use-tx", "Use transactions.")
+        .Optional()
+        .DefaultValue(false)
+        .StoreTrue(&Scenario.UseTransactions);
+    config.Opts->AddLongOption("tx-commit-interval-ms", "Intervall of transaction commit in milliseconds.")
+        .DefaultValue(1000)
+        .StoreResult(&Scenario.TxCommitIntervalMs);
+    config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")
+        .DefaultValue(1'000'000)
+        .StoreResult(&Scenario.CommitMessages);
+    config.Opts->AddLongOption("only-topic-in-tx", "Put only topic (without table) in transaction")
+        .DefaultValue(true)
+        .Hidden()
+        .StoreTrue(&Scenario.OnlyTopicInTx);
+    config.Opts->AddLongOption("tx-use-table-select", "Select rows from table in transaction")
+        .DefaultValue(false)
+        .Hidden()
+        .StoreTrue(&Scenario.UseTableSelect);
 
     config.IsNetworkIntensive = true;
 }
 
 void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
-{
-    TClientCommand::Parse(config);
+{    TClientCommand::Parse(config);
 
     Scenario.EnsurePercentileIsValid();
     Scenario.EnsureWarmupSecIsValid();
@@ -83,7 +124,5 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config)
 {
-    Scenario.UseTransactions = false;
-
     return Scenario.Run(config);
 }

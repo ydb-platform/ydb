@@ -50,8 +50,8 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
         "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
     result->SetCheckPoints(std::move(positions));
-    for (auto&& i : result->SwitchedPortions) {
-        AFL_VERIFY(!locksManager->IsLocked(i.GetPortionInfo()));
+    for (auto&& i : result->GetSwitchedPortions()) {
+        AFL_VERIFY(!locksManager->IsLocked(i));
     }
     return result;
 }

@@ -44,6 +44,10 @@ class NodeInterface(object):
         return KikimrMonitor(self.host, self.mon_port)
 
     @abc.abstractproperty
+    def cwd(self):
+        pass
+
+    @abc.abstractproperty
     def host(self):
         pass
 

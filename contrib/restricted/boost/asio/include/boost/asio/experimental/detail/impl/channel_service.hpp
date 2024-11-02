@@ -2,7 +2,7 @@
 // experimental/detail/impl/channel_service.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -182,10 +182,8 @@ void channel_service<Mutex>::reset(
 
   typename Mutex::scoped_lock lock(impl.mutex_);
 
-  if (impl.receive_state_ == closed)
-    impl.receive_state_ = block;
-  if (impl.send_state_ == closed)
-    impl.send_state_ = impl.max_buffer_size_ ? buffer : block;
+  impl.receive_state_ = block;
+  impl.send_state_ = impl.max_buffer_size_ ? buffer : block;
   impl.buffer_clear();
 }
 

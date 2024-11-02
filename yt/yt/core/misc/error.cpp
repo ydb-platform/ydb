@@ -336,12 +336,12 @@ void Serialize(
             .Item("attributes").DoMap([&] (auto fluent) {
                 if (error.HasOriginAttributes()) {
                     fluent
-                        .Item("host").Value(GetHost(error))
                         .Item("pid").Value(error.GetPid())
                         .Item("tid").Value(error.GetTid())
                         .Item("thread").Value(error.GetThreadName())
                         .Item("fid").Value(GetFid(error));
-                } else if (IsErrorSanitizerEnabled() && HasHost(error)) {
+                }
+                if (HasHost(error)) {
                     fluent
                         .Item("host").Value(GetHost(error));
                 }
@@ -455,9 +455,6 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
     };
 
     if (error.HasOriginAttributes()) {
-        static const TString HostKey("host");
-        addAttribute(HostKey, GetHost(error));
-
         static const TString PidKey("pid");
         addAttribute(PidKey, error.GetPid());
 
@@ -469,7 +466,9 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
 
         static const TString FidKey("fid");
         addAttribute(FidKey, GetFid(error));
-    } else if (IsErrorSanitizerEnabled() && HasHost(error)) {
+    }
+
+    if (HasHost(error)) {
         static const TString HostKey("host");
         addAttribute(HostKey, GetHost(error));
     }

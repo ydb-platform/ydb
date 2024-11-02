@@ -1,4 +1,4 @@
-5#pragma once
+#pragma once
 #include "counters.h"
 
 #include <ydb/core/formats/arrow/reader/position.h>

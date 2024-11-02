@@ -110,7 +110,7 @@ const IInvokerPtr& TActionQueue::GetInvoker()
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSerializedInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
     , public TInvokerProfileWrapper
 {
 public:
@@ -260,7 +260,7 @@ IInvokerPtr CreateSerializedInvoker(IInvokerPtr underlyingInvoker, const TString
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPrioritizedInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<true>
     , public TInvokerProfileWrapper
     , public virtual IPrioritizedInvoker
 {
@@ -333,7 +333,7 @@ IPrioritizedInvokerPtr CreatePrioritizedInvoker(IInvokerPtr underlyingInvoker, c
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFakePrioritizedInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<true>
     , public virtual IPrioritizedInvoker
 {
 public:
@@ -357,7 +357,7 @@ IPrioritizedInvokerPtr CreateFakePrioritizedInvoker(IInvokerPtr underlyingInvoke
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFixedPriorityInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     TFixedPriorityInvoker(
@@ -397,7 +397,7 @@ class TBoundedConcurrencyInvoker;
 YT_DEFINE_THREAD_LOCAL(TBoundedConcurrencyInvoker*, CurrentBoundedConcurrencyInvoker);
 
 class TBoundedConcurrencyInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     TBoundedConcurrencyInvoker(
@@ -559,16 +559,19 @@ void SetMaxConcurrentInvocations(
     TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> invoker,
     int maxConcurrentInvocations)
 {
-    // TODO(apachee): Fix inheritance from IInvoker so that it is possible to use static_cast here instead of dynamic_cast in non-debug builds.
+#ifdef NDEBUG
+    auto boundedConcurrencyInvoker = static_cast<TBoundedConcurrencyInvoker*>(invoker.Get());
+#else
     auto boundedConcurrencyInvoker = dynamic_cast<TBoundedConcurrencyInvoker*>(invoker.Get());
     YT_VERIFY(boundedConcurrencyInvoker);
+#endif
     boundedConcurrencyInvoker->SetMaxConcurrentInvocations(maxConcurrentInvocations);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TSuspendableInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<true>
     , public virtual ISuspendableInvoker
 {
 public:
@@ -710,7 +713,7 @@ ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker)
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCodicilGuardedInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     TCodicilGuardedInvoker(IInvokerPtr invoker, TString codicil)
@@ -745,7 +748,7 @@ IInvokerPtr CreateCodicilGuardedInvoker(IInvokerPtr underlyingInvoker, TString c
 ////////////////////////////////////////////////////////////////////////////////
 
 class TWatchdogInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     TWatchdogInvoker(

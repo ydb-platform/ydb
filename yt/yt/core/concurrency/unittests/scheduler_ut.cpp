@@ -1068,7 +1068,7 @@ private:
 };
 
 class TWrappingInvoker
-    : public TInvokerWrapper
+    : public TInvokerWrapper<false>
 {
 public:
     explicit TWrappingInvoker(IInvokerPtr underlyingInvoker)

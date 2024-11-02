@@ -1,4 +1,3 @@
-
 #include "general_compaction.h"
 
 #include "compaction/merger.h"

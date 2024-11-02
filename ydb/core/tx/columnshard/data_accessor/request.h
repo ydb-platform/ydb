@@ -125,6 +125,7 @@ public:
 
     void StartFetch() {
         AFL_VERIFY(Stage == EFetchStage::Preparing);
+        Stage = EFetchStage::Fetching;
     }
 
     void OnError(const TString& errorMessage) {
@@ -180,6 +181,7 @@ public:
         AFL_VERIFY(!Subscriber);
         AFL_VERIFY(FetchStage == 0);
         Subscriber = subscriber;
+        Subscriber->RegisterRequestId(*this);
     }
 
     const std::vector<TPortionInfo::TConstPtr>& StartFetching(const ui64 pathId) {

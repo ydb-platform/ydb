@@ -4,6 +4,7 @@ PY_SRCS(
     __init__.py
     kikimr_http_client.py
     kikimr_keyvalue_client.py
+    kikimr_monitoring.py
 )
 
 PEERDIR(

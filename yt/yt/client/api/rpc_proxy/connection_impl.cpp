@@ -356,10 +356,16 @@ void TConnection::ClearMetadataCaches()
 void TConnection::Terminate()
 {
     YT_LOG_DEBUG("Terminating connection");
+    Terminated_ = true;
     ChannelPool_->Terminate(TError("Connection terminated"));
     if (Config_->EnableProxyDiscovery) {
         YT_UNUSED_FUTURE(UpdateProxyListExecutor_->Stop());
     }
+}
+
+bool TConnection::IsTerminated() const
+{
+    return Terminated_;
 }
 
 const TConnectionConfigPtr& TConnection::GetConfig()

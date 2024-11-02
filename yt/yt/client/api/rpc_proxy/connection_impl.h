@@ -49,6 +49,7 @@ public:
     void ClearMetadataCaches() override;
 
     void Terminate() override;
+    bool IsTerminated() const override;
 
     NYson::TYsonString GetConfigYson() const override;
 
@@ -58,6 +59,8 @@ private:
     friend class TTimestampProvider;
 
     const TConnectionConfigPtr Config_;
+
+    std::atomic<bool> Terminated_ = false;
 
     const TGuid ConnectionId_;
     const TString LoggingTag_;

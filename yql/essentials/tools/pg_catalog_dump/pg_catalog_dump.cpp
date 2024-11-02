@@ -1,6 +1,6 @@
 
 #include <yql/essentials/utils/backtrace/backtrace.h>
-#include <contrib/ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <library/cpp/json/writer/json.h>
 #include <util/generic/yexception.h>
 

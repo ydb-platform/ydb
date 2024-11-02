@@ -2,7 +2,7 @@
 #include <contrib/ydb/library/yql/ast/yql_ast_annotation.h>
 #include <contrib/ydb/library/yql/ast/yql_expr.h>
 
-#include <contrib/ydb/library/yql/parser/lexer_common/hints.h>
+#include <yql/essentials/parser/lexer_common/hints.h>
 
 #include <contrib/ydb/library/yql/sql/sql.h>
 #include <contrib/ydb/library/yql/providers/common/provider/yql_provider_names.h>

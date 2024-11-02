@@ -20,7 +20,7 @@ PEERDIR(
     contrib/ydb/library/yql/core/file_storage/http_download
     contrib/ydb/library/yql/core/services/mounts
     contrib/ydb/library/yql/minikql/comp_nodes/llvm14
-    contrib/ydb/library/yql/protos
+    yql/essentials/protos
     contrib/ydb/library/yql/public/udf/service/exception_policy
     yql/essentials/utils/backtrace
     contrib/ydb/library/yql/core

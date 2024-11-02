@@ -4,7 +4,7 @@ PEERDIR(
     contrib/libs/antlr3_cpp_runtime
     library/cpp/getopt
     library/cpp/testing/unittest
-    contrib/ydb/library/yql/parser/lexer_common
+    yql/essentials/parser/lexer_common
     contrib/ydb/library/yql/parser/pg_wrapper
     contrib/ydb/library/yql/public/udf/service/stub
     contrib/ydb/library/yql/sql

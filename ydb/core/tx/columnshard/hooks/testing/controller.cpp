@@ -33,7 +33,7 @@ void TController::CheckInvariants(const ::NKikimr::NColumnShard::TColumnShard& s
     std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
     THashMap<TString, THashSet<NOlap::TUnifiedBlobId>> ids;
     for (auto&& i : granules) {
-        auto accessor = i->GetDataAccessorPtrVerifiedAs<TMemDataAccessor>();
+        auto accessor = i->GetDataAccessorPtrVerifiedAs<NOlap::TMemDataAccessor>();
         for (auto&& p : i->GetPortions()) {
             accessor->BuildAccessor(p.second).FillBlobIdsByStorage(ids, index.GetVersionedIndex());
         }

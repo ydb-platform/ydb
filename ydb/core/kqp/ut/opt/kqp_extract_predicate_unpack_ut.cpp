@@ -302,14 +302,14 @@ Y_UNIT_TEST(ComplexRange) {
     TestRange(
         R"(
             SELECT Key, Fk, Value FROM `/Root/ComplexKey`
-            WHERE Key = 1
+            WHERE Key = 2
             ORDER BY Value DESC
             LIMIT 1;
         )",
         R"([
-            [[1];[101];["Value1"]];
+            [[2];[103];["Value3"]];
         ])",
-        1);
+        2);
 
     TestRange(
         R"(

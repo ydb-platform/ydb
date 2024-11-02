@@ -275,7 +275,6 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> JoinCommonUseMapMultiOut;
     NCommon::TConfSetting<bool, false> UseAggPhases;
     NCommon::TConfSetting<bool, false> UsePartitionsByKeysForFinalAgg;
-    NCommon::TConfSetting<bool, false> _EnableWriteReorder;
     NCommon::TConfSetting<double, false> MaxCpuUsageToFuseMultiOuts;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;

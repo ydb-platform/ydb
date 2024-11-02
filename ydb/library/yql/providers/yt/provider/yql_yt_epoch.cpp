@@ -53,11 +53,7 @@ public:
             return status;
         }
 
-        if (State_->Configuration->_EnableWriteReorder.Get().GetOrElse(true)) {
-            return status.Combine(TYtDependencyUpdater().ReorderGraph(output, output, ctx));
-        } else {
-            return status.Combine(TYtDependencyUpdaterOld().ReorderGraph(output, output, ctx));
-        }
+        return status.Combine(TYtDependencyUpdater().ReorderGraph(output, output, ctx));
     }
 
 private:
@@ -88,31 +84,6 @@ private:
         TString GetWriteTarget(const TExprNode::TPtr& node) const final {
             TYtWrite write(node);
             return TStringBuilder() << "yt;" << write.DataSink().Cluster().Value() << ';' << TYtTableInfo(write.Arg(2)).Name;
-        }
-    };
-
-    class TYtDependencyUpdaterOld: public TDependencyUpdaterOld {
-    public:
-        TYtDependencyUpdaterOld()
-            : TDependencyUpdaterOld(YtProviderName, TYtConfigure::CallableName())
-        {
-        }
-
-        TMaybe<ui32> GetReadEpoch(const TExprNode::TPtr& readNode, TExprContext& /*ctx*/) const final {
-            TYtRead read(readNode);
-            TMaybe<ui32> maxEpoch;
-            if (auto list = read.Arg(2).Maybe<TExprList>()) {
-                for (auto item: list.Cast()) {
-                    TMaybeNode<TYtTable> table = item.Maybe<TYtPath>().Table().Maybe<TYtTable>();
-                    if (!table) {
-                        table = item.Maybe<TYtTable>();
-                    }
-                    if (table) {
-                        maxEpoch = Max(maxEpoch.GetOrElse(0), TEpochInfo::Parse(table.Cast().Epoch().Ref()).GetOrElse(0));
-                    }
-                }
-            }
-            return maxEpoch;
         }
     };
 

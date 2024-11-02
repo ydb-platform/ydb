@@ -84,12 +84,8 @@ public:
         return SnapshotByVersion.find(schemaVersion);
     }
 
-    std::map<ui64, ISnapshotSchema::TPtr>::const_iterator FirstSchema() const {
-        return SnapshotByVersion.cbegin();
-    }
-
-    std::map<ui64, ISnapshotSchema::TPtr>::const_iterator End() const {
-        return SnapshotByVersion.cend();
+    const std::map<ui64, ISnapshotSchema::TPtr>& GetSnapshotByVersion() const {
+        return SnapshotByVersion;
     }
 
     ISnapshotSchema::TPtr GetSchema(const ui64 version) const {

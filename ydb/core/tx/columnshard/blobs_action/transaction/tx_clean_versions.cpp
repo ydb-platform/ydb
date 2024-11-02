@@ -4,50 +4,52 @@
 
 namespace NKikimr::NColumnShard {
 
-// For given schema version find nearest previous and next schema versions which are not scheduled for erasing
-void TTxSchemaVersionsCleanup::AddPrevNextSchemas(const ui64 schemaVersion, std::vector<std::pair<ui64, ui64>>& prevNextSchemas, THashSet<ui64>& checkedSchemas) const {
-    if (checkedSchemas.find(schemaVersion) != checkedSchemas.end()) {
-        return;
-    }
+// For each schema version in erase list find nearest previous and next schema versions which are not scheduled for erasing
+std::vector<std::pair<ui64, ui64>> TTxSchemaVersionsCleanup::GetPrevNextSchemas() const {
+    std::vector<std::pair<ui64, ui64>> prevNextSchemas;
+    THashSet<ui64> checkedSchemas;
     const NOlap::TVersionedIndex& versionedIndex = Self->TablesManager.MutablePrimaryIndex().GetVersionedIndex();
-    auto begin = versionedIndex.FirstSchema();
-    auto end = versionedIndex.End();
-    auto iter = versionedIndex.FindSchema(schemaVersion);
-    AFL_VERIFY(iter != end);
-    auto prevIter = iter;
-    ui64 prevVersion = 0;
-    while (prevIter != begin) {
-        prevIter--;
-        if (VersionsToRemove.find(prevIter->first) == VersionsToRemove.end()) {
-            prevVersion = prevIter->first;
-            break;
+    const std::map<ui64, NOlap::ISnapshotSchema::TPtr>& snapshotByVersion = versionedIndex.GetSnapshotByVersion();
+    auto begin = snapshotByVersion.cbegin();
+    auto end = snapshotByVersion.cend();
+    for (const ui64 schemaVersion: VersionsToRemove) {
+        if (checkedSchemas.find(schemaVersion) != checkedSchemas.end()) {
+            continue;
         }
-        checkedSchemas.insert(prevIter->first);
-    }
-    auto nextIter = iter;
-    nextIter++;
-    ui64 nextVersion = 0;
-    while (nextIter != end) {
-        if (VersionsToRemove.find(nextIter->first) == VersionsToRemove.end()) {
-            nextVersion = nextIter->first;
-            break;
+        auto iter = snapshotByVersion.find(schemaVersion);
+        AFL_VERIFY(iter != end);
+        auto prevIter = iter;
+        ui64 prevVersion = 0;
+        while (prevIter != begin) {
+            prevIter--;
+            if (VersionsToRemove.find(prevIter->first) == VersionsToRemove.end()) {
+                prevVersion = prevIter->first;
+                break;
+            }
+            checkedSchemas.insert(prevIter->first);
         }
-        checkedSchemas.insert(nextIter->first);
+        auto nextIter = iter;
         nextIter++;
+        ui64 nextVersion = 0;
+        while (nextIter != end) {
+            if (VersionsToRemove.find(nextIter->first) == VersionsToRemove.end()) {
+                nextVersion = nextIter->first;
+                break;
+            }
+            checkedSchemas.insert(nextIter->first);
+            nextIter++;
+        }
+        prevNextSchemas.emplace_back(prevVersion, nextVersion);
     }
-    prevNextSchemas.emplace_back(prevVersion, nextVersion);
+    return prevNextSchemas;
 }
 
 bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TTxSchemaVersionsCleanup::Execute")("tablet_id", Self->TabletID());
     NIceDb::TNiceDb db(txc.DB);
 
-    THashSet<ui64> checkedSchemaVersions;
-    std::vector<std::pair<ui64, ui64>> prevNextSchemaVersions;
-
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
     for (const ui64 version: VersionsToRemove) {
-        AddPrevNextSchemas(version, prevNextSchemaVersions, checkedSchemaVersions);
         auto iter = Self->VersionCounters->GetVersionToKey().find(version);
         AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
         for (const NOlap::TVersionCounters::TSchemaKey& key: iter->second) {
@@ -56,6 +58,30 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         }
     }
     // Now we need to update schema diffs in the next versions, since base for those diffs are just erased
+
+    auto getSchemaPresetInfo = [&](const ui64 schemaVersion, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+        auto iter = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
+        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
+        const NOlap::TVersionCounters::TSchemaKey& pkey = *iter->second.cbegin();
+        auto rowset = table.Key(pkey.GetId(), pkey.GetPlanStep(), pkey.GetTxId()).Select();
+        AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
+        Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+        return iter;
+    };
+
+    auto updateDiff = [&](const auto& key, auto&& modifier) {
+        auto rowset = table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
+        AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
+        NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+        Y_ABORT_UNLESS(info.ParseFromString(rowset.template GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+        modifier(info);
+        TString serialized;
+        Y_ABORT_UNLESS(info.SerializeToString(&serialized));
+        table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
+    };
+
+    std::vector<std::pair<ui64, ui64>> prevNextSchemaVersions = GetPrevNextSchemas();
+
     for (auto& prevNext: prevNextSchemaVersions) {
         if (prevNext.first == 0) { // No previous versions, just clear diff
             AFL_VERIFY(prevNext.second != 0);
@@ -63,50 +89,29 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
             for (const NOlap::TVersionCounters::TSchemaKey& key: iter->second) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Clearing schema diif in db")("vesion", prevNext.second)("tablet_id", Self->TabletID());
-                auto rowset = table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
-                AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
-                NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
-                Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-                info.ClearDiff();
-                TString serialized;
-                Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing diff in version from db")("vesion", info.GetSchema().GetVersion())("tablet_id", Self->TabletID());
-                table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
+                updateDiff(key, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info){
+                    info.ClearDiff();
+                });
             }
         } else {
             if (prevNext.second != 0) {
                 // Find previous schema
-                auto prevIter = Self->VersionCounters->GetVersionToKey().find(prevNext.first);
-                AFL_VERIFY(prevIter != Self->VersionCounters->GetVersionToKey().end());
-                const NOlap::TVersionCounters::TSchemaKey& pkey = *prevIter->second.cbegin();
-                auto rowset = table.Key(pkey.GetId(), pkey.GetPlanStep(), pkey.GetTxId()).Select();
-                AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
                 NKikimrTxColumnShard::TSchemaPresetVersionInfo pinfo;
-                Y_ABORT_UNLESS(pinfo.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+                getSchemaPresetInfo(prevNext.first, pinfo);
 
                 // Find next schema
-                auto nextIter = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
-                AFL_VERIFY(nextIter != Self->VersionCounters->GetVersionToKey().end());
-                const NOlap::TVersionCounters::TSchemaKey& nkey = *nextIter->second.cbegin();
-                auto nrowset = table.Key(nkey.GetId(), nkey.GetPlanStep(), nkey.GetTxId()).Select();
-                AFL_VERIFY(nrowset.IsReady() && !nrowset.EndOfSet());
                 NKikimrTxColumnShard::TSchemaPresetVersionInfo ninfo;
-                Y_ABORT_UNLESS(ninfo.ParseFromString(nrowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+                auto nextIter = getSchemaPresetInfo(prevNext.second, ninfo);
 
                 // Calculate schema diff
                 auto schemaDiff = NOlap::TSchemaDiffView::MakeSchemasDiff(pinfo.schema(), ninfo.schema());
 
                 // Update diffs
                 for (const NOlap::TVersionCounters::TSchemaKey& key: nextIter->second) {
-                    auto rowset = table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
-                    AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
-                    NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
-                    Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-                    *info.MutableDiff() = schemaDiff;
-                    TString serialized;
-                    Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("vesion", info.GetSchema().GetVersion())("tablet_id", Self->TabletID());
-                    table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
+                    updateDiff(key, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info){
+                        *info.MutableDiff() = schemaDiff;
+                    });
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("vesion", prevNext.second)("base version", prevNext.first)("tablet_id", Self->TabletID());
                 }
             }
         }

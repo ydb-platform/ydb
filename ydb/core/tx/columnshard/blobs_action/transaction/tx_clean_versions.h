@@ -17,7 +17,7 @@ public:
     virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_CLEANUP_SCHEMA_VERSIONS; }
-    void AddPrevNextSchemas(const ui64 schemaVersion, std::vector<std::pair<ui64, ui64>>& prevNextSchemas, THashSet<ui64>& checkedSchemas) const;
+    std::vector<std::pair<ui64, ui64>> GetPrevNextSchemas() const;
 
 private:
     THashSet<ui64> VersionsToRemove;

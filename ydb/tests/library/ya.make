@@ -30,7 +30,6 @@ PY_SRCS(
     harness/kikimr_cluster_interface.py
     harness/kikimr_cluster.py
     harness/kikimr_config.py
-    harness/kikimr_http_client.py
     harness/kikimr_port_allocator.py
     harness/kikimr_runner.py
     harness/param_constants.py
@@ -110,6 +109,7 @@ END()
 
 RECURSE(
     compatibility
+    clients
     serializability
     wardens
     sqs

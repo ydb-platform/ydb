@@ -16,6 +16,8 @@ enum ESimpleCounters {
 
 enum ECumulativeCounters {
     COUNTER_CUMULATIVE_IGNORE = 0;
+
+    COUNTER_PARTIAL_PERMISSIONS_OPTIMIZED = 1 [(CounterOpts) = {Name: "PartialPermissionsOptimized"}];
 }
 
 enum EPercentileCounters {

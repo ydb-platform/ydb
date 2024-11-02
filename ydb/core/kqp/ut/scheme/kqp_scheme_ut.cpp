@@ -7599,6 +7599,86 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkDisabled(ydb->ExecuteQuery(upsertSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
     }
+
+    Y_UNIT_TEST(CreateBackupCollectionDisabledByDefault) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_collection`
+                    (TABLE `table`)
+                WITH(
+                    STORAGE = 'cluster'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections are disabled. Please contact your system administrator to enable it");
+        }
+    }
+
+    Y_UNIT_TEST(CreateBackupCollection) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableBackupService(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // negative
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `/Root/my_collection`
+                    (TABLE `/Root/table`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections must be placed in");
+        }
+
+        // positive
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_collection`
+                    (TABLE `/Root/table`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `/Root/.backups/collections/my_collection2`
+                    (TABLE `/Root/table`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {

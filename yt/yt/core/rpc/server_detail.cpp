@@ -374,6 +374,9 @@ std::optional<TDuration> TServiceContextBase::GetExecutionDuration() const
     return std::nullopt;
 }
 
+void TServiceContextBase::RecordThrottling(TDuration /*throttleDuration*/)
+{ }
+
 TTraceContextPtr TServiceContextBase::GetTraceContext() const
 {
     return nullptr;
@@ -579,6 +582,11 @@ std::optional<TDuration> TServiceContextWrapper::GetWaitDuration() const
 std::optional<TDuration> TServiceContextWrapper::GetExecutionDuration() const
 {
     return UnderlyingContext_->GetExecutionDuration();
+}
+
+void TServiceContextWrapper::RecordThrottling(TDuration throttleDuration)
+{
+    return UnderlyingContext_->RecordThrottling(throttleDuration);
 }
 
 TTraceContextPtr TServiceContextWrapper::GetTraceContext() const

@@ -1,13 +1,15 @@
 #include "shuffle_commands.h"
 
+#include <yt/yt/client/driver/config.h>
+
+#include <yt/yt/library/formats/format.h>
+
+#include <yt/yt/client/formats/config.h>
+
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/table_output.h>
 #include <yt/yt/client/table_client/value_consumer.h>
 
-#include <yt/yt/client/driver/config.h>
-#include <yt/yt/client/formats/config.h>
-
-#include <yt/yt/library/formats/format.h>
 
 namespace NYT::NDriver {
 

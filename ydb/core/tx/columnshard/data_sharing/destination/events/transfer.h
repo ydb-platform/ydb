@@ -25,13 +25,14 @@ private:
 
     TPathIdData() = default;
 
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
+    TConclusionStatus DeserializeFromProto(
+        const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
         PathId = proto.GetPathId();
         for (auto&& portionProto : proto.GetPortions()) {
-            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, indexInfo);
+            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, indexInfo, groupSelector);
             if (!portion) {
                 return portion.GetError();
             }
@@ -69,9 +70,10 @@ public:
         }
     };
 
-    static TConclusion<TPathIdData> BuildFromProto(const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo) {
+    static TConclusion<TPathIdData> BuildFromProto(
+        const NKikimrColumnShardDataSharingProto::TPathIdData& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
         TPathIdData result;
-        auto resultParsing = result.DeserializeFromProto(proto, indexInfo);
+        auto resultParsing = result.DeserializeFromProto(proto, indexInfo, groupSelector);
         if (!resultParsing) {
             return resultParsing;
         } else {

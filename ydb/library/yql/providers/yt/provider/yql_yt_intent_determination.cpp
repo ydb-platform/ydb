@@ -16,6 +16,8 @@ namespace NYql {
 
 using namespace NNodes;
 
+const TString YtProvider_AnonTableName = "YtProvider_AnonTableName";
+
 class TYtIntentDeterminationTransformer : public TVisitorTransformerBase {
 public:
     TYtIntentDeterminationTransformer(TYtState::TPtr state)
@@ -453,7 +455,22 @@ private:
     void RegisterAnonymouseTable(const TString& cluster, const TString& label) {
         auto& path = State_->AnonymousLabels[std::make_pair(cluster, label)];
         if (path.empty()) {
-            path = "tmp/" + GetGuidAsString(State_->Types->RandomProvider->GenGuid());
+            auto& qContext = State_->Types->QContext;
+            const TString key = cluster + "." + label;
+            if (qContext.CanRead()) {
+                auto res = qContext.GetReader()->Get({YtProvider_AnonTableName, key}).GetValueSync();
+                if (!res) {
+                    ythrow yexception() << "Missing replay data";
+                }
+
+                path = res->Value;
+            } else {
+                path = "tmp/" + GetGuidAsString(State_->Types->RandomProvider->GenGuid());
+                if (qContext.CanWrite()) {
+                    qContext.GetWriter()->Put({YtProvider_AnonTableName, key}, path).GetValueSync();
+                }
+            }
+
             YQL_CLOG(INFO, ProviderYt) << "Anonymous label " << cluster << '.' << label << ": " << path;
         }
     }

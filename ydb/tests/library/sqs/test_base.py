@@ -13,7 +13,7 @@ from hamcrest import assert_that, equal_to, not_none, none, greater_than, less_t
 
 import yatest
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
@@ -333,7 +333,7 @@ class KikimrSqsTestBase(object):
     @classmethod
     def _setup_cluster(cls):
         config_generator = cls._setup_config_generator()
-        cluster = kikimr_cluster_factory(config_generator)
+        cluster = KiKiMR(config_generator)
         cluster.start()
         cls._init_cluster(cluster, config_generator)
         return cluster, config_generator

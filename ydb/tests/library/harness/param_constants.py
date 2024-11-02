@@ -18,8 +18,6 @@ kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
 kikimr_configure_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr_configure'
 kikimr_configuration_deploy_path = '/Berkanavt/kikimr/cfg'
 kikimr_cluster_yaml_deploy_path = '/Berkanavt/kikimr/cfg/cluster.yaml'
-kikimr_next_version_deploy_path = '/Berkanavt/kikimr/bin/kikimr_next'
-kikimr_last_version_deploy_path = '/Berkanavt/kikimr/bin/kikimr_last'
 kikimr_home = '/Berkanavt/kikimr'
 
 
@@ -32,10 +30,6 @@ def generate_configs_cmd(configs_type="", deploy_path=None):
 
 def next_version_kikimr_driver_path():
     return _get_param("kikimr.ci.kikimr_driver_next", None)
-
-
-def kikimr_stderr_to_console():
-    return _get_param("kikimr.ci.stderr_to_console", "false") == "true"
 
 
 def kikimr_driver_path():

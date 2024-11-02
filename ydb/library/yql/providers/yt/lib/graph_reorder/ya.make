@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     yql_graph_reorder.cpp
-    yql_graph_reorder_old.cpp
 )
 
 PEERDIR(

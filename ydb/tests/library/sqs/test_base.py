@@ -179,7 +179,7 @@ class KikimrSqsTestBase(object):
 
     def setup_method(self, method=None):
         logging.debug('Test started: {}'.format(str(method.__name__)))
-        logging.debug("Kikimr logs dir: {}".format(self.cluster.slots[1].cwd if self.slot_count else self.cluster.nodes[1].cwd))
+        logging.debug("Kikimr working dir: {}".format(self.cluster.config.working_dir))
 
         # Start all nodes in case of previous test with killed nodes
         for node_index in range(len(self.cluster.nodes)):

@@ -40,7 +40,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
         self.data_center = data_center
-        self.__cwd = None
         self.__config_path = config_path
         self.__cluster_name = cluster_name
         self.__configurator = configurator

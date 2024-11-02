@@ -8,7 +8,7 @@ import uuid
 
 import yatest
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.canonical import set_canondata_root, is_oss
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -109,7 +109,7 @@ class BaseCanonicalTest(object):
         set_canondata_root('ydb/tests/functional/canonical/canondata')
 
         cls.database = '/local'
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 load_udfs=True,
                 domain_name='local',

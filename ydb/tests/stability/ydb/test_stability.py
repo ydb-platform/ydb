@@ -11,7 +11,7 @@ logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
 
 from ydb.tests.library.common.composite_assert import CompositeAssert # noqa
 from ydb.tests.library.harness import param_constants # noqa
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory # noqa
+from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster # noqa
 from ydb.tests.library.matchers.collection import is_empty # noqa
 from ydb.tests.library.wardens.factories import safety_warden_factory, liveness_warden_factory # noqa
 
@@ -48,7 +48,7 @@ class TestSetupForStability(object):
         assert cls.slice_name is not None
 
         logger.info('setup_class started for slice = {}'.format(cls.slice_name))
-        cls.kikimr_cluster = kikimr_cluster_factory(config_path=get_slice_directory())
+        cls.kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory())
         cls._stop_nemesis()
         cls.kikimr_cluster.start()
 
@@ -165,7 +165,7 @@ class TestCheckLivenessAndSafety(object):
         slice_name = get_slice_name()
         logger.info('slice = {}'.format(slice_name))
         assert slice_name is not None
-        kikimr_cluster = kikimr_cluster_factory(config_path=get_slice_directory())
+        kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory())
         composite_assert = CompositeAssert()
         composite_assert.assert_that(
             safety_warden_factory(kikimr_cluster).list_of_safety_violations(),

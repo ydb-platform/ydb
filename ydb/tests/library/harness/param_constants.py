@@ -34,10 +34,6 @@ def next_version_kikimr_driver_path():
     return _get_param("kikimr.ci.kikimr_driver_next", None)
 
 
-def kikimr_stderr_to_console():
-    return _get_param("kikimr.ci.stderr_to_console", "false") == "true"
-
-
 def kikimr_driver_path():
     built_binary = _get_param("kikimr.ci.kikimr_driver", None)
     if os.getenv("YDB_DRIVER_BINARY"):

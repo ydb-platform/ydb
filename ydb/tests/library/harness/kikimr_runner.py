@@ -605,6 +605,8 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             param_constants.kikimr_next_version_deploy_path,
         ]
 
+        self.local_drivers_path = (param_constants.kikimr_driver_path(), param_constants.next_version_kikimr_driver_path())
+
     @property
     def can_update(self):
         if self._can_update is None:
@@ -723,9 +725,8 @@ mon={mon}""".format(
     def prepare_artifacts(self, cluster_yml):
         self.copy_file_or_dir(
             param_constants.kikimr_configure_binary_path(), param_constants.kikimr_configure_binary_deploy_path)
-        local_drivers_path = (param_constants.kikimr_driver_path(), param_constants.next_version_kikimr_driver_path())
 
-        for version, local_driver in zip(self.versions, local_drivers_path):
+        for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)
             if local_driver is not None:
                 self.copy_file_or_dir(

@@ -136,7 +136,7 @@ class TestCRUDOperations(object):
 class TestSelect(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(load_udfs=yatest.common.build_path("yql/udfs")))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(udfs_path=yatest.common.build_path("yql/udfs")))
         cls.cluster.start()
         cls.driver = ydb.Driver(
             ydb.DriverConfig(

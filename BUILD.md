@@ -133,7 +133,9 @@ It is recommended to build YDB on Ubuntu 22.04. Follow these additional instruct
 ### Install dependencies
 
 ```bash
-sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-14 lld-14 libidn11-dev libaio1 libaio-dev llvm-14
+sudo apt-get update && \
+sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-14 lld-14 libidn11-dev \
+ libaio1 libaio-dev llvm-14 curl
 sudo pip3 install conan==1.59 grpcio-tools==1.57.0
 
 ```

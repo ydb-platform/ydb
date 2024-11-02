@@ -34,6 +34,10 @@ public:
     TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
+    const std::vector<TPortionInfo::TConstPtr>& GetSwitchedPortions() const {
+        return SwitchedPortions;
+    }
+
     void AddSwitchedPortion(const TPortionInfo::TConstPtr& portion) {
         SwitchedPortions.emplace_back(portion);
         PortionsToAccess->AddPortion(portion);

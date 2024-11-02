@@ -3,7 +3,6 @@
 #include "yql_yt_op_settings.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/providers/yt/lib/graph_reorder/yql_graph_reorder_old.h>
 #include <ydb/library/yql/providers/yt/lib/graph_reorder/yql_graph_reorder.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>

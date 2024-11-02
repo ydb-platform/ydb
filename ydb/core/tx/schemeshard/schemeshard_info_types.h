@@ -14,6 +14,7 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/services/lib/sharding/sharding.h>
@@ -3075,6 +3076,22 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 }
             }
         }
+
+        TString WriteTo(bool needsBuildTable = false) const {
+            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+            TString name = PostingTable;
+            if (needsBuildTable || NeedsAnotherLevel()) {
+                name += Level % 2 == 0 ? BuildPostingTableSuffix0 : BuildPostingTableSuffix1;
+            }
+            return name;
+        }
+        TString ReadFrom() const {
+            Y_ASSERT(Level != 0);
+            using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+            TString name = PostingTable;
+            name += Level % 2 == 0 ? BuildPostingTableSuffix1 : BuildPostingTableSuffix0;
+            return name;
+        }
     };
     TKMeans KMeans;
 
@@ -3149,7 +3166,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     THashSet<TShardIdx> InProgressShards;
 
-    size_t DoneShardsSize = 0;
+    std::vector<TShardIdx> DoneShards;
 
     TBillingStats Processed;
     TBillingStats Billed;
@@ -3467,7 +3484,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         }
         if (Shards) {
             float totalShards = Shards.size();
-            return 100.0 * DoneShardsSize / totalShards;
+            return 100.0 * DoneShards.size() / totalShards;
         }
         // No shards - no progress
         return 0.0;
@@ -3612,7 +3629,7 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     o << ", UnlockTxDone: " << info.UnlockTxDone;
 
     o << ", ToUploadShards: " << info.ToUploadShards.size();
-    o << ", DoneShards: " << info.DoneShardsSize;
+    o << ", DoneShards: " << info.DoneShards.size();
 
     for (const auto& x: info.InProgressShards) {
         o << ", ShardsInProgress: " << x;

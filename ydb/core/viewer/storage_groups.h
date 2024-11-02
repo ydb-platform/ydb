@@ -1504,61 +1504,67 @@ public:
             return RequestDone();
         }
         auto& navigateResult(itNavigateKeySetResult->second);
-        navigateResult.Set(std::move(ev));
-        ProcessNavigate(navigateResult, firstNavigate);
-        --NavigateKeySetInFlight;
-        ProcessResponses();
-        RequestDone();
+        if (navigateResult.Set(std::move(ev))) {
+            ProcessNavigate(navigateResult, firstNavigate);
+            --NavigateKeySetInFlight;
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(TEvHive::TEvResponseHiveStorageStats::TPtr& ev) {
         auto itHiveStorageStats = HiveStorageStats.find(ev->Cookie);
         if (itHiveStorageStats != HiveStorageStats.end()) {
-            itHiveStorageStats->second.Set(std::move(ev));
+            if (itHiveStorageStats->second.Set(std::move(ev))) {
+                --HiveStorageStatsInFlight;
+                ProcessResponses();
+                RequestDone();
+            }
         }
-        --HiveStorageStatsInFlight;
-        ProcessResponses();
-        RequestDone();
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
-        GetGroupsResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetGroupsResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessResponses();
-        RequestDone();
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
-        GetStoragePoolsResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetStoragePoolsResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessResponses();
-        RequestDone();
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        GetVSlotsResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetVSlotsResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessResponses();
-        RequestDone();
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        GetPDisksResponse->Set(std::move(ev));
-        if (FallbackToWhiteboard) {
+        if (GetPDisksResponse->Set(std::move(ev))) {
+            if (FallbackToWhiteboard) {
+                RequestDone();
+                return;
+            }
+            ProcessResponses();
             RequestDone();
-            return;
         }
-        ProcessResponses();
-        RequestDone();
     }
 
     void RequestNodesList() {
@@ -1584,26 +1590,29 @@ public:
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        BSGroupStateResponse[nodeId].Set(std::move(ev));
-        BSGroupRequestDone();
+        if (BSGroupStateResponse[nodeId].Set(std::move(ev))) {
+            BSGroupRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         auto& vDiskStateResponse = VDiskStateResponse[nodeId];
-        vDiskStateResponse.Set(std::move(ev));
-        for (const NKikimrWhiteboard::TVDiskStateInfo& info : vDiskStateResponse->Record.GetVDiskStateInfo()) {
-            for (const auto& vSlotId : info.GetDonors()) {
-                SendWhiteboardDisksRequest(vSlotId.GetNodeId());
+        if (vDiskStateResponse.Set(std::move(ev))) {
+            for (const NKikimrWhiteboard::TVDiskStateInfo& info : vDiskStateResponse->Record.GetVDiskStateInfo()) {
+                for (const auto& vSlotId : info.GetDonors()) {
+                    SendWhiteboardDisksRequest(vSlotId.GetNodeId());
+                }
             }
+            VDiskRequestDone();
         }
-        VDiskRequestDone();
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskStateResponse[nodeId].Set(std::move(ev));
-        PDiskRequestDone();
+        if (PDiskStateResponse[nodeId].Set(std::move(ev))) {
+            PDiskRequestDone();
+        }
     }
 
     void ProcessWhiteboardGroups() {

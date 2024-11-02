@@ -556,9 +556,9 @@
     ],
     "test.test[blocks-add_uint64--Peephole]": [
         {
-            "checksum": "06f751402a49dbb3f9be4d66e55913b1",
-            "size": 1558,
-            "uri": "https://{canondata_backend}/1942173/d7b51a8943054cfea98b1e42450768694da5000b/resource.tar.gz#test.test_blocks-add_uint64--Peephole_/opt.yql"
+            "checksum": "763488f56cbe183cf603b4c52bce6aaa",
+            "size": 1567,
+            "uri": "https://{canondata_backend}/1809005/c6f042f52e9370f97186bc5a85bef63191f45800/resource.tar.gz#test.test_blocks-add_uint64--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-add_uint64--Plan]": [
@@ -584,9 +584,9 @@
     ],
     "test.test[blocks-combine_hashed_max--Peephole]": [
         {
-            "checksum": "1c4cc1601f1f61b764e391b851324999",
-            "size": 3530,
-            "uri": "https://{canondata_backend}/1946324/820e3db848dce72eac40665b9ca64552c869136b/resource.tar.gz#test.test_blocks-combine_hashed_max--Peephole_/opt.yql"
+            "checksum": "ba6cf6a70fcf57a66e928935c229c070",
+            "size": 3539,
+            "uri": "https://{canondata_backend}/1809005/c6f042f52e9370f97186bc5a85bef63191f45800/resource.tar.gz#test.test_blocks-combine_hashed_max--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_max--Plan]": [
@@ -612,9 +612,9 @@
     ],
     "test.test[blocks-combine_hashed_sum_many_keys--Peephole]": [
         {
-            "checksum": "616ca4f49125448895b333f0c77aa4bb",
-            "size": 12071,
-            "uri": "https://{canondata_backend}/1946324/820e3db848dce72eac40665b9ca64552c869136b/resource.tar.gz#test.test_blocks-combine_hashed_sum_many_keys--Peephole_/opt.yql"
+            "checksum": "99cc43781a266d9ae94de04cac10bfc6",
+            "size": 12112,
+            "uri": "https://{canondata_backend}/1809005/c6f042f52e9370f97186bc5a85bef63191f45800/resource.tar.gz#test.test_blocks-combine_hashed_sum_many_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-combine_hashed_sum_many_keys--Plan]": [
@@ -640,9 +640,9 @@
     ],
     "test.test[blocks-distinct_mixed_keys--Peephole]": [
         {
-            "checksum": "76517f43bab95ee0125ec1b4ccf3a55b",
-            "size": 7664,
-            "uri": "https://{canondata_backend}/1937001/e715663cfc04c70f73b3049843d47c204d5f6c08/resource.tar.gz#test.test_blocks-distinct_mixed_keys--Peephole_/opt.yql"
+            "checksum": "e2ee929a02b352a7e83135ef602b4d35",
+            "size": 7705,
+            "uri": "https://{canondata_backend}/1809005/c6f042f52e9370f97186bc5a85bef63191f45800/resource.tar.gz#test.test_blocks-distinct_mixed_keys--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-distinct_mixed_keys--Plan]": [
@@ -724,9 +724,9 @@
     ],
     "test.test[blocks-tuple_nth--Peephole]": [
         {
-            "checksum": "f261d74a10301bed2fcfa7edf42fcc8d",
-            "size": 3740,
-            "uri": "https://{canondata_backend}/1942173/d7b51a8943054cfea98b1e42450768694da5000b/resource.tar.gz#test.test_blocks-tuple_nth--Peephole_/opt.yql"
+            "checksum": "5ea9e4540f597f425c94e6213a6a21b6",
+            "size": 3734,
+            "uri": "https://{canondata_backend}/1809005/c6f042f52e9370f97186bc5a85bef63191f45800/resource.tar.gz#test.test_blocks-tuple_nth--Peephole_/opt.yql"
         }
     ],
     "test.test[blocks-tuple_nth--Plan]": [
@@ -1259,9 +1259,9 @@
             "uri": "https://{canondata_backend}/1937027/16b7289b1b8f5fdff728155d836fa2b238949b2d/resource.tar.gz#test.test_insert_monotonic-truncate_and_append-default.txt-Results_/Output.txt"
         },
         {
-            "checksum": "7262952f81e108293bd219955828acaf",
+            "checksum": "60f25d4e572a0d9f87a014fdb6e5b921",
             "size": 680,
-            "uri": "https://{canondata_backend}/1775319/c18d3af89fd62644ccc5174aaafa5d9e5a9091ef/resource.tar.gz#test.test_insert_monotonic-truncate_and_append-default.txt-Results_/Output.yqlrun.txt.attr"
+            "uri": "https://{canondata_backend}/1937492/8539c221d3ddc366f32d5aa23ff2d26e142b8238/resource.tar.gz#test.test_insert_monotonic-truncate_and_append-default.txt-Results_/Output.yqlrun.txt.attr"
         }
     ],
     "test.test[join-equi_join_by_expr--Debug]": [

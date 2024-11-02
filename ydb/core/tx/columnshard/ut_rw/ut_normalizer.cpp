@@ -37,66 +37,12 @@ public:
     virtual ~TNormalizerChecker() {
     }
 
+    virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& /*columnShardConfig*/) const {
+
+    }
+
     virtual ui64 RecordsCountAfterReboot(const ui64 initialRecodsCount) const {
         return initialRecodsCount;
-    }
-};
-
-class TPathIdCleaner: public NYDBTest::ILocalDBModifier {
-public:
-    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
-        using namespace NColumnShard;
-        NIceDb::TNiceDb db(txc.DB);
-
-        THashMap<ui64, TPortionRecord> portion2Key;
-        std::optional<ui64> pathId;
-        {
-            auto rowset = db.Table<Schema::IndexColumns>().Select();
-            UNIT_ASSERT(rowset.IsReady());
-
-            while (!rowset.EndOfSet()) {
-                TPortionRecord key;
-                key.Index = rowset.GetValue<Schema::IndexColumns::Index>();
-                key.Granule = rowset.GetValue<Schema::IndexColumns::Granule>();
-                key.ColumnIdx = rowset.GetValue<Schema::IndexColumns::ColumnIdx>();
-                key.PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
-                key.TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
-                key.Portion = rowset.GetValue<Schema::IndexColumns::Portion>();
-                key.Chunk = rowset.GetValue<Schema::IndexColumns::Chunk>();
-
-                key.XPlanStep = rowset.GetValue<Schema::IndexColumns::XPlanStep>();
-                key.XTxId = rowset.GetValue<Schema::IndexColumns::XTxId>();
-                key.Blob = rowset.GetValue<Schema::IndexColumns::Blob>();
-                key.Metadata = rowset.GetValue<Schema::IndexColumns::Metadata>();
-                key.Offset = rowset.GetValue<Schema::IndexColumns::Offset>();
-                key.Size = rowset.GetValue<Schema::IndexColumns::Size>();
-
-                pathId = rowset.GetValue<Schema::IndexColumns::PathId>();
-
-                portion2Key[key.Portion] = key;
-
-                UNIT_ASSERT(rowset.Next());
-            }
-        }
-
-        UNIT_ASSERT(pathId.has_value());
-
-        for (auto&& [portionId, key] : portion2Key) {
-            db.Table<Schema::IndexColumns>().Key(key.Index, key.Granule, key.ColumnIdx, key.PlanStep, key.TxId, key.Portion, key.Chunk).Delete();
-
-            db.Table<Schema::IndexColumns>()
-                .Key(key.Index, 1, key.ColumnIdx, key.PlanStep, key.TxId, key.Portion, key.Chunk)
-                .Update(NIceDb::TUpdate<Schema::IndexColumns::XPlanStep>(key.XPlanStep), NIceDb::TUpdate<Schema::IndexColumns::XTxId>(key.XTxId),
-                    NIceDb::TUpdate<Schema::IndexColumns::Blob>(key.Blob), NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.Metadata),
-                    NIceDb::TUpdate<Schema::IndexColumns::Offset>(key.Offset), NIceDb::TUpdate<Schema::IndexColumns::Size>(key.Size),
-
-                    NIceDb::TNull<Schema::IndexColumns::PathId>());
-        }
-
-        db.Table<Schema::IndexGranules>()
-            .Key(0, *pathId, "1")
-            .Update(NIceDb::TUpdate<Schema::IndexGranules::Granule>(1), NIceDb::TUpdate<Schema::IndexGranules::PlanStep>(1),
-                NIceDb::TUpdate<Schema::IndexGranules::TxId>(1), NIceDb::TUpdate<Schema::IndexGranules::Metadata>(""));
     }
 };
 
@@ -157,30 +103,26 @@ public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
-        auto rowset = db.Table<Schema::IndexPortions>().Select();
-        UNIT_ASSERT(rowset.IsReady());
-
-        ui64 minVersion = (ui64)-1;
-        while (!rowset.EndOfSet()) {
-            auto version = rowset.GetValue<Schema::IndexPortions::SchemaVersion>();
-            if (version < minVersion) {
-                minVersion = version;
-            }
-            UNIT_ASSERT(rowset.Next());
+        // Add invalid widow schema, if SchemaVersionCleaner will not erase it, then test will fail
+        {
+            NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+            info.SetId(1);
+            info.SetSinceStep(5);
+            info.SetSinceTxId(1);
+            info.MutableSchema()->SetVersion(0);
+            db.Table<Schema::SchemaPresetVersionInfo>().Key(1, 5, 1).Update(
+                NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(info.SerializeAsString()));
         }
 
-        // Add invalid widow schema, if SchemaVersionCleaner will not erase it, then test will fail
-        TString serialized;
-        NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
-        info.MutableSchema()->SetVersion(minVersion - 1);
-        Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<Schema::SchemaPresetVersionInfo>().Key(11, 1, 1).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
-
-        // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
-        NKikimrTxColumnShard::TTableVersionInfo versionInfo;
-        versionInfo.MutableSchema()->SetVersion(minVersion - 1);
-        Y_ABORT_UNLESS(versionInfo.SerializeToString(&serialized));
-        db.Table<Schema::TableVersionInfo>().Key(1, 1, 1).Update(NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(serialized));
+        {
+            // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
+            NKikimrTxColumnShard::TTableVersionInfo versionInfo;
+            versionInfo.SetSchemaPresetId(1);
+            versionInfo.SetSinceStep(5);
+            versionInfo.SetSinceTxId(1);
+            db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
+                NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
+        }
 
         db.Table<Schema::SchemaPresetInfo>().Key(10).Update(NIceDb::TUpdate<Schema::SchemaPresetInfo::Name>("default"));
 
@@ -312,9 +254,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
-        auto* repair = runtime.GetAppData().ColumnShardConfig.MutableRepairs()->Add();
-        repair->SetClassName("SchemaVersionCleaner");
-        repair->SetDescription("Removing unused schema versions");
+        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig); 
 
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -348,10 +288,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         }
     }
 
-    Y_UNIT_TEST(PathIdNormalizer) {
-        TestNormalizerImpl<TPathIdCleaner>();
-    }
-
     Y_UNIT_TEST(ColumnChunkNormalizer) {
         TestNormalizerImpl<TColumnChunksCleaner>();
     }
@@ -361,7 +297,15 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 
     Y_UNIT_TEST(SchemaVersionsNormalizer) {
-        TestNormalizerImpl<TSchemaVersionsCleaner>();
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("SchemaVersionCleaner");
+                repair->SetDescription("Removing unused schema versions");
+            }
+        };
+        TestNormalizerImpl<TSchemaVersionsCleaner>(TLocalNormalizerChecker());
     }
 
     Y_UNIT_TEST(CleanEmptyPortionsNormalizer) {
@@ -374,6 +318,11 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         public:
             ui64 RecordsCountAfterReboot(const ui64) const override {
                 return 0;
+            }
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("PortionsCleaner");
+                repair->SetDescription("Removing dirty portions withno tables");
             }
         };
         TLocalNormalizerChecker checker;

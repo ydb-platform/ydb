@@ -7,7 +7,8 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     const TString& name,
     bool validateFeatureFlag,
     TOperationContext& context,
-    THolder<TProposeResponse>& result)
+    THolder<TProposeResponse>& result,
+    bool enforceBackupCollectionsDirExists)
 {
     bool backupServiceEnabled = AppData()->FeatureFlags.GetEnableBackupService();
     if (!backupServiceEnabled && validateFeatureFlag) {
@@ -45,7 +46,7 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     }
 
     const TPath& backupCollectionsPath = TPath::Resolve(backupCollectionsDir, context.SS);
-    {
+    if (enforceBackupCollectionsDirExists || backupCollectionsPath.IsResolved()) {
         const auto checks = backupCollectionsPath.Check();
         checks.NotUnderDomainUpgrade()
             .IsAtLocalSchemeShard()
@@ -68,7 +69,7 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     }
 
     TPath dstPath = absPathSplit.IsAbsolute && parentPath ? parentPath->Child(TString(absPathSplit.back())) : rootPath.Child(name);
-    if (!dstPath.PathString().StartsWith(backupCollectionsDir + "/")) {
+    if (dstPath.PathString() != (backupCollectionsDir + "/" + absPathSplit.back())) {
         result->SetError(NKikimrScheme::EStatus::StatusSchemeError, TStringBuilder() << "Backup collections must be placed in " << backupCollectionsDir);
         return std::nullopt;
     }

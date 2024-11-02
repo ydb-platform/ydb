@@ -65,8 +65,13 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
     ready = ready & Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToKeep>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::InsertTable>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme());
     ready = ready & Schema::Precharge<Schema::IndexCounters>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::SharedBlobIds>(db, txc.DB.GetScheme());
+    ready = ready & Schema::Precharge<Schema::BorrowedBlobIds>(db, txc.DB.GetScheme());
 
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
     ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
@@ -94,8 +99,13 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
 }
 
 bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
-    if (!Precharge(txc)) {
-        return false;
+    TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
+    {
+        TLoadTimeSignals::TLoadTimer timer = tManagerLocal.GetLoadTimeCounters()->PrechargeTimeCounters.StartGuard();
+        if (!Precharge(txc)) {
+            timer.AddLoadingFail();
+            return false;
+        }
     }
 
     NIceDb::TNiceDb db(txc.DB);
@@ -103,7 +113,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
         ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        TTablesManager tManagerLocal(Self->StoragesManager, Self->TabletID());
         {
             TMemoryProfileGuard g("TTxInit/TTablesManager");
             if (!tManagerLocal.InitFromDB(db)) {

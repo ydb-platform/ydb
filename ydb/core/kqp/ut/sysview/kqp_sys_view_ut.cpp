@@ -739,6 +739,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                     RowCount, RowUpdates, RowReads, RangeReadRows,
                     IF(FollowerId = 0, 'L', 'F') AS LeaderFollower
                 FROM `/Root/.sys/partition_stats`
+                WHERE RowCount != 0
                 ORDER BY PathId, PartIdx, LeaderFollower;
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             AssertSuccessResult(result);

@@ -2,10 +2,7 @@
 #include "dump_impl.h"
 #include "restore_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
 #include <library/cpp/logger/log.h>
 
@@ -26,30 +23,24 @@ TString DataFileName(ui32 id) {
 class TClient::TImpl {
 public:
     explicit TImpl(const TDriver& driver, std::shared_ptr<TLog>&& log)
-        : Log(log)
-        , ImportClient(driver)
-        , OperationClient(driver)
-        , SchemeClient(driver)
-        , TableClient(driver)
+        : Driver(driver)
+        , Log(std::move(log))
     {
     }
 
     TDumpResult Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings) {
-        auto client = TDumpClient(SchemeClient, TableClient);
+        auto client = TDumpClient(Driver, Log);
         return client.Dump(dbPath, fsPath, settings);
     }
 
     TRestoreResult Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
-        auto client = TRestoreClient(*Log, ImportClient, OperationClient, SchemeClient, TableClient);
+        auto client = TRestoreClient(Driver, Log);
         return client.Restore(fsPath, dbPath, settings);
     }
 
 private:
+    const TDriver Driver;
     std::shared_ptr<TLog> Log;
-    NImport::TImportClient ImportClient;
-    NOperation::TOperationClient OperationClient;
-    NScheme::TSchemeClient SchemeClient;
-    NTable::TTableClient TableClient;
 
 }; // TImpl
 

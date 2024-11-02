@@ -8,8 +8,11 @@ copy=[
     "gradlew.bat",
     "gradle/wrapper/gradle-wrapper.jar",
     "gradle/wrapper/gradle-wrapper.properties",
-    ".idea/vcs.xml"
+    ".idea/vcs.xml",
 ]
+
+[targets.EXTRA_ONLY]
+template="build.gradle.kts.jinja"
 
 [targets.jar]
 template="build.gradle.kts.jinja"

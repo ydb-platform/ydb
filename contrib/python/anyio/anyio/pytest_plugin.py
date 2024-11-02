@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import ExitStack, contextmanager
-from inspect import isasyncgenfunction, iscoroutinefunction
+from inspect import isasyncgenfunction, iscoroutinefunction, ismethod
 from typing import Any, cast
 
 import pytest
 import sniffio
+from _pytest.fixtures import SubRequest
 from _pytest.outcomes import Exit
 
 from ._core._eventloop import get_all_backends, get_async_backend
@@ -70,27 +71,55 @@ def pytest_configure(config: Any) -> None:
     )
 
 
-def pytest_fixture_setup(fixturedef: Any, request: Any) -> None:
-    def wrapper(*args, anyio_backend, **kwargs):  # type: ignore[no-untyped-def]
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef: Any, request: Any) -> Generator[Any]:
+    def wrapper(
+        *args: Any, anyio_backend: Any, request: SubRequest, **kwargs: Any
+    ) -> Any:
+        # Rebind any fixture methods to the request instance
+        if (
+            request.instance
+            and ismethod(func)
+            and type(func.__self__) is type(request.instance)
+        ):
+            local_func = func.__func__.__get__(request.instance)
+        else:
+            local_func = func
+
         backend_name, backend_options = extract_backend_and_options(anyio_backend)
         if has_backend_arg:
             kwargs["anyio_backend"] = anyio_backend
 
+        if has_request_arg:
+            kwargs["request"] = request
+
         with get_runner(backend_name, backend_options) as runner:
-            if isasyncgenfunction(func):
-                yield from runner.run_asyncgen_fixture(func, kwargs)
+            if isasyncgenfunction(local_func):
+                yield from runner.run_asyncgen_fixture(local_func, kwargs)
             else:
-                yield runner.run_fixture(func, kwargs)
+                yield runner.run_fixture(local_func, kwargs)
 
     # Only apply this to coroutine functions and async generator functions in requests
     # that involve the anyio_backend fixture
     func = fixturedef.func
     if isasyncgenfunction(func) or iscoroutinefunction(func):
         if "anyio_backend" in request.fixturenames:
-            has_backend_arg = "anyio_backend" in fixturedef.argnames
             fixturedef.func = wrapper
-            if not has_backend_arg:
+            original_argname = fixturedef.argnames
+
+            if not (has_backend_arg := "anyio_backend" in fixturedef.argnames):
                 fixturedef.argnames += ("anyio_backend",)
+
+            if not (has_request_arg := "request" in fixturedef.argnames):
+                fixturedef.argnames += ("request",)
+
+            try:
+                return (yield)
+            finally:
+                fixturedef.func = func
+                fixturedef.argnames = original_argname
+
+    return (yield)
 
 
 @pytest.hookimpl(tryfirst=True)

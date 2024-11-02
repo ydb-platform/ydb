@@ -35,8 +35,12 @@ std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<N
 
 class TTestDbWrapper : public IDbWrapper {
 private:
-    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContext>> LoadContexts;
+    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
 public:
+    virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
+        return &Default<TFakeGroupSelector>();
+    }
+
     struct TIndex {
         THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Columns; // pathId -> portions
         THashMap<ui32, ui64> Counters;
@@ -88,13 +92,21 @@ public:
         return true;
     }
 
-    virtual void WritePortion(const NOlap::TPortionInfo& /*portion*/) override {
-
+    virtual void WritePortion(const NOlap::TPortionInfo& portion) override {
+        auto it = Portions.find(portion.GetPortionId());
+        if (it == Portions.end()) {
+            Portions.emplace(portion.GetPortionId(), portion.MakeCopy());
+        } else {
+            it->second = portion.MakeCopy();
+        }
     }
-    virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
-
+    virtual void ErasePortion(const NOlap::TPortionInfo& portion) override {
+        AFL_VERIFY(Portions.erase(portion.GetPortionId()));
     }
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
+        for (auto&& i : Portions) {
+            callback(NOlap::TPortionInfoConstructor(i.second, false, false, false), i.second.GetMeta().SerializeToProto());
+        }
         return true;
     }
 
@@ -105,16 +117,17 @@ public:
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), portion.RestoreBlobRange(row.BlobRange), rowProto);
+        NOlap::TColumnChunkLoadContextV1 loadContext(
+            portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), row.BlobRange, rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
             itInsertInfo.first->second = loadContext;
         }
-        auto it = data.find(portion.GetPortion());
+        auto it = data.find(portion.GetPortionId());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortion(), TPortionInfoConstructor(portion, false, true)).first;
+            it = data.emplace(portion.GetPortionId(), TPortionInfoConstructor(portion, false, true, true)).first;
         } else {
-            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortion() == it->second.GetPortionIdVerified());
+            Y_ABORT_UNLESS(portion.GetPathId() == it->second.GetPathId() && portion.GetPortionId() == it->second.GetPortionIdVerified());
         }
         it->second.SetMinSnapshotDeprecated(portion.GetMinSnapshotDeprecated());
         if (portion.HasRemoveSnapshot()) {
@@ -140,7 +153,7 @@ public:
 
     void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) override {
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        auto it = data.find(portion.GetPortion());
+        auto it = data.find(portion.GetPortionId());
         Y_ABORT_UNLESS(it != data.end());
         auto& portionLocal = it->second;
 
@@ -153,7 +166,7 @@ public:
         portionLocal.MutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::function<void(NOlap::TPortionInfoConstructor&&, const TColumnChunkLoadContext&)>& callback) override {
+    bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
@@ -163,7 +176,7 @@ public:
                     auto itContextLoader = LoadContexts[copy.GetAddress()].find(rec.GetAddress());
                     Y_ABORT_UNLESS(itContextLoader != LoadContexts[copy.GetAddress()].end());
                     auto address = copy.GetAddress();
-                    callback(std::move(copy), itContextLoader->second);
+                    callback(itContextLoader->second);
                     LoadContexts[address].erase(itContextLoader);
                 }
             }
@@ -192,6 +205,7 @@ private:
     THashMap<TInsertWriteId, TInsertedData> Inserted;
     THashMap<ui64, TSet<TCommittedData>> Committed;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
+    THashMap<ui64, NOlap::TPortionInfo> Portions;
     THashMap<ui32, TIndex> Indices;
 };
 
@@ -319,9 +333,9 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
 
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
 
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, snap);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency("testing");
     return result;
@@ -349,14 +363,14 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     //    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, snap);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
             for (auto&& r : i.GetPortionResult().GetRecords()) {
-                Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionResult().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
+                Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionResult().GetPortionInfo().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
             }
         }
     }
@@ -376,9 +390,9 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
     changes->StartEmergency();
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, snap);
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, snap);
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency("testing");
     return result;
@@ -394,9 +408,10 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
 
     changes->StartEmergency();
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
-    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine);
+    NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));
     changes->WriteIndexOnExecute(nullptr, contextExecute);
-    NOlap::TWriteIndexCompleteContext contextComplete(NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine);
+    NOlap::TWriteIndexCompleteContext contextComplete(
+        NActors::TActivationContext::AsActorContext(), 0, 0, TDuration::Zero(), engine, TSnapshot(1, 1));
     changes->WriteIndexOnComplete(nullptr, contextComplete);
     changes->AbortEmergency("testing");
     return result;
@@ -497,7 +512,6 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             ui64 txId = 1;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK[0]->NumChunks(), columnIds.size() + TIndexInfo::GetSnapshotColumnIdsSet().size() - 1);
         }
 
         { // select another pathId

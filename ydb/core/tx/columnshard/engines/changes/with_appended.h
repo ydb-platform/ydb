@@ -9,8 +9,8 @@ namespace NKikimr::NOlap {
 class TChangesWithAppend: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
-    THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
-    THashMap<TPortionAddress, std::shared_ptr<TPortionInfo>> PortionsToMove;
+    THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToRemove;
+    THashMap<TPortionAddress, std::shared_ptr<const TPortionInfo>> PortionsToMove;
 
 protected:
     std::optional<ui64> TargetCompactionLevel;
@@ -59,7 +59,7 @@ public:
         }
     }
 
-    const THashMap<TPortionAddress, TPortionInfo>& GetPortionsToRemove() const {
+    const THashMap<TPortionAddress, TPortionInfo::TConstPtr>& GetPortionsToRemove() const {
         return PortionsToRemove;
     }
 
@@ -75,9 +75,9 @@ public:
         TargetCompactionLevel = level;
     }
 
-    void AddPortionToRemove(const TPortionInfo& info) {
-        AFL_VERIFY(!info.HasRemoveSnapshot());
-        AFL_VERIFY(PortionsToRemove.emplace(info.GetAddress(), info).second);
+    void AddPortionToRemove(const TPortionInfo::TConstPtr& info) {
+        AFL_VERIFY(!info->HasRemoveSnapshot());
+        AFL_VERIFY(PortionsToRemove.emplace(info->GetAddress(), info).second);
     }
 
     std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;

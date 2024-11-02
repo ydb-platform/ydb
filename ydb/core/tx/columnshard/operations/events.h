@@ -9,13 +9,13 @@ namespace NKikimr::NColumnShard {
 class TInsertedPortion {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionInfoConstructor>, PortionInfoConstructor);
-    std::shared_ptr<NOlap::TPortionInfo> PortionInfo;
+    std::optional<NOlap::TPortionDataAccessor> PortionInfo;
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
 
 public:
-    const std::shared_ptr<NOlap::TPortionInfo>& GetPortionInfo() const {
+    const NOlap::TPortionDataAccessor& GetPortionInfo() const {
         AFL_VERIFY(PortionInfo);
-        return PortionInfo;
+        return *PortionInfo;
     }
     TInsertedPortion(NOlap::TWritePortionInfoWithBlobsResult&& portion, const std::shared_ptr<arrow::RecordBatch>& pkBatch)
         : PortionInfoConstructor(portion.DetachPortionConstructor())

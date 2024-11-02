@@ -366,17 +366,20 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
                 serverTimings.emplace_back(res.GetServerTiming());
                 ++successIteration;
                 if (successIteration == 1) {
-                    outFStream << queryN << ": " << Endl
-                        << res.GetYSONResult() << Endl << Endl;
+                    outFStream << queryN << ": " << Endl;
+                    PrintResult(res, outFStream);
                 }
-                if ((!prevResult || *prevResult != res.GetYSONResult()) && !res.GetQueryResult().IsExpected(qInfo.ExpectedResult)) {
+                const auto resHash = res.GetQueryResult().CalcHash();
+                if ((!prevResult || *prevResult != resHash) && !res.GetQueryResult().IsExpected(qInfo.ExpectedResult)) {
                     outFStream << queryN << ":" << Endl <<
                         "Query text:" << Endl <<
                         query << Endl << Endl <<
                         "UNEXPECTED DIFF: " << Endl
-                            << "RESULT: " << Endl << res.GetYSONResult() << Endl
+                          << "RESULT: " << Endl;
+                    PrintResult(res, outFStream);
+                    outFStream << Endl
                             << "EXPECTATION: " << Endl << qInfo.ExpectedResult << Endl;
-                    prevResult = res.GetYSONResult();
+                    prevResult = resHash;
                     ++diffsCount;
                 }
             } else {
@@ -454,6 +457,18 @@ bool TWorkloadCommandBenchmark::RunBench(TClient& client, NYdbWorkload::IWorkloa
     }
 
     return !someFailQueries;
+}
+
+void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const {
+    TResultSetPrinter printer(TResultSetPrinter::TSettings()
+        .SetOutput(&out)
+        .SetFormat(EDataFormat::Pretty).SetMaxWidth(120)
+    );
+    for(const auto& r: res.GetRawResults()) {
+        printer.Print(r);
+        printer.Reset();
+    }
+    out << Endl << Endl;
 }
 
 void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const {

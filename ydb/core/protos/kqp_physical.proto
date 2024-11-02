@@ -475,6 +475,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTopic = 42;
         NKikimrSchemeOp.TModifyScheme AlterTopic = 43;
         NKikimrSchemeOp.TModifyScheme DropTopic = 44;
+        NKikimrSchemeOp.TModifyScheme CreateBackupCollection = 45;
+        NKikimrSchemeOp.TModifyScheme AlterBackupCollection = 46;
+        NKikimrSchemeOp.TModifyScheme DropBackupCollection = 47;
     }
 }
 

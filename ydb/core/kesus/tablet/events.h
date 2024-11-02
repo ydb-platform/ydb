@@ -13,7 +13,7 @@ namespace NKesus {
 TString CanonizeQuoterResourcePath(const TVector<TString>& path);
 TString CanonizeQuoterResourcePath(const TString& path);
 
-struct TEvKesus {
+namespace TEvKesus {
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_KESUS),
 
@@ -488,15 +488,15 @@ struct TEvKesus {
         }
     };
 
-    struct TEvDeleteQuoterResource : public TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource> {       
+    struct TEvDeleteQuoterResource : public TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource> {
         using TBaseEvent = TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource>;
         using TBaseEvent::TBaseEvent;
     };
 
     struct TEvDeleteQuoterResourceResult : public TEventPB<TEvDeleteQuoterResourceResult, NKikimrKesus::TEvDeleteQuoterResourceResult, EvDeleteQuoterResourceResult> {
         using TBaseEvent = TEventPB<TEvDeleteQuoterResourceResult, NKikimrKesus::TEvDeleteQuoterResourceResult, EvDeleteQuoterResourceResult>;
-        using TBaseEvent::TBaseEvent;        
-        
+        using TBaseEvent::TBaseEvent;
+
         TEvDeleteQuoterResourceResult() = default;
 
         TEvDeleteQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {

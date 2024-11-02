@@ -261,11 +261,18 @@ class TJsonNodes : public TViewerPipeClient {
         }
 
         void CalcCpuUsage() {
-            float usage = 0;
-            int threads = 0;
-            for (const auto& pool : SystemState.GetPoolStats()) {
-                usage += pool.GetUsage() * pool.GetThreads();
-                threads += pool.GetThreads();
+            float usage = SystemState.GetCoresUsed();
+            int threads = SystemState.GetCoresTotal();
+            if (threads == 0) {
+                for (const auto& pool : SystemState.GetPoolStats()) {
+                    ui32 usageThreads = pool.GetLimit() ? pool.GetLimit() : pool.GetThreads();
+                    usage += pool.GetUsage() * usageThreads;
+                    if (pool.GetName() != "IO") {
+                        threads += pool.GetThreads();
+                    }
+                }
+                SystemState.SetCoresUsed(usage);
+                SystemState.SetCoresTotal(threads);
             }
             CpuUsage = usage / threads;
         }
@@ -483,6 +490,9 @@ class TJsonNodes : public TViewerPipeClient {
                 case ENodeFields::Version:
                     groupName = GetVersionForGroup();
                     break;
+                case ENodeFields::SystemState:
+                    groupName = NKikimrWhiteboard::EFlag_Name(GetOverall());
+                    break;
                 default:
                     break;
             }
@@ -508,6 +518,8 @@ class TJsonNodes : public TViewerPipeClient {
                     return MissingDisks;
                 case ENodeFields::Uptime:
                     return UptimeSeconds;
+                case ENodeFields::SystemState:
+                    return static_cast<int>(GetOverall());
                 default:
                     return TString();
             }
@@ -1108,12 +1120,12 @@ public:
                 case ENodeFields::DiskSpaceUsage:
                 case ENodeFields::Missing:
                 case ENodeFields::Version:
+                case ENodeFields::SystemState:
                     GroupCollection();
                     SortCollection(NodeGroups, [](const TNodeGroup& nodeGroup) { return nodeGroup.SortKey; }, true);
                     NeedGroup = false;
                     break;
                 case ENodeFields::NodeInfo:
-                case ENodeFields::SystemState:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
@@ -1186,8 +1198,11 @@ public:
                     SortCollection(NodeView, [](const TNode* node) { return node->Database; }, ReverseSort);
                     NeedSort = false;
                     break;
-                case ENodeFields::NodeInfo:
                 case ENodeFields::SystemState:
+                    SortCollection(NodeView, [](const TNode* node) { return static_cast<int>(node->GetOverall()); }, ReverseSort);
+                    NeedSort = false;
+                    break;
+                case ENodeFields::NodeInfo:
                 case ENodeFields::PDisks:
                 case ENodeFields::VDisks:
                 case ENodeFields::Tablets:
@@ -1720,11 +1735,11 @@ public:
         if (AllWhiteboardFields) {
             request->AddFieldsRequired(-1);
         } else {
-            for (auto field : {1, 2, 4, 5, 6, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 30, 31, 36, 37}) { // node_whiteboard.proto
-                request->AddFieldsRequired(field);
-            }
+            request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
+            request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
             if (FieldsRequired.test(+ENodeFields::MemoryDetailed)) {
-                request->AddFieldsRequired(38);
+                request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
             }
         }
     }
@@ -1995,9 +2010,10 @@ public:
     }
 
     void Handle(TEvHive::TEvResponseHiveNodeStats::TPtr& ev) {
-        HiveNodeStats[ev->Cookie].Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (HiveNodeStats[ev->Cookie].Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void WhiteboardRequestDone() {
@@ -2010,40 +2026,46 @@ public:
 
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        SystemStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (SystemStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        VDiskStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (VDiskStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        PDiskStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (PDiskStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        TabletStateResponse[nodeId].Set(std::move(ev));
-        WhiteboardRequestDone();
+        if (TabletStateResponse[nodeId].Set(std::move(ev))) {
+            WhiteboardRequestDone();
+        }
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->Record.Response_case()) {
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse:
-                SystemViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (SystemViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             case NKikimrViewer::TEvViewerResponse::ResponseCase::kTabletResponse:
-                TabletViewerResponse[nodeId].Set(std::move(ev));
-                NodeBatches.erase(nodeId);
-                WhiteboardRequestDone();
+                if (TabletViewerResponse[nodeId].Set(std::move(ev))) {
+                    NodeBatches.erase(nodeId);
+                    WhiteboardRequestDone();
+                }
                 return;
             default:
                 break;
@@ -2076,27 +2098,31 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
-        StoragePoolsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (StoragePoolsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
-        GroupsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (GroupsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
-        VSlotsResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (VSlotsResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Handle(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr& ev) {
-        PDisksResponse->Set(std::move(ev));
-        ProcessResponses();
-        RequestDone();
+        if (PDisksResponse->Set(std::move(ev))) {
+            ProcessResponses();
+            RequestDone();
+        }
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -2509,6 +2535,7 @@ public:
                           * `Missing`
                           * `DiskSpaceUsage`
                           * `Database`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: group
@@ -2525,6 +2552,7 @@ public:
                           * `Missing`
                           * `Uptime`
                           * `Version`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: filter_group_by
@@ -2541,6 +2569,7 @@ public:
                           * `Missing`
                           * `Uptime`
                           * `Version`
+                          * `SystemState`
                     required: false
                     type: string
                   - name: filter_group

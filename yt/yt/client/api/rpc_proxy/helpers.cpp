@@ -81,7 +81,7 @@ void ToProto(
     for (const auto& item : options.PrerequisiteRevisions) {
         auto* protoItem = proto->add_revisions();
         protoItem->set_path(item->Path);
-        protoItem->set_revision(item->Revision);
+        protoItem->set_revision(ToProto(item->Revision));
     }
 }
 
@@ -91,9 +91,9 @@ void ToProto(
 {
     proto->set_read_from(static_cast<NProto::EMasterReadKind>(options.ReadFrom));
     proto->set_disable_per_user_cache(options.DisablePerUserCache);
-    proto->set_expire_after_successful_update_time(ToProto<i64>(options.ExpireAfterSuccessfulUpdateTime));
-    proto->set_expire_after_failed_update_time(ToProto<i64>(options.ExpireAfterFailedUpdateTime));
-    proto->set_success_staleness_bound(ToProto<i64>(options.SuccessStalenessBound));
+    proto->set_expire_after_successful_update_time(ToProto(options.ExpireAfterSuccessfulUpdateTime));
+    proto->set_expire_after_failed_update_time(ToProto(options.ExpireAfterFailedUpdateTime));
+    proto->set_success_staleness_bound(ToProto(options.SuccessStalenessBound));
     if (options.CacheStickyGroupSize) {
         proto->set_cache_sticky_group_size(*options.CacheStickyGroupSize);
     }
@@ -134,7 +134,7 @@ void ToProto(
 {
     protoOptions->set_read_from(static_cast<NProto::ETabletReadKind>(options.ReadFrom));
     if (options.CachedSyncReplicasTimeout) {
-        protoOptions->set_cached_sync_replicas_timeout(ToProto<i64>(*options.CachedSyncReplicasTimeout));
+        protoOptions->set_cached_sync_replicas_timeout(ToProto(*options.CachedSyncReplicasTimeout));
     }
 }
 
@@ -447,7 +447,7 @@ void ToProto(
     ToProto(proto->mutable_trace_id(), result.TraceId);
     proto->set_event_index(result.EventIndex);
     proto->set_event(result.Event);
-    proto->set_event_time(ToProto<i64>(result.EventTime));
+    proto->set_event_time(ToProto(result.EventTime));
 }
 
 void FromProto(
@@ -468,13 +468,13 @@ void FromProto(
 
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema)
 {
-    protoSchema->set_stable_name(schema.StableName().Underlying());
-    protoSchema->set_name(schema.Name());
-    protoSchema->set_type(ToProto<int>(GetPhysicalType(schema.CastToV1Type())));
+    protoSchema->set_stable_name(ToProto(schema.StableName()));
+    protoSchema->set_name(ToProto(schema.Name()));
+    protoSchema->set_type(ToProto(GetPhysicalType(schema.CastToV1Type())));
     auto typeV3Yson = ConvertToYsonString(TTypeV3LogicalTypeWrapper{schema.LogicalType()});
     protoSchema->set_type_v3(typeV3Yson.ToString());
     if (schema.Lock()) {
-        protoSchema->set_lock(*schema.Lock());
+        protoSchema->set_lock(ToProto(*schema.Lock()));
     } else {
         protoSchema->clear_lock();
     }
@@ -489,17 +489,17 @@ void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSche
         protoSchema->clear_materialized();
     }
     if (schema.Aggregate()) {
-        protoSchema->set_aggregate(*schema.Aggregate());
+        protoSchema->set_aggregate(ToProto(*schema.Aggregate()));
     } else {
         protoSchema->clear_aggregate();
     }
     if (schema.SortOrder()) {
-        protoSchema->set_sort_order(ToProto<int>(*schema.SortOrder()));
+        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
     } else {
         protoSchema->clear_sort_order();
     }
     if (schema.Group()) {
-        protoSchema->set_group(*schema.Group());
+        protoSchema->set_group(ToProto(*schema.Group()));
     } else {
         protoSchema->clear_group();
     }
@@ -599,8 +599,8 @@ void FromProto(NTableClient::TTableSchemaPtr* schema, const NProto::TTableSchema
 void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletInfo& tabletInfo)
 {
     ToProto(protoTabletInfo->mutable_tablet_id(), tabletInfo.TabletId);
-    protoTabletInfo->set_mount_revision(tabletInfo.MountRevision);
-    protoTabletInfo->set_state(static_cast<i32>(tabletInfo.State));
+    protoTabletInfo->set_mount_revision(ToProto(tabletInfo.MountRevision));
+    protoTabletInfo->set_state(ToProto(tabletInfo.State));
     ToProto(protoTabletInfo->mutable_pivot_key(), tabletInfo.PivotKey);
     if (tabletInfo.CellId) {
         ToProto(protoTabletInfo->mutable_cell_id(), tabletInfo.CellId);
@@ -611,7 +611,7 @@ void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo
 {
     tabletInfo->TabletId =
         FromProto<TTabletId>(protoTabletInfo.tablet_id());
-    tabletInfo->MountRevision = protoTabletInfo.mount_revision();
+    tabletInfo->MountRevision = FromProto<NHydra::TRevision>(protoTabletInfo.mount_revision());
     tabletInfo->State = CheckedEnumCast<ETabletState>(protoTabletInfo.state());
     tabletInfo->PivotKey = FromProto<NTableClient::TLegacyOwningKey>(protoTabletInfo.pivot_key());
     if (protoTabletInfo.has_cell_id()) {
@@ -676,10 +676,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.StartTime) {
-        protoOperation->set_start_time(ToProto<i64>(*operation.StartTime));
+        protoOperation->set_start_time(ToProto(*operation.StartTime));
     }
     if (operation.FinishTime) {
-        protoOperation->set_finish_time(ToProto<i64>(*operation.FinishTime));
+        protoOperation->set_finish_time(ToProto(*operation.FinishTime));
     }
 
     if (operation.AuthenticatedUser) {
@@ -931,10 +931,10 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
 
     if (job.StartTime) {
-        protoJob->set_start_time(ToProto<i64>(*job.StartTime));
+        protoJob->set_start_time(ToProto(*job.StartTime));
     }
     if (job.FinishTime) {
-        protoJob->set_finish_time(ToProto<i64>(*job.FinishTime));
+        protoJob->set_finish_time(ToProto(*job.FinishTime));
     }
 
     if (job.Address) {
@@ -1227,7 +1227,7 @@ void ToProto(
     const NChunkClient::TFetcherConfigPtr& fetcherConfig)
 {
     protoFetcherConfig->set_node_rpc_timeout(
-        ToProto<i64>(fetcherConfig->NodeRpcTimeout));
+        ToProto(fetcherConfig->NodeRpcTimeout));
 }
 
 void FromProto(
@@ -1362,7 +1362,7 @@ void ToProto(
 {
     protoManifest->set_source_path(manifest->SourcePath);
     protoManifest->set_destination_path(manifest->DestinationPath);
-    protoManifest->set_ordered_mode(ToProto<i32>(manifest->OrderedMode));
+    protoManifest->set_ordered_mode(ToProto(manifest->OrderedMode));
 }
 
 void FromProto(
@@ -1424,10 +1424,10 @@ void ToProto(
         protoQuery->set_files(query.Files->ToString());
     }
     if (query.StartTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
+        protoQuery->set_start_time(NYT::ToProto(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_finish_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());
@@ -2158,12 +2158,12 @@ std::vector<TSharedRef> SerializeRowset(
     // COMPAT(babenko)
     for (const auto& column : schema.Columns()) {
         auto* entry = descriptor->add_name_table_entries();
-        entry->set_name(column.Name());
+        entry->set_name(ToProto(column.Name()));
         // we save physical type for backward compatibility
         // COMPAT(babenko)
-        entry->set_type(ToProto<int>(column.GetWireType()));
+        entry->set_type(ToProto(column.GetWireType()));
         // COMPAT(babenko)
-        entry->set_logical_type(ToProto<int>(column.CastToV1Type()));
+        entry->set_logical_type(ToProto(column.CastToV1Type()));
     }
 
     auto writer = CreateWireProtocolWriter();

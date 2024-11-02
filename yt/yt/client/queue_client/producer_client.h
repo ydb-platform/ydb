@@ -11,6 +11,8 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NQueueClient {
@@ -25,6 +27,8 @@ struct TProducerSessionBatchOptions
     std::optional<i64> RowCount;
 };
 
+using TAckCallback = TCallback<void(NQueueClient::TQueueProducerSequenceNumber)>;
+
 struct TProducerSessionOptions
 {
     //! If true, sequence numbers will be incremented automatically,
@@ -38,6 +42,12 @@ struct TProducerSessionOptions
 
     //! If set, rows will be flushed in background with this period.
     std::optional<TDuration> BackgroundFlushPeriod;
+
+    //! Backoff strategy for retries when background flush is turned on.
+    TBackoffStrategy BackoffStrategy = TBackoffStrategy(TExponentialBackoffOptions{});
+
+    //! Acknowledgment callback.
+    TAckCallback AcknowledgmentCallback;
 };
 
 struct IProducerSession
@@ -53,6 +63,9 @@ struct IProducerSession
 
     //! Flush all written rows.
     virtual TFuture<void> Flush() = 0;
+
+    //! Cancel writing of all not flushed rows.
+    virtual void Cancel() = 0;
 };
 DEFINE_REFCOUNTED_TYPE(IProducerSession)
 

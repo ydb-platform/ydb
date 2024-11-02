@@ -132,9 +132,9 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
     req->SetTimeout(config->RpcTimeout);
 
     req->set_type(static_cast<NProto::ETransactionType>(type));
-    req->set_timeout(ToProto<i64>(timeout));
+    req->set_timeout(ToProto(timeout));
     if (options.Deadline) {
-        req->set_deadline(ToProto<ui64>(*options.Deadline));
+        req->set_deadline(ToProto(*options.Deadline));
     }
     if (options.Id) {
         ToProto(req->mutable_id(), options.Id);
@@ -312,7 +312,7 @@ TFuture<NCypressClient::TNodeId> TClientBase::CreateNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    req->set_type(ToProto<int>(type));
+    req->set_type(ToProto(type));
 
     if (options.Attributes) {
         ToProto(req->mutable_attributes(), *options.Attributes);
@@ -393,7 +393,7 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     std::sort(children.begin(), children.end());
     for (const auto& [attribute, value] : children) {
         auto* protoSubrequest = req->add_subrequests();
-        protoSubrequest->set_attribute(ToProto<TProtobufString>(attribute));
+        protoSubrequest->set_attribute(ToProto(attribute));
         protoSubrequest->set_value(ConvertToYsonString(value).ToString());
     }
 
@@ -416,7 +416,7 @@ TFuture<TLockNodeResult> TClientBase::LockNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
-    req->set_mode(ToProto<int>(mode));
+    req->set_mode(ToProto(mode));
 
     req->set_waitable(options.Waitable);
     if (options.ChildKey) {
@@ -584,7 +584,7 @@ TFuture<void> TClientBase::ExternalizeNode(
     SetTimeoutOptions(*req, options);
 
     ToProto(req->mutable_path(), path);
-    req->set_cell_tag(ToProto<int>(cellTag));
+    req->set_cell_tag(ToProto(cellTag));
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().As<void>();
@@ -612,7 +612,7 @@ TFuture<NObjectClient::TObjectId> TClientBase::CreateObject(
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.CreateObject();
 
-    req->set_type(ToProto<int>(type));
+    req->set_type(ToProto(type));
     req->set_ignore_existing(options.IgnoreExisting);
     req->set_sync(options.Sync);
     if (options.Attributes) {
@@ -1060,7 +1060,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
     if (options.ExecutionBackend) {
-        req->set_execution_backend(static_cast<int>(*options.ExecutionBackend));
+        req->set_execution_backend(ToProto(*options.ExecutionBackend));
     }
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);

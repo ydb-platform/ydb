@@ -723,6 +723,34 @@ namespace {
 
         return true;
     }
+
+    bool ParseBackupCollectionSettings(
+        TBackupCollectionSettings& dstSettings,
+        const TCoNameValueTupleList& srcSettings,
+        TExprContext& ctx,
+        TPositionHandle pos)
+    {
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "incremental_backup_enabled") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (!TryFromString(value, dstSettings.IncrementalBackupEnabled)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "INCREMENTAL_BACKUP_ENABLED must be true or false"));
+                    return false;
+                }
+            } else if (name == "storage") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (to_lower(value) != "cluster") {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos),
+                        "Only cluster STORAGE are currently supported"));
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
 }
 
 class TKiSinkPlanInfoTransformer : public TGraphTransformerBase {
@@ -2459,6 +2487,101 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing ANALYZE");
+        }
+
+        if (auto maybeCreateBackupCollection = TMaybeNode<TKiCreateBackupCollection>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto createBackupCollection = maybeCreateBackupCollection.Cast();
+
+            TCreateBackupCollectionSettings settings;
+            settings.Name = TString(createBackupCollection.BackupCollection());
+            settings.Prefix = TString(createBackupCollection.Prefix());
+
+            TVector<TCreateBackupCollectionSettings::TTable> tables;
+
+            for (auto entry: createBackupCollection.Entries()) {
+                auto type = entry.Type().Cast<TCoAtom>().StringValue();
+                if (type == "database") {
+                    ctx.AddError(TIssue(ctx.GetPosition(entry.Type().Pos()),
+                                        TStringBuilder() << "DATABASE is not implemented yet"));
+                    return SyncError();
+                } else if (type == "table") {
+                    YQL_ENSURE(entry.Path());
+                    auto path = entry.Path().Cast().StringValue();
+                    tables.emplace_back(TCreateBackupCollectionSettings::TTable{path});
+                }
+            }
+
+            settings.Entries = tables;
+
+            if (!ParseBackupCollectionSettings(settings.Settings, createBackupCollection.BackupCollectionSettings(), ctx, createBackupCollection.Pos())) {
+                return SyncError();
+            }
+
+            auto cluster = TString(createBackupCollection.DataSink().Cluster());
+            auto future = Gateway->CreateBackupCollection(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing CREATE BACKUP COLLECTION");
+        }
+
+        if (auto maybeAlterBackupCollection = TMaybeNode<TKiAlterBackupCollection>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto alterBackupCollection = maybeAlterBackupCollection.Cast();
+
+            TAlterBackupCollectionSettings settings;
+            settings.Name = TString(alterBackupCollection.BackupCollection());
+            settings.Prefix = TString(alterBackupCollection.Prefix());
+
+            if (!ParseBackupCollectionSettings(settings.Settings, alterBackupCollection.BackupCollectionSettings(), ctx, alterBackupCollection.Pos())) {
+                return SyncError();
+            }
+
+            auto cluster = TString(alterBackupCollection.DataSink().Cluster());
+            auto future = Gateway->AlterBackupCollection(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing ALTER BACKUP COLLECTION");
+        }
+
+        if (auto maybeDropBackupCollection = TMaybeNode<TKiDropBackupCollection>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto dropBackupCollection = maybeDropBackupCollection.Cast();
+
+            TDropBackupCollectionSettings settings;
+            settings.Name = TString(dropBackupCollection.BackupCollection());
+            settings.Prefix = TString(dropBackupCollection.Prefix());
+            settings.Cascade = (dropBackupCollection.Cascade().Value() == "1");
+
+            auto cluster = TString(dropBackupCollection.DataSink().Cluster());
+            auto future = Gateway->DropBackupCollection(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing DROP BACKUP COLLECTION");
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

@@ -14,19 +14,30 @@ public:
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     YDB_READONLY(EFloatMode, FloatMode, EFloatMode::FLOAT);
+    YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
+    YDB_READONLY(ui64, Scale, 1);
+    YDB_READONLY_DEF(TSet<TString>, Tables);
+    YDB_READONLY(ui32, ProcessIndex, 0);
+    YDB_READONLY(ui32, ProcessCount, 1);
+    YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
+    YDB_READONLY_PROTECT(bool, CheckCanonical, false);
 };
 
 class TTpcBaseWorkloadGenerator: public TWorkloadGeneratorBase {
 public:
     explicit TTpcBaseWorkloadGenerator(const TTpcBaseWorkloadParams& params);
+    TQueryInfoList GetWorkload(int type) override final;
+    TQueryInfoList GetInitialData() override final;
+    TVector<TWorkloadType> GetSupportedWorkloadTypes() const override final;
 
 protected:
-    void PatchQuery(TString& query) const;
+    virtual TVector<TString> GetTablesList() const = 0;
 
 private:
     const TTpcBaseWorkloadParams& Params;
-    TString FilterHeader(TStringBuf header, const TString& query) const;
-    void PatchHeader(TString& header) const;
+    void PatchQuery(TString& query) const;
+    void FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const;
+    TString GetHeader(const TString& query) const;
 };
 
 template<class T>

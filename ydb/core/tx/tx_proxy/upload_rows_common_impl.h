@@ -484,7 +484,7 @@ private:
                 errorMessage = Sprintf("Unknown column: %s", name.c_str());
                 return false;
             }
-            i32 pgTypeMod = -1;            
+            i32 pgTypeMod = -1;
             ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 

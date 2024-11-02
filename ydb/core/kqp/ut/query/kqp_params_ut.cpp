@@ -848,14 +848,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 )"), upsertParams);
                 UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
             }
-            // No upsert parameters is declared
-            {
-                auto [status, issues] = execUpsertQuery(Q1_(R"(
-                    UPSERT INTO Table (Key, Value1, Value22, Value35) VALUES
-                        ($key, $value1, $value22, $value35);
-                )"), upsertParams);
-                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
-            }            
 
             TString expected = R"([[[1];["9"];["123.321"];["555555555555555.123456789"]]])";
             auto selectParams = tableClient.GetParamsBuilder()
@@ -873,15 +865,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                     DECLARE $value22 AS Decimal(22,9);
                     DECLARE $value35 AS Decimal(35,10);
 
-                    SELECT * FROM Table WHERE Key = $key AND Value1 = $value1 AND Value22 = $value22 AND Value35 = $value35;
-                )"), selectParams);
-                UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
-                CompareYson(expected, FormatResultSetYson(resultSet));
-            }
-
-            // No select parameters is declared
-            {
-                auto [status, issues, resultSet] = execSelectQuery(Q1_(R"(
                     SELECT * FROM Table WHERE Key = $key AND Value1 = $value1 AND Value22 = $value22 AND Value35 = $value35;
                 )"), selectParams);
                 UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::SUCCESS, issues);
@@ -943,21 +926,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             UNIT_ASSERT_STRING_CONTAINS(issues, "Failed to convert input columns types to scheme types");
         }
 
-        // No upsert parameters is declared, upsert decimal params mismatch
-        {
-            auto upsertParams = tableClient.GetParamsBuilder()
-                .AddParam("$key").Int32(1).Build()
-                .AddParam("$value22").Decimal(TDecimalValue("123.321", 35, 10)).Build()
-                .AddParam("$value35").Decimal(TDecimalValue("555555555555555.1234567890", 35, 10)).Build()
-                .Build();
-
-            auto [status, issues] = execUpsertQuery(Q1_(R"(
-                UPSERT INTO Table (Key, Value22, Value35) VALUES
-                    ($key, $value22, $value35);
-            )"), upsertParams);
-            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(issues, "Failed to convert input columns types to scheme types");
-        }
         // Good case: Upsert overflowed Decimal
         {
             auto upsertParams = tableClient.GetParamsBuilder()

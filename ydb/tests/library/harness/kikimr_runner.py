@@ -554,6 +554,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             self,
             node_id,
             host,
+            ssh_username,
             port,
             mon_port,
             ic_port,
@@ -561,7 +562,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             configurator=None,
             slot_id=None,
             ):
-        super(KikimrExternalNode, self).__init__(host)
+        super(KikimrExternalNode, self).__init__(host=host, ssh_username=ssh_username)
         self.__node_id = node_id
         self.__host = host
         self.__port = port

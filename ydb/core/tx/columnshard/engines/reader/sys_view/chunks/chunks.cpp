@@ -4,8 +4,8 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo::TConstPtr& portionPtr) const {
-    const TPortionInfo& portion = *portionPtr;
+void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portionPtr) const {
+    const TPortionInfo& portion = portionPtr.GetPortionInfo();
     auto portionSchema = ReadMetadata->GetLoadSchemaVerified(portion);
     auto it = PortionType.find(portion.GetMeta().Produced);
     if (it == PortionType.end()) {
@@ -22,7 +22,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     auto& entityStorages = EntityStorageNames[portion.GetMeta().GetTierName()];
     {
         std::vector<const TColumnRecord*> records;
-        for (auto&& r : TPortionDataAccessor(portionPtr).GetRecords()) {
+        for (auto&& r : portionPtr.GetRecords()) {
             records.emplace_back(&r);
         }
         if (Reverse) {
@@ -81,7 +81,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     }
     {
         std::vector<const TIndexChunk*> indexes;
-        for (auto&& r : TPortionDataAccessor(portionPtr).GetIndexes()) {
+        for (auto&& r : portionPtr.GetIndexes()) {
             indexes.emplace_back(&r);
         }
         if (Reverse) {
@@ -134,7 +134,7 @@ std::shared_ptr<NKikimr::NOlap::NReader::NSysView::NAbstract::TReadStatsMetadata
 bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
     ui64 recordsCount = 0;
     while (granule.GetPortions().size()) {
-        auto it = FetchedAccessors.find(granule.GetPortions().front().GetPortionId());
+        auto it = FetchedAccessors.find(granule.GetPortions().front()->GetPortionId());
         if (it == FetchedAccessors.end()) {
             break;
         }
@@ -152,12 +152,38 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
 ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const {
     ui32 recordsCount = 0;
     for (auto&& portion : granule.GetPortions()) {
-        recordsCount += TPortionDataAccessor(portion).GetRecords().size() + TPortionDataAccessor(portion).GetIndexes().size();
+        auto it = FetchedAccessors.find(portion->GetPortionId());
+        if (it == FetchedAccessors.end()) {
+            break;
+        }
+        recordsCount += it->second.GetRecords().size() + it->second.GetIndexes().size();
         if (recordsCount > 10000) {
             break;
         }
     }
+    AFL_VERIFY(recordsCount);
     return recordsCount;
+}
+
+TConclusionStatus TStatsIterator::Start() {
+    ProcessGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), {});
+    ScopeGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(ReadMetadata->GetTxId(), 1);
+
+    const ui32 columnsCount = Context->GetReadMetadata()->GetResultSchema()->GetColumnsCount();
+    for (auto&& i : IndexGranules) {
+        GroupGuards.emplace_back(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(ReadMetadata->GetTxId(), 1));
+        for (auto&& p : i.GetPortions()) {
+            std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>();
+            request->AddPortion(p);
+            auto allocation = std::make_shared<TFetchingAccessorAllocation>(
+                request, p->PredictMetadataMemorySize(columnsCount), Context->GetDataAccessorsManager(), Context->GetScanActorId());
+            request->RegisterSubscriber(allocation);
+
+            NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
+                ProcessGuard->GetProcessId(), ScopeGuard->GetScopeId(), GroupGuards.back()->GetGroupId(), { allocation }, std::nullopt);
+        }
+    }
+    return TConclusionStatus::Success();
 }
 
 }

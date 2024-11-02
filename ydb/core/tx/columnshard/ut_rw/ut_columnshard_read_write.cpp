@@ -2530,29 +2530,29 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << sb;
                 }
                 if (auto compact = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(msg->IndexChanges)) {
-                    Y_ABORT_UNLESS(compact->SwitchedPortions.size());
+                    Y_ABORT_UNLESS(compact->GetSwitchedPortions().size());
                     ++compactionsHappened;
                     TStringBuilder sb;
                     sb << "Compaction old portions:";
                     ui64 srcPathId{ 0 };
-                    for (const auto& portionInfo : compact->SwitchedPortions) {
-                        const ui64 pathId = portionInfo.GetPortionInfo().GetPathId();
+                    for (const auto& portionInfo : compact->GetSwitchedPortions()) {
+                        const ui64 pathId = portionInfo->GetPathId();
                         UNIT_ASSERT(!srcPathId || srcPathId == pathId);
                         srcPathId = pathId;
-                        oldPortions.insert(portionInfo.GetPortionInfo().GetPortionId());
-                        sb << portionInfo.GetPortionInfo().GetPortionId() << ",";
+                        oldPortions.insert(portionInfo->GetPortionId());
+                        sb << portionInfo->GetPortionId() << ",";
                     }
                     sb << Endl;
                     Cerr << sb;
                 }
                 if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
-                    Y_ABORT_UNLESS(cleanup->PortionsToDrop.size());
+                    Y_ABORT_UNLESS(cleanup->GetPortionsToDrop().size());
                     ++cleanupsHappened;
                     TStringBuilder sb;
                     sb << "Cleanup old portions:";
-                    for (const auto& portion : cleanup->PortionsToDrop) {
-                        sb << " " << portion.GetPortionInfo().GetPortionId();
-                        deletedPortions.insert(portion.GetPortionInfo().GetPortionId());
+                    for (const auto& portion : cleanup->GetPortionsToDrop()) {
+                        sb << " " << portion->GetPortionId();
+                        deletedPortions.insert(portion->GetPortionId());
                     }
                     sb << Endl;
                     Cerr << sb;

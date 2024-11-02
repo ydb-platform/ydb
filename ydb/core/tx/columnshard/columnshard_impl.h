@@ -472,6 +472,8 @@ private:
     TActorId ResourceSubscribeActor;
     TActorId BufferizationWriteActorId;
     TActorId DataAccessorsControlActorId;
+    NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
+
     TActorId StatsReportPipe;
     std::vector<TActorId> ActorsToStop;
 

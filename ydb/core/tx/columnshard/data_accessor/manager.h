@@ -3,6 +3,8 @@
 #include "events.h"
 #include "request.h"
 
+#include <ydb/services/bg_tasks/abstract/interface.h>
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 
 class IDataAccessorsManager {
@@ -25,6 +27,14 @@ public:
     void UnregisterController(const ui64 pathId) {
         return DoUnregisterController(pathId);
     }
+};
+
+class TDataAccessorsManagerContainer: public NBackgroundTasks::TControlInterfaceContainer<IDataAccessorsManager> {
+private:
+    using TBase = NBackgroundTasks::TControlInterfaceContainer<IDataAccessorsManager>;
+
+public:
+    using TBase::TBase;
 };
 
 class TActorAccessorsManager: public IDataAccessorsManager {
@@ -71,4 +81,4 @@ public:
     TLocalManager() = default;
 };
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NDataAccessorControl

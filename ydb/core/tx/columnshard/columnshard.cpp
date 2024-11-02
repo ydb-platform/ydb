@@ -4,6 +4,7 @@
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
 #include "data_accessor/actor.h"
+#include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
 #include "hooks/abstract/abstract.h"
@@ -108,6 +109,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId),
 
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
     Execute(CreateTxInitSchema(), ctx);

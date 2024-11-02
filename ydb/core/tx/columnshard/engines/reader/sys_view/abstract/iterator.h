@@ -21,7 +21,7 @@ protected:
     std::shared_ptr<arrow::Schema> ResultSchema;
 
     std::deque<TGranuleMetaView> IndexGranules;
-    THashMap<ui64, TPortionDataAccessor> FetchedAccessors;
+    mutable THashMap<ui64, TPortionDataAccessor> FetchedAccessors;
 
 public:
     virtual bool IsReadyForBatch() const {
@@ -39,7 +39,7 @@ public:
     virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override {
         while (!Finished()) {
             if (!IsReadyForBatch()) {
-                return nullptr;
+                return std::shared_ptr<TPartialReadResult>();
             }
             auto batchOpt = ExtractStatsBatch();
             if (!batchOpt) {
@@ -98,24 +98,7 @@ public:
     }
 
 
-    TStatsIteratorBase(const std::shared_ptr<NReader::TReadContext>& context, const NTable::TScheme::TTableSchema& statsSchema)
-        : StatsSchema(statsSchema)
-        , Context(context)
-        , ReadMetadata(context->GetReadMetadataPtrVerifiedAs<TReadStatsMetadata>())
-        , KeySchema(MakeArrowSchema(StatsSchema.Columns, StatsSchema.KeyColumns))
-        , ResultSchema(MakeArrowSchema(StatsSchema.Columns, ReadMetadata->ResultColumnIds))
-        , IndexGranules(ReadMetadata->IndexGranules)
-    {
-        if (ResultSchema->num_fields() == 0) {
-            ResultSchema = KeySchema;
-        }
-        std::vector<ui32> allColumnIds;
-        for (const auto& c : StatsSchema.Columns) {
-            allColumnIds.push_back(c.second.Id);
-        }
-        std::sort(allColumnIds.begin(), allColumnIds.end());
-        DataSchema = MakeArrowSchema(StatsSchema.Columns, allColumnIds);
-    }
+    TStatsIteratorBase(const std::shared_ptr<NReader::TReadContext>& context, const NTable::TScheme::TTableSchema& statsSchema);
 };
 
 template <class TSysViewSchema>
@@ -154,7 +137,7 @@ public:
         }
     };
 
-    TStatsIterator(const NReader::TReadContext& context)
+    TStatsIterator(const std::shared_ptr<NReader::TReadContext>& context)
         : TBase(context, StatsSchema)
     {
     }

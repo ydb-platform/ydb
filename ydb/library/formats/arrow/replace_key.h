@@ -55,12 +55,12 @@ public:
         for (auto&& i : *Columns) {
             auto res = i->GetScalar(Position);
             if (!res.ok()) {
-                sb << result.AppendValue(res.status().ToString()) << ";";
+                result.AppendValue(res.status().ToString());
             } else {
-                sb << result.AppendValue((*res)->ToString()) << ";";
+                result.AppendValue((*res)->ToString());
             }
         }
-        return sb;
+        return result;
     }
 
     TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)

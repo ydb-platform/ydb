@@ -21,6 +21,7 @@ private:
     TActorId ResourceSubscribeActorId;
     TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::optional<TMonotonic> StartInstant;
 
 public:
@@ -32,9 +33,11 @@ public:
     virtual void PassAway() override;
 
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId,
-        ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange,
-        NKikimrDataEvents::EDataFormat dataFormat, const NColumnShard::TScanCounters& scanCountersPool);
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
+        TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
+        const NColumnShard::TScanCounters& scanCountersPool);
 
     void Bootstrap(const TActorContext& ctx);
 

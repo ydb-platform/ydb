@@ -101,8 +101,7 @@ bool TTxInit::Precharge(TTransactionContext& txc) {
 }
 
 bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
-    TTablesManager tManagerLocal(Self->StoragesManager,
-        std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(Self->DataAccessorsControlActorId), Self->TabletID());
+    TTablesManager tManagerLocal(Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->TabletID());
     {
         TLoadTimeSignals::TLoadTimer timer = tManagerLocal.GetLoadTimeCounters()->PrechargeTimeCounters.StartGuard();
         if (!Precharge(txc)) {

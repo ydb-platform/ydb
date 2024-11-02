@@ -1,16 +1,20 @@
 #pragma once
+#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/abstract/iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/sys_view/constructor/constructor.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
 
 class TConstructor: public TStatScannerConstructor<NKikimr::NSysView::Schema::PrimaryIndexStats> {
 private:
     using TBase = TStatScannerConstructor<NKikimr::NSysView::Schema::PrimaryIndexStats>;
+
 protected:
-    virtual std::shared_ptr<NAbstract::TReadStatsMetadata> BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override;
+    virtual std::shared_ptr<NAbstract::TReadStatsMetadata> BuildMetadata(
+        const NColumnShard::TColumnShard* self, const TReadDescription& read) const override;
+
 public:
     using TBase::TBase;
 };
@@ -19,6 +23,7 @@ class TReadStatsMetadata: public NAbstract::TReadStatsMetadata {
 private:
     using TBase = NAbstract::TReadStatsMetadata;
     using TSysViewSchema = NKikimr::NSysView::Schema::PrimaryIndexStats;
+
 public:
     using TBase::TBase;
 
@@ -54,27 +59,34 @@ private:
     mutable THashMap<NPortion::EProduced, TViewContainer> PortionType;
     mutable THashMap<TString, THashMap<ui32, TViewContainer>> EntityStorageNames;
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ProcessGuard;
-    std::shared_ptr<NGroupedMemoryManager::TProcessGuard> ScopeGuard;
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TProcessGuard>> GroupGuards;
+    std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TGroupGuard>> GroupGuards;
 
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
 
-    virtual bool IsReadyForBatch() const {
-        return IndexGranules.size() && IndexGranules.front().GetPortions().size() && FetchedAccessors.contains(IndexGranules.front().GetPortions().front().GetPortionId());
+    virtual bool IsReadyForBatch() const override {
+        return IndexGranules.size() && IndexGranules.front().GetPortions().size() &&
+               FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId());
     }
 
-    virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
+    virtual bool AppendStats(
+        const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
-    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo::TConstPtr& portion) const;
+    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portion) const;
 
     class TApplyResult: public IDataTasksProcessor::ITask {
     private:
+        using TBase = IDataTasksProcessor::ITask;
         YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, Accessors);
-    public:
-        TApplyResult(const std::vector<TPortionDataAccessor>& accessors)
-            : Accessors(accessors)
-        {
 
+    public:
+        TString GetTaskClassIdentifier() const override {
+            return "TApplyResult";
+        }
+
+        TApplyResult(const std::vector<TPortionDataAccessor>& accessors)
+            : TBase(NActors::TActorId())
+            , Accessors(accessors) {
         }
 
         virtual TConclusionStatus DoExecuteImpl() override {
@@ -98,6 +110,7 @@ private:
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {
             Guard = std::move(guard);
             AccessorsManager->AskData(std::move(Request));
+            return true;
         }
 
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
@@ -117,40 +130,21 @@ private:
             : TBase(mem)
             , AccessorsManager(manager)
             , Request(request)
-            , OwnerId(ownerId)
-        {
+            , OwnerId(ownerId) {
         }
     };
 
-    void Apply(const std::shared_ptr<IApplyAction>& task) {
+    virtual void Apply(const std::shared_ptr<IApplyAction>& task) override {
         if (IndexGranules.empty()) {
             return;
         }
         auto result = std::dynamic_pointer_cast<TApplyResult>(task);
         AFL_VERIFY(result);
-        AFL_VERIFY(task->GetAccessors().size() == 1);
-        FetchedAccessors.emplace(
-            task->GetAccessors().front().GetPortionInfo().GetPortionId(), task->GetAccessors().front());
+        AFL_VERIFY(result->GetAccessors().size() == 1);
+        FetchedAccessors.emplace(result->GetAccessors().front().GetPortionInfo().GetPortionId(), result->GetAccessors().front());
     }
 
-    virtual TConclusionStatus DoStart() override {
-        ProcessGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId());
-        ScopeGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(ReadMetadata->GetTxId(), 1);
-
-        for (auto&& i : IndexGranules) {
-            GroupGuards.emplace_back(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(ReadMetadata->GetTxId(), 1));
-            for (auto&& p : i.GetPortions()) {
-                std::shared_ptr<TDataAccessorsResult> request = std::make_shared<TDataAccessorsResult>();
-                request->AddPortion(p);
-                auto allocation = std::make_shared<TFetchingAccessorAllocation>(request, p->GetMetadataSize(), DataAccessorsManager, Context->GetScanActorId());
-                request->RegisterSubscriber(allocation);
-
-                NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
-                    ProcessGuard->GetProcessId(), ScopeGuard->GetScopeId(), GroupGuards.back()->GetGroupId(), { allocation }, std::nullopt);
-            }
-        }
-        return TConclusionStatus::Success();
-    }
+    virtual TConclusionStatus Start() override;
 
 public:
     using TBase::TBase;
@@ -158,28 +152,32 @@ public:
 
 class TStoreSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
+        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
         return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromStore>();
     }
-public:
-    static const inline TFactory::TRegistrator<TStoreSysViewPolicy> Registrator = TFactory::TRegistrator<TStoreSysViewPolicy>(TString(::NKikimr::NSysView::StorePrimaryIndexStatsName));
 
+public:
+    static const inline TFactory::TRegistrator<TStoreSysViewPolicy> Registrator =
+        TFactory::TRegistrator<TStoreSysViewPolicy>(TString(::NKikimr::NSysView::StorePrimaryIndexStatsName));
 };
 
 class TTableSysViewPolicy: public NAbstract::ISysViewPolicy {
 protected:
-    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
+    virtual std::unique_ptr<IScannerConstructor> DoCreateConstructor(
+        const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse) const override {
         return std::make_unique<TConstructor>(snapshot, itemsLimit, reverse);
     }
     virtual std::shared_ptr<NAbstract::IMetadataFiller> DoCreateMetadataFiller() const override {
         return std::make_shared<NAbstract::TMetadataFromTable>();
     }
-public:
-    static const inline TFactory::TRegistrator<TTableSysViewPolicy> Registrator = TFactory::TRegistrator<TTableSysViewPolicy>(TString(::NKikimr::NSysView::TablePrimaryIndexStatsName));
 
+public:
+    static const inline TFactory::TRegistrator<TTableSysViewPolicy> Registrator =
+        TFactory::TRegistrator<TTableSysViewPolicy>(TString(::NKikimr::NSysView::TablePrimaryIndexStatsName));
 };
 
-}
+}   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

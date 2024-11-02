@@ -117,6 +117,7 @@ ELSEIF (PY3)
         py_compile.py
         resolve_java_srcs.py
         retry.py
+        retry_cc.py
         rodata2asm.py
         rodata2cpp.py
         run_javac.py

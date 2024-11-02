@@ -441,6 +441,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::MonotonicKeys:
         case EYtSettingType::BlockInputReady:
         case EYtSettingType::BlockInputApplied:
+        case EYtSettingType::Small:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }

@@ -150,6 +150,10 @@ private:
     }
 
 public:
+    TPortionDataAccessor BuildAccessor(const TPortionInfo::TConstPtr& portion) const {
+        return TPortionDataAccessor(portion);
+    }
+
     TMemDataAccessor(const ui64 pathId)
         : TBase(pathId)
     {
@@ -220,7 +224,14 @@ public:
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         auto copy = innerPortion->MakeCopy();
         modifier(copy);
-        TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, firstPKColumnId, false);
+        if (AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+            auto data = std::dynamic_pointer_cast<TMemDataAccessor>(DataAccessor);
+            AFL_VERIFY(data);
+            auto accessor = data->BuildAccessor(std::make_shared<TPortionInfo>(std::move(copy)));
+            accessor.SaveToDatabase(wrapper, firstPKColumnId, false);
+        } else {
+            copy.SaveMetaToDatabase(wrapper);
+        }
     }
 
     template <class TModifier>
@@ -248,7 +259,7 @@ public:
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
         TDbWrapper wrapper(txc.DB, nullptr);
-        TPortionDataAccessor(it->second).SaveToDatabase(wrapper, 0, true);
+        it->second.SaveMetaToDatabase(wrapper);
     }
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
@@ -256,12 +267,14 @@ public:
     void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
+        it->second->SetCommitSnapshot(snapshot);
+        it->second->SetRemoveSnapshot(TSnapshot(1, 1));
         TDbWrapper wrapper(txc.DB, nullptr);
-        TPortionDataAccessor(it->second).RemoveFromDatabase(wrapper);
+        it->second.SaveMetaToDatabase(wrapper);
     }
 
-    void AbortPortionOnComplete(const TInsertWriteId insertWriteId) {
-        AFL_VERIFY(InsertedPortions.erase(insertWriteId));
+    void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
+        CommitPortionOnComplete(insertWriteId, engine);
     }
 
     void CommitImmediateOnExecute(

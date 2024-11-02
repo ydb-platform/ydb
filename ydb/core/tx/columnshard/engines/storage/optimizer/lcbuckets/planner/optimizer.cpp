@@ -34,11 +34,8 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     TSaverContext saverContext(StoragesManager);
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
     //    if (level->GetLevelId() == 0) {
-    std::vector<TPortionDataAccessor> accessors;
-    for (auto&& i : data.GetRepackPortions(level->GetLevelId())) {
-        accessors.emplace_back(i);
-    }
-    result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, accessors, saverContext);
+    result =
+        std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
     //    } else {
     //        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
     //            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);

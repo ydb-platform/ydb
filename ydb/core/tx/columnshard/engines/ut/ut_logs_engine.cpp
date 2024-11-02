@@ -385,7 +385,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
     if (!expectedToDrop && !changes) {
         return true;
     }
-    UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
+    UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToDrop().size(), expectedToDrop);
 
 
     changes->StartEmergency();

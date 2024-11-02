@@ -87,6 +87,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
 
     @property
+    def cwd(self):
+        return self.__working_dir
+
+    @property
     def binary_path(self):
         return self.__binary_path
 
@@ -631,6 +635,10 @@ mon={mon}""".format(
                 "sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id),
             ]
         )
+
+    @property
+    def cwd(self):
+        assert False, "not supported"
 
     @property
     def mon_port(self):

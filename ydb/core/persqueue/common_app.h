@@ -11,7 +11,7 @@
 #define NAVIGATION_TAB_CONTENT(id) WITH_SCOPED(__navigationContent, ::NKikimr::NPQ::NApp::TNavigationBarContent(__navigationBar, id))
 
 #define PROPERTIES(caption) WITH_SCOPED(__properties, ::NKikimr::NPQ::NApp::TProperties(__stream, caption))
-#define PROPERTY(caption, value) __properties.Add(caption, value)
+#define PROPERTY(caption, value) __properties.Add(caption, TStringBuilder() << value)
 
 #define LAYOUT_ROW(columns)
 #define LAYOUT_COLUMN()
@@ -60,8 +60,7 @@ struct TProperties {
     TProperties(IOutputStream&, const TString& caption);
     ~TProperties();
 
-    template<typename T>
-    void Add(const TString& name, const T& value);
+    void Add(const TString& name, const TString& value);
 
 private:
     IOutputStream& Str;

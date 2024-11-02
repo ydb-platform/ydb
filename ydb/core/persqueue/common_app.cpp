@@ -74,10 +74,10 @@ TNavigationBarContent::TNavigationBarContent(TNavigationBar& navigationBar, cons
         __stream << R"(
 </UL>
 <DIV CLASS="tab-content">
-    <DIV CLASS="tab-pane fade in active">
+    <DIV CLASS="tab-pane fade in active" id=")" << id << R"(">
         )";
     } else {
-        __stream << R"(    <DIV CLASS="tab-pane fade">)";
+        __stream << R"(    <DIV CLASS="tab-pane fade" id=")" << id << R"(">)";
     }
 }
 
@@ -104,8 +104,7 @@ TProperties::~TProperties() {
     )";
 }
 
-template<typename T>
-void TProperties::Add(const TString& name, const T& value) {
+void TProperties::Add(const TString& name, const TString& value) {
     auto& __stream = Str;
 
     TABLER() {
@@ -113,8 +112,5 @@ void TProperties::Add(const TString& name, const T& value) {
         TABLED() { __stream << value; }
     }
 }
-
-template void TProperties::Add(const TString& name, const TString& value);
-template void TProperties::Add(const TString& name, const ui64& value);
 
 }

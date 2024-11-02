@@ -71,11 +71,13 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
     }
 }
 
-TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
+TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
+    auto name = internName.Str();
+    const bool small = name.SkipPrefix("Small");
     if (name == TYtTableContent::CallableName()) {
 
         *TableContentFlag_ = true;
-        *RemoteExecutionFlag_ = *RemoteExecutionFlag_ || !Settings_->TableContentLocalExecution.Get().GetOrElse(DEFAULT_TABLE_CONTENT_LOCAL_EXEC);
+        *RemoteExecutionFlag_ = *RemoteExecutionFlag_ || !small;
 
         if (EPhase::Content == Phase_ || EPhase::All == Phase_) {
             return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {

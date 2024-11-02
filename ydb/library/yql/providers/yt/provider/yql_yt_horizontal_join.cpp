@@ -665,7 +665,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
 
             TExprNode::TPtr updatedLambda = map.Mapper().Ptr();
             if (MaxJobMemoryLimit) {
-                auto status = UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx);
+                auto status = UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx, false);
                 if (status.Level != IGraphTransformer::TStatus::Ok) {
                     return {};
                 }
@@ -1346,7 +1346,7 @@ bool TMultiHorizontalJoinOptimizer::HandleGroup(const TVector<TYtMap>& maps, TEx
 
         TExprNode::TPtr updatedLambda = map.Mapper().Ptr();
         if (MaxJobMemoryLimit) {
-            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx).Level != IGraphTransformer::TStatus::Ok) {
+            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx, false).Level != IGraphTransformer::TStatus::Ok) {
                 return false;
             }
         }
@@ -1734,7 +1734,7 @@ bool TOutHorizontalJoinOptimizer::HandleGroup(TPositionHandle pos, const TGroupK
 
         TExprNode::TPtr updatedLambda = map.Mapper().Ptr();
         if (MaxJobMemoryLimit) {
-            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx).Level != IGraphTransformer::TStatus::Ok) {
+            if (UpdateTableContentMemoryUsage(map.Mapper().Ptr(), updatedLambda, State_, ctx, false).Level != IGraphTransformer::TStatus::Ok) {
                 return false;
             }
         }

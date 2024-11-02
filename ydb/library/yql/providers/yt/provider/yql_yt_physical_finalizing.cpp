@@ -2507,7 +2507,7 @@ private:
 
                     TExprNode::TPtr updatedBody = lambda.Body().Ptr();
                     if (maxJobMemoryLimit) {
-                        auto status = UpdateTableContentMemoryUsage(lambda.Body().Ptr(), updatedBody, State_, ctx);
+                        auto status = UpdateTableContentMemoryUsage(lambda.Body().Ptr(), updatedBody, State_, ctx, false);
                         if (status.Level != TStatus::Ok) {
                             return status;
                         }
@@ -2526,7 +2526,7 @@ private:
 
                                 updatedBody = outerMap.Mapper().Body().Ptr();
                                 if (maxJobMemoryLimit) {
-                                    auto status = UpdateTableContentMemoryUsage(outerMap.Mapper().Body().Ptr(), updatedBody, State_, ctx);
+                                    auto status = UpdateTableContentMemoryUsage(outerMap.Mapper().Body().Ptr(), updatedBody, State_, ctx, false);
                                     if (status.Level != TStatus::Ok) {
                                         return status;
                                     }

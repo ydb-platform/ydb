@@ -1360,7 +1360,7 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
     
-    if(auto streamlookup = GetSetting(linkSettings, "forceStreamLookup")) {
+    if (auto streamlookup = GetSetting(linkSettings, "forceStreamLookup")) {
         result.JoinAlgo = EJoinAlgoType::StreamLookupJoin;
         auto size = streamlookup->ChildrenSize();
         for (decltype(size) i = 1; i < size; ++i) {

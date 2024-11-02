@@ -582,16 +582,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     def __init__(
-            self, 
-            node_id, 
-            host, 
-            port, 
-            mon_port, 
-            ic_port, 
-            mbus_port, 
-            configurator=None, 
+            self,
+            node_id,
+            host,
+            port,
+            mon_port,
+            ic_port,
+            mbus_port,
+            configurator=None,
             slot_id=None,
-        ):
+            ):
         super(KikimrExternalNode, self).__init__(host)
         self.__node_id = node_id
         self.__host = host
@@ -615,7 +615,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         ]
 
         self.local_drivers_path = [
-            param_constants.kikimr_driver_path(), 
+            param_constants.kikimr_driver_path(),
             param_constants.next_version_kikimr_driver_path(),
         ]
 

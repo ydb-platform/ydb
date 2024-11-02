@@ -1,14 +1,17 @@
 LIBRARY()
 
 SRCS(
-    status.cpp
+    ydb_issue_message.cpp
 )
 
 PEERDIR(
-    contrib/libs/protobuf
-    ydb/library/grpc/client
     ydb/public/api/protos
     yql/essentials/public/issue
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)
+

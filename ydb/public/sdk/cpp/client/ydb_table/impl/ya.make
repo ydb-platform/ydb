@@ -17,6 +17,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/impl/ydb_internal/session_pool
     ydb/public/sdk/cpp/client/ydb_table/query_stats
     yql/essentials/public/issue/protos
+    ydb/library/yql/public/ydb_issue
 )
 
 END()

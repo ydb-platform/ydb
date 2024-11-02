@@ -5,4 +5,5 @@ RECURSE(
     purecalc
     result_format
     udf
+    ydb_issue
 )

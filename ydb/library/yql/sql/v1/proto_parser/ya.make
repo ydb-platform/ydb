@@ -1,7 +1,8 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/utils
+    yql/essentials/utils
+    ydb/library/yql/ast
 
     ydb/library/yql/parser/proto_ast/antlr3
     ydb/library/yql/parser/proto_ast/antlr4

@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/library/yql/public/ydb_issue
     ydb/library/yql/dq/actors
     ydb/library/actors/wilson
     ydb/library/actors/testlib

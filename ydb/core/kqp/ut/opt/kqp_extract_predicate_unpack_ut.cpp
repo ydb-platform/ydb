@@ -302,6 +302,18 @@ Y_UNIT_TEST(ComplexRange) {
     TestRange(
         R"(
             SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE Key = 1
+            ORDER BY Value DESC
+            LIMIT 1;
+        )",
+        R"([
+            [[1];[101];["Value1"]];
+        ])",
+        1);
+
+    TestRange(
+        R"(
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
             WHERE Key >= 1 AND Key < 4 AND Fk >= 101 AND Fk < 104;
         )",
         R"([

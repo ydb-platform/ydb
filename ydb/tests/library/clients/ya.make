@@ -2,6 +2,7 @@ PY23_LIBRARY()
 
 PY_SRCS(
     __init__.py
+    kikimr_client.py
     kikimr_http_client.py
     kikimr_keyvalue_client.py
     kikimr_monitoring.py
@@ -9,6 +10,8 @@ PY_SRCS(
 )
 
 PEERDIR(
+    ydb/core/protos
+    # ydb/tests/library  # TODO: remove dependency, commented because of loop. Needed because protobuf_ss
     ydb/public/api/protos
     ydb/public/api/grpc
 )

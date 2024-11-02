@@ -131,7 +131,7 @@ void TYamredDsvFormatConfig::Register(TRegistrar registrar)
     });
 
     registrar.Postprocessor([] (TThis* config) {
-        THashSet<TString> names;
+        THashSet<std::string> names;
 
         for (const auto& name : config->KeyColumnNames) {
             if (!names.insert(name).second) {
@@ -151,7 +151,7 @@ void TYamredDsvFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<TString>& TSchemafulDsvFormatConfig::GetColumnsOrThrow() const
+const std::vector<std::string>& TSchemafulDsvFormatConfig::GetColumnsOrThrow() const
 {
     if (!Columns) {
         THROW_ERROR_EXCEPTION("Missing \"columns\" attribute in schemaful DSV format");
@@ -188,7 +188,7 @@ void TSchemafulDsvFormatConfig::Register(TRegistrar registrar)
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->Columns) {
-            THashSet<TString> names;
+            THashSet<std::string> names;
             for (const auto& name : *config->Columns) {
                 if (!names.insert(name).second) {
                     THROW_ERROR_EXCEPTION("Duplicate column name %Qv in schemaful DSV configuration",

@@ -12,6 +12,22 @@ namespace NKikimr::NOlap {
 TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormalization) {
     AFL_VERIFY(!Constructed);
     Constructed = true;
+
+    MetaConstructor.ColumnRawBytes = 0;
+    MetaConstructor.ColumnBlobBytes = 0;
+    MetaConstructor.IndexRawBytes = 0;
+    MetaConstructor.IndexBlobBytes = 0;
+
+    MetaConstructor.RecordsCount = GetRecordsCount();
+    for (auto&& r : Records) {
+        *MetaConstructor.ColumnRawBytes += r.GetMeta().GetRawBytes();
+        *MetaConstructor.ColumnBlobBytes += r.GetBlobRange().GetSize();
+    }
+    for (auto&& r : Indexes) {
+        *MetaConstructor.IndexRawBytes += r.GetRawBytes();
+        *MetaConstructor.IndexBlobBytes += r.GetDataSize();
+    }
+
     std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
     AFL_VERIFY(PathId);
     result->PathId = PathId;
@@ -41,13 +57,11 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
         ReorderChunks();
     }
     NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("portion_id", GetPortionIdVerified());
-    FullValidation();
-
-    if (BlobIdxs.size()) {
+    if (MetaConstructor.BlobIdxs.size()) {
         auto itRecord = Records.begin();
         auto itIndex = Indexes.begin();
-        auto itBlobIdx = BlobIdxs.begin();
-        while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
+        auto itBlobIdx = MetaConstructor.BlobIdxs.begin();
+        while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != MetaConstructor.BlobIdxs.end()) {
             if (itRecord->GetAddress() < itIndex->GetAddress()) {
                 AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
                 itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
@@ -66,11 +80,11 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
                 AFL_VERIFY(false);
             }
         }
-        for (; itRecord != Records.end() && itBlobIdx != BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
+        for (; itRecord != Records.end() && itBlobIdx != MetaConstructor.BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
             AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
             itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
         }
-        for (; itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end(); ++itIndex) {
+        for (; itIndex != Indexes.end() && itBlobIdx != MetaConstructor.BlobIdxs.end(); ++itIndex) {
             if (itIndex->HasBlobData()) {
                 continue;
             }
@@ -79,25 +93,23 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
             ++itBlobIdx;
         }
         AFL_VERIFY(itRecord == Records.end());
-        AFL_VERIFY(itBlobIdx == BlobIdxs.end());
+        AFL_VERIFY(itBlobIdx == MetaConstructor.BlobIdxs.end());
     } else {
         for (auto&& i : Records) {
-            AFL_VERIFY(i.BlobRange.IsValid());
+            AFL_VERIFY(i.BlobRange.GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
         }
         for (auto&& i : Indexes) {
             if (auto* blobId = i.GetBlobRangeOptional()) {
-                AFL_VERIFY(blobId->IsValid());
+                AFL_VERIFY(blobId->GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
             }
         }
     }
+    FullValidation();
 
     result->Indexes = std::move(Indexes);
     result->Indexes.shrink_to_fit();
     result->Records = std::move(Records);
     result->Records.shrink_to_fit();
-    result->BlobIds = std::move(BlobIds);
-    result->BlobIds.shrink_to_fit();
-    result->Precalculate();
     return TPortionDataAccessor(result);
 }
 
@@ -111,13 +123,10 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
     return index.GetSchema(*MinSnapshotDeprecated);
 }
 
-void TPortionInfoConstructor::LoadRecord(const TIndexInfo& indexInfo, const TColumnChunkLoadContext& loadContext) {
-    TColumnRecord rec(RegisterBlobId(loadContext.GetBlobRange().GetBlobId()), loadContext);
+void TPortionInfoConstructor::LoadRecord(const TColumnChunkLoadContextV1& loadContext) {
+    AFL_VERIFY(loadContext.GetBlobRange().GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
+    TColumnRecord rec(loadContext);
     Records.push_back(std::move(rec));
-
-    if (loadContext.GetPortionMeta()) {
-        AFL_VERIFY(MetaConstructor.LoadMetadata(*loadContext.GetPortionMeta(), indexInfo));
-    }
 }
 
 void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContext) {

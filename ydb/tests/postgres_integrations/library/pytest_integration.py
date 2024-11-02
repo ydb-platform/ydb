@@ -14,7 +14,6 @@ import yatest
 
 import logging
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 
@@ -36,7 +35,7 @@ _filter_format_function = Callable[[List[str]], str]
 _filter_formatter: Optional[_filter_format_function] = None
 _tests_folder: Optional[str] = None
 _test_results: Optional[Dict[str, TestCase]] = None
-_kikimr_factory: KiKiMR = kikimr_cluster_factory()
+_kikimr_factory: KiKiMR = KiKiMR()
 _integration_tests: Optional[List[str]] = None
 _skip_tests: Dict[str, str] = dict()  # [test name: reason]
 

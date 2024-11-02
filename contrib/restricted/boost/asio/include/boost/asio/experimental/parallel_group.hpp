@@ -2,7 +2,7 @@
 // experimental/parallel_group.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -16,8 +16,8 @@
 #endif // defined(_MSC_VER) && (_MSC_VER >= 1200)
 
 #include <boost/asio/detail/config.hpp>
-#include <utility>
 #include <boost/asio/detail/array.hpp>
+#include <boost/asio/detail/utility.hpp>
 #include <boost/asio/experimental/cancellation_condition.hpp>
 
 #include <boost/asio/detail/push_options.hpp>
@@ -26,23 +26,6 @@ namespace boost {
 namespace asio {
 namespace experimental {
 namespace detail {
-
-// Helper trait for getting the completion signature from an async operation.
-
-struct parallel_op_signature_probe {};
-
-template <typename T>
-struct parallel_op_signature_probe_result
-{
-  typedef T type;
-};
-
-template <typename Op>
-struct parallel_op_signature
-{
-  typedef typename decltype(declval<Op>()(
-    declval<parallel_op_signature_probe>()))::type type;
-};
 
 // Helper trait for getting a tuple from a completion signature.
 
@@ -94,7 +77,7 @@ struct parallel_group_signature<N, Sig0, Sig1, SigN...>
 template <typename Condition, typename Handler,
     typename... Ops, std::size_t... I>
 void parallel_group_launch(Condition cancellation_condition, Handler handler,
-    std::tuple<Ops...>& ops, std::index_sequence<I...>);
+    std::tuple<Ops...>& ops, boost::asio::detail::index_sequence<I...>);
 
 } // namespace detail
 
@@ -106,6 +89,20 @@ void parallel_group_launch(Condition cancellation_condition, Handler handler,
 template <typename... Ops>
 class parallel_group
 {
+private:
+  struct initiate_async_wait
+  {
+    template <typename Handler, typename Condition>
+    void operator()(Handler&& h, Condition&& c, std::tuple<Ops...>&& ops) const
+    {
+      detail::parallel_group_launch(
+          std::forward<Condition>(c), std::forward<Handler>(h),
+          ops, boost::asio::detail::index_sequence_for<Ops...>());
+    }
+  };
+
+  std::tuple<Ops...> ops_;
+
 public:
   /// Constructor.
   explicit parallel_group(Ops... ops)
@@ -115,7 +112,7 @@ public:
 
   /// The completion signature for the group of operations.
   typedef typename detail::parallel_group_signature<sizeof...(Ops),
-      typename detail::parallel_op_signature<Ops>::type...>::type signature;
+      typename completion_signature_of<Ops>::type...>::type signature;
 
   /// Initiate an asynchronous wait for the group of operations.
   /**
@@ -128,7 +125,7 @@ public:
    * operations, it must return a boost::asio::cancellation_type value other
    * than <tt>boost::asio::cancellation_type::none</tt>.
    *
-   * @param token A completion token whose signature is comprised of
+   * @param token A @ref completion_token whose signature is comprised of
    * a @c std::array<std::size_t, N> indicating the completion order of the
    * operations, followed by all operations' completion handler arguments.
    *
@@ -141,26 +138,18 @@ public:
    */
   template <typename CancellationCondition,
       BOOST_ASIO_COMPLETION_TOKEN_FOR(signature) CompletionToken>
-  auto async_wait(CancellationCondition cancellation_condition,
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(CompletionToken, signature)
+  async_wait(CancellationCondition cancellation_condition,
       CompletionToken&& token)
+    BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+      boost::asio::async_initiate<CompletionToken, signature>(
+          declval<initiate_async_wait>(), token,
+          std::move(cancellation_condition), std::move(ops_))))
   {
     return boost::asio::async_initiate<CompletionToken, signature>(
         initiate_async_wait(), token,
         std::move(cancellation_condition), std::move(ops_));
   }
-
-private:
-  struct initiate_async_wait
-  {
-    template <typename Handler, typename Condition>
-    void operator()(Handler&& h, Condition&& c, std::tuple<Ops...>&& ops) const
-    {
-      detail::parallel_group_launch(std::move(c), std::move(h),
-          ops, std::make_index_sequence<sizeof...(Ops)>());
-    }
-  };
-
-  std::tuple<Ops...> ops_;
 };
 
 /// Create a group of operations that may be launched in parallel.
@@ -201,7 +190,8 @@ private:
  * @endcode
  */
 template <typename... Ops>
-inline parallel_group<Ops...> make_parallel_group(Ops... ops)
+BOOST_ASIO_NODISCARD inline parallel_group<Ops...>
+make_parallel_group(Ops... ops)
 {
   return parallel_group<Ops...>(std::move(ops)...);
 }

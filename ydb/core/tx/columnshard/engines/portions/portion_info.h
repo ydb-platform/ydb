@@ -65,14 +65,8 @@ private:
     friend class TPortionDataAccessor;
     friend class TPortionInfoConstructor;
 
-    ui64 PrecalculatedColumnRawBytes = 0;
-    ui64 PrecalculatedColumnBlobBytes = 0;
-    ui64 PrecalculatedRecordsCount = 0;
-    ui64 PrecalculatedIndexBlobBytes = 0;
-    ui64 PrecalculatedIndexRawBytes = 0;
-    bool Precalculated = false;
-
-    void Precalculate();
+    TPortionInfo(const TPortionInfo&) = default;
+    TPortionInfo& operator=(const TPortionInfo&) = default;
 
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
@@ -92,7 +86,6 @@ private:
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
-    std::vector<TUnifiedBlobId> BlobIds;
 
     std::vector<TIndexChunk> Indexes;
     std::vector<TColumnRecord> Records;
@@ -101,16 +94,23 @@ private:
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
         AFL_VERIFY(MinSnapshotDeprecated.Valid());
-        AFL_VERIFY(BlobIds.size());
+        Meta.FullValidation();
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
 public:
+    TPortionInfo(TPortionInfo&&) = default;
+    TPortionInfo& operator=(TPortionInfo&&) = default;
+
     void SaveMetaToDatabase(IDbWrapper& db) const;
 
+    TPortionInfo MakeCopy() const {
+        return *this;
+    }
+
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return BlobIds;
+        return Meta.GetBlobIds();
     }
 
     ui32 GetCompactionLevel() const {
@@ -223,12 +223,11 @@ public:
     }
 
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < BlobIds.size());
-        return BlobIds[linkId];
+        return Meta.GetBlobId(linkId);
     }
 
     ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
+        return Meta.GetBlobIdsCount();
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
@@ -433,18 +432,15 @@ public:
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
     ui32 GetRecordsCount() const {
-        AFL_VERIFY(Precalculated);
-        return PrecalculatedRecordsCount;
+        return GetMeta().GetRecordsCount();
     }
 
     ui64 GetIndexBlobBytes() const noexcept {
-        AFL_VERIFY(Precalculated);
-        return PrecalculatedIndexBlobBytes;
+        return GetMeta().GetIndexBlobBytes();
     }
 
     ui64 GetIndexRawBytes() const noexcept {
-        AFL_VERIFY(Precalculated);
-        return PrecalculatedIndexRawBytes;
+        return GetMeta().GetIndexRawBytes();
     }
 
     ui64 GetColumnRawBytes() const;

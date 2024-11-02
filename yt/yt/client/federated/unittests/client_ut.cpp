@@ -78,8 +78,8 @@ struct TTestDataStorage
     }
 
     const NYPath::TYPath Path = "/test/table";
-    const TString KeyColumn = "key";
-    const TString ValueColumn = "value";
+    const std::string KeyColumn = "key";
+    const std::string ValueColumn = "value";
 
     const NTableClient::TColumnSchema KeyColumnSchema = NTableClient::TColumnSchema(KeyColumn, NTableClient::EValueType::Uint64);
     const NTableClient::TColumnSchema ValueColumnSchema = NTableClient::TColumnSchema(ValueColumn, NTableClient::EValueType::Uint64);

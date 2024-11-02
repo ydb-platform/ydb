@@ -151,7 +151,7 @@ escape_unicode_kind4(PyUnicodeObject *in)
 static PyObject*
 escape_unicode(PyObject *self, PyObject *s)
 {
-	if (!PyUnicode_CheckExact(s))
+	if (!PyUnicode_Check(s))
 		return NULL;
 
     // This check is no longer needed in Python 3.12.

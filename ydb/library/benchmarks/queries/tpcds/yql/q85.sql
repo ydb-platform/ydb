@@ -29,7 +29,7 @@ select  substring(cast(reason.r_reason_desc as string),0,20) bla
      and
      cd1.cd_marital_status = cd2.cd_marital_status
      and
-     cd1.cd_education_status = '4 yr Degree'
+     cd1.cd_education_status = 'Advanced Degree'
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
@@ -49,11 +49,11 @@ select  substring(cast(reason.r_reason_desc as string),0,20) bla
     )
    or
     (
-     cd1.cd_marital_status = 'D'
+     cd1.cd_marital_status = 'W'
      and
      cd1.cd_marital_status = cd2.cd_marital_status
      and
-     cd1.cd_education_status = 'Secondary'
+     cd1.cd_education_status = '2 yr Degree'
      and
      cd1.cd_education_status = cd2.cd_education_status
      and
@@ -65,21 +65,21 @@ select  substring(cast(reason.r_reason_desc as string),0,20) bla
     (
      ca_country = 'United States'
      and
-     ca_state in ('TX', 'VA', 'CA')
+     ca_state in ('IN', 'OH', 'NJ')
      and ws_net_profit between 100 and 200
     )
     or
     (
      ca_country = 'United States'
      and
-     ca_state in ('AR', 'NE', 'MO')
+     ca_state in ('WI', 'CT', 'KY')
      and ws_net_profit between 150 and 300
     )
     or
     (
      ca_country = 'United States'
      and
-     ca_state in ('IA', 'MS', 'WA')
+     ca_state in ('LA', 'IA', 'AR')
      and ws_net_profit between 50 and 250
     )
    )

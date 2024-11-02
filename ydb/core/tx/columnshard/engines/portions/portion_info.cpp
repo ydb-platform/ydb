@@ -11,13 +11,11 @@
 namespace NKikimr::NOlap {
 
 ui64 TPortionInfo::GetColumnRawBytes() const {
-    AFL_VERIFY(Precalculated);
-    return PrecalculatedColumnRawBytes;
+    return GetMeta().GetColumnRawBytes();
 }
 
 ui64 TPortionInfo::GetColumnBlobBytes() const {
-    AFL_VERIFY(Precalculated);
-    return PrecalculatedColumnBlobBytes;
+    return GetMeta().GetColumnBlobBytes();
 }
 
 TString TPortionInfo::DebugString(const bool withDetails) const {
@@ -50,7 +48,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
 
 ui64 TPortionInfo::GetMetadataMemorySize() const {
     return sizeof(TPortionInfo) + Records.size() * (sizeof(TColumnRecord) + 8) + Indexes.size() * sizeof(TIndexChunk) +
-           BlobIds.size() * sizeof(TUnifiedBlobId) - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
+           - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
 }
 
 ui64 TPortionInfo::GetTxVolume() const {
@@ -65,9 +63,6 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     if (!RemoveSnapshot.IsZero()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
-    for (auto&& i : BlobIds) {
-        *proto.AddBlobIds() = i.SerializeToProto();
-    }
 
     *proto.MutableMeta() = Meta.SerializeToProto();
 }
@@ -76,13 +71,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
     PathId = proto.GetPathId();
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
-    for (auto&& i : proto.GetBlobIds()) {
-        auto blobId = TUnifiedBlobId::BuildFromProto(i);
-        if (!blobId) {
-            return blobId;
-        }
-        BlobIds.emplace_back(blobId.DetachResult());
-    }
     {
         auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
         if (!parse) {
@@ -109,7 +97,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         }
         Indexes.emplace_back(std::move(parse.DetachResult()));
     }
-    Precalculate();
     return TConclusionStatus::Success();
 }
 
@@ -167,33 +154,6 @@ NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageId(
         return groups;
     } else {
         return indexInfo.GetEntityGroupsByStorageId(specialTier, storages);
-    }
-}
-
-void TPortionInfo::Precalculate() {
-    AFL_VERIFY(!Precalculated);
-    Precalculated = true;
-    {
-        PrecalculatedColumnRawBytes = 0;
-        PrecalculatedColumnBlobBytes = 0;
-        PrecalculatedRecordsCount = 0;
-        const auto aggr = [&](const TColumnRecord& r) {
-            PrecalculatedColumnRawBytes += r.GetMeta().GetRawBytes();
-            PrecalculatedColumnBlobBytes += r.BlobRange.GetSize();
-            if (r.GetColumnId() == Records.front().GetColumnId()) {
-                PrecalculatedRecordsCount += r.GetMeta().GetRecordsCount();
-            }
-        };
-        TPortionDataAccessor::AggregateIndexChunksData(aggr, Records, nullptr, true);
-    }
-    {
-        PrecalculatedIndexRawBytes = 0;
-        PrecalculatedIndexBlobBytes = 0;
-        const auto aggr = [&](const TIndexChunk& r) {
-            PrecalculatedIndexRawBytes += r.GetRawBytes();
-            PrecalculatedIndexBlobBytes += r.GetDataSize();
-        };
-        TPortionDataAccessor::AggregateIndexChunksData(aggr, Indexes, nullptr, true);
     }
 }
 

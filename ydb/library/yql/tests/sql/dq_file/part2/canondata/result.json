@@ -2081,6 +2081,50 @@
         }
     ],
     "test.test[pg-join_using_multiple2--Results]": [],
+    "test.test[pg-pgns_agg-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871002/e16c2456d2585dc5260dae8153efad865802ebff/resource.tar.gz#test.test_pg-pgns_agg-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-pgns_agg-default.txt-Debug]": [
+        {
+            "checksum": "c62f85fabe40a18829587ccbbdbaee91",
+            "size": 446,
+            "uri": "https://{canondata_backend}/1871002/e16c2456d2585dc5260dae8153efad865802ebff/resource.tar.gz#test.test_pg-pgns_agg-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-pgns_agg-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871002/e16c2456d2585dc5260dae8153efad865802ebff/resource.tar.gz#test.test_pg-pgns_agg-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-pgns_agg-default.txt-Results]": [],
+    "test.test[pg-pgns_proc-default.txt-Analyze]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871002/e16c2456d2585dc5260dae8153efad865802ebff/resource.tar.gz#test.test_pg-pgns_proc-default.txt-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[pg-pgns_proc-default.txt-Debug]": [
+        {
+            "checksum": "2fcd7306a350cf965b03048751c38368",
+            "size": 344,
+            "uri": "https://{canondata_backend}/1871002/e16c2456d2585dc5260dae8153efad865802ebff/resource.tar.gz#test.test_pg-pgns_proc-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[pg-pgns_proc-default.txt-Plan]": [
+        {
+            "checksum": "b4dd508a329723c74293d80f0278c705",
+            "size": 505,
+            "uri": "https://{canondata_backend}/1871002/e16c2456d2585dc5260dae8153efad865802ebff/resource.tar.gz#test.test_pg-pgns_proc-default.txt-Plan_/plan.txt"
+        }
+    ],
+    "test.test[pg-pgns_proc-default.txt-Results]": [],
     "test.test[pg-select_agg-default.txt-Analyze]": [
         {
             "checksum": "b4dd508a329723c74293d80f0278c705",

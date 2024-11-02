@@ -39,6 +39,7 @@ public:
 
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
+        ReadActorId3 = Runtime.AllocateEdgeActor();
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
@@ -46,7 +47,7 @@ public:
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
-        Config.SetWithoutConsumer(true);
+        Config.SetWithoutConsumer(false);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -91,11 +92,11 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event));
     }
 
-    NYql::NPq::NProto::TDqPqTopicSource BuildSource(TString topic, bool emptyPredicate = false) {
+    NYql::NPq::NProto::TDqPqTopicSource BuildSource(TString topic, bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetEndpoint(GetDefaultPqEndpoint());
         settings.SetTopicPath(topic);
-        settings.SetConsumerName("PqConsumer");
+        settings.SetConsumerName(consumer);
         settings.MutableToken()->SetName("token");
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
@@ -162,6 +163,7 @@ public:
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
+    NActors::TActorId ReadActorId3;
     ui64 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
 
@@ -185,6 +187,10 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { Json1 });
         ExpectMessageBatch(ReadActorId2, { Json1 });
+
+        auto source2 = BuildSource(topicName, false, "OtherConsumer");
+        StartSession(ReadActorId3, source2);
+        ExpectSessionError(ReadActorId3, "Use the same consumer");
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);

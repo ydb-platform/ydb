@@ -9,6 +9,30 @@ THtmlAppPage::THtmlAppPage(IOutputStream& str, const TString& title)
 <HTML>
     <TITLE>)" << title << R"(</TITLE>
     <STYLE>
+.row {
+  --bs-gutter-x: 1.5rem;
+  --bs-gutter-y: 0;
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: calc(-1 * var(--bs-gutter-y));
+  margin-right: calc(-0.5 * var(--bs-gutter-x));
+  margin-left: calc(-0.5 * var(--bs-gutter-x));
+}
+
+.row > * {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  padding-right: calc(var(--bs-gutter-x) * 0.5);
+  padding-left: calc(var(--bs-gutter-x) * 0.5);
+  margin-top: var(--bs-gutter-y);
+}
+
+.col {
+  flex: 1 0 0%;
+}
+
 .properties {
     border-bottom-style: solid;
     border-top-style: solid;
@@ -74,8 +98,7 @@ TNavigationBarContent::TNavigationBarContent(TNavigationBar& navigationBar, cons
         __stream << R"(
 </UL>
 <DIV CLASS="tab-content">
-    <DIV CLASS="tab-pane fade in active" id=")" << id << R"(">
-        )";
+    <DIV CLASS="tab-pane fade in active container" id=")" << id << R"(">)";
     } else {
         __stream << R"(    <DIV CLASS="tab-pane fade" id=")" << id << R"(">)";
     }

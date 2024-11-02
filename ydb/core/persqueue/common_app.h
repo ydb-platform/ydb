@@ -13,8 +13,8 @@
 #define PROPERTIES(caption) WITH_SCOPED(__properties, ::NKikimr::NPQ::NApp::TProperties(__stream, caption))
 #define PROPERTY(caption, value) __properties.Add(caption, TStringBuilder() << value)
 
-#define LAYOUT_ROW(columns)
-#define LAYOUT_COLUMN()
+#define LAYOUT_ROW() DIV_CLASS("raw")
+#define LAYOUT_COLUMN() DIV_CLASS("col")
 
 
 namespace NKikimr::NPQ::NApp {

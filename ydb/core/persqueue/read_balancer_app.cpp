@@ -29,7 +29,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
             }
 
             NAVIGATION_TAB_CONTENT("generic") {
-                LAYOUT_ROW(2) {
+                LAYOUT_ROW() {
                     LAYOUT_COLUMN() {
                         PROPERTIES("Tablet info") {
                             PROPERTY("Topic", Topic);

@@ -160,6 +160,10 @@ private:
 public:
     TDataAccessorsRequest() = default;
 
+    bool HasSubscriber() const {
+        return !!Subscriber;
+    }
+
     ui32 GetSize() const {
         return PortionIds.size();
     }

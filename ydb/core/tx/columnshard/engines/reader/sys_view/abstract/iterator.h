@@ -14,13 +14,20 @@ private:
 protected:
     virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, TGranuleMetaView& granule) const = 0;
     virtual ui32 PredictRecordsCount(const TGranuleMetaView& granule) const = 0;
+    std::shared_ptr<NReader::TReadContext> Context;
     TReadStatsMetadata::TConstPtr ReadMetadata;
     const bool Reverse = false;
     std::shared_ptr<arrow::Schema> KeySchema;
     std::shared_ptr<arrow::Schema> ResultSchema;
 
     std::deque<TGranuleMetaView> IndexGranules;
+    THashMap<ui64, TPortionDataAccessor> FetchedAccessors;
+
 public:
+    virtual bool IsReadyForBatch() const {
+        return true;
+    }
+
     virtual TConclusionStatus Start() override {
         return TConclusionStatus::Success();
     }
@@ -31,6 +38,9 @@ public:
 
     virtual TConclusion<std::shared_ptr<TPartialReadResult>> GetBatch() override {
         while (!Finished()) {
+            if (!IsReadyForBatch()) {
+                return nullptr;
+            }
             auto batchOpt = ExtractStatsBatch();
             if (!batchOpt) {
                 AFL_VERIFY(Finished());
@@ -88,9 +98,10 @@ public:
     }
 
 
-    TStatsIteratorBase(const NAbstract::TReadStatsMetadata::TConstPtr& readMetadata, const NTable::TScheme::TTableSchema& statsSchema)
+    TStatsIteratorBase(const std::shared_ptr<NReader::TReadContext>& context, const NTable::TScheme::TTableSchema& statsSchema)
         : StatsSchema(statsSchema)
-        , ReadMetadata(readMetadata)
+        , Context(context)
+        , ReadMetadata(context->GetReadMetadataPtrVerifiedAs<TReadStatsMetadata>())
         , KeySchema(MakeArrowSchema(StatsSchema.Columns, StatsSchema.KeyColumns))
         , ResultSchema(MakeArrowSchema(StatsSchema.Columns, ReadMetadata->ResultColumnIds))
         , IndexGranules(ReadMetadata->IndexGranules)
@@ -143,8 +154,8 @@ public:
         }
     };
 
-    TStatsIterator(const NAbstract::TReadStatsMetadata::TConstPtr& readMetadata)
-        : TBase(readMetadata, StatsSchema)
+    TStatsIterator(const NReader::TReadContext& context)
+        : TBase(context, StatsSchema)
     {
     }
 

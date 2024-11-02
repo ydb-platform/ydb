@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
         // load
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
@@ -547,7 +547,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(
+            0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -649,7 +650,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+        TColumnEngineForLogs engine(
+            0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
         engine.Load(db);
 
@@ -674,7 +676,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
+            TColumnEngineForLogs tmpEngine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -705,7 +708,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
+            TColumnEngineForLogs tmpEngine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
             tmpEngine.Load(db);
         }
@@ -725,7 +729,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
         TSnapshot indexSnapshot(1, 1);
         {
-            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            TColumnEngineForLogs engine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 
@@ -803,7 +808,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
         {
             // load
-            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            TColumnEngineForLogs engine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
             engine.Load(db);
 

@@ -26,9 +26,10 @@
 
 namespace NKikimr::NOlap {
 
-TColumnEngineForLogs::TColumnEngineForLogs(
-    ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -37,9 +38,10 @@ TColumnEngineForLogs::TColumnEngineForLogs(
     RegisterSchemaVersion(snapshot, schema);
 }
 
-TColumnEngineForLogs::TColumnEngineForLogs(
-    ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, storagesManager))
+TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema)
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -525,7 +527,7 @@ void TColumnEngineForLogs::AppendPortion(const TPortionInfo::TPtr& portionInfo) 
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
     UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
     granule->AppendPortion(portionInfo);
-    if (portionInfo->HasRemoveSnapshot())  {
+    if (portionInfo->HasRemoveSnapshot()) {
         AddCleanupPortion(portionInfo);
     }
 }

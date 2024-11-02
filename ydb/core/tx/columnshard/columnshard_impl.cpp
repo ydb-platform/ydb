@@ -19,8 +19,11 @@
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
-#include "blobs_reader/actor.h"
-#include "data_sharing/common/transactions/tx_extension.h"
+#include "blobs_action/transaction/tx_gc_insert_table.h"
+#include "blobs_action/transaction/tx_gc_indexed.h"
+#include "bg_tasks/events/events.h"
+
+#include "data_accessor/manager.h"
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
 #include "engines/changes/cleanup_portions.h"
@@ -78,7 +81,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, info->TabletID)
+    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())

@@ -117,7 +117,7 @@ void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
 }
 
 std::unique_ptr<TScanIteratorBase> TReadStatsMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
-    return std::make_unique<TStatsIterator>(readContext->GetReadMetadataPtrVerifiedAs<TReadStatsMetadata>());
+    return std::make_unique<TStatsIterator>(readContext);
 }
 
 std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata::GetKeyYqlSchema() const {
@@ -133,9 +133,15 @@ std::shared_ptr<NKikimr::NOlap::NReader::NSysView::NAbstract::TReadStatsMetadata
 
 bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
     ui64 recordsCount = 0;
-    while (auto portion = granule.PopFrontPortion()) {
-        recordsCount += TPortionDataAccessor(portion).GetRecords().size() + TPortionDataAccessor(portion).GetIndexes().size();
-        AppendStats(builders, portion);
+    while (granule.GetPortions().size()) {
+        auto it = FetchedAccessors.find(granule.GetPortions().front().GetPortionId());
+        if (it == FetchedAccessors.end()) {
+            break;
+        }
+        recordsCount += it->second.GetRecords().size() + it->second.GetIndexes().size();
+        AppendStats(builders, it->second);
+        granule.PopFrontPortion();
+        FetchedAccessors.erase(it);
         if (recordsCount > 10000) {
             break;
         }

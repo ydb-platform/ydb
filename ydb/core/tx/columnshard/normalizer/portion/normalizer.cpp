@@ -1,6 +1,7 @@
 #include "normalizer.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
@@ -24,7 +25,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
         return TConclusionStatus::Fail("Not ready");
     }
 
-    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), 0);
+    NColumnShard::TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(), 0);
     if (!tablesManager.InitFromDB(db)) {
         ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");

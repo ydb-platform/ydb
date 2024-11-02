@@ -18,7 +18,7 @@ private:
     }
 
     void Handle(TEvRegisterController::TPtr& ev) {
-        AFL_VERIFY(Controllers.emplace(ev->Get()->GetPathId(), ev->Get()->GetAccessor()).second);
+        AFL_VERIFY(Controllers.emplace(ev->Get()->GetAccessor()->GetPathId(), ev->Get()->GetAccessor()).second);
     }
     void Handle(TEvUnregisterController::TPtr& ev) {
         AFL_VERIFY(Controllers.erase(ev->Get()->GetPathId()));

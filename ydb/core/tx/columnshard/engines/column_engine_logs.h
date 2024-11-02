@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -82,10 +83,10 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot,
-        const TSchemaInitializationData& schema);
-    TColumnEngineForLogs(
-        ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
+    TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema);
+    TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema);
 
     virtual void OnTieringModified(
         const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;

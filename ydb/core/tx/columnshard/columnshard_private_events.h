@@ -58,6 +58,10 @@ struct TEvPrivate {
         EvWritePortionResult,
         EvStartCompaction,
 
+        EvRegisterGranuleDataAccessor,
+        EvUnregisterGranuleDataAccessor,
+        EvAskDataAccessors,
+
         EvEnd
     };
 

@@ -1,10 +1,10 @@
 #include "column_engine.h"
 
 #include "portions/portion_info.h"
-#include "storage/granule/accessors_request.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/data_accessor/request.h>
 
 #include <util/system/info.h>
 

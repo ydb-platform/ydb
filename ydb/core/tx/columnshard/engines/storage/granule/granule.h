@@ -1,10 +1,10 @@
 #pragma once
-#include "accessors_request.h"
 #include "portions_index.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_accessor/controller.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
@@ -113,7 +113,6 @@ private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionInfo>> InsertedPortions;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
-
 
     void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;

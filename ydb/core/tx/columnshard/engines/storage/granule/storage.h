@@ -1,8 +1,11 @@
 #pragma once
 #include "granule.h"
-#include <ydb/core/tx/columnshard/counters/engine_logs.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_accessor/events.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 
 namespace NKikimr::NOlap {
 
@@ -31,9 +34,7 @@ private:
 
 public:
     TGranulesStat(const NColumnShard::TEngineLogsCounters& counters)
-        : Counters(counters)
-    {
-
+        : Counters(counters) {
     }
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
@@ -43,6 +44,7 @@ public:
     class TModificationGuard: TNonCopyable {
     private:
         TGranulesStat& Owner;
+
     public:
         TModificationGuard(TGranulesStat& storage)
             : Owner(storage) {
@@ -89,40 +91,39 @@ public:
         const i64 value = SumMetadataMemoryPortionsSize.Add(portion.GetMetadataMemorySize());
         Counters.OnIndexMetadataUsageBytes(value);
     }
-
 };
 
 class TGranulesStorage {
 private:
     const NColumnShard::TEngineLogsCounters Counters;
-    const NActors::TActorId DataAccessorsControlActorId;
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
-    THashMap<ui64, std::shared_ptr<TGranuleMeta>> Tables; // pathId into Granule that equal to Table
+    THashMap<ui64, std::shared_ptr<TGranuleMeta>> Tables;   // pathId into Granule that equal to Table
     std::shared_ptr<TGranulesStat> Stats;
+
 public:
-    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const NActor::TActorId& dataAccessorsControlActorId,
+    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
+        const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager)
         : Counters(counters)
-        , DataAccessorsControlActorId(dataAccessorsControlActorId)
+        , DataAccessorsManager(dataAccessorsManager)
         , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters))
-    {
-
+        , Stats(std::make_shared<TGranulesStat>(Counters)) {
     }
 
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
-        NActors::TActivationContext::Send(DataAccessorsControlActorId, std::make_unique<NDataAccessorControl::TEvAskDataAccessors>(request));
+        DataAccessorsManager->AskData(request);
     }
 
     const std::shared_ptr<TGranulesStat>& GetStats() const {
         return Stats;
     }
 
-    std::shared_ptr<TGranuleMeta> RegisterTable(const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
+    std::shared_ptr<TGranuleMeta> RegisterTable(
+        const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
         AFL_VERIFY(infoEmplace.second);
-        NActors::TActivationContext::Send(
-            DataAccessorsControlActorId, std::make_unique<NDataAccessorControl::TEvRegisterController>(infoEmplace.first->second->GetDataAccessor()));
+        DataAccessorsManager->RegisterController(infoEmplace.first->second->GetDataAccessor());
         return infoEmplace.first->second;
     }
 
@@ -134,7 +135,7 @@ public:
         if (!it->second->IsErasable()) {
             return false;
         }
-        NActors::TActivationContext::Send(DataAccessorsControlActorId, std::make_unique<NDataAccessorControl::TEvUnregisterController>(pathId));
+        DataAccessorsManager->UnregisterController(pathId);
         Tables.erase(it);
         return true;
     }
@@ -201,4 +202,4 @@ public:
         std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

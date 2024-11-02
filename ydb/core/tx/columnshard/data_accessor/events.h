@@ -1,10 +1,14 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/engines/storage/granule/accessors_request.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_local.h>
+
+namespace NKikimr::NOlap {
+class IGranuleDataAccessor;
+class TDataAccessorsRequest;
+}
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 

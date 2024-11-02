@@ -1,0 +1,74 @@
+#pragma once
+#include "controller.h"
+#include "events.h"
+#include "request.h"
+
+namespace NKikimr::NOlap::NDataAccessorControl {
+
+class IDataAccessorsManager {
+private:
+    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) = 0;
+    virtual void DoRegisterController(const std::shared_ptr<IGranuleDataAccessor>& controller) = 0;
+    virtual void DoUnregisterController(const ui64 pathId) = 0;
+
+public:
+    virtual ~IDataAccessorsManager() = default;
+
+    void AskData(const std::shared_ptr<TDataAccessorsRequest>& request) {
+        AFL_VERIFY(request);
+        return DoAskData(request);
+    }
+    void RegisterController(const std::shared_ptr<IGranuleDataAccessor>& controller) {
+        AFL_VERIFY(controller);
+        return DoRegisterController(controller);
+    }
+    void UnregisterController(const ui64 pathId) {
+        return DoUnregisterController(pathId);
+    }
+};
+
+class TActorAccessorsManager: public IDataAccessorsManager {
+private:
+    const NActors::TActorId ActorId;
+    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAskDataAccessors>(request));
+    }
+    virtual void DoRegisterController(const std::shared_ptr<IGranuleDataAccessor>& controller) override {
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(controller));
+    }
+    virtual void DoUnregisterController(const ui64 pathId) override {
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvUnregisterController>(pathId));
+    }
+
+public:
+    TActorAccessorsManager(const NActors::TActorId& actorId)
+        : ActorId(actorId) {
+    }
+};
+
+class TLocalManager: public IDataAccessorsManager {
+private:
+    THashMap<ui64, std::shared_ptr<IGranuleDataAccessor>> Managers;
+
+    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
+        for (auto&& i : request->GetPathIds()) {
+            auto it = Managers.find(i);
+            if (it == Managers.end()) {
+                request->AddData(i, TConclusionStatus::Fail("incorrect pathId"));
+            } else {
+                it->second->AskData(request);
+            }
+        }
+    }
+    virtual void DoRegisterController(const std::shared_ptr<IGranuleDataAccessor>& controller) override {
+        AFL_VERIFY(Managers.emplace(controller->GetPathId(), controller).second);
+    }
+    virtual void DoUnregisterController(const ui64 pathId) override {
+        AFL_VERIFY(Managers.erase(pathId));
+    }
+
+public:
+    TLocalManager() = default;
+};
+
+}   // namespace NKikimr::NOlap

@@ -384,7 +384,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it != Consumers.end()) {
-        LOG_ROW_DISPATCHER_ERROR("Сonsumer already exists, ignore StartSession");
+        LOG_ROW_DISPATCHER_ERROR("Consumer already exists, ignore StartSession");
         return;
     }
     const auto& source = ev->Get()->Record.GetSource();

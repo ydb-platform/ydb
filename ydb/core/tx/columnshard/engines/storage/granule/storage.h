@@ -95,12 +95,15 @@ public:
 class TGranulesStorage {
 private:
     const NColumnShard::TEngineLogsCounters Counters;
+    const NActors::TActorId DataAccessorsControlActorId;
     std::shared_ptr<IStoragesManager> StoragesManager;
     THashMap<ui64, std::shared_ptr<TGranuleMeta>> Tables; // pathId into Granule that equal to Table
     std::shared_ptr<TGranulesStat> Stats;
 public:
-    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const std::shared_ptr<IStoragesManager>& storagesManager)
+    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const NActor::TActorId& dataAccessorsControlActorId,
+        const std::shared_ptr<IStoragesManager>& storagesManager)
         : Counters(counters)
+        , DataAccessorsControlActorId(dataAccessorsControlActorId)
         , StoragesManager(storagesManager)
         , Stats(std::make_shared<TGranulesStat>(Counters))
     {
@@ -108,9 +111,7 @@ public:
     }
 
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
-        for (auto&& i : request->GetPathIds()) {
-            GetGranuleVerified(i)->GetDataAccessor()->AskData(request);
-        }
+        NActors::TActivationContext::Send(DataAccessorsControlActorId, std::make_unique<NDataAccessorControl::TEvAskDataAccessors>(request));
     }
 
     const std::shared_ptr<TGranulesStat>& GetStats() const {
@@ -120,6 +121,8 @@ public:
     std::shared_ptr<TGranuleMeta> RegisterTable(const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
         AFL_VERIFY(infoEmplace.second);
+        NActors::TActivationContext::Send(
+            DataAccessorsControlActorId, std::make_unique<NDataAccessorControl::TEvRegisterController>(infoEmplace.first->second->GetDataAccessor()));
         return infoEmplace.first->second;
     }
 
@@ -131,6 +134,7 @@ public:
         if (!it->second->IsErasable()) {
             return false;
         }
+        NActors::TActivationContext::Send(DataAccessorsControlActorId, std::make_unique<NDataAccessorControl::TEvUnregisterController>(pathId));
         Tables.erase(it);
         return true;
     }

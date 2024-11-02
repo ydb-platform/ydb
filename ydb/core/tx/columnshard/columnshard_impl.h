@@ -471,6 +471,7 @@ private:
 
     TActorId ResourceSubscribeActor;
     TActorId BufferizationWriteActorId;
+    TActorId DataAccessorsControlActorId;
     TActorId StatsReportPipe;
     std::vector<TActorId> ActorsToStop;
 

@@ -60,12 +60,16 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
             for (auto path: section.Paths()) {
                 updatedPaths.push_back(path);
 
+                bool hasRanges = false;
                 if (!path.Ranges().Maybe<TCoVoid>()) {
                     bool pathLimits = false;
                     for (auto range: path.Ranges().Cast<TExprList>()) {
                         if (range.Maybe<TYtRow>() || range.Maybe<TYtRowRange>()) {
                             pathLimits = true;
                             break;
+                        }
+                        if (range.Maybe<TYtRangeItemBase>()) {
+                            hasRanges = true;
                         }
                     }
                     if (pathLimits) {
@@ -118,7 +122,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                 if (hasTakeSkip && sortedMerge && NYql::HasSetting(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted)) {
                     continue;
                 }
-                if (hasTakeSkip && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
+                if ((hasTakeSkip || hasRanges) && AnyOf(innerMergeSection.Paths(), [](const auto& path) { return !path.Ranges().template Maybe<TCoVoid>(); })) {
                     continue;
                 }
 

@@ -109,8 +109,6 @@ class Daemon(object):
         if self.is_alive():
             return
         stderr_stream = self.__stderr_file
-        if param_constants.kikimr_stderr_to_console():
-            stderr_stream = sys.stderr
         self.__daemon = process.execute(
             self.__command,
             check_exit_code=False,

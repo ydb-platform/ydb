@@ -74,6 +74,7 @@ enum class EYtSettingType: ui64 {
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
     RowFactor                /* "rowFactor" */,
+    Small                    /* "small" */,
     // Operations
     Ordered                  /* "ordered" */,                  // hybrid supported
     KeyFilter                /* "keyFilter" */,

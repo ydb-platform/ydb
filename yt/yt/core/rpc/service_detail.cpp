@@ -46,7 +46,6 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto InfiniteRequestThrottlerConfig = New<TThroughputThrottlerConfig>();
 static const auto DefaultLoggingSuppressionFailedRequestThrottlerConfig = TThroughputThrottlerConfig::Create(1'000);
 
 constexpr int MaxUserAgentLength = 200;
@@ -54,10 +53,41 @@ constexpr auto ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueuePtr CreateRequestQueue(const std::string& name, const NProfiling::TProfiler& profiler)
+const auto InfiniteRequestThrottlerConfig = New<TThroughputThrottlerConfig>();
+
+TRequestQueuePtr CreateRequestQueue(
+    std::string name,
+    std::any tag,
+    IReconfigurableThroughputThrottlerPtr bytesThrottler,
+    IReconfigurableThroughputThrottlerPtr weightThrottler)
 {
-    // TODO(babenko): migrate to std::string
-    return New<TRequestQueue>(name, profiler.WithTag("user", std::string(name)));
+    return New<TRequestQueue>(
+        std::move(name),
+        std::move(tag),
+        std::move(bytesThrottler),
+        std::move(weightThrottler));
+}
+
+TRequestQueuePtr CreateRequestQueue(
+    std::string name,
+    const NProfiling::TProfiler& profiler)
+{
+    auto bytesThrottler = CreateNamedReconfigurableThroughputThrottler(
+        InfiniteRequestThrottlerConfig,
+        "BytesThrottler",
+        NLogging::TLogger(),
+        profiler);
+    auto weightThrottler = CreateNamedReconfigurableThroughputThrottler(
+        InfiniteRequestThrottlerConfig,
+        "WeightThrottler",
+        NLogging::TLogger(),
+        profiler);
+    auto tag = name;
+    return CreateRequestQueue(
+        std::move(name),
+        std::move(tag),
+        std::move(bytesThrottler),
+        std::move(weightThrottler));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1319,14 +1349,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueue::TRequestQueue(const std::string& name, NProfiling::TProfiler profiler)
-    : Name_(name)
-    , BytesThrottler_{CreateReconfigurableThroughputThrottler(InfiniteRequestThrottlerConfig,
-        NLogging::TLogger(),
-        profiler.WithPrefix("/bytes_throttler"))}
-    , WeightThrottler_{CreateReconfigurableThroughputThrottler(InfiniteRequestThrottlerConfig,
-        NLogging::TLogger(),
-        profiler.WithPrefix("/weight_throttler"))}
+TRequestQueue::TRequestQueue(
+    std::string name,
+    std::any tag,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler)
+    : Name_(std::move(name))
+    , Tag_(std::move(tag))
+    , BytesThrottler_{std::move(bytesThrottler)}
+    , WeightThrottler_{std::move(weightThrottler)}
 { }
 
 bool TRequestQueue::Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo)
@@ -1391,6 +1422,11 @@ void TRequestQueue::Configure(const TMethodConfigPtr& config)
 const std::string& TRequestQueue::GetName() const
 {
     return Name_;
+}
+
+const std::any& TRequestQueue::GetTag() const
+{
+    return Tag_;
 }
 
 void TRequestQueue::ConfigureBytesThrottler(const TThroughputThrottlerConfigPtr& config)

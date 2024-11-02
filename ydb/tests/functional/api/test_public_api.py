@@ -14,7 +14,7 @@ import logging
 from datetime import date, datetime
 from ydb.public.api.protos import ydb_table_pb2
 from ydb.public.api.protos import ydb_scheme_pb2
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -90,7 +90,7 @@ storage_policy {
 class Base(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 additional_log_configs={
                     'TENANT_POOL': LogLevels.DEBUG,
@@ -118,7 +118,7 @@ class Base(object):
 class WithTenant(Base):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.database_name = "/Root/tenant"
         cls.cluster.create_database(
@@ -1518,7 +1518,7 @@ class TestDriverCanRecover(Base):
 class TestSelectAfterDropWithRepetitions(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             configurator=KikimrConfigGenerator(
                 additional_log_configs={
                     'TX_PROXY': LogLevels.DEBUG,
@@ -1587,7 +1587,7 @@ class TestSelectAfterDropWithRepetitions(object):
 class TestMetaDataInvalidation(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",
@@ -1673,7 +1673,7 @@ class TestMetaDataInvalidation(object):
 class TestJsonExample(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",
@@ -1759,7 +1759,7 @@ class TestJsonExample(object):
 class TestForPotentialDeadlock(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
 
     @classmethod

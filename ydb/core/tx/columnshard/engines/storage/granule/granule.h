@@ -212,6 +212,13 @@ public:
         return DataAccessor;
     }
 
+    template <class T>
+    std::shared_ptr<T> GetDataAccessorPtrVerifiedAs() const {
+        auto result = std::dynamic_pointer_cast<T>(DataAccessor);
+        AFL_VERIFY(result);
+        return result;
+    }
+
     void RefreshTiering(const std::optional<TTiering>& tiering) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshTiering(tiering, context);
@@ -259,7 +266,7 @@ public:
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
         TDbWrapper wrapper(txc.DB, nullptr);
-        it->second.SaveMetaToDatabase(wrapper);
+        it->second->SaveMetaToDatabase(wrapper);
     }
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
@@ -267,10 +274,10 @@ public:
     void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
-        it->second->SetCommitSnapshot(snapshot);
-        it->second->SetRemoveSnapshot(TSnapshot(1, 1));
+        it->second->SetCommitSnapshot(TSnapshot(1, 1));
+        it->second->SetRemoveSnapshot(TSnapshot(1, 2));
         TDbWrapper wrapper(txc.DB, nullptr);
-        it->second.SaveMetaToDatabase(wrapper);
+        it->second->SaveMetaToDatabase(wrapper);
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {

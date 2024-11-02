@@ -634,10 +634,6 @@ mon={mon}""".format(
         )
 
     @property
-    def cwd(self):
-        assert False, "not supported"
-
-    @property
     def mon_port(self):
         return self.__mon_port
 

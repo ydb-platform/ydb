@@ -6,7 +6,6 @@ import signal
 import sys
 import subprocess
 
-import yatest
 from yatest.common import process
 import six
 
@@ -53,14 +52,6 @@ class SeveralDaemonErrors(RuntimeError):
         super(SeveralDaemonErrors, self).__init__("\n".join(str(x) for x in exceptions))
 
 
-def _work_path(name):
-    # TODO: remove yatest dependency from harness
-    try:
-        return yatest.common.work_path(name)
-    except (AttributeError, yatest.common.NoRuntimeFormed):
-        return name
-
-
 class Daemon(object):
     """Local process executed as process in current host"""
     def __init__(
@@ -68,8 +59,8 @@ class Daemon(object):
         command,
         cwd,
         timeout,
-        stdout_file=_work_path('stdout'),
-        stderr_file=_work_path('stderr'),
+        stdout_file,
+        stderr_file,
         stderr_on_error_lines=0,
         core_pattern=None,
     ):

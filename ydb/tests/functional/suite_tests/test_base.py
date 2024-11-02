@@ -245,7 +245,7 @@ class BaseSuiteRunner(object):
     def setup_class(cls):
         cls.cluster = KiKiMR(
             KikimrConfigGenerator(
-                load_udfs=True,
+                udfs_path=yatest.common.build_path("yql/udfs"),
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
                 disable_iterator_lookups=True,

@@ -601,6 +601,62 @@ blob_storage_config:
 
 For a configuration located in 3 availability zones, specify 3 rings. For a configuration within a single availability zone, specify exactly one ring.
 
+## Configuring Authentication Providers {#auth-config}
+
+{{ ydb-short-name }} allows for various user authentication methods. The configuration of authentication providers is specified in the `auth_config` section.
+
+### Configuring LDAP authentication
+
+One of the methods for user authentication in {{ ydb-short-name }} is using an LDAP directory. More details about this type of authentication can be found in the section on [interacting {{ ydb-short-name }} with the LDAP directory](../../concepts/auth.md#ldap-auth-provider). To configure LDAP authentication, you need to define the `ldap_authentication` section.
+
+Example of section `ldap_authentication`:
+
+```yaml
+auth_config:
+  #...
+  ldap_authentication:
+    hosts:
+      - "ldap-hostname-01.example.net"
+      - "ldap-hostname-02.example.net"
+      - "ldap-hostname-03.example.net"
+    port: 389
+    base_dn: "dc=mycompany,dc=net"
+    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
+    bind_password: "serviceAccauntPassword"
+    search_filter: "uid=$username"
+    use_tls:
+      enable: true
+      ca_cert_file: "/path/to/ca.pem"
+      cert_require: DEMAND
+  ldap_authentication_domain: "ldap"
+  scheme: "ldap"
+  requested_group_attribute: "memberOf"
+  extended_settings:
+      enable_nested_groups_search: true
+
+  refresh_time: "1h"
+  #...
+```
+
+Parameter | Description
+--- | ---
+`hosts` | A list of hostnames where the LDAP server is running.
+`port` | Port to connect to the LDAP server.
+`base_dn` | The root of the subtree in the LDAP directory from which the user entry search will begin.
+`bind_dn` | Distinguished Name (DN) of the service account used to perform the search for the user entry.
+`bind_password` | Password of the service account used to perform the search for the user entry.
+`search_filter` | Filter for searching the user entry in the LDAP directory. The filter string may contain the sequence *$username*, which will be replaced by the username requested for authentication in the database.
+`use_tls` | Settings for configuring the TLS connection between {{ ydb-short-name }} and the LDAP server.
+`enable` | Determines whether an attempt will be made to establish a TLS connection [using the `StartTls` request](../../concepts/auth.md#starttls). When this parameter is set to `true`, you should disable the use of the `ldaps` connection scheme by setting the `ldap_authentication.scheme` parameter to `ldap`.
+`ca_cert_file` | Path to the certificate file of the certification authority.
+`cert_require` | The level of certificate requirement for the LDAP server.<br/>Possible values:<ul><li>`NEVER` - {{ ydb-short-name }} does not request a certificate or any certificate is accepted.</li><li>`ALLOW` - {{ ydb-short-name }} requires the LDAP server to present a certificate. Even if the provided certificate is not trusted, the TLS session will still be established.</li><li>`TRY` - {{ ydb-short-name }} requires the LDAP server to present a certificate. If the provided certificate is not trusted, the establishment of the TLS connection is terminated.</li><li>`DEMAND` and `HARD` - These requirements are equivalent to `TRY`. By default, the value is set to `DEMAND`.</li></ul>
+`ldap_authentication_domain` | An identifier attached to the username to distinguish users for the LDAP directory from users authenticated using other providers. The default value is `ldap`.
+`scheme` | The connection scheme to the LDAP server.<br>Possible values:<ul><li>`ldap` - {{ ydb-short-name }} will connect to the LDAP server without any encryption. Passwords will be sent to the LDAP server in plain text. This value is set by default.</li><li>`ldaps` - {{ ydb-short-name }} will make an encrypted connection to the LDAP server using the TLS protocol from the very first request. To successfully establish a connection using the `ldaps` scheme, you need to disable the [`StartTls` request](../../concepts/auth.md#starttls) in the `ldap_authentication.use_tls.enable section: false` and fill out the certificate information in `ldap_authentication.use_tls.ca_cert_file` and the certificate requirement level in `ldap_authentication.use_tls.cert_require`.</li><li>Any other value will default to `ldap`.</li></ul>
+`requested_group_attribute` | The reverse membership attribute in groups. Default is `memberOf`.
+`extended_settings.enable_nested_groups_search` | A flag that determines whether to perform a request to obtain the entire tree of groups that the user's direct groups belong to.
+`host` | The hostname where the LDAP server is running. This parameter is deprecated. Instead it use the `hosts` parameter.
+`refresh_time` | Defines the time when an attempt will be made to refresh user information. The specific update time will fall within the interval from `refresh_time/2` to `refresh_time`.
+
 ## Enabling stable node names {#node-broker-config}
 
 Node names are assigned through the Node Broker, which is a system tablet that registers dynamic nodes in the {{ ydb-short-name }} cluster.

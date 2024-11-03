@@ -2,6 +2,7 @@
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
+#include <ydb/library/yql/sql/settings/translation_settings.h>
 
 #include <util/generic/fwd.h>
 

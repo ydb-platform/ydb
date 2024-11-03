@@ -18,6 +18,7 @@ namespace NYdb {
         using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
         using NSQLTranslationV1::IsProbablyKeyword;
         using NSQLTranslationV1::MakeLexer;
+        using NSQLTranslation::TTranslationSettings;
         using NYql::TIssues;
 
         using std::regex_constants::ECMAScript;
@@ -79,6 +80,15 @@ namespace NYdb {
             "string|timestamp|tzdate|tzdatetime|tztimestamp|uint16|uint32|uint64|uint8|utf8|uuid|yson|"
             "text|bytes"
             ")$");
+
+        bool IsAnsiQuery(const TString& queryUtf8) {
+            NSQLTranslation::TTranslationSettings settings;
+            TIssues issues;
+            return (
+                NSQLTranslation::ParseTranslationSettings(queryUtf8, settings, issues) && 
+                settings.AnsiLexer
+            );
+        }
 
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Monaco() {
             using replxx::color::rgb666;
@@ -154,7 +164,7 @@ namespace NYdb {
         }
 
         ILexer::TPtr& YQLHighlight::SuitableLexer(const TString& queryUtf8) {
-            if (StripStringLeft(queryUtf8).StartsWith("--!ansi_lexer")) {
+            if (IsAnsiQuery(queryUtf8)) {
                 return ANSILexer;
             }
             return CppLexer;

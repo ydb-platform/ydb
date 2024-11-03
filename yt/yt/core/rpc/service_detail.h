@@ -204,17 +204,16 @@ public:
         std::optional<NCompression::ECodec> bodyCodecId;
         NCompression::ECodec attachmentCodecId;
         if (requestHeader.has_request_codec()) {
-            int intCodecId = requestHeader.request_codec();
-            NCompression::ECodec codecId;
-            if (!TryEnumCast(intCodecId, &codecId)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(requestHeader.request_codec());
+            if (!codecId) {
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Request codec %v is not supported",
-                    intCodecId));
+                    requestHeader.request_codec()));
                 return false;
             }
-            bodyCodecId = codecId;
-            attachmentCodecId = codecId;
+            bodyCodecId = *codecId;
+            attachmentCodecId = *codecId;
         } else {
             bodyCodecId = std::nullopt;
             attachmentCodecId = NCompression::ECodec::None;
@@ -342,13 +341,12 @@ protected:
         underlyingContext->SetResponseBodySerializedWithCompression();
 
         if (requestHeader.has_response_format()) {
-            int intFormat = requestHeader.response_format();
-            EMessageFormat format;
-            if (!TryEnumCast(intFormat, &format)) {
+            auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
+            if (!format) {
                 THROW_ERROR_EXCEPTION(
                     EErrorCode::ProtocolError,
                     "Message format %v is not supported",
-                    intFormat);
+                    requestHeader.response_format());
             }
 
             NYson::TYsonString formatOptionsYson;
@@ -356,10 +354,10 @@ protected:
                 formatOptionsYson = NYson::TYsonString(requestHeader.response_format_options());
             }
 
-            if (format != EMessageFormat::Protobuf) {
+            if (*format != EMessageFormat::Protobuf) {
                 serializedBody = ConvertMessageToFormat(
                     serializedBody,
-                    format,
+                    *format,
                     NYson::ReflectProtobufMessageType<TResponseMessage>(),
                     formatOptionsYson);
             }

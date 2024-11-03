@@ -2139,23 +2139,17 @@ TError TServiceBase::DoCheckRequestFeatures(const NRpc::NProto::TRequestHeader& 
 
 TError TServiceBase::DoCheckRequestCodecs(const NRpc::NProto::TRequestHeader& header)
 {
-    if (header.has_request_codec()) {
-        NCompression::ECodec requestCodec;
-        if (!TryEnumCast(header.request_codec(), &requestCodec)) {
-            return TError(
-                NRpc::EErrorCode::ProtocolError,
-                "Request codec %v is not supported",
-                header.request_codec());
-        }
+    if (header.has_request_codec() && !TryCheckedEnumCast<NCompression::ECodec>(header.request_codec())) {
+        return TError(
+            NRpc::EErrorCode::ProtocolError,
+            "Request codec %v is not supported",
+            header.request_codec());
     }
-    if (header.has_response_codec()) {
-        NCompression::ECodec responseCodec;
-        if (!TryEnumCast(header.response_codec(), &responseCodec)) {
-            return TError(
-                NRpc::EErrorCode::ProtocolError,
-                "Response codec %v is not supported",
-                header.response_codec());
-        }
+    if (header.has_response_codec() && !TryCheckedEnumCast<NCompression::ECodec>(header.response_codec())) {
+        return TError(
+            NRpc::EErrorCode::ProtocolError,
+            "Response codec %v is not supported",
+            header.response_codec());
     }
     return {};
 }

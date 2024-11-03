@@ -42,6 +42,18 @@ struct TArcadiaEnumTraitsImpl
         auto it = LiteralToValue.find(literal);
         return it == LiteralToValue.end() ? std::nullopt : std::make_optional(it->second);
     }
+
+    static bool IsKnownValue(T value)
+    {
+        static const auto Values = [] {
+            THashSet<T> result;
+            for (const auto& [value, _] : GetEnumNames<T>()) {
+                result.insert(value);
+            }
+            return result;
+        }();
+        return Values.contains(value);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

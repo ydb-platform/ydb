@@ -980,13 +980,12 @@ private:
                 return;
             }
 
-            NCompression::ECodec codec;
-            int intCodec = header.codec();
-            if (!TryEnumCast(intCodec, &codec)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            if (!codecId) {
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Streaming payload codec %v is not supported",
-                    intCodec));
+                    header.codec()));
                 return;
             }
 
@@ -997,13 +996,13 @@ private:
                 MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
                 }),
-                codec,
+                *codecId,
                 !attachments.back());
 
             TStreamingPayload payload{
-                codec,
+                *codecId,
                 sequenceNumber,
-                std::move(attachments)
+                std::move(attachments),
             };
             responseHandler->HandleStreamingPayload(payload);
         }

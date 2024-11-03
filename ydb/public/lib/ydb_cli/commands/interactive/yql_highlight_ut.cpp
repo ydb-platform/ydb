@@ -153,6 +153,33 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "SELECT \\\"\xF0\x9F\x98\x8A\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
     }
 
+    Y_UNIT_TEST(MultilineString) {
+        YQLHighlight highlight(Coloring);
+
+        Check(highlight, "@@", "oo");
+        Check(highlight, "@@@", "ooo");
+        Check(highlight, "@@@@", "ssss");
+        Check(highlight, "@@@@@", "sssss");
+        Check(highlight, "@@test@@@", "sssssssss");
+
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "ssssssssss"
+             "sssssso"));
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline with double at: @@@@\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "sssssssssssssssssssssssssssssss"
+             "sssssso"));
+    }
+
     Y_UNIT_TEST(Number) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "1234", "nnnn");

@@ -80,10 +80,12 @@ public:
         TargetCompactionLevel = level;
     }
 
-    void AddPortionToRemove(const TPortionInfo::TConstPtr& info) {
+    void AddPortionToRemove(const TPortionInfo::TConstPtr& info, const bool addIntoDataAccessRequest = true) {
         AFL_VERIFY(!info->HasRemoveSnapshot());
         AFL_VERIFY(PortionsToRemove.emplace(info->GetAddress(), info).second);
-        PortionsToAccess->AddPortion(info);
+        if (addIntoDataAccessRequest) {
+            PortionsToAccess->AddPortion(info);
+        }
     }
 
     std::vector<TWritePortionInfoWithBlobsResult> AppendedPortions;

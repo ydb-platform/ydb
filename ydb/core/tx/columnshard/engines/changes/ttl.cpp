@@ -57,7 +57,7 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
-            AddPortionToRemove(info.GetPortionInfo());
+            AddPortionToRemove(info.GetPortionInfo(), false);
             AppendedPortions.emplace_back(std::move(*pwb));
         }
     }

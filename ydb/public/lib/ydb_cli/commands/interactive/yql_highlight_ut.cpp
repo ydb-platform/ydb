@@ -180,6 +180,14 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
              "sssssso"));
     }
 
+    Y_UNIT_TEST(TypedString) {
+        YQLHighlight highlight(Coloring);
+        Check(
+            highlight,
+            "SELECT \"foo\"u, '[1;2]'y, @@{\"a\":null}@@j;",
+            "kkkkkk sssssso sssssssso ssssssssssssssso");
+    }
+
     Y_UNIT_TEST(Number) {
         YQLHighlight highlight(Coloring);
         Check(highlight, "1234", "nnnn");

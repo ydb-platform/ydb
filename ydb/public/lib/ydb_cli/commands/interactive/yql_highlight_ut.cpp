@@ -190,8 +190,26 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     Y_UNIT_TEST(Number) {
         YQLHighlight highlight(Coloring);
+
         Check(highlight, "1234", "nnnn");
         Check(highlight, "-123", "onnn");
+
+        Check(
+            highlight,
+            ("SELECT "
+             "123l AS `Int64`, "
+             "0b01u AS `Uint32`, "
+             "0xfful AS `Uint64`, "
+             "0o7ut AS `Uint8`, "
+             "456s AS `Int16`, "
+             "1.2345f AS `Float`;"),
+            ("kkkkkk "
+             "nnnn kk qqqqqqqo "
+             "nnnnn kk qqqqqqqqo "
+             "nnnnnn kk qqqqqqqqo "
+             "nnnnn kk qqqqqqqo "
+             "nnnn kk qqqqqqqo "
+             "nnnnnnn kk qqqqqqqo"));
     }
 
     Y_UNIT_TEST(SQL) {

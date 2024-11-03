@@ -1,4 +1,4 @@
-#include <contrib/ydb/library/yql/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
 
 using namespace NKikimr;
 using namespace NUdf;

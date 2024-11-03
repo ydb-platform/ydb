@@ -17,8 +17,8 @@ PEERDIR(
     library/cpp/svnversion
     yql/essentials/utils/backtrace
     yql/essentials/utils/log
-    contrib/ydb/library/yql/public/udf
-    contrib/ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf
+    yql/essentials/public/udf/service/exception_policy
     library/cpp/skiff
     library/cpp/yson
     contrib/ydb/library/yql/public/purecalc/io_specs/mkql

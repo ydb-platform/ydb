@@ -21,7 +21,7 @@ PEERDIR(
     contrib/ydb/library/yql/core/services/mounts
     contrib/ydb/library/yql/minikql/comp_nodes/llvm14
     yql/essentials/protos
-    contrib/ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/utils/backtrace
     contrib/ydb/library/yql/core
     contrib/ydb/library/yql/sql/v1/format

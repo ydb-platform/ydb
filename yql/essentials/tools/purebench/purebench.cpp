@@ -8,9 +8,9 @@
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
-#include <contrib/ydb/library/yql/public/udf/arrow/util.h>
-#include <contrib/ydb/library/yql/public/udf/udf_registrator.h>
-#include <contrib/ydb/library/yql/public/udf/udf_version.h>
+#include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/public/udf/udf_registrator.h>
+#include <yql/essentials/public/udf/udf_version.h>
 
 #include <library/cpp/skiff/skiff.h>
 #include <library/cpp/yson/writer.h>

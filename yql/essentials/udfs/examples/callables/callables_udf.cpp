@@ -1,6 +1,6 @@
-#include <contrib/ydb/library/yql/public/udf/udf_value.h>
-#include <contrib/ydb/library/yql/public/udf/udf_type_builder.h>
-#include <contrib/ydb/library/yql/public/udf/udf_registrator.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_type_builder.h>
+#include <yql/essentials/public/udf/udf_registrator.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>

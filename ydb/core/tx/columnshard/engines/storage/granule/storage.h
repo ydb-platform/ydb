@@ -102,6 +102,10 @@ private:
     std::shared_ptr<TGranulesStat> Stats;
 
 public:
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
+        return DataAccessorsManager;
+    }
+
     TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager)
@@ -123,7 +127,7 @@ public:
         const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
         AFL_VERIFY(infoEmplace.second);
-        DataAccessorsManager->RegisterController(infoEmplace.first->second->GetDataAccessor());
+        DataAccessorsManager->RegisterController(infoEmplace.first->second->BuildDataAccessor());
         return infoEmplace.first->second;
     }
 

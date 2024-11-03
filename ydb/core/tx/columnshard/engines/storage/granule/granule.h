@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/data_accessor/controller.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
@@ -119,7 +120,7 @@ private:
 
     mutable bool AllowInsertionFlag = false;
     const ui64 PathId;
-    std::shared_ptr<IGranuleDataAccessor> DataAccessor;
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
     std::shared_ptr<TGranulesStat> Stats;
@@ -150,17 +151,13 @@ private:
         }
         return it->second;
     }
+    bool DataAccessorConstructed = false;
 
 public:
-    const std::shared_ptr<IGranuleDataAccessor>& GetDataAccessor() const {
-        return DataAccessor;
-    }
-
-    template <class T>
-    std::shared_ptr<T> GetDataAccessorPtrVerifiedAs() const {
-        auto result = std::dynamic_pointer_cast<T>(DataAccessor);
-        AFL_VERIFY(result);
-        return result;
+    std::unique_ptr<IGranuleDataAccessor> BuildDataAccessor() {
+        AFL_VERIFY(!DataAccessorConstructed);
+        DataAccessorConstructed = true;
+        return std::make_unique<TMemDataAccessor>(PathId);
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
@@ -170,16 +167,14 @@ public:
 
     template <class TModifier>
     void ModifyPortionOnExecute(
-        IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
-        const auto innerPortion = GetInnerPortion(portion).DetachResult();
-        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        IDbWrapper& wrapper, const TPortionDataAccessor& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
+        const auto innerPortion = GetInnerPortion(portion.GetPortionInfoPtr()).DetachResult();
+        AFL_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
         auto copy = innerPortion->MakeCopy();
         modifier(copy);
         if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
-            auto data = std::dynamic_pointer_cast<TMemDataAccessor>(DataAccessor);
-            AFL_VERIFY(data);
-            auto accessor = data->BuildAccessor(std::make_shared<TPortionInfo>(std::move(copy)));
-            accessor.SaveToDatabase(wrapper, firstPKColumnId, false);
+            auto accessorCopy = portion.SwitchPortionInfo(std::move(copy));
+            accessorCopy.SaveToDatabase(wrapper, firstPKColumnId, false);
         } else {
             copy.SaveMetaToDatabase(wrapper);
         }
@@ -198,6 +193,7 @@ public:
         AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
         portion.SaveToDatabase(wrapper, 0, false);
+        DataAccessorsManager->AddPortion(portion);
     }
 
     void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {

@@ -1,6 +1,9 @@
 #pragma once
 
+#include "controller.h"
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -8,17 +11,45 @@
 namespace NKikimr::NOlap {
 class IGranuleDataAccessor;
 class TDataAccessorsRequest;
-}
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
-class TEvRegisterController: public NActors::TEventLocal<TEvRegisterController, NColumnShard::TEvPrivate::EEv::EvRegisterGranuleDataAccessor> {
+class TEvAddPortion: public NActors::TEventLocal<TEvAddPortion, NColumnShard::TEvPrivate::EEv::EvAddPortionDataAccessor> {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<IGranuleDataAccessor>, Accessor);
+    TPortionDataAccessor Accessor;
 
 public:
-    explicit TEvRegisterController(const std::shared_ptr<IGranuleDataAccessor>& accessor)
+    TPortionDataAccessor ExtractAccessor() {
+        return std::move(Accessor);
+    }
+
+    explicit TEvAddPortion(const TPortionDataAccessor& accessor)
         : Accessor(accessor) {
+    }
+};
+
+class TEvRemovePortion: public NActors::TEventLocal<TEvRemovePortion, NColumnShard::TEvPrivate::EEv::EvRemovePortionDataAccessor> {
+private:
+    YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
+
+public:
+    explicit TEvRemovePortion(const TPortionInfo::TConstPtr& portion)
+        : Portion(portion) {
+    }
+};
+
+class TEvRegisterController: public NActors::TEventLocal<TEvRegisterController, NColumnShard::TEvPrivate::EEv::EvRegisterGranuleDataAccessor> {
+private:
+    std::unique_ptr<IGranuleDataAccessor> Controller;
+
+public:
+    std::unique_ptr<IGranuleDataAccessor> ExtractController() {
+        return std::move(Controller);
+    }
+
+    explicit TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor)
+        : Controller(std::move(accessor)) {
     }
 };
 

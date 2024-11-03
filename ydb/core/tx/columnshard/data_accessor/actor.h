@@ -1,6 +1,7 @@
 #pragma once
 #include "controller.h"
 #include "events.h"
+#include "manager.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -11,17 +12,23 @@ class TActor: public TActorBootstrapped<TActor> {
 private:
     const ui64 TabletId;
     const NActors::TActorId Parent;
-    THashMap<ui64, std::shared_ptr<IGranuleDataAccessor>> Controllers;
+    TLocalManager Manager;
 
     void StartStopping() {
         PassAway();
     }
 
     void Handle(TEvRegisterController::TPtr& ev) {
-        AFL_VERIFY(Controllers.emplace(ev->Get()->GetAccessor()->GetPathId(), ev->Get()->GetAccessor()).second);
+        Manager.RegisterController(ev->Get()->ExtractController());
     }
     void Handle(TEvUnregisterController::TPtr& ev) {
-        AFL_VERIFY(Controllers.erase(ev->Get()->GetPathId()));
+        Manager.UnregisterController(ev->Get()->GetPathId());
+    }
+    void Handle(TEvAddPortion::TPtr& ev) {
+        Manager.AddPortion(ev->Get()->ExtractAccessor());
+    }
+    void Handle(TEvRemovePortion::TPtr& ev) {
+        Manager.RemovePortion(ev->Get()->GetPortion());
     }
     void Handle(TEvAskDataAccessors::TPtr& ev);
 
@@ -44,6 +51,8 @@ public:
             hFunc(TEvRegisterController, Handle);
             hFunc(TEvUnregisterController, Handle);
             hFunc(TEvAskDataAccessors, Handle);
+            hFunc(TEvRemovePortion, Handle);
+            hFunc(TEvAddPortion, Handle);
             default:
                 AFL_VERIFY(false);
         }

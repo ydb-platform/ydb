@@ -30,6 +30,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     } else {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
     }
+    DataAccessorsManager->RemovePortion(it->second);
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
     OnAfterChangePortion(nullptr, nullptr);
@@ -121,7 +122,7 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
 TGranuleMeta::TGranuleMeta(
     const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
-    , DataAccessor(std::make_shared<TMemDataAccessor>(PathId))
+    , DataAccessorsManager(owner.GetDataAccessorsManager())
     , Counters(counters)
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())
@@ -185,6 +186,7 @@ void TGranuleMeta::CommitImmediateOnExecute(
     portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
     portion.SaveToDatabase(wrapper, 0, false);
+    DataAccessorsManager->AddPortion(portion);
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {

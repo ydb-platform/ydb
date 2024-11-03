@@ -340,7 +340,7 @@ public:
     }
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
-        return GetSchema()->GetIndexInfo().HasIndexes(indexIds);
+        return Schema->GetIndexInfo().HasIndexes(indexIds);
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
@@ -391,6 +391,7 @@ public:
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
+        return Portion->GetTotalRawBytes();
         return GetStageData().GetPortionAccessor().GetIndexRawBytes(indexIds, false);
     }
 

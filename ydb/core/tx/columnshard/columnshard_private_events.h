@@ -61,6 +61,8 @@ struct TEvPrivate {
         EvRegisterGranuleDataAccessor,
         EvUnregisterGranuleDataAccessor,
         EvAskDataAccessors,
+        EvAddPortionDataAccessor,
+        EvRemovePortionDataAccessor,
 
         EvEnd
     };

@@ -349,7 +349,7 @@ struct TExpected {
 
 class TTestCompactionAccessorsSubscriber: public NOlap::IDataAccessorRequestsSubscriber {
 private:
-    std::shared_ptr<TCompactColumnEngineChanges> Changes;
+    std::shared_ptr<TColumnEngineChanges> Changes;
     const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
@@ -359,7 +359,7 @@ private:
 
 public:
     TTestCompactionAccessorsSubscriber(
-        const std::shared_ptr<TCompactColumnEngineChanges>& changes, const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
+        const std::shared_ptr<TColumnEngineChanges>& changes, const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
         : Changes(changes)
         , VersionedIndex(versionedIndex)
     {
@@ -430,8 +430,13 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
     auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().size(), expectedToDrop);
 
-
     changes->StartEmergency();
+    {
+        auto request = changes->ExtractDataAccessorsRequest();
+        request->RegisterSubscriber(
+            std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
+        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+    }
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));
     changes->WriteIndexOnExecute(nullptr, contextExecute);

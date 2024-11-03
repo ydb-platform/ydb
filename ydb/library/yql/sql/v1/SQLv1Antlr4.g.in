@@ -15,7 +15,7 @@ lambda_stmt:
   | import_stmt
 ;
 
-sql_stmt: (EXPLAIN (TQ TU TE TR TY PLAN)?)? sql_stmt_core;
+sql_stmt: (EXPLAIN (QUERY PLAN)?)? sql_stmt_core;
 
 sql_stmt_core:
     pragma_stmt
@@ -1732,7 +1732,6 @@ RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
 COMMAT:        '@';
-DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
@@ -1746,6 +1745,7 @@ fragment BACKSLASH:     '\\';
 fragment QUOTE_DOUBLE:  '"';
 fragment QUOTE_SINGLE:  '\'';
 fragment BACKTICK:      '`';
+fragment DOUBLE_COMMAT: '@@';
 
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');
@@ -1967,7 +1967,7 @@ PRESORT: P R E S O R T;
 PRIMARY: P R I M A R Y;
 PRIVILEGES: P R I V I L E G E S;
 PROCESS: P R O C E S S;
-//QUERY: Q U E R Y;
+QUERY: Q U E R Y;
 QUEUE: Q U E U E;
 RAISE: R A I S E;
 RANGE: R A N G E;
@@ -2102,12 +2102,6 @@ REAL:
     ;
 
 BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
-
-TQ:('q'|'Q');
-TU:('u'|'U');
-TE:('e'|'E');
-TR:('r'|'R');
-TY:('y'|'Y');
 
 // YQL Default Lexer:
 // GRAMMAR_MULTILINE_COMMENT_CORE = .

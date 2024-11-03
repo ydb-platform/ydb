@@ -280,5 +280,36 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "/* /* */ */",
             "    ccccccccccccccc"
             "ccccccccccc");
+
+        Check(
+            highlight,
+            (
+                "\n"
+                "\t --!ansi_lexer \n"
+                "-- Some comment\n"
+                "pragma SimpleColumns;\n"
+                "select 1, '''' as empty;"),
+            (
+                " "
+                "  ccccccccccccccc"
+                "cccccccccccccccc"
+                "kkkkkk vvvvvvvvvvvvvo "
+                "kkkkkk no ssss kk kkkkko"));
+        Check(
+            highlight,
+            (
+                "$str = '\n"
+                "--!ansi_lexer\n"
+                "--!syntax_v1\n"
+                "';\n"
+                "\n"
+                "select 1, $str, \"\" as empty;"),
+            (
+                "ovvv o ss"
+                "ssssssssssssss"
+                "sssssssssssss"
+                "so "
+                " "
+                "kkkkkk no ovvvo ss kk kkkkko"));
     }
 }

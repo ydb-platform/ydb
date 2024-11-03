@@ -254,6 +254,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
     Y_UNIT_TEST(ANSI) {
         YQLHighlight highlight(Coloring);
+
         Check(
             highlight,
             "--!ansi_lexer\n"
@@ -274,6 +275,14 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "SELECT 'string with '' quote';",
             "cccccccccccccc"
             "kkkkkk sssssssssssssssssssssso"
+        );
+
+        Check(
+            highlight,
+            " \t\n --!ansi_lexer \n"
+            "/* /* */ */",
+            "    ccccccccccccccc"
+            "ccccccccccc"
         );
     }
 }

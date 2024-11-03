@@ -7,6 +7,7 @@
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
 
 #include <util/charset/utf8.h>
+#include <util/string/strip.h>
 
 #include <regex>
 
@@ -121,7 +122,8 @@ namespace NYdb {
             : Coloring(color)
             , BuiltinFunctionRegex(builtinFunctionPattern, ECMAScript | icase)
             , TypeRegex(typePattern, ECMAScript | icase)
-            , Lexer(MakeLexer(/* ansi = */ false, /* antlr4 = */ true))
+            , CppLexer(MakeLexer(/* ansi = */ false, /* antlr4 = */ true))
+            , ANSILexer(MakeLexer(/* ansi = */ true, /* antlr4 = */ true))
         {
         }
 
@@ -143,10 +145,19 @@ namespace NYdb {
         }
 
         TParsedTokenList YQLHighlight::Tokenize(const TString& queryUtf8) {
+            ILexer& lexer = *SuitableLexer(queryUtf8);
+
             TParsedTokenList tokens;
             TIssues issues;
-            NSQLTranslation::Tokenize(*Lexer, queryUtf8, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
+            NSQLTranslation::Tokenize(lexer, queryUtf8, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
             return tokens;
+        }
+
+        ILexer::TPtr& YQLHighlight::SuitableLexer(const TString& queryUtf8) {
+            if (StripStringLeft(queryUtf8).StartsWith("--!ansi_lexer")) {
+                return ANSILexer;
+            }
+            return CppLexer;
         }
 
         YQLHighlight::Color YQLHighlight::ColorOf(const TParsedToken& token, size_t index) {

@@ -1458,9 +1458,9 @@ private:
         op.Properties["Name"] = name;
         op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
 
-        auto operatorId = AddOperator(planNode, name, std::move(op));
-
         AddOptimizerEstimates(op, join);
+
+        auto operatorId = AddOperator(planNode, name, std::move(op));
 
         Visit(flatMap, planNode);
 

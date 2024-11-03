@@ -15,9 +15,9 @@ PEERDIR(
     library/cpp/yson/node
     contrib/ydb/library/yql/sql/pg
     contrib/ydb/library/yql/core/facade
-    contrib/ydb/library/yql/core/file_storage
-    contrib/ydb/library/yql/core/file_storage/proto
-    contrib/ydb/library/yql/core/file_storage/http_download
+    yql/essentials/core/file_storage
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core/file_storage/http_download
     contrib/ydb/library/yql/core/services/mounts
     contrib/ydb/library/yql/minikql/comp_nodes/llvm14
     yql/essentials/protos

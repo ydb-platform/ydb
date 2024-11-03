@@ -225,6 +225,7 @@ TConclusionStatus TScanHead::DetectSourcesFeatureInContextIntervalScan(
         optimizer.AddSource(i.second, fetchingPlan);
     }
     const ui64 startMemory = optimizer.GetMemorySum();
+
     if (!optimizer.Optimize(Context->ReduceMemoryIntervalLimit) && Context->RejectMemoryIntervalLimit < optimizer.GetMemorySum()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "next_internal_broken")("reason", "a lot of memory need")("start", startMemory)(
             "reduce_limit", Context->ReduceMemoryIntervalLimit)("reject_limit", Context->RejectMemoryIntervalLimit)(

@@ -123,7 +123,7 @@ void TTieringActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, co
             for (auto&& p : portions) {
                 auto portion = externalContext.GetPortionVerified(p);
                 if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                    if (!NYDBTest::GetColumnShardController()->CheckPortionForEvict() || portion->HasInsertWriteId()) {
+                    if (!NYDBTest::TControllers::GetColumnShardController()->CheckPortionForEvict(portion) || portion->HasInsertWriteId()) {
                         Counters.SkipEvictionForCompaction->Add(1);
                         continue;
                     }

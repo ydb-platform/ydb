@@ -274,4 +274,13 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
     return true;
 }
 
+TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
+    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    return !source->StartFetchingAccessor(source, step);
+}
+
+ui64 TPortionAccessorFetchingStep::DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const {
+    return source->PredictAccessorMemoryBytes();
+}
+
 }   // namespace NKikimr::NOlap::NReader::NPlain

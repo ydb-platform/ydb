@@ -278,6 +278,23 @@ public:
     }
 };
 
+class TPortionAccessorFetchingStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+protected:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual ui64 DoPredictRawBytes(const std::shared_ptr<IDataSource>& source) const override;
+    virtual TString DoDebugString() const override {
+        return TStringBuilder();
+    }
+
+public:
+    TPortionAccessorFetchingStep()
+        : TBase("FETCHING_ACCESSOR") {
+    }
+};
+
 class TIndexBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;

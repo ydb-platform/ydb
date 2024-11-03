@@ -23,9 +23,25 @@ protected:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_READONLY(bool, UseFilter, false);
 
+    std::optional<TPortionDataAccessor> PortionAccessor;
+
 public:
     TFetchedData(const bool useFilter)
         : UseFilter(useFilter) {
+    }
+
+    bool HasPortionAccessor() const {
+        return !!PortionAccessor;
+    }
+
+    void SetPortionAccessor(TPortionDataAccessor&& accessor) {
+        AFL_VERIFY(!PortionAccessor);
+        PortionAccessor = std::move(accessor);
+    }
+
+    const TPortionDataAccessor& GetPortionAccessor() const {
+        AFL_VERIFY(!!PortionAccessor);
+        return *PortionAccessor;
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {

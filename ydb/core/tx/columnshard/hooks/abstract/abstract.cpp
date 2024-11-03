@@ -24,8 +24,8 @@ ui64 ICSController::GetGuaranteeIndexationStartBytesLimit() const {
     return DoGetGuaranteeIndexationStartBytesLimit(defaultValue);
 }
 
-bool ICSController::CheckPortionForEvict(const std::shared_ptr<TPortionInfo>& portion) const {
-    return portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
+bool ICSController::CheckPortionForEvict(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
+    return portion->HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized);
 }
 
 }

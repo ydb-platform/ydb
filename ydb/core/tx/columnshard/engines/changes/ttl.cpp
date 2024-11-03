@@ -17,19 +17,7 @@ void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     Y_ABORT_UNLESS(PortionsToEvict.size() || HasPortionsToRemove());
-    THashMap<TString, THashSet<TBlobRange>> blobRanges;
-    auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
-    auto& index = engine.GetVersionedIndex();
-    for (const auto& p : PortionsToEvict) {
-        GetPortionDataAccessor(p.GetPortionInfo()->GetPortionId()).FillBlobRangesByStorage(blobRanges, index);
-    }
-    for (auto&& i : blobRanges) {
-        auto action = BlobsAction.GetReading(i.first);
-        for (auto&& b : i.second) {
-            action->AddRange(b);
-        }
-    }
-    engine.GetActualizationController()->StartActualization(RWAddress);
+    self.GetIndexAs<TColumnEngineForLogs>().GetActualizationController()->StartActualization(RWAddress);
 }
 
 void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {

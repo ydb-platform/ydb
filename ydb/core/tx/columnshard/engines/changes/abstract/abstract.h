@@ -187,6 +187,17 @@ public:
 
 class TGranuleMeta;
 
+class TDataAccessorsInitializationContext {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TVersionedIndex>, VersionedIndex);
+
+public:
+    TDataAccessorsInitializationContext(const std::shared_ptr<TVersionedIndex>& versionedIndex)
+        : VersionedIndex(versionedIndex) {
+        AFL_VERIFY(VersionedIndex);
+    }
+};
+
 class TColumnEngineChanges {
 public:
     enum class EStage: ui32 {
@@ -215,7 +226,7 @@ protected:
     virtual bool NeedConstruction() const {
         return true;
     }
-    virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
+    virtual void DoStart(NColumnShard::TColumnShard& context) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
     virtual void OnAbortEmergency() {
     }
@@ -231,6 +242,7 @@ protected:
     }
 
     std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>();
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
     std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() const {
@@ -252,9 +264,10 @@ public:
         return result;
     }
 
-    void SetFetchedDataAccessors(TDataAccessorsResult&& result) {
+    void SetFetchedDataAccessors(TDataAccessorsResult&& result, const TDataAccessorsInitializationContext& context) {
         AFL_VERIFY(!FetchedDataAccessors);
         FetchedDataAccessors = std::move(result);
+        OnDataAccessorsInitialized(context);
     }
 
     class IMemoryPredictor {

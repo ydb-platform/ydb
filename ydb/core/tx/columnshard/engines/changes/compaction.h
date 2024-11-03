@@ -30,6 +30,21 @@ protected:
         return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds);
     }
 
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
+        TBase::OnDataAccessorsInitialized(context);
+        THashMap<TString, THashSet<TBlobRange>> blobRanges;
+        for (const auto& p : SwitchedPortions) {
+            GetPortionDataAccessor(p->GetPortionId()).FillBlobRangesByStorage(blobRanges, *context.GetVersionedIndex());
+        }
+
+        for (const auto& p : blobRanges) {
+            auto action = BlobsAction.GetReading(p.first);
+            for (auto&& b : p.second) {
+                action->AddRange(b);
+            }
+        }
+    }
+
 public:
     TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();

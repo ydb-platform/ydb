@@ -59,6 +59,20 @@ protected:
         };
         return std::make_shared<NDataLocks::TListPortionsLock>(TypeString() + "::" + RWAddress.DebugString() + "::" + GetTaskIdentifier(), PortionsToEvict, pred);
     }
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
+        TBase::OnDataAccessorsInitialized(context);
+        THashMap<TString, THashSet<TBlobRange>> blobRanges;
+        for (const auto& p : PortionsToEvict) {
+            GetPortionDataAccessor(p.GetPortionInfo()->GetPortionId()).FillBlobRangesByStorage(blobRanges, *context.GetVersionedIndex());
+        }
+        for (auto&& i : blobRanges) {
+            auto action = BlobsAction.GetReading(i.first);
+            for (auto&& b : i.second) {
+                action->AddRange(b);
+            }
+        }
+    }
+
 public:
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
     private:

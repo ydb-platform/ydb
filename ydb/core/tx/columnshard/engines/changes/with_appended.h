@@ -15,6 +15,10 @@ private:
 protected:
     std::optional<ui64> TargetCompactionLevel;
     TSaverContext SaverContext;
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
+
+    }
+
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual void DoOnAfterCompile() override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;

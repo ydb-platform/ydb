@@ -175,7 +175,7 @@ public:
         AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         auto copy = innerPortion->MakeCopy();
         modifier(copy);
-        if (AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
             auto data = std::dynamic_pointer_cast<TMemDataAccessor>(DataAccessor);
             AFL_VERIFY(data);
             auto accessor = data->BuildAccessor(std::make_shared<TPortionInfo>(std::move(copy)));

@@ -105,6 +105,7 @@ private:
         std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> Guard;
         std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> AccessorsManager;
         std::shared_ptr<TDataAccessorsRequest> Request;
+        NColumnShard::TCounterGuard WaitingCountersGuard;
         const NActors::TActorId OwnerId;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {
@@ -125,13 +126,7 @@ private:
         }
 
     public:
-        TFetchingAccessorAllocation(const std::shared_ptr<TDataAccessorsRequest>& request, const ui64 mem,
-            const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& manager, const NActors::TActorId& ownerId)
-            : TBase(mem)
-            , AccessorsManager(manager)
-            , Request(request)
-            , OwnerId(ownerId) {
-        }
+        TFetchingAccessorAllocation(const std::shared_ptr<TDataAccessorsRequest>& request, const ui64 mem, const std::shared_ptr<NReader::TReadContext>& context);
     };
 
     virtual void Apply(const std::shared_ptr<IApplyAction>& task) override {

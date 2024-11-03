@@ -137,7 +137,6 @@ private:
     TChunksLimiter ChunksLimiter;
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
     std::shared_ptr<arrow::RecordBatch> CurrentLastReadKey;
-    i64 InFlightReads = 0;
     bool Finished = false;
     std::optional<TMonotonic> LastResultInstant;
 

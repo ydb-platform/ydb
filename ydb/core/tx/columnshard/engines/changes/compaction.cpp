@@ -32,19 +32,6 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-    THashMap<TString, THashSet<TBlobRange>> blobRanges;
-    auto& index = self.GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
-    for (const auto& p : SwitchedPortions) {
-        GetPortionDataAccessor(p->GetPortionId()).FillBlobRangesByStorage(blobRanges, index);
-    }
-
-    for (const auto& p : blobRanges) {
-        auto action = BlobsAction.GetReading(p.first);
-        for (auto&& b : p.second) {
-            action->AddRange(b);
-        }
-    }
-
     self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()));
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();

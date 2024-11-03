@@ -347,13 +347,38 @@ struct TExpected {
     ui32 NewGranules;
 };
 
+class TTestCompactionAccessorsSubscriber: public NOlap::IDataAccessorRequestsSubscriber {
+private:
+    std::shared_ptr<TCompactColumnEngineChanges> Changes;
+    const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        const TDataAccessorsInitializationContext context(VersionedIndex);
+        Changes->SetFetchedDataAccessors(std::move(result), context);
+    }
+
+public:
+    TTestCompactionAccessorsSubscriber(
+        const std::shared_ptr<TCompactColumnEngineChanges>& changes, const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
+        : Changes(changes)
+        , VersionedIndex(versionedIndex)
+    {
+
+    }
+};
+
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, NBlobOperations::NRead::TCompositeReadBlobs&& blobs, ui32& step,
              const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
     std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(EmptyDataLocksManager));
     UNIT_ASSERT(changes);
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
-    changes->Blobs = std::move(blobs);
     changes->StartEmergency();
+    {
+        auto request = changes->ExtractDataAccessorsRequest();
+        request->RegisterSubscriber(std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
+        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+    }
+    changes->Blobs = std::move(blobs);
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"), NOlap::TSnapshot(step, 1));
     Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 

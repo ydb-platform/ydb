@@ -36,6 +36,8 @@ DEFINE_ENUM(EMultiplexingBand,
     ((RealTime)              (4))
 );
 
+DEFINE_ENUM_UNKNOWN_VALUE(EMultiplexingBand, Default);
+
 YT_DEFINE_ERROR_ENUM(
     ((TransportError)       (100))
     ((SslError)             (119))

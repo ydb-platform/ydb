@@ -82,14 +82,12 @@ namespace NYdb {
             "text|bytes"
             ")$");
 
+        // Permits invalid special comments
         bool IsAnsiQuery(const TString& queryUtf8) {
             TTranslationSettings settings;
-            settings.AnsiLexer = false;
-
             TIssues issues;
-            return (
-                ParseTranslationSettings(queryUtf8, settings, issues) &&
-                settings.AnsiLexer);
+            ParseTranslationSettings(queryUtf8, settings, issues);
+            return settings.AnsiLexer;
         }
 
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Monaco() {

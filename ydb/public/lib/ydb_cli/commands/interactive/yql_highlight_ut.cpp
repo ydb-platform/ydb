@@ -251,4 +251,29 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "FROM test\n",
             "kkkkkk o  kkkk vvvv ");
     }
+
+    Y_UNIT_TEST(ANSI) {
+        YQLHighlight highlight(Coloring);
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT * FROM T; /* this is a comment /* this is a nested comment */ */",
+            "cccccccccccccc"
+            "kkkkkk o kkkk vo cccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        );
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 1 as \"column with \"\" double quote\";",
+            "cccccccccccccc"
+            "kkkkkk n kk ssssssssssssssssssssssssssssso"
+        );
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 'string with '' quote';",
+            "cccccccccccccc"
+            "kkkkkk sssssssssssssssssssssso"
+        );
+    }
 }

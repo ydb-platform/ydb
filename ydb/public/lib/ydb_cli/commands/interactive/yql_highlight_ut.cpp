@@ -260,29 +260,25 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "--!ansi_lexer\n"
             "SELECT * FROM T; /* this is a comment /* this is a nested comment */ */",
             "cccccccccccccc"
-            "kkkkkk o kkkk vo cccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-        );
+            "kkkkkk o kkkk vo cccccccccccccccccccccccccccccccccccccccccccccccccccccc");
         Check(
             highlight,
             "--!ansi_lexer\n"
             "SELECT 1 as \"column with \"\" double quote\";",
             "cccccccccccccc"
-            "kkkkkk n kk ssssssssssssssssssssssssssssso"
-        );
+            "kkkkkk n kk ssssssssssssssssssssssssssssso");
         Check(
             highlight,
             "--!ansi_lexer\n"
             "SELECT 'string with '' quote';",
             "cccccccccccccc"
-            "kkkkkk sssssssssssssssssssssso"
-        );
+            "kkkkkk sssssssssssssssssssssso");
 
         Check(
             highlight,
             " \t\n --!ansi_lexer \n"
             "/* /* */ */",
             "    ccccccccccccccc"
-            "ccccccccccc"
-        );
+            "ccccccccccc");
     }
 }

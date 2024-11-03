@@ -16,9 +16,9 @@
 namespace NYdb {
     namespace NConsoleClient {
         using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
+        using NSQLTranslation::TTranslationSettings;
         using NSQLTranslationV1::IsProbablyKeyword;
         using NSQLTranslationV1::MakeLexer;
-        using NSQLTranslation::TTranslationSettings;
         using NYql::TIssues;
 
         using std::regex_constants::ECMAScript;
@@ -85,9 +85,8 @@ namespace NYdb {
             NSQLTranslation::TTranslationSettings settings;
             TIssues issues;
             return (
-                NSQLTranslation::ParseTranslationSettings(queryUtf8, settings, issues) && 
-                settings.AnsiLexer
-            );
+                NSQLTranslation::ParseTranslationSettings(queryUtf8, settings, issues) &&
+                settings.AnsiLexer);
         }
 
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Monaco() {

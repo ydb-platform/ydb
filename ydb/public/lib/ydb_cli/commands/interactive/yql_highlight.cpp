@@ -84,6 +84,8 @@ namespace NYdb {
 
         bool IsAnsiQuery(const TString& queryUtf8) {
             TTranslationSettings settings;
+            settings.AnsiLexer = false;
+
             TIssues issues;
             return (
                 ParseTranslationSettings(queryUtf8, settings, issues) &&

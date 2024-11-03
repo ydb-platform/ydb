@@ -15,6 +15,7 @@
 
 namespace NYdb {
     namespace NConsoleClient {
+        using NSQLTranslation::ParseTranslationSettings;
         using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
         using NSQLTranslation::TTranslationSettings;
         using NSQLTranslationV1::IsProbablyKeyword;
@@ -82,10 +83,10 @@ namespace NYdb {
             ")$");
 
         bool IsAnsiQuery(const TString& queryUtf8) {
-            NSQLTranslation::TTranslationSettings settings;
+            TTranslationSettings settings;
             TIssues issues;
             return (
-                NSQLTranslation::ParseTranslationSettings(queryUtf8, settings, issues) &&
+                ParseTranslationSettings(queryUtf8, settings, issues) &&
                 settings.AnsiLexer);
         }
 

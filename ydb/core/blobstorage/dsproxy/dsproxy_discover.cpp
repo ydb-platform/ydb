@@ -272,7 +272,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
     const TInstant Deadline;
-    const TInstant StartTime;
 
     TGroupResponseTracker GroupResponseTracker;
     std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> PendingResult;
@@ -295,7 +294,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     template<typename TPtr>
     void SendResult(TPtr& result) {
         Y_ABORT_UNLESS(result);
-        const TDuration duration = TActivationContext::Now() - StartTime;
+        const TDuration duration = TActivationContext::Monotonic() - RequestStartTime;
         Mon->CountDiscoverResponseTime(duration);
         const bool success = result->Status == NKikimrProto::OK;
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
@@ -884,7 +883,6 @@ public:
         , ReadBody(params.Common.Event->ReadBody)
         , DiscoverBlockedGeneration(params.Common.Event->DiscoverBlockedGeneration)
         , Deadline(params.Common.Event->Deadline)
-        , StartTime(params.Common.Now)
         , GroupResponseTracker(Info)
         , IsGetBlockDone(!DiscoverBlockedGeneration)
         , ForceBlockedGeneration(params.Common.Event->ForceBlockedGeneration)

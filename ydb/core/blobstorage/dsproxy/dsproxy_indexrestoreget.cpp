@@ -24,7 +24,6 @@ class TBlobStorageGroupIndexRestoreGetRequest
     TVector<TBlobStatusTracker> BlobStatus;
     ui32 VGetsInFlight;
 
-    TInstant StartTime;
     NKikimrBlobStorage::EGetHandleClass GetHandleClass;
 
     ui64 TabletId;
@@ -51,7 +50,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
             PendingResult->ErrorReason = ErrorReason;
         }
         Y_ABORT_UNLESS(PendingResult);
-        Mon->CountIndexRestoreGetResponseTime(TActivationContext::Now() - StartTime);
+        Mon->CountIndexRestoreGetResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         SendResponseAndDie(std::move(PendingResult));
     }
 
@@ -275,7 +274,6 @@ public:
         , Decommission(params.Common.Event->Decommission)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
         , VGetsInFlight(0)
-        , StartTime(params.Common.Now)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , RestoreQueriesStarted(0)
         , RestoreQueriesFinished(0)

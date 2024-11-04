@@ -82,7 +82,10 @@ struct TDSProxyEnv {
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), true, nodeMon,
-            std::move(storagePoolCounters), enablePutBatching, enableVPatch);
+            std::move(storagePoolCounters), TBlobStorageProxyParameters{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                });
         TActorId actorId = runtime.Register(dsproxy, nodeIndex);
         runtime.RegisterService(RealProxyActorId, actorId, nodeIndex);
 
@@ -111,7 +114,7 @@ struct TDSProxyEnv {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now =  TInstant::Now(),
+                        .Now = TMonotonic::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
@@ -135,7 +138,7 @@ struct TDSProxyEnv {
                         .GroupInfo = Info,
                         .GroupQueues = GroupQueues,
                         .Mon = Mon,
-                        .Now = TInstant::Now(),
+                        .Now = TMonotonic::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                         .LatencyQueueKind = kind,
@@ -161,7 +164,7 @@ struct TDSProxyEnv {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TInstant::Now(),
+                        .Now = TMonotonic::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
                         .TraceId = std::move(ev->TraceId),
@@ -182,7 +185,7 @@ struct TDSProxyEnv {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TInstant::Now(),
+                    .Now = TMonotonic::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
                     .TraceId = std::move(ev->TraceId),
@@ -193,7 +196,6 @@ struct TDSProxyEnv {
             }));
     }
 };
-
 
 inline bool ScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
         TDuration delay, TInstant& deadline) {

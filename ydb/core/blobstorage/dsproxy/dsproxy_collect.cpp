@@ -27,7 +27,6 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     const bool Decommission;
 
     TGroupQuorumTracker QuorumTracker;
-    TInstant StartTime;
 
     ui32 RequestsSent = 0;
     ui32 ResponsesReceived = 0;
@@ -156,7 +155,6 @@ public:
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
         , QuorumTracker(Info.Get())
-        , StartTime(params.Common.Now)
     {}
 
     void Bootstrap() {

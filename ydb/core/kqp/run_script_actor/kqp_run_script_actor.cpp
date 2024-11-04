@@ -37,6 +37,31 @@ constexpr ui64 MIN_SAVE_RESULT_BATCH_SIZE = 5_MB;
 constexpr i32 MIN_SAVE_RESULT_BATCH_ROWS = 5000;
 constexpr ui64 RUN_SCRIPT_ACTOR_BUFFER_SIZE = 40_MB;
 
+struct TProducerState {
+    TMaybe<ui64> LastSeqNo;
+    i64 AckedFreeSpaceBytes = 0;
+    TActorId ActorId;
+    ui64 ChannelId = 0;
+
+    void SendAck(const NActors::TActorIdentity& actor) const {
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+        resp->Record.SetSeqNo(*LastSeqNo);
+        resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
+        resp->Record.SetChannelId(ChannelId);
+
+        actor.Send(ActorId, resp.Release());
+    }
+
+    bool ResumeIfStopped(const NActors::TActorIdentity& actor, i64 freeSpaceBytes) {
+        if (LastSeqNo && AckedFreeSpaceBytes <= 0) {
+            AckedFreeSpaceBytes = freeSpaceBytes;
+            SendAck(actor);
+            return true;
+        }
+        return false;
+    }
+};
+
 class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     enum class ERunState {
         Created,
@@ -61,11 +86,6 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
         ui64 FirstRowId = 0;
         ui64 AccumulatedSize = 0;
         Ydb::ResultSet PendingResult;
-    };
-
-    struct TPendingAck {
-        TActorId ReplyActorId;
-        THolder<TEvKqpExecuter::TEvStreamDataAck> AckEvent;
     };
 
 public:
@@ -271,30 +291,6 @@ private:
         PassAway();
     }
 
-    void SendStreamDataResponse() {
-        if (PendingAcks.empty()) {
-            return;
-        }
-
-        if (PendingResultSetsSize > RUN_SCRIPT_ACTOR_BUFFER_SIZE) {
-            // Try to save any pending result
-            SaveResult();
-        }
-
-        if (PendingResultSetsSize <= RUN_SCRIPT_ACTOR_BUFFER_SIZE) {
-            while (!PendingAcks.empty()) {
-                auto response = std::move(PendingAcks.front());
-                PendingAcks.pop();
-
-                LOG_D("Send stream data ack"
-                    << ", seqNo: " << response.AckEvent->Record.GetSeqNo()
-                    << ", to: " << response.ReplyActorId);
-
-                Send(response.ReplyActorId, response.AckEvent.Release());
-            }
-        }
-    }
-
     void SaveResult(size_t resultSetId) {
         if (SaveResultInflight) {
             return;
@@ -307,7 +303,9 @@ private:
         auto& resultSetInfo = ResultSetInfos[resultSetId];
         Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, resultSetId, ExpireAt, resultSetInfo.FirstRowId, resultSetInfo.AccumulatedSize, std::move(resultSetInfo.PendingResult)));
         SaveResultInflight++;
-        PendingResultSetsSize -= resultSetInfo.ByteCount - resultSetInfo.AccumulatedSize;
+        const ui64 bytes = resultSetInfo.ByteCount - resultSetInfo.AccumulatedSize;
+        PendingResultSetsSize -= bytes;
+        SaveResultInflightBytes = bytes;
         resultSetInfo.FirstRowId = resultSetInfo.RowCount;
         resultSetInfo.AccumulatedSize = resultSetInfo.ByteCount;
         resultSetInfo.PendingResult = Ydb::ResultSet();
@@ -315,7 +313,7 @@ private:
 
     void SaveResult() {
         for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
-            if (ResultSetInfos[resultSetId].PendingResult.rows_size()) {
+            if (ShouldSaveResult(resultSetId)) {
                 SaveResult(resultSetId);
                 break;
             }
@@ -326,13 +324,6 @@ private:
         if (RunState != ERunState::Running) {
             return;
         }
-        auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        resp->Record.SetFreeSpace(QueryServiceConfig.GetScriptResultSizeLimit()
-                                 ? QueryServiceConfig.GetScriptResultSizeLimit() > std::numeric_limits<i64>::max()
-                                    ? std::numeric_limits<i64>::max()
-                                    : static_cast<i64>(QueryServiceConfig.GetScriptResultSizeLimit())
-                                 : std::numeric_limits<i64>::max());
 
         LOG_D("Compute stream data"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
@@ -399,13 +390,20 @@ private:
                 }
             }
 
-            if (ShouldSaveResult(resultSetInfo)) {
+            if (ShouldSaveResult(resultSetIndex)) {
                 SaveResult(resultSetIndex);
             }
         }
 
-        PendingAcks.push({.ReplyActorId = ev->Sender, .AckEvent = std::move(resp)});
-        SendStreamDataResponse();
+        const i64 freeSpaceBytes = GetFreeSpaceBytes();
+        const ui32 channelId = ev->Get()->Record.GetChannelId();
+        const ui64 seqNo = ev->Get()->Record.GetSeqNo();
+        auto& channel = StreamChannels[channelId];
+        channel.ActorId = ev->Sender;
+        channel.LastSeqNo = seqNo;
+        channel.AckedFreeSpaceBytes = freeSpaceBytes;
+        channel.ChannelId = channelId;
+        channel.SendAck(SelfId());
     }
 
     void SaveResultMeta() {
@@ -532,20 +530,33 @@ private:
 
     void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
         SaveResultInflight--;
+        SaveResultInflightBytes = 0;
         if (Status == Ydb::StatusIds::SUCCESS || Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
             if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
                 Status = ev->Get()->Status;
                 Issues.AddIssues(ev->Get()->Issues);
             } else {
                 for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
-                    if (ShouldSaveResult(ResultSetInfos[resultSetId])) {
+                    if (ShouldSaveResult(resultSetId)) {
                         SaveResult(resultSetId);
                         break;
                     }
                 }
             }
         }
-        SendStreamDataResponse();
+
+        const i64 freeSpaceBytes = GetFreeSpaceBytes();
+        if (freeSpaceBytes > 0) {
+            for (auto& [channelId, channel] : StreamChannels) {
+                if (channel.ResumeIfStopped(SelfId(), freeSpaceBytes)) {
+                    LOG_D("Resume execution, "
+                        << ", channel: " << channelId
+                        << ", seqNo: " << channel.LastSeqNo
+                        << ", freeSpace: " << freeSpaceBytes);
+                }
+            }
+        }
+
         CheckInflight();
     }
 
@@ -611,11 +622,19 @@ private:
             && RunState != ERunState::Cancelling;
     }
 
-    static bool ShouldSaveResult(TResultSetInfo& resultInfo) {
+    bool ShouldSaveResult(size_t resultSetId) const {
+        const TResultSetInfo& resultInfo = ResultSetInfos[resultSetId];
         if (!resultInfo.PendingResult.rows_size()) {
             return false;
         }
-        return resultInfo.Truncated || resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
+        if (resultInfo.Truncated || !IsExecuting()) {
+            return true;
+        }
+        return resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
+    }
+
+    i64 GetFreeSpaceBytes() const {
+        return static_cast<i64>(RUN_SCRIPT_ACTOR_BUFFER_SIZE) - static_cast<i64>(PendingResultSetsSize) - static_cast<i64>(SaveResultInflightBytes);
     }
 
 private:
@@ -642,10 +661,11 @@ private:
 
     // Result
     std::vector<TResultSetInfo> ResultSetInfos;
-    std::queue<TPendingAck> PendingAcks;
+    TMap<ui64, TProducerState> StreamChannels;
     TMaybe<TInstant> ExpireAt;
     NJson::TJsonValue ResultSetMetas;
     ui32 SaveResultInflight = 0;
+    ui64 SaveResultInflightBytes = 0;
     ui32 SaveResultMetaInflight = 0;
     bool PendingResultMeta = false;
     ui64 PendingResultSetsSize = 0;

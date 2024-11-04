@@ -31,6 +31,13 @@ class TCleanupTablesColumnEngineChanges;
 namespace NDataSharing {
 class TDestinationSession;
 }
+namespace NEngineLoading {
+class TEngineShardingInfoReader;
+class TEngineCountersReader;
+class TEngineColumnsReader;
+class TPortionsLoadContext;
+class TEnginePortionsReader;
+}
 
 struct TReadMetadata;
 
@@ -47,6 +54,10 @@ class TColumnEngineForLogs: public IColumnEngine {
     friend class TCleanupPortionsColumnEngineChanges;
     friend class TCleanupTablesColumnEngineChanges;
     friend class NDataSharing::TDestinationSession;
+    friend class NEngineLoading::TEngineShardingInfoReader;
+    friend class NEngineLoading::TEngineCountersReader;
+    friend class NEngineLoading::TEngineColumnsReader;
+    friend class NEngineLoading::TEnginePortionsReader;
 
 private:
     bool ActualizationStarted = false;
@@ -110,8 +121,12 @@ public:
         GranulesStorage->FetchDataAccessors(request);
     }
 
+    bool TestingLoadColumns(IDbWrapper& db);
+    bool LoadCounters(IDbWrapper& db);
+
 public:
-    bool Load(IDbWrapper& db) override;
+    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
+    bool FinishLoading(const std::shared_ptr<NEngineLoading::TPortionsLoadContext>& context);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
@@ -195,6 +210,8 @@ public:
         VersionedIndex.AddShardingInfo(shardingInfo);
     }
 
+    bool TestingLoad(IDbWrapper& db);
+
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         auto exPortion = portion->MakeCopy();
@@ -218,10 +235,6 @@ private:
     bool Loaded = false;
 
 private:
-    bool LoadColumns(IDbWrapper& db);
-    bool LoadShardingInfo(IDbWrapper& db);
-    bool LoadCounters(IDbWrapper& db);
-
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(
         const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);

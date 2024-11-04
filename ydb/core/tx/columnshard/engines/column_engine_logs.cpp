@@ -7,6 +7,7 @@
 #include "changes/general_compaction.h"
 #include "changes/indexation.h"
 #include "changes/ttl.h"
+#include "loading/stages.h"
 #include "portions/constructor.h"
 
 #include <ydb/core/base/appdata.h>
@@ -15,6 +16,7 @@
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
@@ -164,6 +166,19 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     RegisterSchemaVersion(snapshot, std::move(*indexInfoOptional));
 }
 
+std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
+    auto result = std::make_shared<TTxCompositeReader>("column_engines");
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineShardingInfoReader>("sharding_info", this, dsGroupSelector));
+    auto portionsLoadContext = std::make_shared<NEngineLoading::TPortionsLoadContext>();
+    result->AddChildren(std::make_shared<NEngineLoading::TEnginePortionsReader>("portions", this, dsGroupSelector, portionsLoadContext));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineColumnsReader>("columns", this, dsGroupSelector, portionsLoadContext));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineIndexesReader>("indexes", this, dsGroupSelector, portionsLoadContext));
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineLoadingFinish>("finish", this, portionsLoadContext));
+    return result;
+}
+
+bool TColumnEngineForLogs::FinishLoading(const std::shared_ptr<NEngineLoading::TPortionsLoadContext>& context) {
 void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
     AFL_VERIFY(!VersionedIndex.IsEmpty());
 
@@ -194,25 +209,19 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
     VersionedIndex.AddIndex(snapshot, std::move(*indexInfoOptional));
 }
 
-bool TColumnEngineForLogs::Load(IDbWrapper& db) {
-    Y_ABORT_UNLESS(!Loaded);
-    Loaded = true;
-    THashMap<ui64, ui64> granuleToPathIdDecoder;
     {
-        TMemoryProfileGuard g("TTxInit/LoadShardingInfo");
-        if (!VersionedIndex.LoadShardingInfo(db)) {
-            return false;
+        TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");
+        for (auto&& [granuleId, pathConstructors] : context->MutableConstructors()) {
+            auto g = GetGranulePtrVerified(granuleId);
+            for (auto&& [portionId, constructor] : pathConstructors) {
+                g->UpsertPortionOnLoad(constructor.Build(false).MutablePortionInfoPtr());
+            }
         }
     }
-
     {
-        auto guard = GranulesStorage->GetStats()->StartPackModification();
-        if (!LoadColumns(db)) {
-            return false;
-        }
-        TMemoryProfileGuard g("TTxInit/LoadCounters");
-        if (!LoadCounters(db)) {
-            return false;
+        TMemoryProfileGuard g("TTxInit/LoadColumns/After");
+        for (auto&& i : GranulesStorage->GetTables()) {
+            i.second->OnAfterPortionsLoad();
         }
     }
 
@@ -228,85 +237,6 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db) {
     Y_ABORT_UNLESS(!(LastPortion >> 63), "near to int overflow");
     Y_ABORT_UNLESS(!(LastGranule >> 63), "near to int overflow");
     return true;
-}
-
-bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
-    TPortionConstructors constructors;
-    {
-        NColumnShard::TLoadTimeSignals::TLoadTimer timer = SignalCounters.PortionsLoadingTimeCounters.StartGuard();
-        TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
-        if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
-                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-                AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
-            })) {
-            timer.AddLoadingFail();
-            return false;
-        }
-    }
-
-    {
-        NColumnShard::TLoadTimeSignals::TLoadTimer timer = SignalCounters.ColumnsLoadingTimeCounters.StartGuard();
-        TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
-        TPortionInfo::TSchemaCursor schema(VersionedIndex);
-        if (!db.LoadColumns([&](const TColumnChunkLoadContextV1& loadContext) {
-                auto* constructor = constructors.GetConstructorVerified(loadContext.GetPathId(), loadContext.GetPortionId());
-                constructor->LoadRecord(loadContext);
-            })) {
-            timer.AddLoadingFail();
-            return false;
-        }
-    }
-
-    {
-        NColumnShard::TLoadTimeSignals::TLoadTimeSignals::TLoadTimer timer = SignalCounters.IndexesLoadingTimeCounters.StartGuard();
-        TMemoryProfileGuard g("TTxInit/LoadIndexes/Indexes");
-        if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
-                auto* constructor = constructors.GetConstructorVerified(pathId, portionId);
-                constructor->LoadIndex(loadContext);
-            })) {
-            timer.AddLoadingFail();
-            return false;
-        };
-    }
-
-    {
-        TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");
-        for (auto&& [granuleId, pathConstructors] : constructors) {
-            auto g = GetGranulePtrVerified(granuleId);
-            for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false).MutablePortionInfoPtr());
-            }
-        }
-    }
-    {
-        TMemoryProfileGuard g("TTxInit/LoadColumns/After");
-        for (auto&& i : GranulesStorage->GetTables()) {
-            i.second->OnAfterPortionsLoad();
-        }
-    }
-    return true;
-}
-
-bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
-    auto callback = [&](ui32 id, ui64 value) {
-        switch (id) {
-            case LAST_PORTION:
-                LastPortion = value;
-                break;
-            case LAST_GRANULE:
-                LastGranule = value;
-                break;
-            case LAST_PLAN_STEP:
-                LastSnapshot = TSnapshot(value, LastSnapshot.GetTxId());
-                break;
-            case LAST_TX_ID:
-                LastSnapshot = TSnapshot(LastSnapshot.GetPlanStep(), value);
-                break;
-        }
-    };
-
-    return db.LoadCounters(callback);
 }
 
 std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept {
@@ -629,6 +559,75 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
         g->StartActualizationIndex();
         g->RefreshScheme();
     }
+}
+
+bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
+    {
+        TMemoryProfileGuard g("TTxInit/LoadShardingInfo");
+        if (!VersionedIndex.LoadShardingInfo(db)) {
+            return false;
+        }
+    }
+
+    {
+        auto guard = GranulesStorage->GetStats()->StartPackModification();
+        std::shared_ptr<TPortionsLoadContext> constructors = std::make_shared<TPortionsLoadContext>();
+        {
+            if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                    const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
+                    AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
+                    AFL_VERIFY(constructors->MutableConstructors().AddConstructorVerified(std::move(portion)));
+                })) {
+                return false;
+            }
+        }
+
+        {
+            TPortionInfo::TSchemaCursor schema(VersionedIndex);
+            if (!db.LoadColumns([&](const TColumnChunkLoadContextV1& loadContext) {
+                    auto* constructor =
+                        constructors->MutableConstructors().GetConstructorVerified(loadContext.GetPathId(), loadContext.GetPortionId());
+                    constructor->LoadRecord(loadContext);
+                })) {
+                return false;
+            }
+        }
+
+        {
+            if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
+                    auto* constructor = constructors->MutableConstructors().GetConstructorVerified(pathId, portionId);
+                    constructor->LoadIndex(loadContext);
+                })) {
+                return false;
+            };
+        }
+        if (!LoadCounters(db)) {
+            return false;
+        }
+        FinishLoading(constructors)
+    }
+    return true;
+}
+
+bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
+    auto callback = [&](ui32 id, ui64 value) {
+        switch (id) {
+            case LAST_PORTION:
+                LastPortion = value;
+                break;
+            case LAST_GRANULE:
+                LastGranule = value;
+                break;
+            case LAST_PLAN_STEP:
+                LastSnapshot = TSnapshot(value, LastSnapshot.GetTxId());
+                break;
+            case LAST_TX_ID:
+                LastSnapshot = TSnapshot(LastSnapshot.GetPlanStep(), value);
+                break;
+        }
+    };
+
+    return db.LoadCounters(callback);
 }
 
 }   // namespace NKikimr::NOlap

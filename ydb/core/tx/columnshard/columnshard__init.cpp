@@ -9,6 +9,9 @@
 #include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "hooks/abstract/abstract.h"
+#include "loading/stages.h"
+#include "tx_reader/abstract.h"
+#include "tx_reader/composite.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
@@ -35,9 +38,9 @@ public:
     }
 
 private:
-    bool Precharge(TTransactionContext& txc);
+    std::shared_ptr<ITxReader> StartReader;
     void SetDefaults();
-    bool ReadEverything(TTransactionContext& txc, const TActorContext& ctx);
+    std::shared_ptr<ITxReader> BuildReader();
 };
 
 void TTxInit::SetDefaults() {
@@ -53,204 +56,20 @@ void TTxInit::SetDefaults() {
     Self->LongTxWritesByUniqueId.clear();
 }
 
-bool TTxInit::Precharge(TTransactionContext& txc) {
-    NIceDb::TNiceDb db(txc.DB);
-
-    bool ready = true;
-    ready = ready & Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::TxInfo>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::SchemaPresetInfo>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::SchemaPresetVersionInfo>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::TtlSettingsPresetInfo>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::TtlSettingsPresetVersionInfo>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::TableInfo>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::TableVersionInfo>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::BlobsToKeep>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::InsertTable>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::IndexCounters>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::SharedBlobIds>(db, txc.DB.GetScheme());
-    ready = ready & Schema::Precharge<Schema::BorrowedBlobIds>(db, txc.DB.GetScheme());
-
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoRound, Self->LastSchemaSeqNo.Round);
-    ready = ready && Schema::GetSpecialProtoValue(db, Schema::EValueIds::ProcessingParams, Self->ProcessingParams);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastPlannedStep, Self->LastPlannedStep);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId);
-    ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPath, Self->OwnerPath);
-
-    {
-        ui64 lastCompletedStep = 0;
-        ui64 lastCompletedTx = 0;
-        ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedStep, lastCompletedStep);
-        ready = ready && Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedTxId, lastCompletedTx);
-        Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
-    }
-
-    if (!ready) {
-        return false;
-    }
-    return true;
-}
-
-bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
-    TTablesManager tManagerLocal(Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->TabletID());
-    {
-        TLoadTimeSignals::TLoadTimer timer = tManagerLocal.GetLoadTimeCounters()->PrechargeTimeCounters.StartGuard();
-        if (!Precharge(txc)) {
-            timer.AddLoadingFail();
-            return false;
-        }
-    }
-
-    NIceDb::TNiceDb db(txc.DB);
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    {
-        ACFL_DEBUG("step", "TTablesManager::Load_Start");
-        {
-            TMemoryProfileGuard g("TTxInit/TTablesManager");
-            if (!tManagerLocal.InitFromDB(db)) {
-                ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
-                return false;
-            }
-        }
-        {
-            TMemoryProfileGuard g("TTxInit/LoadIndex");
-            if (!tManagerLocal.LoadIndex(dbTable)) {
-                ACFL_ERROR("step", "TTablesManager::LoadIndex_Fails");
-                return false;
-            }
-        }
-        Self->TablesManager = std::move(tManagerLocal);
-
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
-        Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
-        ACFL_DEBUG("step", "TTablesManager::Load_Finish");
-    }
-
-    {
-        ACFL_DEBUG("step", "TInsertTable::Load_Start");
-        TMemoryProfileGuard g("TTxInit/InsertTable");
-        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
-        for (auto&& i : Self->TablesManager.GetTables()) {
-            localInsertTable->RegisterPathInfo(i.first);
-        }
-        if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
-            ACFL_ERROR("step", "TInsertTable::Load_Fails");
-            return false;
-        }
-        ACFL_DEBUG("step", "TInsertTable::Load_Finish");
-        Self->InsertTable.swap(localInsertTable);
-    }
-
-    {
-        ACFL_DEBUG("step", "TTxController::Load_Start");
-        TMemoryProfileGuard g("TTxInit/TTxController");
-        auto localTxController = std::make_unique<TTxController>(*Self);
-        if (!localTxController->Load(txc)) {
-            ACFL_ERROR("step", "TTxController::Load_Fails");
-            return false;
-        }
-        ACFL_DEBUG("step", "TTxController::Load_Finish");
-        Self->ProgressTxController.swap(localTxController);
-    }
-
-    {
-        ACFL_DEBUG("step", "TOperationsManager::Load_Start");
-        TMemoryProfileGuard g("TTxInit/TOperationsManager");
-        auto localOperationsManager = std::make_unique<TOperationsManager>();
-        if (!localOperationsManager->Load(txc)) {
-            ACFL_ERROR("step", "TOperationsManager::Load_Fails");
-            return false;
-        }
-        ACFL_DEBUG("step", "TOperationsManager::Load_Finish");
-        Self->OperationsManager.swap(localOperationsManager);
-    }
-
-    {
-        ACFL_DEBUG("step", "TStoragesManager::Load_Start");
-        AFL_VERIFY(Self->StoragesManager);
-        TMemoryProfileGuard g("TTxInit/NDataSharing::TStoragesManager");
-        if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
-            return false;
-        }
-        ACFL_DEBUG("step", "TStoragesManager::Load_Finish");
-    }
-
-    {
-        TMemoryProfileGuard g("TTxInit/LongTxWrites");
-        auto rowset = db.Table<Schema::LongTxWrites>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-
-        while (!rowset.EndOfSet()) {
-            const TInsertWriteId writeId = (TInsertWriteId)rowset.GetValue<Schema::LongTxWrites::WriteId>();
-            const ui32 writePartId = rowset.GetValue<Schema::LongTxWrites::WritePartId>();
-            NKikimrLongTxService::TLongTxId proto;
-            Y_ABORT_UNLESS(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
-            const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
-
-            std::optional<ui32> granuleShardingVersion;
-            if (rowset.HaveValue<Schema::LongTxWrites::GranuleShardingVersion>() &&
-                rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>()) {
-                granuleShardingVersion = rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>();
-            }
-
-            Self->LoadLongTxWrite(writeId, writePartId, longTxId, granuleShardingVersion);
-
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-    }
-    {
-        TMemoryProfileGuard g("TTxInit/LocksDB");
-        if (txc.DB.GetScheme().GetTableInfo(Schema::Locks::TableId)) {
-            TColumnShardLocksDb locksDb(*Self, txc);
-            if (!Self->SysLocks.Load(locksDb)) {
-                return false;
-            }
-        }
-    }
-
-    {
-        TMemoryProfileGuard g("TTxInit/NDataSharing::TBackgroundSessionsManager");
-        if (!Self->BackgroundSessionsManager->LoadIdempotency(txc)) {
-            return false;
-        }
-    }
-
-    {
-        TMemoryProfileGuard g("TTxInit/NDataSharing::TSessionsManager");
-        auto local = std::make_shared<NOlap::NDataSharing::TSessionsManager>();
-        if (!local->Load(txc.DB, Self->TablesManager.GetPrimaryIndexAsOptional<NOlap::TColumnEngineForLogs>())) {
-            return false;
-        }
-        Self->SharingSessionsManager = local;
-    }
-    {
-        TMemoryProfileGuard g("TTxInit/TInFlightReadsTracker");
-        TInFlightReadsTracker local(Self->StoragesManager, Self->Counters.GetRequestsTracingCounters());
-        if (!local.LoadFromDatabase(txc.DB)) {
-            return false;
-        }
-        Self->InFlightReadsTracker = std::move(local);
-    }
-
-    Self->UpdateInsertTableCounters();
-    Self->UpdateIndexCounters();
-    Self->UpdateResourceMetrics(ctx, {});
-    return true;
+std::shared_ptr<ITxReader> TTxInit::BuildReader() {
+    auto result = std::make_shared<TTxCompositeReader>("composite_init");
+    result->AddChildren(std::make_shared<NLoading::TSpecialValuesInitializer>("special_values", Self));
+    result->AddChildren(std::make_shared<NLoading::TTablesManagerInitializer>("tables_manager", Self));
+    result->AddChildren(std::make_shared<NLoading::TInsertTableInitializer>("insert_table", Self));
+    result->AddChildren(std::make_shared<NLoading::TTxControllerInitializer>("tx_controller", Self));
+    result->AddChildren(std::make_shared<NLoading::TOperationsManagerInitializer>("operations_manager", Self));
+    result->AddChildren(std::make_shared<NLoading::TStoragesManagerInitializer>("storages_manager", Self));
+    result->AddChildren(std::make_shared<NLoading::TLongTxInitializer>("long_tx", Self));
+    result->AddChildren(std::make_shared<NLoading::TDBLocksInitializer>("db_locks", Self));
+    result->AddChildren(std::make_shared<NLoading::TBackgroundSessionsInitializer>("bg_sessions", Self));
+    result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));
+    result->AddChildren(std::make_shared<NLoading::TInFlightReadsInitializer>("in_flight_reads", Self));
+    return result;
 }
 
 bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
@@ -260,7 +79,16 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     try {
         SetDefaults();
-        return ReadEverything(txc, ctx);
+        if (!StartReader) {
+            StartReader = BuildReader();
+        }
+        if (!StartReader->Execute(txc, ctx)) {
+            return false;
+        }
+        StartReader = nullptr;
+        Self->UpdateInsertTableCounters();
+        Self->UpdateIndexCounters();
+        Self->UpdateResourceMetrics(ctx, {});
     } catch (const TNotReadyTabletException&) {
         ACFL_ERROR("event", "tablet not ready");
         return false;

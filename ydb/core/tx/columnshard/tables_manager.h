@@ -245,7 +245,6 @@ public:
     }
 
     bool InitFromDB(NIceDb::TNiceDb& db);
-    bool LoadIndex(NOlap::TDbWrapper& db);
 
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;

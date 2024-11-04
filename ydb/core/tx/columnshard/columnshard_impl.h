@@ -97,6 +97,20 @@ class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
 
+namespace NLoading {
+class TInsertTableInitializer;
+class TTxControllerInitializer;
+class TOperationsManagerInitializer;
+class TStoragesManagerInitializer;
+class TLongTxInitializer;
+class TDBLocksInitializer;
+class TBackgroundSessionsInitializer;
+class TSharingSessionsInitializer;
+class TInFlightReadsInitializer;
+class TSpecialValuesInitializer;
+class TTablesManagerInitializer;
+}
+
 extern bool gAllowLogBatchingDefaultValue;
 
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
@@ -197,6 +211,18 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TBackupTransactionOperator;
     friend class IProposeTxOperator;
     friend class TSharingTransactionOperator;
+
+    friend class NLoading::TInsertTableInitializer;
+    friend class NLoading::TTxControllerInitializer;
+    friend class NLoading::TOperationsManagerInitializer;
+    friend class NLoading::TStoragesManagerInitializer;
+    friend class NLoading::TLongTxInitializer;
+    friend class NLoading::TDBLocksInitializer;
+    friend class NLoading::TBackgroundSessionsInitializer;
+    friend class NLoading::TSharingSessionsInitializer;
+    friend class NLoading::TInFlightReadsInitializer;
+    friend class NLoading::TSpecialValuesInitializer;
+    friend class NLoading::TTablesManagerInitializer;
 
     class TTxProgressTx;
     class TTxProposeCancel;
@@ -562,6 +588,8 @@ private:
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 
 public:
+    std::shared_ptr<ITxReader> StartReader;
+
     ui64 TabletTxCounter = 0;
 
     const TTablesManager& GetTablesManager() const {

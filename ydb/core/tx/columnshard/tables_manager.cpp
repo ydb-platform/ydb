@@ -203,15 +203,6 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     return true;
 }
 
-bool TTablesManager::LoadIndex(NOlap::TDbWrapper& idxDB) {
-    if (PrimaryIndex) {
-        if (!PrimaryIndex->Load(idxDB)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool TTablesManager::HasTable(const ui64 pathId, bool withDeleted) const {
     auto it = Tables.find(pathId);
     if (it == Tables.end()) {

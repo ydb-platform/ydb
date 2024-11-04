@@ -17,6 +17,7 @@
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/ymq/actor/auth_multi_factory.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/tests/counters.h>
@@ -702,6 +703,11 @@ private:
         
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
+
+        NActors::TActorSystemSetup::TLocalServices services {};
+        auto authFactory = new NKikimr::NSQS::TMultiAuthFactory();
+        authFactory->Initialize(services, *AppData(as), AppData(as)->SqsConfig);
+        AppData(as)->SqsAuthFactory = authFactory;
 
         for (ui32 i = 0; i < ActorRuntime->GetNodeCount(); i++) {
             auto nodeId = ActorRuntime->GetNodeId(i);

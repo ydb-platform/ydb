@@ -42,6 +42,8 @@ public:
 
     TTosLevel GetTosLevelForBand(EMultiplexingBand band);
 
+    int GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism);
+
     NConcurrency::IPollerPtr GetAcceptorPoller();
     NConcurrency::IPollerPtr GetXferPoller();
 
@@ -99,6 +101,8 @@ private:
     struct TBandDescriptor
     {
         std::atomic<TTosLevel> TosLevel = DefaultTosLevel;
+        std::atomic<int> MinMultiplexingParallelism = DefaultMinMultiplexingParallelism;
+        std::atomic<int> MaxMultiplexingParallelism = DefaultMaxMultiplexingParallelism;
     };
 
     TEnumIndexedArray<EMultiplexingBand, TBandDescriptor> BandToDescriptor_;

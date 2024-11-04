@@ -19,6 +19,9 @@ using TTosLevel = int;
 constexpr int DefaultTosLevel = 0;
 constexpr int BlackHoleTosLevel = -1;
 
+constexpr int DefaultMinMultiplexingParallelism = 1;
+constexpr int DefaultMaxMultiplexingParallelism = 1'000;
+
 constexpr size_t MaxMessagePartCount = 1 << 28;
 constexpr size_t MaxMessagePartSize = 1_GB;
 

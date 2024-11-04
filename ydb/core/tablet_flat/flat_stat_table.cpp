@@ -60,15 +60,15 @@ bool HasSchemaChanges(const TPartView& partView, const TScheme::TTableInfo& tabl
             return true;
         }
 
-        for (size_t groupIndex : xrange(rowScheme.Families.size())) {
-            auto familyId = rowScheme.Families[groupIndex];
+        for (size_t index : xrange(rowScheme.Families.size())) {
+            auto familyId = rowScheme.Families[index];
             static const NTable::TScheme::TFamily defaultFamilySettings;
             const auto& family = tableInfo.Families.Value(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
 
             const auto* schemeGroupRoom = tableInfo.Rooms.FindPtr(family.Room);
             Y_ABORT_UNLESS(schemeGroupRoom, "Cannot find room %" PRIu32 " in table %" PRIu32, family.Room, tableInfo.Id);
 
-            ui32 partGroupChannel = partView.Part->GetGroupChannel(NPage::TGroupId(groupIndex));
+            ui32 partGroupChannel = partView.Part->GetGroupChannel(NPage::TGroupId(index));
             if (partGroupChannel != schemeGroupRoom->Main) {
                 return true;
             }

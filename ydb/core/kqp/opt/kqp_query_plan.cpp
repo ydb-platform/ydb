@@ -954,6 +954,8 @@ private:
             operatorId = Visit(maybeCondense.Cast(), planNode);
         } else if (auto maybeCombiner = TMaybeNode<TCoCombineCore>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
+        } else if (auto maybeBlockCombine = TMaybeNode<TCoBlockCombineHashed>(node)) {
+            operatorId = Visit(maybeBlockCombine.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
             operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeTop = TMaybeNode<TCoTop>(node)) {
@@ -1026,6 +1028,8 @@ private:
                 } else {
                     operatorId = Visit(olapTable, planNode);
                 }
+            } else if (TMaybeNode<TCoToFlow>(node)) {
+                // do nothing
             } else {
                 for (const auto& child : node->Children()) {
                     if(!child->IsLambda()) {
@@ -1164,6 +1168,40 @@ private:
         op.Properties["Name"] = "Aggregate";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(combiner.KeyExtractor());
         op.Properties["Aggregation"] = NPlanUtils::PrettyExprStr(combiner.UpdateHandler());
+
+        return AddOperator(planNode, "Aggregate", std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TCoBlockCombineHashed& blockCombine, TQueryPlanNode& planNode) {
+
+        static const THashMap<TString, TString> aggregations = {
+            {"count", "COUNT"},
+            {"count_all", "COUNT"},
+            {"min", "MIN"},
+            {"max", "MAX"},
+            {"avg", "AVG"},
+            {"sum", "SUM"}
+        };
+
+        TOperator op;
+        op.Properties["Name"] = "Aggregate";
+        op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(blockCombine.Keys());
+
+        if (blockCombine.Aggregations().Ref().IsList()) {
+            TVector<TString> aggrs;
+            for (ui32 index = 0; index < blockCombine.Aggregations().Ref().ChildrenSize(); index++) {
+                auto child = blockCombine.Aggregations().Ref().Child(index);
+                if (child && child->IsList() && child->ChildrenSize() >= 2) {
+                    auto callable = child->Child(0);
+                    if (callable->ChildrenSize() >= 1) {
+                        if (auto aggrName = TMaybeNode<TCoAtom>(callable->Child(0))) {
+                            aggrs.push_back(aggregations.Value(aggrName.Cast().StringValue(), "??"));
+                        }
+                    }
+                }
+            }
+            op.Properties["Aggregation"] = JoinStrings(std::move(aggrs), ",");
+        }
 
         return AddOperator(planNode, "Aggregate", std::move(op));
     }

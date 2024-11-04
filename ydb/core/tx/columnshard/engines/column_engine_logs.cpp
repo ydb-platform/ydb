@@ -170,8 +170,7 @@ std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_p
     auto result = std::make_shared<TTxCompositeReader>("column_engines");
     result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineShardingInfoReader>("sharding_info", this, dsGroupSelector));
-    {
-        AFL_VERIFY(GranulesStorage->GetTables().size());
+    if (GranulesStorage->GetTables().size()) {
         auto granules = std::make_shared<TTxCompositeReader>("granules");
         for (auto&& i : GranulesStorage->GetTables()) {
             granules->AddChildren(i.second->BuildLoader(dsGroupSelector, VersionedIndex));

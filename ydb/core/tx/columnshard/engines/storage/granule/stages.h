@@ -45,7 +45,6 @@ public:
 class TGranulePortionsReader: public IGranuleTxReader {
 private:
     using TBase = IGranuleTxReader;
-    const std::shared_ptr<TPortionsLoadContext> Context;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
 
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
@@ -57,7 +56,6 @@ public:
 class TGranuleColumnsReader: public IGranuleTxReader {
 private:
     using TBase = IGranuleTxReader;
-    const std::shared_ptr<TPortionsLoadContext> Context;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
 
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
@@ -69,7 +67,6 @@ public:
 class TGranuleIndexesReader: public IGranuleTxReader {
 private:
     using TBase = IGranuleTxReader;
-    const std::shared_ptr<TPortionsLoadContext> Context;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
 
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;

@@ -14,9 +14,14 @@
 
 namespace NKikimr::NOlap {
 
+namespace NLoading {
+class TPortionsLoadContext;
+}
+
 class TGranulesStorage;
 class TGranulesStat;
 class TColumnChunkLoadContext;
+class TVersionedIndex;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
@@ -152,8 +157,13 @@ private:
         return it->second;
     }
     bool DataAccessorConstructed = false;
+    bool LoadingFinished = false;
 
 public:
+    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
+    void FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadContext>& context);
+    bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+
     std::unique_ptr<IGranuleDataAccessor> BuildDataAccessor() {
         AFL_VERIFY(!DataAccessorConstructed);
         DataAccessorConstructed = true;

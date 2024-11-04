@@ -170,54 +170,19 @@ std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_p
     auto result = std::make_shared<TTxCompositeReader>("column_engines");
     result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));
     result->AddChildren(std::make_shared<NEngineLoading::TEngineShardingInfoReader>("sharding_info", this, dsGroupSelector));
-    auto portionsLoadContext = std::make_shared<NEngineLoading::TPortionsLoadContext>();
-    result->AddChildren(std::make_shared<NEngineLoading::TEnginePortionsReader>("portions", this, dsGroupSelector, portionsLoadContext));
-    result->AddChildren(std::make_shared<NEngineLoading::TEngineColumnsReader>("columns", this, dsGroupSelector, portionsLoadContext));
-    result->AddChildren(std::make_shared<NEngineLoading::TEngineIndexesReader>("indexes", this, dsGroupSelector, portionsLoadContext));
-    result->AddChildren(std::make_shared<NEngineLoading::TEngineLoadingFinish>("finish", this, portionsLoadContext));
+    {
+        AFL_VERIFY(GranulesStorage->GetTables().size());
+        auto granules = std::make_shared<TTxCompositeReader>("granules");
+        for (auto&& i : GranulesStorage->GetTables()) {
+            granules->AddChildren(i.second->BuildLoader(dsGroupSelector, VersionedIndex));
+        }
+        result->AddChildren(granules);
+    }
+    result->AddChildren(std::make_shared<NEngineLoading::TEngineLoadingFinish>("finish", this));
     return result;
 }
 
-bool TColumnEngineForLogs::FinishLoading(const std::shared_ptr<NEngineLoading::TPortionsLoadContext>& context) {
-void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
-    AFL_VERIFY(!VersionedIndex.IsEmpty());
-
-    ui64 version = schema.GetVersion();
-
-    ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(version);
-
-    if (prevSchema && version == prevSchema->GetVersion()) {
-        // skip already registered version
-        return;
-    }
-
-    ISnapshotSchema::TPtr secondLast = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(VersionedIndex.GetLastSchema()->GetVersion() - 1);
-
-    AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version)("reason", "incorrect schema registration order");
-
-    std::optional<NOlap::TIndexInfo> indexInfoOptional;
-    if (schema.GetDiff()) {
-        AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
-
-        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
-            *schema.GetDiff(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
-    } else {
-        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
-    }
-
-    AFL_VERIFY(indexInfoOptional);
-    VersionedIndex.AddIndex(snapshot, std::move(*indexInfoOptional));
-}
-
-    {
-        TMemoryProfileGuard g("TTxInit/LoadColumns/Constructors");
-        for (auto&& [granuleId, pathConstructors] : context->MutableConstructors()) {
-            auto g = GetGranulePtrVerified(granuleId);
-            for (auto&& [portionId, constructor] : pathConstructors) {
-                g->UpsertPortionOnLoad(constructor.Build(false).MutablePortionInfoPtr());
-            }
-        }
-    }
+bool TColumnEngineForLogs::FinishLoading() {
     {
         TMemoryProfileGuard g("TTxInit/LoadColumns/After");
         for (auto&& i : GranulesStorage->GetTables()) {
@@ -571,40 +536,13 @@ bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
 
     {
         auto guard = GranulesStorage->GetStats()->StartPackModification();
-        auto constructors = std::make_shared<NEngineLoading::TPortionsLoadContext>();
-        {
-            if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                    const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
-                    AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-                    AFL_VERIFY(constructors->MutableConstructors().AddConstructorVerified(std::move(portion)));
-                })) {
-                return false;
-            }
-        }
-
-        {
-            TPortionInfo::TSchemaCursor schema(VersionedIndex);
-            if (!db.LoadColumns([&](const TColumnChunkLoadContextV1& loadContext) {
-                    auto* constructor =
-                        constructors->MutableConstructors().GetConstructorVerified(loadContext.GetPathId(), loadContext.GetPortionId());
-                    constructor->LoadRecord(loadContext);
-                })) {
-                return false;
-            }
-        }
-
-        {
-            if (!db.LoadIndexes([&](const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
-                    auto* constructor = constructors->MutableConstructors().GetConstructorVerified(pathId, portionId);
-                    constructor->LoadIndex(loadContext);
-                })) {
-                return false;
-            };
+        for (auto&& [_, i] : GranulesStorage->GetTables()) {
+            i->TestingLoad(db, VersionedIndex);
         }
         if (!LoadCounters(db)) {
             return false;
         }
-        FinishLoading(constructors);
+        FinishLoading();
     }
     return true;
 }

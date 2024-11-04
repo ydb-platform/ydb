@@ -34,9 +34,6 @@ class TDestinationSession;
 namespace NEngineLoading {
 class TEngineShardingInfoReader;
 class TEngineCountersReader;
-class TEngineColumnsReader;
-class TPortionsLoadContext;
-class TEnginePortionsReader;
 }
 
 struct TReadMetadata;
@@ -56,8 +53,6 @@ class TColumnEngineForLogs: public IColumnEngine {
     friend class NDataSharing::TDestinationSession;
     friend class NEngineLoading::TEngineShardingInfoReader;
     friend class NEngineLoading::TEngineCountersReader;
-    friend class NEngineLoading::TEngineColumnsReader;
-    friend class NEngineLoading::TEnginePortionsReader;
 
 private:
     bool ActualizationStarted = false;
@@ -126,7 +121,7 @@ public:
 
 public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
-    bool FinishLoading(const std::shared_ptr<NEngineLoading::TPortionsLoadContext>& context);
+    bool FinishLoading();
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();

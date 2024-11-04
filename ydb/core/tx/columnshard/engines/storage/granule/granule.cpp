@@ -1,9 +1,11 @@
 #include "granule.h"
+#include "stages.h"
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/tx_reader/composite.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -191,6 +193,59 @@ void TGranuleMeta::CommitImmediateOnExecute(
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {
     (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(portion);
+}
+
+std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
+    const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex) {
+    auto result = std::make_shared<TTxCompositeReader>("granule");
+    auto portionsLoadContext = std::make_shared<NLoading::TPortionsLoadContext>();
+    result->AddChildren(std::make_shared<NLoading::TGranulePortionsReader>("portions", &vIndex, this, dsGroupSelector, portionsLoadContext));
+    result->AddChildren(std::make_shared<NLoading::TGranuleColumnsReader>("columns", &vIndex, this, dsGroupSelector, portionsLoadContext));
+    result->AddChildren(std::make_shared<NLoading::TGranuleIndexesReader>("indexes", &vIndex, this, dsGroupSelector, portionsLoadContext));
+    result->AddChildren(std::make_shared<NLoading::TGranuleFinishLoading>("finish", &vIndex, this, dsGroupSelector, portionsLoadContext));
+    return result;
+}
+
+bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {
+    auto constructors = std::make_shared<NLoading::TPortionsLoadContext>();
+    {
+        if (!db.LoadPortions(PathId, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                const TIndexInfo& indexInfo = portion.GetSchema(versionedIndex)->GetIndexInfo();
+                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
+                AFL_VERIFY(constructors->MutableConstructors().AddConstructorVerified(std::move(portion)));
+            })) {
+            return false;
+        }
+    }
+
+    {
+        TPortionInfo::TSchemaCursor schema(versionedIndex);
+        if (!db.LoadColumns(PathId, [&](const TColumnChunkLoadContextV1& loadContext) {
+                auto* constructor = constructors->MutableConstructors().GetConstructorVerified(loadContext.GetPortionId());
+                constructor->LoadRecord(loadContext);
+            })) {
+            return false;
+        }
+    }
+
+    {
+        if (!db.LoadIndexes(PathId, [&](const ui64 /*pathId*/, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
+                auto* constructor = constructors->MutableConstructors().GetConstructorVerified(portionId);
+                constructor->LoadIndex(loadContext);
+            })) {
+            return false;
+        };
+    }
+    FinishLoading(constructors);
+    return true;
+}
+
+void TGranuleMeta::FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadContext>& context) {
+    AFL_VERIFY(!LoadingFinished);
+    LoadingFinished = true;
+    for (auto&& [portionId, constructor] : context->MutableConstructors()) {
+        UpsertPortionOnLoad(constructor.Build(false).MutablePortionInfoPtr());
+    }
 }
 
 }   // namespace NKikimr::NOlap

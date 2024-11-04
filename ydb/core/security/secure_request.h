@@ -139,6 +139,15 @@ public:
         return BUILTIN_ACL_ROOT;
     }
 
+    TString GetSanitizedToken() const {
+        if (AuthorizeTicketResult) {
+            if (AuthorizeTicketResult->Token) {
+                return AuthorizeTicketResult->Token->GetSanitizedToken();
+            }
+        }
+        return TString();
+    }
+
     bool IsUserAdmin() const {
         return UserAdmin;
     }

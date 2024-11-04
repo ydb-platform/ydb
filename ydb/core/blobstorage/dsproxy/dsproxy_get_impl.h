@@ -3,6 +3,7 @@
 #include "dsproxy.h"
 #include "dsproxy_blackboard.h"
 #include "dsproxy_mon.h"
+#include "request_history.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <util/generic/set.h>
 
@@ -51,6 +52,11 @@ class TGetImpl {
 
     TAccelerationParams AccelerationParams;
 
+    THistory History;
+
+    friend class TBlobStorageGroupGetRequest;
+    friend class THistory;
+
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout,
@@ -72,6 +78,7 @@ public:
         , Decommission(ev->Decommission)
         , ReaderTabletData(ev->ReaderTabletData)
         , AccelerationParams(accelerationParams)
+        , History(Info)
     {
         Y_ABORT_UNLESS(QuerySize > 0);
     }
@@ -243,6 +250,7 @@ public:
         ++ResponseIndex;
 
         Step(logCtx, outVGets, outVPuts, outGetResult);
+        History.AddVGetResult(orderNumber, status, record.GetErrorReason());
     }
 
     void OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &ev,
@@ -283,6 +291,10 @@ public:
     ui64 GetTimeToAcceleratePutNs(TLogContext &logCtx);
 
     TString DumpFullState() const;
+
+    TString PrintHistory() const {
+        return History.Print((QuerySize == 0) ? nullptr : &Queries[0].Id);
+    }
 
 protected:
     EStrategyOutcome RunBoldStrategy(TLogContext &logCtx);

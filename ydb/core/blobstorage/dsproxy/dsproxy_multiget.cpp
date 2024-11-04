@@ -28,7 +28,6 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     const bool Decommission;
     TArrayHolder<TEvBlobStorage::TEvGetResult::TResponse> Responses;
 
-    const TInstant StartTime;
     const bool MustRestoreFirst;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
     const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
@@ -77,7 +76,8 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
             x.LooksLikePhantom = PhantomCheck ? std::make_optional(false) : std::nullopt;
         }
         ev->ErrorReason = ErrorReason;
-        Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
+        Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(),
+                TActivationContext::Monotonic() - RequestStartTime);
         Y_ABORT_UNLESS(status != NKikimrProto::OK);
         SendResponseAndDie(std::move(ev));
     }
@@ -104,7 +104,6 @@ public:
         , PhantomCheck(params.Common.Event->PhantomCheck)
         , Decommission(params.Common.Event->Decommission)
         , Responses(new TEvBlobStorage::TEvGetResult::TResponse[QuerySize])
-        , StartTime(params.Common.Now)
         , MustRestoreFirst(params.Common.Event->MustRestoreFirst)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , ForceBlockTabletData(params.Common.Event->ForceBlockTabletData)
@@ -139,7 +138,8 @@ public:
             auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID);
             ev->ResponseSz = QuerySize;
             ev->Responses = std::move(Responses);
-            Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
+            Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(),
+                    TActivationContext::Monotonic() - RequestStartTime);
             SendResponseAndDie(std::move(ev));
         }
     }

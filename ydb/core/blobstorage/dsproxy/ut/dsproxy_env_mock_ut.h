@@ -117,7 +117,7 @@ struct TDSProxyEnv {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now =  TInstant::Now(),
+                        .Now = TMonotonic::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
                         .Event = ev->Get(),
@@ -140,7 +140,7 @@ struct TDSProxyEnv {
                         .GroupInfo = Info,
                         .GroupQueues = GroupQueues,
                         .Mon = Mon,
-                        .Now = TInstant::Now(),
+                        .Now = TMonotonic::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
                         .LatencyQueueKind = kind,
@@ -166,7 +166,7 @@ struct TDSProxyEnv {
                         .Mon = Mon,
                         .Source = ev->Sender,
                         .Cookie = ev->Cookie,
-                        .Now = TInstant::Now(),
+                        .Now = TMonotonic::Now(),
                         .StoragePoolCounters = StoragePoolCounters,
                         .RestartCounter = ev->Get()->RestartCounter,
                         .Event = ev->Get(),
@@ -186,7 +186,7 @@ struct TDSProxyEnv {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TInstant::Now(),
+                    .Now = TMonotonic::Now(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
                     .Event = ev->Get(),
@@ -196,7 +196,6 @@ struct TDSProxyEnv {
             }, std::move(ev->TraceId)));
     }
 };
-
 
 inline bool ScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
         TDuration delay, TInstant& deadline) {

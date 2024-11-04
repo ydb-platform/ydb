@@ -53,6 +53,7 @@ namespace NTable {
         ui64 MemRowCount = 0;
         ui64 MemDataSize = 0;
         ui64 MemDataWaste = 0;
+        bool HasSchemaChanges = false;
     };
 
 }

@@ -322,7 +322,7 @@ public:
         return RemovedRowVersions;
     }
 
-    TCompactionStats GetCompactionStats() const;
+    TCompactionStats GetCompactionStats(const TScheme::TTableInfo &table, bool enableBTreeIndex) const;
 
     void SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept;
 

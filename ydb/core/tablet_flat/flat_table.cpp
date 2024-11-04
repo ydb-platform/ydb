@@ -11,6 +11,7 @@
 #include "flat_util_misc.h"
 #include "util_fmt_abort.h"
 
+#include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr {
@@ -1396,13 +1397,16 @@ bool TTable::RemoveRowVersions(const TRowVersion& lower, const TRowVersion& uppe
     return RemovedRowVersions.Add(lower, upper);
 }
 
-TCompactionStats TTable::GetCompactionStats() const
+TCompactionStats TTable::GetCompactionStats(const TScheme::TTableInfo &table, bool enableBTreeIndex) const
 {
     TCompactionStats stats;
     stats.MemRowCount = GetMemRowCount();
     stats.MemDataSize = GetMemSize();
     stats.MemDataWaste = GetMemWaste();
     stats.PartCount = Flatten.size() + ColdParts.size();
+
+    auto subset = Subset(TEpoch::Max());
+    stats.HasSchemaChanges = HasSchemaChanges(*subset, table, enableBTreeIndex);
 
     return stats;
 }

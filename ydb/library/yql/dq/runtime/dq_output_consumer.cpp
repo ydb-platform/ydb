@@ -408,7 +408,7 @@ private:
                     dataItem.Data = src->array().get();
                     dataItem.StartOffset = 0;
                     Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
-                    output.emplace_back(Builders_[j]->Build(false));
+                    output.emplace_back(Builders_[j]->Build(true));
                 }
             }
             outputData.emplace_back(std::make_unique<TArgsDechunker>(std::move(output)));

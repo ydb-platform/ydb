@@ -433,6 +433,13 @@ message ColumnMeta {
     }
 }
 
+message EvictionTier {
+    // Name of tiered storage
+    string storage_name = 1;
+
+    uint32 evict_after_seconds = 2;
+}
+
 message DateTypeColumnModeSettings {
     // The row will be considered as expired at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
@@ -442,7 +449,9 @@ message DateTypeColumnModeSettings {
     // The column type must be a date type
     string column_name = 1;
 
-    uint32 expire_after_seconds = 2;
+    optional uint32 expire_after_seconds = 2;
+
+    repeated EvictionTier storage_tiers = 3;
 }
 
 message ValueSinceUnixEpochModeSettings {
@@ -468,7 +477,9 @@ message ValueSinceUnixEpochModeSettings {
 
     // This option is always interpreted as seconds regardless of the
     // <column_unit> value.
-    uint32 expire_after_seconds = 3;
+    optional uint32 expire_after_seconds = 3;
+
+    repeated EvictionTier storage_tiers = 4;
 }
 
 message TtlSettings {

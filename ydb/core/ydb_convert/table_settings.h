@@ -28,15 +28,25 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return false;
     };
 
+    static const auto& fillCommonFields = []<class TModeSettings>(TTtlSettingsEnabled out, const TModeSettings& in) {
+        out.SetColumnName(in.date_type_column().column_name());
+        if (in.date_type_column().has_expire_after_seconds()) {
+            out.SetExpireAfterSeconds(in.date_type_column().expire_after_seconds());
+        }
+        for (const auto& in_tier : in.date_type_column().storage_tiers()) {
+            auto* out_tier = out.AddTiers();
+            out_tier->SetEvictAfterSeconds(in_tier.evict_after_seconds());
+            out_tier->SetStorageName(in_tier.storage_name());
+        }
+    };
+
     switch (in.mode_case()) {
     case Ydb::Table::TtlSettings::kDateTypeColumn:
-        out.SetColumnName(in.date_type_column().column_name());
-        out.SetExpireAfterSeconds(in.date_type_column().expire_after_seconds());
+        fillCommonFields(out, in.date_type_column());
         break;
 
     case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-        out.SetColumnName(in.value_since_unix_epoch().column_name());
-        out.SetExpireAfterSeconds(in.value_since_unix_epoch().expire_after_seconds());
+        fillCommonFields(out, in.value_since_unix_epoch());
 
         #define CASE_UNIT(type) \
             case Ydb::Table::ValueSinceUnixEpochModeSettings::type: \

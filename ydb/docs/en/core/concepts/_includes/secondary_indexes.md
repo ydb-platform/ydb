@@ -69,6 +69,4 @@ A secondary index can be:
 
 ## Using secondary indexes {#use}
 
-To use a secondary index in a YQL SELECT statement you must explicitly specify its name using the [VIEW clause](../../yql/reference/syntax/select/secondary_index.md).
-
-Refer to [this article about using secondary indexes in applications](../../dev/secondary-indexes.md) in the Development section of the documentation to get more information.
+To get detailed information on the secondary indexes usage in applications refer to [this article](../../dev/secondary-indexes.md) in the Development section of the documentation.

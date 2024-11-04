@@ -392,28 +392,23 @@ public:
         return mon->ActiveGet;
     }
 
-    TBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev, ui64 cookie,
-            NWilson::TSpan&& span, TNodeLayoutInfoPtr&& nodeLayout, TMaybe<TGroupStat::EKind> latencyQueueKind,
-            TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_GET, ev->IsVerboseNoDataEnabled || ev->CollectDebugInfo,
-                latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, std::move(span),
-                std::move(ev->ExecutionRelay))
-        , GetImpl(info, state, ev, std::move(nodeLayout), LogCtx.RequestPrefix)
-        , Orbit(std::move(ev->Orbit))
-        , Deadline(ev->Deadline)
-        , StartTime(now)
+    TBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters& params, NWilson::TSpan&& span)
+        : TBlobStorageGroupRequestActor(params, std::move(span))
+        , GetImpl(Info, GroupQueues, params.Common.Event, std::move(params.NodeLayout),
+                LogCtx.RequestPrefix)
+        , Orbit(std::move(params.Common.Event->Orbit))
+        , Deadline(params.Common.Event->Deadline)
+        , StartTime(params.Common.Now)
         , StartTimePut(StartTime)
-        , GroupSize(info->Type.BlobSubgroupSize())
+        , GroupSize(Info->Type.BlobSubgroupSize())
         , ReportedBytes(0)
     {
         ReportBytes(sizeof(*this));
-        MaxSaneRequests = ev->QuerySize * info->Type.TotalPartCount() * (1 + info->Type.Handoff()) * 3;
+        MaxSaneRequests = params.Common.Event->QuerySize * Info->Type.TotalPartCount() *
+                (1 + Info->Type.Handoff()) * 3;
 
         RequestBytes = GetImpl.CountRequestBytes();
-        RequestHandleClass = HandleClassToHandleClass(ev->GetHandleClass);
+        RequestHandleClass = HandleClassToHandleClass(params.Common.Event->GetHandleClass);
         if (Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
         }
@@ -466,19 +461,12 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvGet *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TNodeLayoutInfoPtr&& nodeLayout,
-        TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Get");
+IActor* CreateBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters params) {
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(params.Common.TraceId), "DSProxy.Get");
     if (span) {
-        span.Attribute("event", ev->ToString());
+        span.Attribute("event", params.Common.Event->ToString());
     }
-
-    return new TBlobStorageGroupGetRequest(info, state, source, mon, ev, cookie, std::move(span),
-            std::move(nodeLayout), latencyQueueKind, now, storagePoolCounters);
+    return new TBlobStorageGroupGetRequest(params, std::move(span));
 }
 
 }//NKikimr

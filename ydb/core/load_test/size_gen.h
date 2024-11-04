@@ -23,5 +23,22 @@ namespace NKikimr {
         };
     } // NSizeGenerator
 
-    using TSizeGenerator = TGenerator<NSizeGenerator::TItem>;
+    class TSizeGenerator : public TGenerator<NSizeGenerator::TItem> {
+    public:
+        TSizeGenerator() = default;
+
+        template<typename T>
+        TSizeGenerator(const T& settings)
+            : TGenerator<NSizeGenerator::TItem>(settings)
+        {}
+
+        ui32 GetMax() const {
+            Y_ABORT_UNLESS(!Items.empty());
+            auto it = Items.cbegin();
+            auto max = it->second.Max;
+            while (Items.cend() != ++it)
+                max = std::max(max, it->second.Max);
+            return max;
+        }
+    };
 } // NKikimr

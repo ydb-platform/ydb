@@ -109,6 +109,8 @@ protected:
 public:
     void Bootstrap() {
         try {
+            Alloc->SetGUCSettings(GUCSettings);
+            
             StartTime = TInstant::Now();
             {
                 TStringBuilder prefixBuilder;
@@ -170,6 +172,7 @@ protected:
         , TxId(txId)
         , Task(task, std::move(arena))
         , RuntimeSettings(settings)
+        , GUCSettings(GUCSettings)
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -195,7 +198,6 @@ protected:
             ComputeActorSpan.Attribute("stageId", static_cast<int>(Task.GetStageId()));
         }
 
-        Alloc->SetGUCSettings(GUCSettings);
         InitMonCounters(taskCounters);
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();
@@ -1939,6 +1941,7 @@ protected:
     TDqTaskSettings Task;
     TString LogPrefix;
     const TComputeRuntimeSettings RuntimeSettings;
+    TGUCSettings::TPtr GUCSettings;
     TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;

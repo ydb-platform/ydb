@@ -15,7 +15,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TIndexInf
 
     const bool needActualization = indexInfo.GetSchemeNeedActualization();
     auto newVersion = indexInfo.GetVersion();
-    auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSnapshotSchema>(std::move(indexInfo), snapshot));
+    auto itVersion = SnapshotByVersion.emplace(newVersion, std::make_shared<TSchema>(std::move(indexInfo), snapshot));
     if (!itVersion.second) {
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("message", "Skip registered version")("version", LastSchemaVersion);
     } else if (needActualization) {

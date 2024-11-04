@@ -121,7 +121,7 @@ const TString& TPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexI
     return indexInfo.GetIndexStorageId(indexId);
 }
 
-ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
+ISchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
     AFL_VERIFY(SchemaVersion);
     if (SchemaVersion) {
         auto schema = index.GetSchema(SchemaVersion.value());
@@ -131,7 +131,7 @@ ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) cons
     return index.GetSchema(MinSnapshotDeprecated);
 }
 
-ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {
+ISchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {
     if (!CurrentSchema || portion.GetMinSnapshotDeprecatedVerified() != LastSnapshot) {
         CurrentSchema = portion.GetSchema(VersionedIndex);
         LastSnapshot = portion.GetMinSnapshotDeprecatedVerified();

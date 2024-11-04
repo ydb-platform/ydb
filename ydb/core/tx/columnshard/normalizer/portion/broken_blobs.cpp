@@ -12,10 +12,10 @@ namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs {
 
 class TNormalizerResult: public INormalizerChanges {
     THashMap<ui64, TPortionDataAccessor> BrokenPortions;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
 
 public:
-    TNormalizerResult(THashMap<ui64, TPortionDataAccessor>&& portions, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
+    TNormalizerResult(THashMap<ui64, TPortionDataAccessor>&& portions, const std::shared_ptr<THashMap<ui64, ISchema::TPtr>>& schemas)
         : BrokenPortions(std::move(portions))
         , Schemas(schemas) {
     }
@@ -61,13 +61,13 @@ class TReadTask: public NOlap::NBlobOperations::NRead::ITask {
 private:
     using TBase = NOlap::NBlobOperations::NRead::ITask;
     TNormalizationContext NormContext;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
     THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>> PortionsByBlobId;
     THashMap<ui64, TPortionDataAccessor> BrokenPortions;
 
 public:
     TReadTask(const TNormalizationContext& nCtx, const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions,
-        std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas,
+        std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas,
         THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>>&& portionsByBlobId)
         : TBase(actions, "CS::NORMALIZER")
         , NormContext(nCtx)
@@ -124,12 +124,12 @@ public:
 class TBrokenBlobsTask: public INormalizerTask {
     THashMap<TString, THashSet<TBlobRange>> Blobs;
     THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>> PortionsByBlobId;
-    const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    const std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
 
 public:
     TBrokenBlobsTask(THashMap<TString, THashSet<TBlobRange>>&& blobs,
         THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>>&& portionsByBlobId,
-        const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>& schemas)
+        const std::shared_ptr<THashMap<ui64, ISchema::TPtr>>& schemas)
         : Blobs(std::move(blobs))
         , PortionsByBlobId(portionsByBlobId)
         , Schemas(schemas) {
@@ -158,7 +158,7 @@ bool TNormalizer::CheckPortion(const NColumnShard::TTablesManager& /*tablesManag
 }
 
 INormalizerTask::TPtr TNormalizer::BuildTask(
-    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas) const {
     THashMap<TString, THashSet<TBlobRange>> blobIds;
     THashMap<TString, THashMap<TUnifiedBlobId, TPortionDataAccessor>> portionByBlobId;
     for (auto&& portion : portions) {

@@ -59,13 +59,13 @@ public:
 class TPathFieldsInfo {
 private:
     std::set<ui32> UsageColumnIds;
-    const ISnapshotSchema::TPtr ResultSchema;
-    THashMap<ui64, ISnapshotSchema::TPtr> Schemas;
+    const ISchema::TPtr ResultSchema;
+    THashMap<ui64, ISchema::TPtr> Schemas;
     bool Finished = false;
     const ui32 FullColumnsCount;
 
 public:
-    TPathFieldsInfo(const ISnapshotSchema::TPtr& resultSchema)
+    TPathFieldsInfo(const ISchema::TPtr& resultSchema)
         : UsageColumnIds(IIndexInfo::GetNecessarySystemColumnIdsSet())
         , ResultSchema(resultSchema)
         , FullColumnsCount(ResultSchema->GetIndexInfo().GetColumnIds(true).size())
@@ -89,7 +89,7 @@ public:
         if (UsageColumnIds.size() == FullColumnsCount) {
             return;
         }
-        auto defaultDiffs = ISnapshotSchema::GetColumnsWithDifferentDefaults(Schemas, ResultSchema);
+        auto defaultDiffs = ISchema::GetColumnsWithDifferentDefaults(Schemas, ResultSchema);
         UsageColumnIds.insert(defaultDiffs.begin(), defaultDiffs.end());
     }
 
@@ -127,7 +127,7 @@ private:
     TPathFieldsInfo ColumnsInfo;
 
 public:
-    TPathData(const std::optional<TGranuleShardingInfo>& shardingInfo, const ISnapshotSchema::TPtr& resultSchema)
+    TPathData(const std::optional<TGranuleShardingInfo>& shardingInfo, const ISchema::TPtr& resultSchema)
         : ShardingInfo(shardingInfo)
         , ColumnsInfo(resultSchema) {
     }
@@ -174,10 +174,10 @@ public:
 class TPathesData {
 private:
     THashMap<ui64, TPathData> Data;
-    const ISnapshotSchema::TPtr ResultSchema;
+    const ISchema::TPtr ResultSchema;
 
 public:
-    TPathesData(const ISnapshotSchema::TPtr& resultSchema)
+    TPathesData(const ISchema::TPtr& resultSchema)
         : ResultSchema(resultSchema) {
     }
 
@@ -267,7 +267,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     auto stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
     std::vector<std::shared_ptr<NArrow::TColumnFilter>> filters;
     for (auto& [pathId, pathInfo] : pathBatches.GetData()) {
-        auto filteredSnapshot = std::make_shared<TFilteredSnapshotSchema>(resultSchema, pathInfo.GetColumnsInfo().GetUsageColumnIds());
+        auto filteredSnapshot = std::make_shared<TFilteredSchema>(resultSchema, pathInfo.GetColumnsInfo().GetUsageColumnIds());
         std::optional<ui64> shardingVersion;
         if (pathInfo.GetShardingInfo()) {
             shardingVersion = pathInfo.GetShardingInfo()->GetSnapshotVersion();

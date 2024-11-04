@@ -16,7 +16,7 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
-    const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const {
+    const ISchema& data, const ISchema& resultSchema, const std::set<ui32>& seqColumns) const {
     THashMap<TChunkAddress, TString> blobs;
     for (auto&& i : PortionInfo.GetRecords()) {
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
@@ -85,7 +85,7 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
 }
 
 std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
-    const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier,
+    const ISchema::TPtr& from, const ISchema::TPtr& to, const TString& targetTier,
     const std::shared_ptr<IStoragesManager>& storages, std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
     if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "we don't need sync portion");

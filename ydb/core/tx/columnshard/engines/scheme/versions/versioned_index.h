@@ -25,19 +25,19 @@ public:
 
 class TVersionedIndex {
     THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
-    std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
+    std::map<TSnapshot, ISchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> PrimaryKey;
-    std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
+    std::map<ui64, ISchema::TPtr> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
-    ISnapshotSchema::TPtr SchemeForActualization;
+    ISchema::TPtr SchemeForActualization;
 
 public:
-    ISnapshotSchema::TPtr GetLastCriticalSchema() const {
+    ISchema::TPtr GetLastCriticalSchema() const {
         return SchemeForActualization;
     }
 
-    ISnapshotSchema::TPtr GetLastCriticalSchemaDef(const ISnapshotSchema::TPtr defaultSchema) const {
+    ISchema::TPtr GetLastCriticalSchemaDef(const ISchema::TPtr defaultSchema) const {
         auto result = GetLastCriticalSchema();
         return result ? result : defaultSchema;
     }
@@ -73,18 +73,18 @@ public:
         return sb;
     }
 
-    ISnapshotSchema::TPtr GetSchema(const ui64 version) const {
+    ISchema::TPtr GetSchema(const ui64 version) const {
         auto it = SnapshotByVersion.find(version);
         return it == SnapshotByVersion.end() ? nullptr : it->second;
     }
 
-    ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
+    ISchema::TPtr GetSchemaVerified(const ui64 version) const {
         auto it = SnapshotByVersion.find(version);
         Y_ABORT_UNLESS(it != SnapshotByVersion.end(), "no schema for version %lu", version);
         return it->second;
     }
 
-    ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
+    ISchema::TPtr GetSchema(const TSnapshot& version) const {
         for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
             if (it->first <= version) {
                 return it->second;
@@ -94,6 +94,7 @@ public:
         return Snapshots.begin()->second;
     }
 
+<<<<<<< HEAD
     ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
         ISnapshotSchema::TPtr res = nullptr;
         for (auto it = SnapshotByVersion.rbegin(); it != SnapshotByVersion.rend(); ++it) {
@@ -106,6 +107,9 @@ public:
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {
+=======
+    ISchema::TPtr GetLastSchema() const {
+>>>>>>> 87d5c9db72 (rename)
         Y_ABORT_UNLESS(!Snapshots.empty());
         return Snapshots.rbegin()->second;
     }

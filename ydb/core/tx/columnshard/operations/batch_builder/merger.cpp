@@ -60,7 +60,7 @@ NKikimr::TConclusionStatus TUpdateMerger::OnEqualKeys(const NArrow::NMerger::TSo
     return TConclusionStatus::Success();
 }
 
-TUpdateMerger::TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
+TUpdateMerger::TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISchema>& actualSchema,
     const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists /*= {}*/)
     : TBase(incoming, actualSchema)
     , Builder(actualSchema->GetIndexInfo().ArrowSchema()->fields())

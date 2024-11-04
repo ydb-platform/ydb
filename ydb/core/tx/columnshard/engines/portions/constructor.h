@@ -10,7 +10,7 @@
 namespace NKikimr::NOlap {
 class TPortionInfo;
 class TVersionedIndex;
-class ISnapshotSchema;
+class ISchema;
 class TIndexChunkLoadContext;
 class TGranuleShardingInfo;
 
@@ -60,9 +60,9 @@ public:
         PortionId = value;
     }
 
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
+    void AddMetadata(const ISchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords,
+    void AddMetadata(const ISchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords,
         const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial) {
         MetaConstructor.FillMetaInfo(firstLastRecords, deletionsCount, minMaxSpecial, snapshotSchema.GetIndexInfo());
     }
@@ -204,7 +204,7 @@ public:
         return *MinSnapshotDeprecated;
     }
 
-    std::shared_ptr<ISnapshotSchema> GetSchema(const TVersionedIndex& index) const;
+    std::shared_ptr<ISchema> GetSchema(const TVersionedIndex& index) const;
 
     void SetCommitSnapshot(const TSnapshot& snap) {
         AFL_VERIFY(!!InsertWriteId);

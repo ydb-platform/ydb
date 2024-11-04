@@ -19,7 +19,7 @@ namespace NKikimr::NOlap {
 namespace {
 template <class TExternalBlobInfo>
 TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDataAccessor& portionData, const TPortionInfo& portionInfo,
-    const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
+    const ISchema& dataSchema, const ISchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
     const std::optional<TSnapshot>& defaultSnapshot) {
     std::vector<TPortionDataAccessor::TColumnAssemblingInfo> columns;
     columns.reserve(resultSchema.GetColumnIds().size());
@@ -97,13 +97,13 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
 
 }   // namespace
 
-TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
-    const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot) const {
+TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISchema& dataSchema,
+    const ISchema& resultSchema, THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot) const {
     return PrepareForAssembleImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, defaultSnapshot);
 }
 
-TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISnapshotSchema& dataSchema,
-    const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData,
+TPortionDataAccessor::TPreparedBatchData TPortionDataAccessor::PrepareForAssemble(const ISchema& dataSchema,
+    const ISchema& resultSchema, THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData,
     const std::optional<TSnapshot>& defaultSnapshot) const {
     return PrepareForAssembleImpl(*this, *PortionInfo, dataSchema, resultSchema, blobsData, defaultSnapshot);
 }

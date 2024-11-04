@@ -17,7 +17,7 @@ std::shared_ptr<TSelectInfo> TDataStorageAccessor::Select(const TReadDescription
     return Index->Select(readDescription.PathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter, withUncommitted);
 }
 
-ISnapshotSchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInfo& portion) const {
+ISchema::TPtr TReadMetadataBase::GetLoadSchemaVerified(const TPortionInfo& portion) const {
     auto schema = portion.GetSchema(GetIndexVersions());
     AFL_VERIFY(schema);
     return schema;

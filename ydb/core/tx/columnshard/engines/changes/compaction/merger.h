@@ -39,7 +39,7 @@ public:
     }
 
     std::vector<TWritePortionInfoWithBlobsResult> Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
-        const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
+        const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSchema>& resultFiltered,
         const ui64 pathId, const std::optional<ui64> shardingActualVersion);
 };
 }   // namespace NKikimr::NOlap::NCompaction

@@ -64,7 +64,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
         if (portionInfo->IsVisible(GetMaxReadVersion())) {
-            std::shared_ptr<NOlap::ISnapshotSchema> portionSchema = portionInfo->GetSchema(index.GetVersionedIndex());
+            std::shared_ptr<NOlap::ISchema> portionSchema = portionInfo->GetSchema(index.GetVersionedIndex());
             for (ui32 columnId : columnTagsRequested) {
                 auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaCountMinSketch({columnId});
 

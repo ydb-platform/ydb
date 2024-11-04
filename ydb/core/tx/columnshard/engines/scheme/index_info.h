@@ -41,7 +41,7 @@ class IOptimizerPlannerConstructor;
 }
 class TPortionInfoWithBlobs;
 class TSnapshotColumnInfo;
-class ISnapshotSchema;
+class ISchema;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
 /// Column engine index description in terms of tablet's local table.

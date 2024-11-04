@@ -14,11 +14,11 @@ private:
     virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
     virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
 protected:
-    std::shared_ptr<ISnapshotSchema> Schema;
+    std::shared_ptr<ISchema> Schema;
     std::shared_ptr<arrow::RecordBatch> IncomingData;
     bool IncomingFinished = false;
 public:
-    IMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
+    IMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISchema>& actualSchema)
         : IncomingPosition(incoming, 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
         , Schema(actualSchema)
         , IncomingData(incoming) {
@@ -96,7 +96,7 @@ public:
         return Builder.Finalize();
     }
 
-    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
+    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISchema>& actualSchema,
         const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});
 };
 

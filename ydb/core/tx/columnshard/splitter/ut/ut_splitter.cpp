@@ -19,7 +19,7 @@
 Y_UNIT_TEST_SUITE(Splitter) {
     using namespace NKikimr::NArrow;
 
-    class TTestSnapshotSchema: public NKikimr::NArrow::NSplitter::ISchemaDetailInfo {
+    class TTesTSchema: public NKikimr::NArrow::NSplitter::ISchemaDetailInfo {
     private:
         mutable std::map<std::string, ui32> Decoder;
 
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
 
     class TSplitTester {
     private:
-        std::shared_ptr<TTestSnapshotSchema> Schema = std::make_shared<TTestSnapshotSchema>();
+        std::shared_ptr<TTesTSchema> Schema = std::make_shared<TTesTSchema>();
         YDB_ACCESSOR_DEF(std::optional<ui32>, ExpectSlicesCount);
         YDB_ACCESSOR_DEF(std::optional<ui32>, ExpectBlobsCount);
         YDB_ACCESSOR(std::optional<ui32>, ExpectPortionsCount, 1);

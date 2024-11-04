@@ -38,13 +38,13 @@ class TVersionedIndex;
 
 class TPortionEvictionFeatures {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
-    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+    YDB_READONLY_DEF(std::shared_ptr<ISchema>, CurrentScheme);
+    YDB_READONLY_DEF(std::shared_ptr<ISchema>, TargetScheme);
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
 public:
-    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
+    TPortionEvictionFeatures(const std::shared_ptr<ISchema>& currentScheme, const std::shared_ptr<ISchema>& targetScheme, const TString& currentTierName)
         : CurrentScheme(currentScheme)
         , TargetScheme(targetScheme)
         , CurrentTierName(currentTierName)

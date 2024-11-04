@@ -16,7 +16,7 @@ namespace NKikimr::NOlap {
 
 class TDefaultSchemaDetails: public NArrow::NSplitter::ISchemaDetailInfo {
 private:
-    ISnapshotSchema::TPtr Schema;
+    ISchema::TPtr Schema;
     std::shared_ptr<NArrow::NSplitter::TSerializationStats> Stats;
 
 protected:
@@ -24,7 +24,7 @@ protected:
         return Schema->GetColumnSaver(columnId);
     }
 public:
-    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats)
+    TDefaultSchemaDetails(ISchema::TPtr schema, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats)
         : Schema(schema)
         , Stats(stats)
     {

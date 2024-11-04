@@ -113,7 +113,7 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
     return TPortionDataAccessor(result);
 }
 
-ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
+ISchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
     if (SchemaVersion) {
         auto schema = index.GetSchema(SchemaVersion.value());
         AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
@@ -146,7 +146,7 @@ const TColumnRecord& TPortionInfoConstructor::AppendOneChunkColumn(TColumnRecord
     return Records.back();
 }
 
-void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
+void TPortionInfoConstructor::AddMetadata(const ISchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
     Y_ABORT_UNLESS(batch->num_rows() == GetRecordsCount());
     MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch), IIndexInfo::CalcDeletions(batch, false),
         NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());

@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-class TSnapshotSchema: public ISnapshotSchema {
+class TSchema: public ISchema {
 private:
     TIndexInfo IndexInfo;
     std::shared_ptr<NArrow::TSchemaLite> Schema;
@@ -21,7 +21,7 @@ protected:
             ;
     }
 public:
-    TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot);
+    TSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot);
 
     virtual const std::vector<ui32>& GetColumnIds() const override {
         return IndexInfo.GetColumnIds();

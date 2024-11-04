@@ -160,8 +160,8 @@ private:
     YDB_READONLY_DEF(std::set<TString>, ColumnNames);
     std::vector<TString> ColumnNamesVector;
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
-    ISnapshotSchema::TPtr FullReadSchema;
-    YDB_READONLY_DEF(ISnapshotSchema::TPtr, FilteredSchema);
+    ISchema::TPtr FullReadSchema;
+    YDB_READONLY_DEF(ISchema::TPtr, FilteredSchema);
 
     void Rebuild();
 
@@ -177,7 +177,7 @@ public:
         return std::make_shared<TColumnsSet>(columnIds, FullReadSchema);
     }
 
-    TColumnsSet(const std::set<ui32>& columnIds, const ISnapshotSchema::TPtr& fullReadSchema)
+    TColumnsSet(const std::set<ui32>& columnIds, const ISchema::TPtr& fullReadSchema)
         : TBase(columnIds)
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
@@ -185,7 +185,7 @@ public:
         Rebuild();
     }
 
-    TColumnsSet(const std::vector<ui32>& columnIds, const ISnapshotSchema::TPtr& fullReadSchema)
+    TColumnsSet(const std::vector<ui32>& columnIds, const ISchema::TPtr& fullReadSchema)
         : TBase(columnIds)
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
@@ -193,12 +193,12 @@ public:
         Rebuild();
     }
 
-    const ISnapshotSchema& GetFilteredSchemaVerified() const {
+    const ISchema& GetFilteredSchemaVerified() const {
         AFL_VERIFY(FilteredSchema);
         return *FilteredSchema;
     }
 
-    const std::shared_ptr<ISnapshotSchema>& GetFilteredSchemaPtrVerified() const {
+    const std::shared_ptr<ISchema>& GetFilteredSchemaPtrVerified() const {
         AFL_VERIFY(FilteredSchema);
         return FilteredSchema;
     }

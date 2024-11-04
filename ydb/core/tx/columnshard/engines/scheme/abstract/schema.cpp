@@ -14,18 +14,18 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) const {
+std::shared_ptr<arrow::Field> ISchema::GetFieldByIndex(const int index) const {
     auto schema = GetSchema();
     if (!schema || index < 0 || index >= schema->num_fields()) {
         return nullptr;
     }
     return schema->field(index);
 }
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
+std::shared_ptr<arrow::Field> ISchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
     return GetFieldByIndex(GetFieldIndex(columnId));
 }
 
-std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
+std::set<ui32> ISchema::GetPkColumnsIds() const {
     std::set<ui32> result;
     for (auto&& field : GetIndexInfo().GetReplaceKey()->fields()) {
         result.emplace(GetColumnId(field->name()));
@@ -33,8 +33,8 @@ std::set<ui32> ISnapshotSchema::GetPkColumnsIds() const {
     return result;
 }
 
-TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::NormalizeBatch(
-    const ISnapshotSchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const {
+TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISchema::NormalizeBatch(
+    const ISchema& dataSchema, const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const {
     AFL_VERIFY(dataSchema.GetSnapshot() <= GetSnapshot());
     if (dataSchema.GetSnapshot() == GetSnapshot()) {
         if (batch->GetColumnsCount() == GetColumnsCount()) {
@@ -67,7 +67,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
     return result;
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
+TConclusion<std::shared_ptr<arrow::RecordBatch>> ISchema::PrepareForModification(
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const {
     if (!incomingBatch) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
@@ -138,7 +138,7 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
     return batch;
 }
 
-std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const {
+std::set<ui32> ISchema::GetColumnIdsToDelete(const ISchema::TPtr& targetSchema) const {
     if (targetSchema->GetVersion() == GetVersion()) {
         return {};
     }
@@ -152,7 +152,7 @@ std::set<ui32> ISnapshotSchema::GetColumnIdsToDelete(const ISnapshotSchema::TPtr
     return columnIdxsToDelete;
 }
 
-std::vector<ui32> ISnapshotSchema::ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const {
+std::vector<ui32> ISchema::ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const {
     std::vector<ui32> columnIndexes;
     for (const auto& id : idxs) {
         AFL_VERIFY(HasColumnId(id));
@@ -161,31 +161,31 @@ std::vector<ui32> ISnapshotSchema::ConvertColumnIdsToIndexes(const std::set<ui32
     return columnIndexes;
 }
 
-ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
+ui32 ISchema::GetColumnId(const std::string& columnName) const {
     auto id = GetColumnIdOptional(columnName);
     AFL_VERIFY(id)("column_name", columnName)("schema", JoinSeq(",", GetSchema()->field_names()));
     return *id;
 }
 
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const ui32 columnId) const {
+std::shared_ptr<arrow::Field> ISchema::GetFieldByColumnIdVerified(const ui32 columnId) const {
     auto result = GetFieldByColumnIdOptional(columnId);
     AFL_VERIFY(result)("event", "unknown_column")("column_id", columnId)("schema", DebugString());
     return result;
 }
 
-std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const ui32 columnId) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISchema::GetColumnLoaderVerified(const ui32 columnId) const {
     auto result = GetColumnLoaderOptional(columnId);
     AFL_VERIFY(result);
     return result;
 }
 
-std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderVerified(const std::string& columnName) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISchema::GetColumnLoaderVerified(const std::string& columnName) const {
     auto result = GetColumnLoaderOptional(columnName);
     AFL_VERIFY(result);
     return result;
 }
 
-std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoaderOptional(const std::string& columnName) const {
+std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISchema::GetColumnLoaderOptional(const std::string& columnName) const {
     const std::optional<ui32> id = GetColumnIdOptional(columnName);
     if (id) {
         return GetColumnLoaderOptional(*id);
@@ -194,11 +194,11 @@ std::shared_ptr<NArrow::NAccessor::TColumnLoader> ISnapshotSchema::GetColumnLoad
     }
 }
 
-std::vector<std::string> ISnapshotSchema::GetPKColumnNames() const {
+std::vector<std::string> ISchema::GetPKColumnNames() const {
     return GetIndexInfo().GetReplaceKey()->field_names();
 }
 
-std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const {
+std::vector<std::shared_ptr<arrow::Field>> ISchema::GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const {
     std::vector<std::shared_ptr<arrow::Field>> result;
     for (auto&& f : GetIndexInfo().ArrowSchema()->fields()) {
         if (!existsSchema->GetFieldByName(f->name())) {
@@ -208,7 +208,7 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
     return result;
 }
 
-TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
+TConclusionStatus ISchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
     for (auto&& i : fields) {
         const ui32 colId = GetColumnIdVerified(i->name());
         auto defaultValue = GetExternalDefaultValueVerified(colId);
@@ -219,7 +219,7 @@ TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::sh
     return TConclusionStatus::Success();
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(
+TConclusion<std::shared_ptr<arrow::RecordBatch>> ISchema::BuildDefaultBatch(
     const std::vector<std::shared_ptr<arrow::Field>>& fields, const ui32 rowsCount, const bool force) const {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     for (auto&& i : fields) {
@@ -237,20 +237,20 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), rowsCount, columns);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const std::string& columnName) const {
+std::shared_ptr<arrow::Scalar> ISchema::GetExternalDefaultValueVerified(const std::string& columnName) const {
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnName);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const ui32 columnId) const {
+std::shared_ptr<arrow::Scalar> ISchema::GetExternalDefaultValueVerified(const ui32 columnId) const {
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
 }
 
-bool ISnapshotSchema::IsSpecialColumnId(const ui32 columnId) const {
+bool ISchema::IsSpecialColumnId(const ui32 columnId) const {
     return GetIndexInfo().IsSpecialColumn(columnId);
 }
 
-std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
-    const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema) {
+std::set<ui32> ISchema::GetColumnsWithDifferentDefaults(
+    const THashMap<ui64, ISchema::TPtr>& schemas, const ISchema::TPtr& targetSchema) {
     std::set<ui32> result;
     if (schemas.size() <= 1) {
         return {};
@@ -282,7 +282,7 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     return result;
 }
 
-TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
+TConclusion<TWritePortionInfoWithBlobsResult> ISchema::PrepareForWrite(const ISchema::TPtr& selfPtr, const ui64 pathId,
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
     AFL_VERIFY(incomingBatch->num_rows());

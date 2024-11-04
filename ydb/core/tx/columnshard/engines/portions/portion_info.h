@@ -413,7 +413,7 @@ public:
 
     class TSchemaCursor {
         const NOlap::TVersionedIndex& VersionedIndex;
-        ISnapshotSchema::TPtr CurrentSchema;
+        ISchema::TPtr CurrentSchema;
         TSnapshot LastSnapshot = TSnapshot::Zero();
 
     public:
@@ -421,9 +421,9 @@ public:
             : VersionedIndex(versionedIndex) {
         }
 
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfoConstructor& portion);
+        ISchema::TPtr GetSchema(const TPortionInfoConstructor& portion);
 
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfo& portion) {
+        ISchema::TPtr GetSchema(const TPortionInfo& portion) {
             if (!CurrentSchema || portion.MinSnapshotDeprecated != LastSnapshot) {
                 CurrentSchema = portion.GetSchema(VersionedIndex);
                 LastSnapshot = portion.MinSnapshotDeprecated;
@@ -433,7 +433,7 @@ public:
         }
     };
 
-    ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
+    ISchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
     ui32 GetRecordsCount() const {
         return GetMeta().GetRecordsCount();

@@ -10,10 +10,10 @@ namespace NKikimr::NOlap {
 
 class TPortionsNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<TPortionDataAccessor> Portions;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
 
 public:
-    TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas)
         : Portions(std::move(portions))
         , Schemas(schemas) {
     }
@@ -40,7 +40,7 @@ bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, cons
 }
 
 INormalizerTask::TPtr TPortionsNormalizer::BuildTask(
-    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas) const {
     return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 

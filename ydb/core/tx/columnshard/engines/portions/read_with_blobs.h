@@ -40,9 +40,9 @@ public:
         const TPortionDataAccessor& portion, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TIndexInfo& indexInfo);
 
-    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const;
+    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> RestoreBatch(const ISchema& data, const ISchema& resultSchema, const std::set<ui32>& seqColumns) const;
     static std::optional<TWritePortionInfoWithBlobsResult> SyncPortion(TReadPortionInfoWithBlobs&& source,
-        const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
+        const ISchema::TPtr& from, const ISchema::TPtr& to, const TString& targetTier, const std::shared_ptr<IStoragesManager>& storages,
         std::shared_ptr<NColumnShard::TSplitterCounters> counters);
 
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;

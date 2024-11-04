@@ -276,8 +276,15 @@ public:
 class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
+<<<<<<< HEAD
     const TPortionInfo::TConstPtr Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
+=======
+    std::set<ui32> SequentialEntityIds;
+    TPortionDataAccessor Portion;
+    std::shared_ptr<ISchema> Schema;
+    mutable THashMap<ui64, ui64> FingerprintedData;
+>>>>>>> 87d5c9db72 (rename)
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);

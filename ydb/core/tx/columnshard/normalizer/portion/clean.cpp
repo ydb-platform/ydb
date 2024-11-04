@@ -69,7 +69,7 @@ bool TCleanPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& 
 }
 
 INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(
-    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas) const {
     std::vector<TUnifiedBlobId> blobIds;
     THashMap<TString, THashSet<TUnifiedBlobId>> blobsByStorage;
     for (auto&& portion : portions) {

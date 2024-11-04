@@ -30,7 +30,7 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, cons
         if (columns.empty()) {
             BatchSchema = IndexSchema;
         } else {
-            BatchSchema = std::make_shared<NOlap::TFilteredSnapshotSchema>(IndexSchema, columns);
+            BatchSchema = std::make_shared<NOlap::TFilteredSchema>(IndexSchema, columns);
         }
         if (BatchSchema->GetColumnsCount() != columns.size()) {
             return false;

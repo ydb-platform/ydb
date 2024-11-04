@@ -10,7 +10,7 @@ class TSchemeActualizer: public IActualizer {
 private:
     const TSchemeCounters Counters;
     THashMap<TRWAddress, THashSet<ui64>> PortionsToActualizeScheme;
-    std::shared_ptr<ISnapshotSchema> TargetSchema;
+    std::shared_ptr<ISchema> TargetSchema;
     const ui64 PathId;
     const TVersionedIndex& VersionedIndex;
 
@@ -33,7 +33,7 @@ private:
     class TFullActualizationInfo {
     private:
         TRWAddress Address;
-        YDB_ACCESSOR_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+        YDB_ACCESSOR_DEF(std::shared_ptr<ISchema>, TargetScheme);
     public:
         TFindActualizationInfo ExtractFindId() {
             return TFindActualizationInfo(std::move(Address));
@@ -47,7 +47,7 @@ private:
             return Address;
         }
 
-        TFullActualizationInfo(TRWAddress&& address, const std::shared_ptr<ISnapshotSchema>& targetScheme)
+        TFullActualizationInfo(TRWAddress&& address, const std::shared_ptr<ISchema>& targetScheme)
             : Address(std::move(address))
             , TargetScheme(targetScheme) {
 

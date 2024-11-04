@@ -67,11 +67,11 @@ class TColumnsAccumulator {
 private:
     TColumnsSetIds FetchingReadyColumns;
     TColumnsSetIds AssemblerReadyColumns;
-    ISnapshotSchema::TPtr FullSchema;
+    ISchema::TPtr FullSchema;
     std::shared_ptr<TColumnsSetIds> GuaranteeNotOptional;
 
 public:
-    TColumnsAccumulator(const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional, const ISnapshotSchema::TPtr& fullSchema)
+    TColumnsAccumulator(const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional, const ISchema::TPtr& fullSchema)
         : FullSchema(fullSchema)
         , GuaranteeNotOptional(guaranteeNotOptional) {
     }

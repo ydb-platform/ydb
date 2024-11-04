@@ -15,7 +15,7 @@ class TArrowData : public NEvWrite::IDataContainer {
 private:
     std::optional<ui64> OriginalDataSize;
 public:
-    TArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
+    TArrowData(const NOlap::ISchema::TPtr& schema)
         : IndexSchema(schema)
     {}
 
@@ -28,8 +28,8 @@ public:
     }
 
 private:
-    NOlap::ISnapshotSchema::TPtr IndexSchema;
-    NOlap::ISnapshotSchema::TPtr BatchSchema;
+    NOlap::ISchema::TPtr IndexSchema;
+    NOlap::ISchema::TPtr BatchSchema;
     std::shared_ptr<arrow::Schema> PayloadSchema;
     TString IncomingData;
     NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Upsert;
@@ -40,7 +40,7 @@ private:
     std::optional<ui64> OriginalDataSize;
     NEvWrite::EModificationType ModificationType = NEvWrite::EModificationType::Replace;
 public:
-    TProtoArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
+    TProtoArrowData(const NOlap::ISchema::TPtr& schema)
         : IndexSchema(schema)
     {}
 
@@ -53,7 +53,7 @@ public:
     }
 
 private:
-    NOlap::ISnapshotSchema::TPtr IndexSchema;
+    NOlap::ISchema::TPtr IndexSchema;
     std::shared_ptr<arrow::Schema> ArrowSchema;
     TString IncomingData;
 };

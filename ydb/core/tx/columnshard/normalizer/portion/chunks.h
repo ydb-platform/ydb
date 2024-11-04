@@ -64,7 +64,7 @@ namespace NKikimr::NOlap {
         class TChunkInfo {
             YDB_READONLY_DEF(TKey, Key);
             TColumnChunkLoadContext CLContext;
-            ISnapshotSchema::TPtr Schema;
+            ISchema::TPtr Schema;
 
             YDB_ACCESSOR_DEF(TUpdate, Update);
         public:

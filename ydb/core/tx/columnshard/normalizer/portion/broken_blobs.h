@@ -37,12 +37,12 @@ public:
         : TPortionsNormalizerBase(info) {
     }
 
-    virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& /*schema*/) const override {
+    virtual std::set<ui32> GetColumnsFilter(const ISchema::TPtr& /*schema*/) const override {
         return {};
     }
 
     virtual INormalizerTask::TPtr BuildTask(
-        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const override;
+        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas) const override;
     virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 
     virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const override;

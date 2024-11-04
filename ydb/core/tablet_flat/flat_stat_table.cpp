@@ -54,9 +54,9 @@ bool HasSchemaChanges(const TPartView& partView, const TScheme::TTableInfo& tabl
     }
 
     { // Check families
-        size_t partFamilies = partView->GroupsCount;
-        size_t schemeFamilies = rowScheme.Families.size();
-        if (partFamilies != schemeFamilies) {
+        size_t partFamiliesCount = partView->GroupsCount;
+        size_t schemeFamiliesCount = rowScheme.Families.size();
+        if (partFamiliesCount != schemeFamiliesCount) {
             return true;
         }
 
@@ -75,7 +75,7 @@ bool HasSchemaChanges(const TPartView& partView, const TScheme::TTableInfo& tabl
         }
     }
 
-    { // Check column families
+    { // Check columns
         THashMap<NTable::TTag, ui32> partColumnGroups, schemeColumnGroups;
         for (const auto& column : partView->Scheme->AllColumns) {
             partColumnGroups[column.Tag] = column.Group;
@@ -92,7 +92,7 @@ bool HasSchemaChanges(const TPartView& partView, const TScheme::TTableInfo& tabl
 }
 
 bool HasSchemaChanges(const TSubset& subset, const TScheme::TTableInfo& tableInfo, bool enableBTreeIndex) {
-    for (auto& partView : subset.Flatten) {
+    for (const auto& partView : subset.Flatten) {
         if (HasSchemaChanges(partView, tableInfo, *subset.Scheme, enableBTreeIndex)) {
             return true;
         }

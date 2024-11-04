@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2);");
 
-       {
+        {
             Cerr << "... waiting leader stats" << Endl;
             auto stats = WaitTableStats(runtime, shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
@@ -564,22 +564,17 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
 
         CompactTable(runtime, shard1, tableId1, false);
-
         {
             auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetHasSchemaChanges(), false);
         }
 
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-
         WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
-
         CompactTable(runtime, shard1, tableId1, false);
-
         WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
 
         runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-
         // turn off doesn't trigger compaction:
         WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
         WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
@@ -619,14 +614,11 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         WaitTxNotification(server, sender,
             AsyncSetEnableFilterByKey(server, "/Root", "table-1", true));
-
         {
             auto stats = WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetByKeyFilterSize(), 0);
         }
-
         CompactTable(runtime, shard1, tableId1, false);
-
         {
             auto stats = WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
             UNIT_ASSERT_GT(stats.GetTableStats().GetByKeyFilterSize(), 0);
@@ -634,18 +626,111 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
 
         WaitTxNotification(server, sender,
             AsyncSetEnableFilterByKey(server, "/Root", "table-1", false));
-
         {
             auto stats = WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
             UNIT_ASSERT_GT(stats.GetTableStats().GetByKeyFilterSize(), 0);
         }
-
         CompactTable(runtime, shard1, tableId1, false);
-
         {
             auto stats = WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetByKeyFilterSize(), 0);
         }
+    }
+
+    Y_UNIT_TEST(HasSchemaChanges_Columns) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, tableId1] = CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ui64 shard1 = shards.at(0);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
+
+        CompactTable(runtime, shard1, tableId1, false);
+
+        {
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetHasSchemaChanges(), false);
+        }
+
+        WaitTxNotification(server, sender,
+            AsyncAlterAddExtraColumn(server, "/Root", "table-1"));
+        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+        CompactTable(runtime, shard1, tableId1, false);
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+
+        WaitTxNotification(server, sender,
+            AsyncAlterDropColumn(server, "/Root", "table-1", "extra"));
+        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+        CompactTable(runtime, shard1, tableId1, false);
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+    }
+
+    Y_UNIT_TEST(HasSchemaChanges_Families) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .AddStoragePool("ssd")
+            .AddStoragePool("hdd");
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto opts = TShardedTableOptions()
+            .Columns({{"key", "Uint32", true, false}, {"value", "Uint32", false, false}, {"value2", "Uint32", false, false}})
+            .Families({{.Name = "default", .LogPoolKind = "ssd", .SysLogPoolKind = "ssd", .DataPoolKind = "ssd"}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const auto shard1 = GetTableShards(server, sender, "/Root/table-1").at(0);
+        const auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)");
+
+        WaitTxNotification(server, sender,
+            AsyncAlterAddExtraColumn(server, "/Root", "table-1"));
+
+        CompactTable(runtime, shard1, tableId1, false);
+        {
+            auto stats = WaitTableStats(runtime, shard1, HasPartCountCondition(1));
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetHasSchemaChanges(), false);
+        }
+
+        WaitTxNotification(server, sender,
+            AsyncSetColumnFamily(server, "/Root", "table-1", "value2", {.Name = "hdd", .DataPoolKind = "hdd"}));
+        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+        CompactTable(runtime, shard1, tableId1, false);
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+
+        WaitTxNotification(server, sender,
+            AsyncSetColumnFamily(server, "/Root", "table-1", "extra", {.Name = "hdd", .DataPoolKind = "hdd"}));
+        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+        CompactTable(runtime, shard1, tableId1, false);
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
+
+        WaitTxNotification(server, sender,
+            AsyncSetColumnFamily(server, "/Root", "table-1", "extra", {.Name = "default", .DataPoolKind = "ssd"}));
+        WaitTableStats(runtime, shard1, HasSchemaChangesCondition());
+        CompactTable(runtime, shard1, tableId1, false);
+        WaitTableStats(runtime, shard1, DoesNotHaveSchemaChangesCondition());
     }
 
 }

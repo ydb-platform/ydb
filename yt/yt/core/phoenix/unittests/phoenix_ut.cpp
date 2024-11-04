@@ -25,11 +25,11 @@ using NYT::Load;
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TString Serialize(const T& value)
+TString Serialize(const T& value, int version = 0)
 {
     TString buffer;
     TStringOutput output(buffer);
-    TSaveContext context(&output);
+    TSaveContext context(&output, version);
     Save(context, value);
     context.Finish();
     return buffer;
@@ -319,6 +319,7 @@ struct S
     int A;
     int B;
     int C;
+    int D = 0;
 
     bool operator==(const S&) const = default;
 
@@ -338,6 +339,11 @@ void S::RegisterMetadata(auto&& registrar)
         })
         .WhenMissing([] (TThis* this_, auto& /*context*/) {
             this_->C = 777;
+        })();
+    PHOENIX_REGISTER_FIELD(4, D)
+        .SinceVersion(250)
+        .WhenMissing([] (TThis* this_, auto& /*context*/) {
+            this_->D = 888;
         })();
 }
 
@@ -425,13 +431,20 @@ TEST(TPhoenixTest, InVersion5)
     s1.A = 123;
     s1.B = 0;
     s1.C = 777;
+    s1.D = 42;
 
     auto buffer = MakeBuffer([] (auto& context) {
         Save<int>(context, 123);
+        Save<int>(context, 42);
     });
+    auto buffer3 = Serialize(s1, 300);
+    EXPECT_EQ(buffer, buffer3);
 
     auto s2 = Deserialize<S>(buffer, /*version*/ 300);
     EXPECT_EQ(s1, s2);
+
+    auto s3 = Deserialize<S>(buffer3, /*version*/ 300);
+    EXPECT_EQ(s1, s3);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

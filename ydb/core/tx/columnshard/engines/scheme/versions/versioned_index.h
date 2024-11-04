@@ -1,5 +1,5 @@
 #pragma once
-#include "abstract_scheme.h"
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {

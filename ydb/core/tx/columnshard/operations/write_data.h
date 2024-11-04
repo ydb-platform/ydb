@@ -3,8 +3,8 @@
 #include <ydb/core/tx/data_events/write_data.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_schema.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 

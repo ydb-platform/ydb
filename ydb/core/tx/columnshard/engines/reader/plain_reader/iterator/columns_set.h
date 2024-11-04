@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 #include <ydb/library/accessor/accessor.h>

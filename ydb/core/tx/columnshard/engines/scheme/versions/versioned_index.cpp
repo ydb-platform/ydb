@@ -1,5 +1,5 @@
 #include "versioned_index.h"
-#include "snapshot_scheme.h"
+#include "schema.h"
 
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>

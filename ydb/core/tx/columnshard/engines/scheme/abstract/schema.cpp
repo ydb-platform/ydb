@@ -1,4 +1,4 @@
-#include "abstract_scheme.h"
+#include "schema.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>

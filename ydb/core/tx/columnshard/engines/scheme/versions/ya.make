@@ -1,9 +1,8 @@
 LIBRARY()
 
 SRCS(
-    abstract_scheme.cpp
-    snapshot_scheme.cpp
-    filtered_scheme.cpp
+    schema.cpp
+    filtered_schema.cpp
     versioned_index.cpp
 )
 

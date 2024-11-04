@@ -1,4 +1,4 @@
-#include "snapshot_scheme.h"
+#include "schema.h"
 
 namespace NKikimr::NOlap {
 

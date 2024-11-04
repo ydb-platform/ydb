@@ -2,7 +2,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/columnshard.h>
 #include <ydb/core/tx/columnshard/counters/splitter.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 
 namespace NKikimr::NOlap {
 

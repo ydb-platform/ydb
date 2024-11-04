@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    schema.cpp
     index_info.cpp
 )
 

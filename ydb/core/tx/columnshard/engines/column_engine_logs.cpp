@@ -571,7 +571,7 @@ bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
 
     {
         auto guard = GranulesStorage->GetStats()->StartPackModification();
-        std::shared_ptr<TPortionsLoadContext> constructors = std::make_shared<TPortionsLoadContext>();
+        auto constructors = std::make_shared<NEngineLoading::TPortionsLoadContext>();
         {
             if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                     const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
@@ -604,7 +604,7 @@ bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
         if (!LoadCounters(db)) {
             return false;
         }
-        FinishLoading(constructors)
+        FinishLoading(constructors);
     }
     return true;
 }

@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
-        engine.Load(db);
+        engine.TestingLoad(db);
 
         std::vector<TCommittedData> dataToIndex = {
             TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TColumnEngineForLogs engine(
             0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
-        engine.Load(db);
+        engine.TestingLoad(db);
 
         // insert
         ui64 planStep = 1;
@@ -683,7 +683,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TColumnEngineForLogs engine(
             0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         engine.RegisterTable(pathId);
-        engine.Load(db);
+        engine.TestingLoad(db);
 
         ui64 numRows = 1000;
         ui64 rowPos = 0;
@@ -709,7 +709,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             TColumnEngineForLogs tmpEngine(
                 0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
-            tmpEngine.Load(db);
+            tmpEngine.TestingLoad(db);
         }
 
         // compact
@@ -741,7 +741,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             TColumnEngineForLogs tmpEngine(
                 0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.RegisterTable(pathId);
-            tmpEngine.Load(db);
+            tmpEngine.TestingLoad(db);
         }
     }
 
@@ -762,7 +762,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             TColumnEngineForLogs engine(
                 0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
-            engine.Load(db);
+            engine.TestingLoad(db);
 
             const ui64 numRows = 1000;
             const ui64 txCount = 20;
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             TColumnEngineForLogs engine(
                 0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
             engine.RegisterTable(pathId);
-            engine.Load(db);
+            engine.TestingLoad(db);
 
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
             THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(testColumns[0].GetName()) };

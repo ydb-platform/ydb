@@ -21,7 +21,7 @@ TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(
                 logName,
                 runConfig.TenantName == "" ? "static" : "slot",
                 runConfig.TenantName,
-                runConfig.ClusterName
+                logConfig.HasClusterName() ? logConfig.GetClusterName() : "",
             );
             logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
         }
@@ -65,7 +65,7 @@ TAutoPtr<TLogBackend> CreateMeteringLogBackendWithUnifiedAgent(
             logName,
             runConfig.TenantName == "" ? "static" : "slot",
             runConfig.TenantName,
-            runConfig.ClusterName
+            logConfig.HasClusterName() ? logConfig.GetClusterName() : "",
         );
         logBackend = logBackend ? NActors::CreateCompositeLogBackend({logBackend, uaLogBackend}) : uaLogBackend;
     }
@@ -120,7 +120,7 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
             logName,
             runConfig.TenantName == "" ? "static" : "slot",
             runConfig.TenantName,
-            runConfig.ClusterName
+            logConfig.HasClusterName() ? logConfig.GetClusterName() : "",
         );
     }
 

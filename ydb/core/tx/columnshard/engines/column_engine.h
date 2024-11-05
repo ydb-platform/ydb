@@ -266,6 +266,14 @@ public:
                 Diff = info.GetDiff();
             }
         }
+
+        ui64 GetVersion() const {
+            if (Schema) {
+                return Schema->GetVersion();
+            }
+            AFL_VERIFY(Diff);
+            return Diff->GetVersion();
+        }
     };
 
     static ui64 GetMetadataLimit();

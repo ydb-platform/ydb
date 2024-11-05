@@ -85,19 +85,21 @@ public:
     }
 
     ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
-        Y_ABORT_UNLESS(!Snapshots.empty());
-        ISnapshotSchema::TPtr res = GetLastSchemaBeforeOrEqualSnapshotOptional(version);
-        if (!res) {
-            return Snapshots.begin()->second;
+        for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
+            if (it->first <= version) {
+                return it->second;
+            }
         }
-        return res;
+        Y_ABORT_UNLESS(!Snapshots.empty());
+        return Snapshots.begin()->second;
     }
 
-    ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const TSnapshot& version) const {
+    ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
         ISnapshotSchema::TPtr res = nullptr;
-        for (auto it = Snapshots.begin(); it != Snapshots.end(); ++it) {
+        for (auto it = SnapshotByVersion.rbegin(); it != SnapshotByVersion.rend(); ++it) {
             if (it->first <= version) {
                 res = it->second;
+                break;
             }
         }
         return res;
@@ -106,15 +108,6 @@ public:
     ISnapshotSchema::TPtr GetLastSchema() const {
         Y_ABORT_UNLESS(!Snapshots.empty());
         return Snapshots.rbegin()->second;
-    }
-
-    ISnapshotSchema::TPtr GetSecondLastSchemaOptional() const {
-        if (Snapshots.size() < 2) {
-            return nullptr;
-        }
-        auto i = Snapshots.rbegin();
-        ++i;
-        return i->second;
     }
 
     bool IsEmpty() const {

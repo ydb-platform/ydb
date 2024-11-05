@@ -165,16 +165,18 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
 void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
     AFL_VERIFY(!VersionedIndex.IsEmpty());
 
-    ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(snapshot);
+    ui64 version = schema.GetVersion();
 
-    if (prevSchema && snapshot == prevSchema->GetSnapshot()) {
-        // skip already registered snapshot
+    ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(version);
+
+    if (prevSchema && version == prevSchema->GetVersion()) {
+        // skip already registered version
         return;
     }
 
-    ISnapshotSchema::TPtr secondLast = VersionedIndex.GetSecondLastSchemaOptional();
+    ISnapshotSchema::TPtr secondLast = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(VersionedIndex.GetLastSchema()->GetVersion() - 1);
 
-    AFL_VERIFY(!secondLast || secondLast->GetSnapshot() < snapshot)("reason", "incorrect schema registration order");
+    AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version)("reason", "incorrect schema registration order");
 
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.GetDiff()) {

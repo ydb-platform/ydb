@@ -351,7 +351,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
                                       record.GetMaxProbability(),
                                       record.GetColumns(),
                                       userTable),
-                                  ev->Cookie,
+                                  0,
                                   scanOpts);
 
     TScanRecord recCard = {scanId, seqNo};

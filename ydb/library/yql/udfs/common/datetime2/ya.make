@@ -8,7 +8,7 @@ ELSE()
     YQL_UDF_YDB(datetime2_udf)
     YQL_ABI_VERSION(
         2
-        37
+        38
         0
     )
     SRCS(

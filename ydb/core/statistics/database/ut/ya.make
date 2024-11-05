@@ -22,7 +22,6 @@ PEERDIR(
 
 SRCS(
     ut_database.cpp
-    ut_load_statistics.cpp
 )
 
 END()

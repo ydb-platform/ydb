@@ -465,16 +465,6 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {
-            bool allowToReport = AllowToReport(HandleClass);
-            if (allowToReport) {
-                STLOG(PutImpl.WasNotOkResponses() ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_PUT, BPP72,
-                        "Some TEvPutResult are not success",                                    \
-                        (GroupId, Info->GroupID),                                               \
-                        (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),   \
-                        (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),                   \
-                        (RestartCounter, RestartCounter),                                       \
-                        (History, PutImpl.PrintHistory()));
-            }
             PassAway();
             Done = true;
             return true;

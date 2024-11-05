@@ -547,7 +547,7 @@ Y_UNIT_TEST(TestMirror3dcPutStatusErrorWith_2_2_0_VdiskErrors) {
         {TVDiskID(0, 1, 1, 1, 0), NKikimrProto::ERROR},
         {TVDiskID(0, 1, 1, 2, 0), NKikimrProto::ERROR},
     };
-    TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 6, NKikimrProto::ERROR);
+    TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 5, NKikimrProto::ERROR);
 }
 
 Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_3_1_0_VdiskErrors) {

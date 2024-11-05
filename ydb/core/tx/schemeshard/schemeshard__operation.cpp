@@ -1479,6 +1479,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
         return {CreateDropBackupCollection(NextPartId(), tx)};
 
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        return CreateBackupBackupCollection(NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

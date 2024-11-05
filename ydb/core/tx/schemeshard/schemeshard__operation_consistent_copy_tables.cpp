@@ -47,14 +47,20 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+bool CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables);
 
     const auto& op = tx.GetCreateConsistentCopyTables();
 
     if (0 == op.CopyTableDescriptionsSize()) {
         TString msg = TStringBuilder() << "no task to do, empty list CopyTableDescriptions";
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+        return false;
     }
 
     TPath firstPath = TPath::Resolve(op.GetCopyTableDescriptions(0).GetSrcPath(), context.SS);
@@ -66,7 +72,8 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             .IsAtLocalSchemeShard();
 
         if (!checks) {
-            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+            result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+            return false;
         }
     }
 
@@ -80,19 +87,19 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
         : limits.MaxConsistentCopyTargets;
 
     if (op.CopyTableDescriptionsSize() > limit) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, TStringBuilder()
             << "Consistent copy object count limit exceeded"
                 << ", limit: " << limit
                 << ", objects: " << op.CopyTableDescriptionsSize()
         )};
+        return false;
     }
 
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        result = {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+        return false;
     }
-
-    TVector<ISubOperation::TPtr> result;
 
     for (const auto& descr: op.GetCopyTableDescriptions()) {
         const auto& srcStr = descr.GetSrcPath();
@@ -108,7 +115,8 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
                   .IsTheSameDomain(firstPath);
 
             if (!checks) {
-                return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+                return false;
             }
         }
 
@@ -192,6 +200,14 @@ TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, con
             result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
         }
     }
+
+    return true;
+}
+
+TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+
+    CreateConsistentCopyTables(nextId, tx, context, result);
 
     return result;
 }

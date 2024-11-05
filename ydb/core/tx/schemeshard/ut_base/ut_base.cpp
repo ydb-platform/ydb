@@ -11376,4 +11376,85 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
     }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithPrefix) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
+
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
+              Name: "src1"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )");
+        AsyncCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
+            TableDescription {
+              Name: "src2"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndexByValue0"
+              KeyColumnNames: ["value0"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndexByValues"
+              KeyColumnNames: ["value0", "value1"]
+            }
+            IndexDescription {
+              Name: "UserDefinedIndexByValue0CoveringValue1"
+              KeyColumnNames: ["value0"]
+              DataColumnNames: ["value1"]
+            }
+        )");
+
+        TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+
+        env.TestWaitNotification(runtime, {txId, txId-1 , txId-2});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
+                           {NLs::PathVersionEqual(7),
+                            NLs::Finished,
+                            NLs::PathExist,
+                            NLs::PathsInsideDomain(9),
+                            NLs::ShardsInsideDomain(5),
+                            NLs::ChildrenCount(2)
+                           });
+
+        TestConsistentCopyTables(runtime, ++txId, "/", R"(
+                       CopyTableDescriptions {
+                         SrcPath: "/MyRoot/DirA/src1"
+                         DstPath: "/MyRoot/DirA/dst1"
+                       }
+                      CopyTableDescriptions {
+                        SrcPath: "/MyRoot/DirA/src2"
+                        DstPath: "/MyRoot/DirA/dst2"
+                      })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1"),
+                                              {NLs::PathVersionEqual(3),
+                                               NLs::PathExist,
+                                               NLs::Finished});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst2"),
+                                              {NLs::PathVersionEqual(3),
+                                               NLs::PathExist,
+                                               NLs::Finished});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
+                                              {NLs::PathVersionEqual(11),
+                                               NLs::PathExist,
+                                               NLs::Finished,
+                                               NLs::PathExist,
+                                               NLs::PathsInsideDomain(17),
+                                               NLs::ShardsInsideDomain(10)});
+    }
 }

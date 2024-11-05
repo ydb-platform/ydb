@@ -146,6 +146,7 @@ struct TRunOptions {
     bool UseMetaFromGraph = false;
     bool WithFinalIssues = false;
     bool ValidateResultFormat = false;
+    bool NoColorize = false;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -401,7 +402,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
         Cout << "Parse YQL..." << Endl;
         fail = !program->ParseYql();
     }
-    program->PrintErrorsTo(*options.ErrStream);
+    program->PrintErrorsTo(*options.ErrStream, !options.NoColorize);
     if (fail) {
         return 1;
     }
@@ -410,7 +411,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     });
     Cout << "Compile program..." << Endl;
     fail = !program->Compile(options.User);
-    program->PrintErrorsTo(*options.ErrStream);
+    program->PrintErrorsTo(*options.ErrStream, !options.NoColorize);
     if (options.TraceOpt) {
         program->Print(&Cerr, nullptr);
     }
@@ -438,7 +439,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
     if (options.WithFinalIssues) {
         program->FinalizeIssues();
     }
-    program->PrintErrorsTo(*options.ErrStream);
+    program->PrintErrorsTo(*options.ErrStream, !options.NoColorize);
     if (status == TProgram::TStatus::Error) {
         if (options.TraceOpt) {
             program->Print(&Cerr, nullptr);
@@ -653,6 +654,10 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .NoArgument()
         .SetFlag(&runOptions.TraceOpt);
+    opts.AddLongOption("no-colorize", "no colorize issues output")
+        .Optional()
+        .NoArgument()
+        .SetFlag(&runOptions.NoColorize);
     opts.AddLongOption("print-expr", "print rebuild AST before execution").NoArgument();
     opts.AddLongOption("expr-file", "print AST to that file instead of stdout").StoreResult<TString>(&exprFile);
     opts.AddLongOption("result-file", "print program execution result to file").StoreResult<TString>(&resultFile);
@@ -770,6 +775,10 @@ int RunMain(int argc, const char* argv[])
     opts.SetFreeArgsNum(0);
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
+
+    if (!isatty(STDERR_FILENO) || !errFile.empty()) {
+        runOptions.NoColorize = true;
+    }
 
     if (memLimit > 0) {
 #ifdef __unix__

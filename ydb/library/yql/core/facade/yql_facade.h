@@ -198,8 +198,8 @@ public:
 
     void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
 
-    inline void PrintErrorsTo(IOutputStream& out) const {
-        Issues().PrintWithProgramTo(out, Filename_, SourceCode_);
+    inline void PrintErrorsTo(IOutputStream& out, bool colorize = true) const {
+        Issues().PrintWithProgramTo(out, Filename_, SourceCode_, colorize);
     }
 
     inline const TAstNode* AstRoot() const {

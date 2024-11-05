@@ -144,7 +144,7 @@ public:
         return !Events.empty();
     }
 
-    void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true);
+    void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true, bool alreadyConnected = false);
     void HandleNodeConnected(ui32 nodeId);
     void HandleNodeDisconnected(ui32 nodeId);
     bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);

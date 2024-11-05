@@ -658,9 +658,9 @@ class TestPqRowDispatcher(TestYdsBase):
 
         node_index = 1
         logging.debug("Restart compute node {}".format(node_index))
-        kikimr.control_plane.kikimr_cluster.nodes[node_index].stop()
-        kikimr.control_plane.kikimr_cluster.nodes[node_index].start()
-        kikimr.control_plane.wait_bootstrap(node_index)
+        kikimr.compute_plane.kikimr_cluster.nodes[node_index].stop()
+        kikimr.compute_plane.kikimr_cluster.nodes[node_index].start()
+        kikimr.compute_plane.wait_bootstrap(node_index)
 
         data = ['{"time": 105, "data": "hello5"}', '{"time": 106, "data": "hello6"}']
         self.write_stream(data)

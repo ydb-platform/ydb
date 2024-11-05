@@ -128,6 +128,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TRowDispatcherMetrics Metrics;
     NYql::IPqGateway::TPtr PqGateway;
     THashSet<TActorId> InterconnectSessions;
+    TMap<ui32, bool> NodeConnected;
 
     struct ConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -141,7 +142,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             NActors::TActorId selfId,
             ui64 eventQueueId,
             NFq::NRowDispatcherProto::TEvStartSession& proto,
-            TActorId topicSessionId)
+            TActorId topicSessionId,
+            bool alreadyConnected)
             : ReadActorId(readActorId)
             , SourceParams(proto.GetSource())
             , PartitionId(proto.GetPartitionId())
@@ -150,7 +152,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             , TopicSessionId(topicSessionId)
             , QueryId(proto.GetQueryId()) {
                 EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true);
-                EventsQueue.OnNewRecipientId(readActorId);
+                EventsQueue.OnNewRecipientId(readActorId, true, alreadyConnected);
             }
 
         NActors::TActorId ReadActorId;
@@ -292,6 +294,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected, node id " << ev->Get()->NodeId);
+    NodeConnected[ev->Get()->NodeId] = true;
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
     }
@@ -299,6 +302,7 @@ void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
+    NodeConnected[ev->Get()->NodeId] = false;
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
     }
@@ -395,7 +399,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Topic session count " << topicSessionInfo.Sessions.size());
     Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
-    auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, TActorId());
+    auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, TActorId(), NodeConnected[ev->Sender.NodeId()]);
     Consumers[key] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
     if (!consumerInfo->EventsQueue.OnEventReceived(ev)) {

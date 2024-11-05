@@ -21,7 +21,7 @@ void TRetryEventsQueue::Init(
     KeepAlive = keepAlive;
 }
 
-void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe) {
+void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe, bool alreadyConnected) {
     if (unsubscribe) {
         Unsubscribe();
     }
@@ -31,7 +31,7 @@ void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, b
     Events.clear();
     MyConfirmedSeqNo = 0;
     ReceivedEventsSeqNos.clear();
-    Connected = false;
+    Connected = alreadyConnected;
     RetryState = Nothing();
 }
 

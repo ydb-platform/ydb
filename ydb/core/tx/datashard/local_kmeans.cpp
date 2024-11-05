@@ -663,7 +663,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     TScanOptions scanOpts;
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), ev->Cookie, scanOpts);
+    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
     TScanRecord recCard = {scanId, seqNo};
     ScanManager.Set(id, recCard);
 }

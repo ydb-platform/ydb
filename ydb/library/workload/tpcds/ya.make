@@ -42,6 +42,11 @@ RESOURCE(
     tpcds_schema.sql tpcds_schema.sql
 )
 
+ALL_RESOURCE_FILES_FROM_DIRS(
+    PREFIX tpcds/
+    s1_canonical
+)
+
 PEERDIR(
     library/cpp/charset
     library/cpp/resource

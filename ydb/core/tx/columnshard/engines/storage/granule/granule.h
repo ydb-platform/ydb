@@ -123,7 +123,7 @@ private:
     std::shared_ptr<TGranulesStat> Stats;
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
-    std::shared_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
+    std::unique_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
     mutable TInstant NextActualizations = TInstant::Zero();
 
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;

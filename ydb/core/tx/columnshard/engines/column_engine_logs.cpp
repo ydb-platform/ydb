@@ -204,7 +204,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
-                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
+                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
                 AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
             })) {
             timer.AddLoadingFail();
@@ -216,7 +216,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = SignalCounters.ColumnsLoadingTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
-        if (!db.LoadColumns([&](const TColumnChunkLoadContext& loadContext) {
+        if (!db.LoadColumns([&](const TColumnChunkLoadContextV1& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPathId(), loadContext.GetPortionId());
                 constructor->LoadRecord(loadContext);
             })) {

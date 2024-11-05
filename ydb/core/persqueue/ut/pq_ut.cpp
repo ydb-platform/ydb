@@ -2402,7 +2402,7 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         {
             //Cerr << "Got consumer delete response: " << consumerDeleteResult->Record << Endl;
             UNIT_ASSERT(consumerDeleteResult->Record.HasStatus());
-            UNIT_ASSERT_EQUAL(consumerDeleteResult->Record.GetStatus(), NKikimrPQ::EStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL((int)consumerDeleteResult->Record.GetStatus(), (int)NKikimrPQ::EStatus::OK);
         }
 
         // Resend intercepted blob responses and wait for read result

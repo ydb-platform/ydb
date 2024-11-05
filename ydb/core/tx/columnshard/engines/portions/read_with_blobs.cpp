@@ -114,7 +114,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         }
     }
 
-    TPortionInfoConstructor constructor(source.PortionInfo.GetPortionInfo(), false, true);
+    TPortionInfoConstructor constructor(source.PortionInfo.GetPortionInfo(), false, true, false);
     constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
     constructor.SetSchemaVersion(to->GetVersion());
     constructor.MutableMeta().ResetTierName(targetTier);

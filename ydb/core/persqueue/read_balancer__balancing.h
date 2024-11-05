@@ -156,7 +156,7 @@ private:
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
     std::unique_ptr<TEvPersQueue::TEvLockPartition> MakeEvLockPartition(ui32 partitionId, ui32 step) const;
-    TString GetPrefix() const;
+    TString LogPrefix() const;
 };
 
 struct TPartitionFamilyComparator {
@@ -243,7 +243,7 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
-    TString GetPrefix() const;
+    TString LogPrefix() const;
 };
 
 struct TSession {
@@ -337,7 +337,7 @@ public:
     void RenderApp(TStringStream& str) const;
 
 private:
-    TString GetPrefix() const;
+    TString LogPrefix() const;
     ui32 NextStep();
 
 private:

@@ -9,7 +9,7 @@ namespace NYT::NTableClient {
 
 struct TColumnSortSchema
 {
-    TString Name;
+    std::string Name;
     ESortOrder SortOrder;
 
     bool operator==(const TColumnSortSchema& other) const = default;

@@ -452,17 +452,21 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtTableContent tableContent(&node);
             TMaybe<ui64> itemsCount;
+            TString name = ToString(TYtTableContent::CallableName());
             if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {
                 itemsCount = FromString<ui64>(setting->Child(1)->Content());
             }
+            if (NYql::HasSetting(tableContent.Settings().Ref(), EYtSettingType::Small)) {
+                name.prepend("Small");
+            }
             if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
                 auto read = maybeRead.Cast();
-                return BuildTableContentCall(
+                return BuildTableContentCall(name,
                     NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
                     read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
-                return BuildTableContentCall(
+                return BuildTableContentCall(name,
                     NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
                     GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
             }

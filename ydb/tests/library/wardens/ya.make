@@ -11,4 +11,8 @@ PY_SRCS(
     schemeshard.py
 )
 
+PEERDIR(
+    ydb/tests/library/clients
+)
+
 END()

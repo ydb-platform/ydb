@@ -16,7 +16,7 @@ from hamcrest import assert_that, is_, equal_to, raises, none
 import yatest
 from yatest.common import source_path, test_source_path
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.oss.canonical import set_canondata_root
@@ -243,9 +243,9 @@ def format_as_table(data):
 class BaseSuiteRunner(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
-                load_udfs=True,
+                udfs_path=yatest.common.build_path("yql/udfs"),
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
                 disable_iterator_lookups=True,

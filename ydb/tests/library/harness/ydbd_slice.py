@@ -3,12 +3,13 @@
 import itertools
 import logging
 import time
+import yaml
 
 import ydb
 import ydb.tools.ydbd_slice as ydbd_slice
 from ydb.tools.cfg import walle
 
-from .kikimr_cluster import DEFAULT_INTERCONNECT_PORT, DEFAULT_MBUS_PORT, DEFAULT_MON_PORT, DEFAULT_GRPC_PORT, load_yaml
+from .kikimr_cluster import DEFAULT_INTERCONNECT_PORT, DEFAULT_MBUS_PORT, DEFAULT_MON_PORT, DEFAULT_GRPC_PORT
 from .kikimr_runner import KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
 
@@ -18,7 +19,8 @@ logger = logging.getLogger(__name__)
 class YdbdSlice(KiKiMRClusterInterface):
     def __init__(self, config_path, binary_path=None):
         kikimr_bin = binary_path
-        self.__yaml_config = load_yaml(config_path)
+        with open(config_path) as f:
+            self.__yaml_config = yaml.safe_load(f.read())
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         ssh_user = "yc-user"
         walle_provider = walle.NopHostsInformationProvider()

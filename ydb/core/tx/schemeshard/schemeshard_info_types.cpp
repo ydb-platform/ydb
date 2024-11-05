@@ -2308,15 +2308,16 @@ bool TTopicInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, T
     KeySchema.reserve(tabletConfig.PartitionKeySchemaSize());
 
     for (const auto& component : tabletConfig.GetPartitionKeySchema()) {
-        // TODO: support pg types
         auto typeId = component.GetTypeId();
-        if (!NScheme::NTypeIds::IsYqlType(typeId)) {
+        if (!NScheme::NTypeIds::IsYqlType(typeId) && typeId != NScheme::NTypeIds::Pg) {
             error = TStringBuilder() << "TypeId is not supported"
                 << ": typeId# " << typeId
                 << ", component# " << component.GetName();
             return false;
         }
-        KeySchema.push_back(NScheme::TTypeInfo(typeId));
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId,
+                component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
+        KeySchema.push_back(typeInfoMod.TypeInfo);
     }
 
     return true;

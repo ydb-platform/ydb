@@ -69,5 +69,7 @@ message TTableStats {
 
     optional uint64 ByKeyFilterSize = 32;
 
+    // denotes that datashard should be background compacted 
+    // even if it is single parted
     optional bool HasSchemaChanges = 33;
 }

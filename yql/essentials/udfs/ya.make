@@ -1,3 +1,4 @@
 RECURSE(
     examples
+    logs
 )

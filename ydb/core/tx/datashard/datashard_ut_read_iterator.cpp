@@ -3145,8 +3145,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // Read in a transaction.
         auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
         readRequest1->Record.SetLockTxId(lockTxId);
-        readRequest1->Record.MutableSnapshot()->SetStep(snapshot.Step);
-        readRequest1->Record.MutableSnapshot()->SetTxId(snapshot.TxId);
+        snapshot.Serialize(*readRequest1->Record.MutableSnapshot());
         AddKeyQuery(*readRequest1, {1, 1, 1});
 
         auto readResult1 = helper.SendRead(tableName, readRequest1.release());
@@ -4598,8 +4597,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
                 auto* msg = ev->Get();
                 if (!msg->Record.HasSnapshot()) {
                     Cerr << "... forcing read snapshot " << txVersion << Endl;
-                    msg->Record.MutableSnapshot()->SetStep(txVersion.Step);
-                    msg->Record.MutableSnapshot()->SetTxId(txVersion.TxId);
+                    txVersion.Serialize(*msg->Record.MutableSnapshot());
                 }
             }
         });

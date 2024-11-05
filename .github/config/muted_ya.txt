@@ -3,13 +3,22 @@ ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestD
 ydb/core/client/ut TClientTest.PromoteFollower
 ydb/core/client/ut TClientTest.ReadFromFollower
 ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
-ydb/core/cms/ut_sentinel_unstable *
-ydb/core/external_sources *
-ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
-ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
-ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
+ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
+ydb/core/cms/ut_sentinel_unstable sole chunk chunk
+ydb/core/cms/ut_sentinel_unstable sole+chunk+chunk
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
+ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWrite
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertViaLegacyScripting-Streaming
+ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
+ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_SumL_GroupL_OrderL
@@ -34,24 +43,6 @@ ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpUpdate
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
-<<<<<<< HEAD
-ydb/core/kqp/ut/service [38/50]*
-ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
-ydb/core/persqueue/ut [37/40] chunk chunk
-ydb/core/persqueue/ut [38/40] chunk chunk
-ydb/core/persqueue/ut TPQTest.*DirectRead*
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_AutoscaleAwareSDK
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_existed_AutoscaleAwareSDK
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ReadNotEmptyPartitions_BeforeAutoscaleAwareSDK
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK
-ydb/core/persqueue/ut/ut_with_sdk [4/10] chunk chunk
-ydb/core/persqueue/ut/ut_with_sdk [6/10] chunk chunk
-ydb/core/persqueue/ut/ut_with_sdk [7/10] chunk chunk
-ydb/core/persqueue/ut/ut_with_sdk [8/10] chunk chunk
-ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
-ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
-=======
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
@@ -61,7 +52,6 @@ ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
->>>>>>> e2ee1b2b1a (Clean max scalar (#10826))
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage

@@ -17,6 +17,8 @@ namespace NUtil {
     }
 
     inline void CreateNormalizedSharesVector(const THashMap<ui32, float>& shares, const TVector<ui8>& channels, TVector<float>& normalizedShares) {
+        normalizedShares.reserve(channels.size());
+
         float totalWeight = 0.0f;
 
         // Calculate the total weight

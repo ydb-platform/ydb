@@ -139,7 +139,7 @@ IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
     const TString& name,
-    NLogging::TLogger logger,
+    NLogging::TLogger logger = NLogging::TLogger(),
     NProfiling::TProfiler profiler = {});
 
 //! Returns a throttler that imposes no throughput limit.

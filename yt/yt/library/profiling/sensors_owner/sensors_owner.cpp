@@ -175,9 +175,14 @@ const TRateHistogram& TSensorsOwner::GetRateHistogram(const std::string& name, s
     return Get<TRateHistogramWrapper<std::vector<double>>>(name, std::move(buckets)).Sensor;
 }
 
-void TSensorsOwner::Inc(const std::string& name, i64 delta) const
+void TSensorsOwner::Increment(const std::string& name, i64 delta) const
 {
     GetCounter(name).Increment(delta);
+}
+
+void TSensorsOwner::Inc(const std::string& name, i64 delta) const
+{
+    Increment(name, delta);
 }
 
 TIntrusivePtr<TSensorsOwner::TState> TSensorsOwner::GetDefaultState()

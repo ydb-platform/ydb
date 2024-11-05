@@ -1215,6 +1215,76 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
     }
 };
 
+class TTxAskPortionChunks: public TTransactionBase<TColumnShard> {
+private:
+    using TBase = TTransactionBase<TColumnShard>;
+    std::shared_ptr<NOlap::TDataAccessorsRequest> Request;
+    THashMap<ui64, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
+    THashMap<ui64, std::vector<NOlap::TPortionDataAccessor>> Accessors;
+    NOlap::TDataAccessorsResult Result;
+
+public:
+    TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::TDataAccessorsRequest>& request)
+        : TBase(self)
+        , Request(request) {
+        for (auto&& i : Request->GetPathIds()) {
+            PortionsByPath.emplace(i, Request->StartFetching(i));
+        }
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        NIceDb::TNiceDb db(txc.DB);
+        TBlobGroupSelector selector(Self->Info());
+        for (auto&& i : PortionsByPath) {
+            while (i.second.size()) {
+                auto p = i.second.back();
+                auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                NOlap::TPortionInfoConstructor constructor(*p, false, true, true);
+                {
+                    if (!rowset.IsReady()) {
+                        return false;
+                    }
+                    while (!rowset.EndOfSet()) {
+                        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
+                        constructor.LoadRecord(chunkLoadContext);
+                        if (!rowset.Next()) {
+                            return false;
+                        }
+                    }
+                }
+                {
+                    auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                    if (!rowset.IsReady()) {
+                        return false;
+                    }
+                    while (!rowset.EndOfSet()) {
+                        NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, &selector);
+                        constructor.LoadIndex(chunkLoadContext);
+                        if (!rowset.Next()) {
+                            return false;
+                        }
+                    }
+                }
+                Accessors[i.first].emplace_back(constructor.Build(true));
+                i.second.pop_back();
+            }
+        }
+        return true;
+    }
+    void Complete(const TActorContext& /*ctx*/) override {
+        for (auto&& i : Accessors) {
+            Request->AddData(i.first, std::move(i.second));
+        }
+    }
+    TTxType GetTxType() const override {
+        return TXTYPE_WRITE_INDEX;
+    }
+};
+
+void TColumnShard::Handle(NOlap::NDataAccessorControl::TEvAskDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
+    Execute(new TTxAskPortionChunks(this, ev->Get()->GetRequest()));
+}
+
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvAckFinishFromInitiator");
     auto currentSession = SharingSessionsManager->GetDestinationSession(ev->Get()->Record.GetSessionId());

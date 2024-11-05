@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/predicate/range.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -51,7 +52,7 @@ private:
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
 
 protected:
-    bool IsSourceInMemoryFlag = true;
+    std::optional<bool> IsSourceInMemoryFlag;
     THashMap<ui32, TFetchingInterval*> Intervals;
 
     std::unique_ptr<TFetchedData> StageData;
@@ -64,10 +65,9 @@ protected:
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual bool DoStartFetchingIndexes(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
-    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) = 0;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
     virtual void DoAbort() = 0;
     virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
-    virtual bool DoAddSequentialEntityIds(const ui32 entityId) = 0;
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
@@ -75,7 +75,6 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
-
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
@@ -106,7 +105,19 @@ public:
     }
 
     bool IsSourceInMemory() const {
-        return IsSourceInMemoryFlag;
+        if (!ExclusiveIntervalOnly) {
+            return false;
+        }
+        AFL_VERIFY(IsSourceInMemoryFlag);
+        return *IsSourceInMemoryFlag;
+    }
+    void SetSourceInMemory(const bool value) {
+        AFL_VERIFY(!IsSourceInMemoryFlag);
+        IsSourceInMemoryFlag = value;
+        AFL_VERIFY(StageData);
+        if (!value) {
+            StageData->SetUseFilter(value);
+        }
     }
     void SetFirstIntervalId(const ui64 value) {
         AFL_VERIFY(!FirstIntervalId);
@@ -115,14 +126,6 @@ public:
     ui64 GetFirstIntervalId() const {
         AFL_VERIFY(!!FirstIntervalId);
         return *FirstIntervalId;
-    }
-    virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const = 0;
-    bool AddSequentialEntityIds(const ui32 entityId) {
-        if (DoAddSequentialEntityIds(entityId)) {
-            IsSourceInMemoryFlag = false;
-            return true;
-        }
-        return false;
     }
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
@@ -152,11 +155,11 @@ public:
         return DoApplyIndex(indexMeta);
     }
 
-    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
+    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false) {
         if (columns->IsEmpty()) {
             return;
         }
-        DoAssembleColumns(columns);
+        DoAssembleColumns(columns, sequential);
     }
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
@@ -176,6 +179,8 @@ public:
     void IncIntervalsCount() {
         ++IntervalsCount;
     }
+
+    virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
@@ -271,10 +276,8 @@ public:
 class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
-    std::set<ui32> SequentialEntityIds;
     const TPortionInfo::TConstPtr Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
-    mutable THashMap<ui64, ui64> FingerprintedData;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
@@ -284,7 +287,7 @@ private:
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
     virtual bool DoStartFetchingIndexes(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
-    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -296,14 +299,9 @@ private:
 
     virtual NJson::TJsonValue DoDebugJsonForMemory() const override {
         NJson::TJsonValue result = TBase::DoDebugJsonForMemory();
-        if (SequentialEntityIds.size() && GetStageData().HasPortionAccessor()) {
+        if (GetStageData().HasPortionAccessor()) {
             auto columns = GetStageData().GetPortionAccessor().GetColumnIds();
-            for (auto&& i : SequentialEntityIds) {
-                AFL_VERIFY(columns.erase(i));
-            }
             //        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
-            result.InsertValue("min_memory_seq", GetStageData().GetPortionAccessor().GetMinMemoryForReadColumns(SequentialEntityIds));
-            result.InsertValue("min_memory_seq_blobs", GetStageData().GetPortionAccessor().GetColumnBlobBytes(SequentialEntityIds));
             result.InsertValue("in_mem", GetStageData().GetPortionAccessor().GetColumnRawBytes(columns, false));
             result.InsertValue("columns_in_mem", JoinSeq(",", columns));
         }
@@ -316,10 +314,6 @@ private:
     virtual void DoAbort() override;
     virtual ui64 GetPathId() const override {
         return Portion->GetPathId();
-    }
-    virtual bool DoAddSequentialEntityIds(const ui32 entityId) override {
-        FingerprintedData.clear();
-        return SequentialEntityIds.emplace(entityId).second;
     }
 
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
@@ -347,46 +341,24 @@ public:
         return GetStageData().GetPortionAccessor().DecodeBlobAddresses(std::move(blobsOriginal), Schema->GetIndexInfo());
     }
 
-    virtual bool IsSourceInMemory(const std::set<ui32>& fieldIds) const override {
-        for (auto&& i : SequentialEntityIds) {
-            if (fieldIds.contains(i)) {
-                return false;
-            }
+    virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {
+        AFL_VERIFY(columnIds.size());
+        switch (type) {
+            case EMemType::Raw:
+                return GetStageData().GetPortionAccessor().GetColumnRawBytes(columnIds, false);
+            case EMemType::Blob:
+                return GetStageData().GetPortionAccessor().GetColumnBlobBytes(columnIds, false);
+            case EMemType::RawSequential:
+                return GetStageData().GetPortionAccessor().GetMinMemoryForReadColumns(columnIds);
         }
-        return true;
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnsIds) const override {
-        return Portion->GetTotalRawBytes();
         AFL_VERIFY(columnsIds.size());
-        const ui64 fp = CombineHashes(*columnsIds.begin(), *columnsIds.rbegin());
-        auto it = FingerprintedData.find(fp);
-        if (it != FingerprintedData.end()) {
-            return it->second;
-        }
-        ui64 result = 0;
-        if (SequentialEntityIds.size()) {
-            std::set<ui32> selectedSeq;
-            std::set<ui32> selectedInMem;
-            for (auto&& i : columnsIds) {
-                if (SequentialEntityIds.contains(i)) {
-                    selectedSeq.emplace(i);
-                } else {
-                    selectedInMem.emplace(i);
-                }
-            }
-            result = GetStageData().GetPortionAccessor().GetMinMemoryForReadColumns(selectedSeq) +
-                     GetStageData().GetPortionAccessor().GetColumnBlobBytes(selectedSeq, false) +
-                     GetStageData().GetPortionAccessor().GetColumnRawBytes(selectedInMem, false);
-        } else {
-            result = GetStageData().GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
-        }
-        FingerprintedData.emplace(fp, result);
-        return result;
+        return GetStageData().GetPortionAccessor().GetColumnRawBytes(columnsIds, false);
     }
 
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const override {
-        return Portion->GetTotalBlobBytes();
         return GetStageData().GetPortionAccessor().GetColumnBlobBytes(columnsIds, false);
     }
 
@@ -405,8 +377,8 @@ public:
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
         : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(TSnapshot::Zero()),
-              portion->RecordSnapshotMax(TSnapshot::Zero()),
-              portion->GetRecordsCount(), portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+              portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
+              portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
         , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
     }
@@ -431,7 +403,7 @@ private:
         return;
     }
 
-    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) override;
+    virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "commit");
@@ -440,9 +412,6 @@ private:
     }
     virtual ui64 GetPathId() const override {
         return 0;
-    }
-    virtual bool DoAddSequentialEntityIds(const ui32 /*entityId*/) override {
-        return false;
     }
 
     virtual bool DoAddTxConflict() override {
@@ -467,10 +436,6 @@ public:
         return result;
     }
 
-    virtual bool IsSourceInMemory(const std::set<ui32>& /*fieldIds*/) const override {
-        return true;
-    }
-
     virtual bool HasIndexes(const std::set<ui32>& /*indexIds*/) const override {
         return false;
     }
@@ -488,6 +453,18 @@ public:
     }
     virtual ui64 PredictAccessorMemoryBytes() const override {
         return 0;
+    }
+
+    virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {
+        AFL_VERIFY(columnIds.size());
+        switch (type) {
+            case EMemType::Raw:
+                return GetColumnRawBytes(columnIds);
+            case EMemType::Blob:
+                return GetColumnBlobBytes(columnIds);
+            case EMemType::RawSequential:
+                return GetColumnRawBytes(columnIds);
+        }
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& /*columnIds*/) const override {

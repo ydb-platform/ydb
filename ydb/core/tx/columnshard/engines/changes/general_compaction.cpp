@@ -238,39 +238,7 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
 
 ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo::TConstPtr& portionInfo) {
     SumMemoryFix += portionInfo->GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16)) + portionInfo->GetTotalBlobBytes();
-    ++PortionsCount;
-    SumMemoryDelta = 0;
-
-    auto it = MaxMemoryByColumnChunk.begin();
-    const auto advanceIterator = [&](const ui32 columnId, const ui64 maxColumnChunkRawBytes) {
-        while (it != MaxMemoryByColumnChunk.end() && it->ColumnId < columnId) {
-            ++it;
-        }
-        if (it == MaxMemoryByColumnChunk.end() || columnId < it->ColumnId) {
-            it = MaxMemoryByColumnChunk.insert(it, TColumnInfo(columnId));
-        }
-        it->MemoryUsage += maxColumnChunkRawBytes;
-        SumMemoryDelta = std::max(SumMemoryDelta, it->MemoryUsage);
-    };
-    ui32 columnId = 0;
-    ui64 maxChunkSize = 0;
-    for (auto&& i : TPortionDataAccessor(portionInfo).GetRecords()) {
-        if (columnId != i.GetColumnId()) {
-            if (columnId) {
-                advanceIterator(columnId, maxChunkSize);
-            }
-            columnId = i.GetColumnId();
-            maxChunkSize = 0;
-        }
-        if (maxChunkSize < i.GetMeta().GetRawBytes()) {
-            maxChunkSize = i.GetMeta().GetRawBytes();
-        }
-    }
-    advanceIterator(columnId, maxChunkSize);
-
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_prediction_after", SumMemoryFix + SumMemoryDelta)(
-        "portion_info", portionInfo->DebugString());
-    return SumMemoryFix + SumMemoryDelta;
+    return SumMemoryFix + ((ui64)500 << 20);
 }
 
 }   // namespace NKikimr::NOlap::NCompaction

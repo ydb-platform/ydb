@@ -25,7 +25,7 @@ ui64 ICSController::GetGuaranteeIndexationStartBytesLimit() const {
 }
 
 bool ICSController::CheckPortionForEvict(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
-    return portion->HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized);
+    return portion->HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized) && !portion->HasInsertWriteId();
 }
 
 }

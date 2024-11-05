@@ -30,7 +30,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
     if (AtomicCas(&SourceStartedFlag, 1, 0)) {
         SetFirstIntervalId(interval.GetIntervalId());
         AFL_VERIFY(FetchingPlan);
-        StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly() && IsSourceInMemory());
+        StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
         if (Context->IsAborted()) {
@@ -188,7 +188,7 @@ void TPortionDataSource::DoApplyIndex(const NIndexes::TIndexCheckerContainer& in
     }
 }
 
-void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
+void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) {
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
 
     std::optional<TSnapshot> ss;
@@ -203,7 +203,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     auto batch = GetStageData()
                      .GetPortionAccessor()
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(SequentialEntityIds)
+                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
 
     MutableStageData().AddBatch(batch);
@@ -263,7 +263,7 @@ bool TCommittedDataSource::DoStartFetchingColumns(
     return true;
 }
 
-void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns) {
+void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool /*sequential*/) {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     const ISnapshotSchema::TPtr batchSchema =
         GetContext()->GetReadMetadata()->GetIndexVersions().GetSchemaVerified(GetCommitted().GetSchemaVersion());

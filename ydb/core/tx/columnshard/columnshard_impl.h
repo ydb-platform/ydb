@@ -281,6 +281,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishToSource::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(NOlap::NDataAccessorControl::TEvAskDataAccessors::TPtr& ev, const TActorContext& ctx);
+
     ITransaction* CreateTxInitSchema();
 
     void OnActivateExecutor(const TActorContext& ctx) override;
@@ -439,6 +441,8 @@ protected:
             HFunc(NOlap::NDataSharing::NEvents::TEvFinishedFromSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishToSource, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator, Handle);
+            HFunc(NOlap::NDataAccessorControl::TEvAskDataAccessors, Handle);
+
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeRewrite()

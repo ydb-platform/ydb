@@ -1187,8 +1187,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                         Last.MvccSnapshot.Step = record.GetSnapshot().GetStep();
                         Last.MvccSnapshot.TxId = record.GetSnapshot().GetTxId();
                     } else if (Inject.MvccSnapshot) {
-                        record.MutableSnapshot()->SetStep(Inject.MvccSnapshot.Step);
-                        record.MutableSnapshot()->SetTxId(Inject.MvccSnapshot.TxId);
+                        Inject.MvccSnapshot.Serialize(*record.MutableSnapshot());
                         Cerr << "TEvRead: injected MvccSnapshot" << Endl;
                     }
                     break;
@@ -1788,8 +1787,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
         record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
         record.MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
-        record.MutableSnapshot()->SetStep(snapshot.Step);
-        record.MutableSnapshot()->SetTxId(snapshot.TxId);
+        snapshot.Serialize(*record.MutableSnapshot());
         for (ui32 columnId : columns) {
             record.AddColumns(columnId);
         }

@@ -712,8 +712,7 @@ public:
         record.SetSeqNo(State.SeqNo + 1);
 
         if (!State.IsHeadRead) {
-            record.MutableSnapshot()->SetStep(State.ReadVersion.Step);
-            record.MutableSnapshot()->SetTxId(State.ReadVersion.TxId);
+            State.ReadVersion.Serialize(*record.MutableSnapshot());
         }
 
         return useful;

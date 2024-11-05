@@ -609,7 +609,6 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
 
-    PQ_LOG_D("ApplyNewConfig: TopicName=" << TopicName << ", TopicPath=" << TopicPath);
     SetupTransactionCounters(ctx);
 
     InitializeMeteringSink(ctx);
@@ -1009,7 +1008,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
 
     EndInitTransactions();
-    PQ_LOG_D("ReadConfig: TopicName=" << TopicName << ", TopicPath=" << TopicPath);
     SetupTransactionCounters(ctx);
     EndReadConfig(ctx);
 }

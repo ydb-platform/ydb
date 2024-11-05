@@ -374,6 +374,7 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
         throw TMemoryLimitExceededException();
     }
 
+#ifndef PROFILE_MEMORY_ALLOCATIONS
     if (const auto ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
         TotalAllocated += POOL_PAGE_SIZE;
         if (AllocNotifyCallback) {
@@ -390,23 +391,24 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
     }
 
     ++PageMissCount;
+#endif
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     const auto res = GetBlock(POOL_PAGE_SIZE);
 #else
     const auto res = Alloc(POOL_PAGE_SIZE);
+    AllPages.emplace(res);
 #endif
 
-    AllPages.emplace(res);
     return res;
 }
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
-    Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     ReturnBlock(addr, POOL_PAGE_SIZE);
 #else
+    Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
     FreePages.emplace(addr);
 #endif
 }

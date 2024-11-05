@@ -49,9 +49,13 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
 void TAllocState::CleanupArrowList(TListEntry* root) {
     for (auto curr = root->Right; curr != root; ) {
         auto next = curr->Right;
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        free(curr);
+#else
         auto size = ((TMkqlArrowHeader*)curr)->Size;
         auto fullSize = size + sizeof(TMkqlArrowHeader);
         ReleaseAlignedPage(curr, fullSize);
+#endif
         curr = next;
     }
 
@@ -251,8 +255,15 @@ void* MKQLArrowAllocate(ui64 size) {
     if (state->EnableArrowTracking) {
         state->OffloadAlloc(fullSize);
     }
-    
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    auto ptr = malloc(fullSize);
+    if (!ptr) {
+        throw TMemoryLimitExceededException();
+    }
+#else
     auto ptr = GetAlignedPage(fullSize);
+#endif
     auto header = (TMkqlArrowHeader*)ptr;
     if (state->EnableArrowTracking) {
         header->Entry.Link(&state->ArrowBlocksRoot);
@@ -286,7 +297,11 @@ void MKQLArrowFree(const void* mem, ui64 size) {
     }
 
     Y_ENSURE(size == header->Size);
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    free(header);
+#else
     ReleaseAlignedPage(header, fullSize);
+#endif
 }
 
 void MKQLArrowUntrack(const void* mem) {

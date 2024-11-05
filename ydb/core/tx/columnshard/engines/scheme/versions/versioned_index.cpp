@@ -48,4 +48,21 @@ std::optional<NKikimr::NOlap::TGranuleShardingInfo> TVersionedIndex::GetSharding
     }
 }
 
+THashMap<ui64, ui64> TVersionedIndex::GetCompatibleSchemaVersions() const {
+    THashMap<ui64, ui64> result;
+    auto cur = SnapshotByVersion.crbegin();
+    while (cur != SnapshotByVersion.crend()) {
+        auto prev = cur;
+        prev++;
+        for (; prev != SnapshotByVersion.crend(); prev++) {
+            bool compatible = prev->second->IsCompatibleWithNext(*cur->second);
+            if (compatible) {
+                result[prev->first] = cur->first;
+            }
+        }
+        cur = prev;
+    }
+    return result;
+}
+
 }

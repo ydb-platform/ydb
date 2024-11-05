@@ -16,6 +16,7 @@
 #include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
+#include "blobs_action/transaction/tx_set_compatible_versions.h"
 #include "bg_tasks/events/events.h"
 
 #include "data_sharing/destination/session/destination.h"
@@ -749,6 +750,7 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
             NPrioritiesQueue::TCompServiceOperator::Ask(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
         }
     }
+    Execute(new TTxSetCompatibleSchemaVersions(this));
 }
 
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {

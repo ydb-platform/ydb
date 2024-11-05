@@ -14,6 +14,7 @@ namespace NKikimr::NOlap {
 struct TIndexInfo;
 class TSaverContext;
 class TWritePortionInfoWithBlobsResult;
+class TSnapshotSchema;
 
 class ISnapshotSchema {
 protected:
@@ -86,6 +87,14 @@ public:
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;
+
+    virtual bool IsCompatibleWithNext(const ISnapshotSchema&) const {
+        return false;
+    };
+
+    virtual bool IsCompatibleWithPrev(const TSnapshotSchema&) const {
+        return false;
+    }
 };
 
 }   // namespace NKikimr::NOlap

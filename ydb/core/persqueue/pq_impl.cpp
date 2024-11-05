@@ -1171,6 +1171,7 @@ void TPersQueue::BeginWriteTabletState(const TActorContext& ctx, NKikimrPQ::ETab
     kvCmd->SetKey(KeyState());
     kvCmd->SetValue(strState);
     kvCmd->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+    kvCmd->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 
     ctx.Send(ctx.SelfID, kvRequest.Release());
 }
@@ -1666,6 +1667,7 @@ void TPersQueue::AddCmdWriteConfig(TEvKeyValue::TEvRequest* request,
     write->SetKey(KeyConfig());
     write->SetValue(str);
     write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+    write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 
     auto graph = MakePartitionGraph(cfg);
     for (const auto& partition : cfg.GetPartitions()) {
@@ -3905,6 +3907,7 @@ void TPersQueue::AddCmdWriteTabletTxInfo(NKikimrClient::TKeyValueRequest& reques
     auto command = request.AddCmdWrite();
     command->SetKey(KeyTxInfo());
     command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
 void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)

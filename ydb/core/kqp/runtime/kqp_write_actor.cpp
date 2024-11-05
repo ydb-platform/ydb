@@ -172,6 +172,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
+        TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : TypeEnv(typeEnv)
         , Alloc(alloc)
@@ -182,6 +183,7 @@ public:
         , InconsistentTx(inconsistentTx)
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
+        , Counters(counters)
         , TableWriteActorSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(traceId), "TKqpTableWriteActor")
     {
         LogPrefix = TStringBuilder() << "SessionActorId: " << sessionActorId;
@@ -199,6 +201,8 @@ public:
                 CurrentExceptionMessage(),
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
+
+        Counters->WriteActorsCount->Inc();
     }
 
     void Bootstrap() {
@@ -363,6 +367,7 @@ public:
     }
 
     void ResolveTable() {
+        Counters->WriteActorsShardResolve->Inc();
         SchemeEntry.reset();
         SchemeRequest.reset();
 
@@ -665,6 +670,7 @@ public:
             preparedInfo.Coordinator = domainCoordinators.Select(*TxId);
         }
 
+        OnMessageAcknowledged(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result) {
@@ -707,12 +713,20 @@ public:
             return;
         }
 
+        OnMessageAcknowledged(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
             Callbacks->OnMessageAcknowledged(result->DataSize);
+        }
+    }
+
+    void OnMessageAcknowledged(const ui64 shardId) {
+        if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
+            Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
+            SendTime.erase(it);
         }
     }
 
@@ -803,6 +817,16 @@ public:
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
+
+        if (metadata->SendAttempts == 0) {
+            Counters->WriteActorImmediateWrites->Inc();
+            Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
+            Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
+
+            SendTime[shardId] = TInstant::Now();
+        } else {
+            Counters->WriteActorImmediateWritesRetries->Inc();
+        }
 
         CA_LOG_D("Send EvWrite to ShardID=" << shardId << ", isPrepare=" << isPrepare << ", isImmediateCommit=" << isImmediateCommit << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
@@ -942,8 +966,11 @@ public:
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
     EMode Mode = EMode::WRITE;
+    THashMap<ui64, TInstant> SendTime;
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
+
+    TIntrusivePtr<TKqpCounters> Counters;
 
     NWilson::TSpan TableWriteActorSpan;
     NWilson::TSpan TableWriteActorStateSpan;
@@ -989,6 +1016,7 @@ public:
             Alloc,
             nullptr,
             TActorId{},
+            Counters,
             DirectWriteActorSpan.GetTraceId());
 
         WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
@@ -1236,6 +1264,7 @@ public:
         , TxManager(settings.TxManager)
         , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
         , TypeEnv(*Alloc)
+        , Counters(settings.Counters)
         , BufferWriteActor(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(settings.TraceId), "TKqpBufferWriteActor")
     {
         State = EState::WRITING;
@@ -1298,6 +1327,7 @@ public:
                     Alloc,
                     TxManager,
                     SessionActorId,
+                    Counters,
                     BufferWriteActor.GetTraceId());
                 writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
@@ -1972,6 +2002,7 @@ private:
 
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
+    TIntrusivePtr<TKqpCounters> Counters;
     NWilson::TSpan BufferWriteActor;
 };
 

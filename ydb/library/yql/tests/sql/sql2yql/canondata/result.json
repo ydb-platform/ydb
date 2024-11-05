@@ -6852,11 +6852,25 @@
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_expr-variant_list_sort_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-variant_struct_builtins]": [
+        {
+            "checksum": "3d4ee911a626c37b74dcdf7cf6ec02b9",
+            "size": 9708,
+            "uri": "https://{canondata_backend}/937458/8d30e25a27ab471d577aaf799165e8c95557395b/resource.tar.gz#test_sql2yql.test_expr-variant_struct_builtins_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-variant_struct_comp]": [
         {
             "checksum": "0b2a7bd63b80ef1ce214007aaa17ec47",
             "size": 21576,
             "uri": "https://{canondata_backend}/1784117/d56ae82ad9d30397a41490647be1bd2124718f98/resource.tar.gz#test_sql2yql.test_expr-variant_struct_comp_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-variant_tuple_builtins]": [
+        {
+            "checksum": "751ab2b643b591a5a064f43e3d6ff448",
+            "size": 9270,
+            "uri": "https://{canondata_backend}/937458/8d30e25a27ab471d577aaf799165e8c95557395b/resource.tar.gz#test_sql2yql.test_expr-variant_tuple_builtins_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-variant_tuple_comp]": [
@@ -26550,11 +26564,25 @@
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_expr-variant_list_sort_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-variant_struct_builtins]": [
+        {
+            "checksum": "5fbb23763b2e4433fe88d7d8e1806378",
+            "size": 1182,
+            "uri": "https://{canondata_backend}/937458/8d30e25a27ab471d577aaf799165e8c95557395b/resource.tar.gz#test_sql_format.test_expr-variant_struct_builtins_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-variant_struct_comp]": [
         {
             "checksum": "367d90412c541035e89f3225e992fcee",
             "size": 2788,
             "uri": "https://{canondata_backend}/1880306/64654158d6bfb1289c66c626a8162239289559d0/resource.tar.gz#test_sql_format.test_expr-variant_struct_comp_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-variant_tuple_builtins]": [
+        {
+            "checksum": "a176bb9898c82d3789387b8159eb6c7f",
+            "size": 1091,
+            "uri": "https://{canondata_backend}/937458/8d30e25a27ab471d577aaf799165e8c95557395b/resource.tar.gz#test_sql_format.test_expr-variant_tuple_builtins_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-variant_tuple_comp]": [

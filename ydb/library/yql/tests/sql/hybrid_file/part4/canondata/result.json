@@ -1007,6 +1007,20 @@
             "uri": "https://{canondata_backend}/1889210/431569691fa60b20bf9ef4cc94610d8f1b1518e2/resource.tar.gz#test.test_expr-to_sorted_set_tuple_key-default.txt-Plan_/plan.txt"
         }
     ],
+    "test.test[expr-variant_tuple_builtins-default.txt-Debug]": [
+        {
+            "checksum": "dc35ef4ccc12cadacd7a66482b2d14cb",
+            "size": 1067,
+            "uri": "https://{canondata_backend}/937458/c8fb51d31d14dbd988bd44c34c93dc34502c6f9f/resource.tar.gz#test.test_expr-variant_tuple_builtins-default.txt-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[expr-variant_tuple_builtins-default.txt-Plan]": [
+        {
+            "checksum": "b2a2eb5d6b0a138ee924c128fc7738ef",
+            "size": 1331,
+            "uri": "https://{canondata_backend}/937458/c8fb51d31d14dbd988bd44c34c93dc34502c6f9f/resource.tar.gz#test.test_expr-variant_tuple_builtins-default.txt-Plan_/plan.txt"
+        }
+    ],
     "test.test[expr-yql-15485-default.txt-Debug]": [
         {
             "checksum": "3ebc8277919720b5344e40ba5fe2f0e5",

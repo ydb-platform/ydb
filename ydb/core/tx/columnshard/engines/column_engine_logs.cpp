@@ -165,14 +165,17 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
 void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
     AFL_VERIFY(!VersionedIndex.IsEmpty());
 
+    ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeSnapshot(snapshot);
+
+    if (prevSchema && snapshot == prevSchema->GetSnapshot()) {
+        // skip already registered snapshot
+        return;
+    }
+
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.GetDiff()) {
-        ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeSnapshot(snapshot);
         AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
-        if (snapshot == prevSchema->GetSnapshot()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "attempting to register schema with existing snapshot");
-            return;
-        }
+
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
             *schema.GetDiff(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {

@@ -7396,7 +7396,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     ResolveSA();
-    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
+    ctx.Schedule(TDuration::Seconds(120), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {
@@ -7470,30 +7470,54 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     }
 
     int count = 0;
+    bool areAllStatsFull = true;
 
     NKikimrStat::TSchemeShardStats record;
     for (const auto& [pathId, tableInfo] : Tables) {
-        const auto& aggregated = tableInfo->GetStats().Aggregated;
+        const auto& stats = tableInfo->GetStats();
+        const auto& aggregated = stats.Aggregated;
+        bool areStatsFull = stats.AreStatsFull();
+
         auto* entry = record.AddEntries();
         auto* entryPathId = entry->MutablePathId();
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
+        entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(false);
+        entry->SetAreStatsFull(areStatsFull);
+        areAllStatsFull = areAllStatsFull && areStatsFull;
+
         ++count;
     }
+
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
     for (const auto& pathId : columnTablesPathIds) {
         const auto& tableInfo = ColumnTables.GetVerified(pathId);
-        const auto& aggregated = tableInfo->Stats.Aggregated;
+        const auto& stats = tableInfo->GetStats();
+        const TTableAggregatedStats* aggregatedStats = nullptr;
+        if (tableInfo->IsStandalone()) {
+            aggregatedStats = &stats;
+        } else {
+            auto it = stats.TableStats.find(pathId);
+            if (it == stats.TableStats.end()) {
+                continue;
+            }
+            aggregatedStats = &it->second;
+        }
+        const auto& aggregated = aggregatedStats->Aggregated;
+        bool areStatsFull = aggregatedStats->AreStatsFull();
+
         auto* entry = record.AddEntries();
         auto* entryPathId = entry->MutablePathId();
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
-        entry->SetRowCount(aggregated.RowCount);
-        entry->SetBytesSize(aggregated.DataSize);
+        entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(true);
+        entry->SetAreStatsFull(areStatsFull);
+        areAllStatsFull = areAllStatsFull && areStatsFull;
+
         ++count;
     }
 
@@ -7504,8 +7528,9 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         return TDuration::Seconds(30);
     }
 
+    record.SetAreAllStatsFull(areAllStatsFull);
+
     TString stats;
-    stats.clear();
     Y_PROTOBUF_SUPPRESS_NODISCARD record.SerializeToString(&stats);
 
     auto event = std::make_unique<NStat::TEvStatistics::TEvSchemeShardStats>();

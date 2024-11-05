@@ -134,15 +134,27 @@ class TestKqpCounters(BaseDbCounters):
         self.check_db_counters(sensors_to_check, 'kqp')
 
 
+def get_default_feature_flag_value(feature_flag_camel_case) -> bool:
+    return getattr(config_pb2.TAppConfig().FeatureFlags, feature_flag_camel_case)
+
+
 @pytest.fixture(
     scope="module",
     params=[True, False],
-    ids=["enable_separate_disk_space_quotas", "disable_separate_disk_space_quotas"],
+    ids=["enable_separate_quotas", "disable_separate_quotas"],
 )
 def ydb_cluster_configuration(request):
-    return (
-        dict(extra_feature_flags=["enable_separate_disk_space_quotas"]) if request.param else dict()
-    )
+    extra_feature_flags = []
+    if request.param:
+        extra_feature_flags.append("enable_separate_disk_space_quotas")
+    else:
+        # Note: in case the assert is failing remove the parametrization by this feature flag completely.
+        # Unfortunately, it is not possible to disable a feature flag using the extra_feature_flags parameter.
+        # So we must make sure that the default value for the particular feature flag is false, or
+        # the test would not exhibit the behavior we would like it to.
+        assert not get_default_feature_flag_value("EnableSeparateDiskSpaceQuotas")
+
+    return dict(extra_feature_flags=extra_feature_flags)
 
 
 @pytest.fixture(scope="function")
@@ -234,16 +246,6 @@ def describe(client, path):
     return client.describe(path, token="")
 
 
-def get_effective_feature_flag_value(ydb_cluster, feature_flag_snake_case, feature_flag_camel_case) -> bool:
-    set_feature_flags = ydb_cluster.config.yaml_config["feature_flags"]
-    default_feature_flags = config_pb2.TAppConfig().FeatureFlags
-    return (
-        set_feature_flags[feature_flag_snake_case]
-        if feature_flag_snake_case in set_feature_flags
-        else getattr(default_feature_flags, feature_flag_camel_case)
-    )
-
-
 def check_disk_quota_exceedance(client, database, retries=10, sleep_duration=5):
     for attempt in range(retries):
         path_description = describe(client, database)
@@ -303,7 +305,7 @@ def check_counters(mon_port, sensors_to_check, retries=60, sleep_duration=5):
 
 
 class TestStorageCounters:
-    def test_storage_counters(self, ydb_cluster, ydb_database, ydb_client_session):
+    def test_storage_counters(self, ydb_cluster_configuration, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         node = ydb_cluster.nodes[1]
 
@@ -357,14 +359,10 @@ class TestStorageCounters:
             assert_that(new_partition_config.CompactionPolicy.InMemForceSizeToSnapshot, equal_to(1))
 
             insert_data(session, table)
-            if get_effective_feature_flag_value(
-                ydb_cluster, "enable_separate_disk_space_quotas", "EnableSeparateDiskSpaceQuotas"
-            ):
+            if "enable_separate_disk_space_quotas" in ydb_cluster_configuration["extra_feature_flags"]:
                 check_disk_quota_exceedance(client, database_path)
 
-            btree_index_feature_flag = get_effective_feature_flag_value(
-                ydb_cluster, "enable_local_dbbtree_index", "EnableLocalDBBtreeIndex"
-            )
+            btree_index_feature_flag = get_default_feature_flag_value("EnableLocalDBBtreeIndex")
             usage = wait_for_stats(client, table)
             assert len(usage) == 2
             assert json_format.MessageToDict(usage[0], preserving_proto_field_name=True) == {

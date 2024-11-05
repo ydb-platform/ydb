@@ -3699,8 +3699,8 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
     // This test might start failing, because disk space usage of the created table might change
     // due to changes in the storage implementation.
-    // To fix the test you need to update canonical quotas and / or batch sizes.
-    Y_UNIT_TEST_FLAG(DifferentQuotasInteraction, IsExternalSubdomain) {
+    // To fix the test you need to update canonical quotas and the content of the table.
+    Y_UNIT_TEST_FLAGS(DifferentQuotasInteraction, IsExternalSubdomain, EnableSeparateQuotas) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
@@ -3838,27 +3838,26 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         const TString shortText = TString(16, 'a');
         const TString tinyText = TString(8, 'a');
 
-        // There are two columns in the table: key and value. Key is stored at the fast storage, value at the large storage.
-        // We can:
-        // - simultaneously increase the consumption of the both storage pools by increasing the number of rows in the table
-        // - increase or decrease the consumption of the large storage by making the value longer / shorter
-        // Test scenario:
-        // 1) disable separate disk space quotas, write a lot of data to break the overall hard quota
-        // 2) enable separate quotas, a small number of rows (little fast storage consumption), but a long text that breaks the large_kind hard quota
-        // 3) the same small number of rows, but a medium text that gets the large_kind storage consumption in between the soft and the large quotas
-        // 4) the same small number of rows, but a short text that gets the large_kind storage consumption below the soft quota
-        // 5) a bigger number of rows, but a tiny text to break only the fast_kind hard quota
-        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
-        updateAndCheck(lessRows, longText, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(EnableSeparateQuotas);
+        if (!EnableSeparateQuotas) {
+            // write a lot of data to break the overall hard quota
+            updateAndCheck(lessRows, longText, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        } else {
+            // There are two columns in the table: key and value. Key is stored at the fast storage, value at the large storage.
+            // We can:
+            // - simultaneously increase the consumption of the both storage pools by increasing the number of rows in the table
+            // - increase or decrease the consumption of the large storage by making the value longer / shorter
+            // Test scenario:
+            // 1) write a small number of rows (little fast storage consumption), but a long text that breaks the large kind hard quota
+            // 2) the same small number of rows, but a medium text that gets the large kind storage consumption in between the soft and the large quotas
+            // 3) the same small number of rows, but a short text that gets the large kind storage consumption below the soft quota
+            // 4) a bigger number of rows, but a tiny text to break only the fast kind hard quota
+            updateAndCheck(lessRows, longText, {{"large_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+            updateAndCheck(lessRows, mediumText, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
+            updateAndCheck(lessRows, shortText, {}, DEBUG_HINT);
 
-        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
-        updateAndCheck(lessRows, longText, {{"large_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
-
-        updateAndCheck(lessRows, mediumText, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
-
-        updateAndCheck(lessRows, shortText, {}, DEBUG_HINT);
-
-        updateAndCheck(moreRows, tinyText, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+            updateAndCheck(moreRows, tinyText, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        }
 
         // step 4: drop the table
         TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", "SomeTable");

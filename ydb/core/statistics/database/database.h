@@ -11,12 +11,9 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
     const TPathId& pathId, ui64 statType, std::vector<ui32>&& columnTags, std::vector<TString>&& data);
 
 NActors::IActor* CreateLoadStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie);
+    const TPathId& pathId, ui64 statType, ui32 columnTag);
 
 NActors::IActor* CreateDeleteStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
     const TPathId& pathId);
-
-NActors::IActor* CreateLoadStatisticsActor(ui64 queryId, const NActors::TActorId& replyActorId, const TString& database,
-    const TPathId& pathId, ui64 statType, ui32 columnTag, ui64 cookie);
 
 };

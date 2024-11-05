@@ -26,8 +26,15 @@
 
 #include <util/datetime/cputimer.h>
 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+
 namespace NKikimr {
 namespace NStat {
+
+using TEvReadRowsRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 struct TAggregationStatistics {
     using TColumnsStatistics = ::google::protobuf::RepeatedPtrField<::NKikimrStat::TColumnStatistics>;
@@ -115,6 +122,8 @@ class TStatService : public TActorBootstrapped<TStatService> {
 public:
     using TBase = TActorBootstrapped<TStatService>;
 
+    static constexpr TStringBuf StatisticsTable = "/.metadata/_statistics";
+
     TStatService(const TStatServiceSettings& settings)
         : Settings(settings)
         , AggregationStatistics(settings.FanOutFactor)
@@ -187,8 +196,9 @@ public:
 
     STFUNC(StateWork) {
         switch(ev->GetTypeRewrite()) {
-            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig)
-            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig)
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+
             hFunc(TEvStatistics::TEvGetStatistics, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvPropagateStatistics, Handle);
@@ -639,9 +649,104 @@ private:
         }
     }
 
+    void LoadStatistics(const TString& database, const TString& tablePath,
+                        const TPathId& pathId, ui32 statType, ui32 columnTag, ui64 queryId) {
+        SA_LOG_D("[TStatService::LoadStatistics] QueryId[ " << queryId
+            << " ], PathId[ " << pathId << " ], " << " StatType[ " << statType
+            << " ], ColumnTag[ " << columnTag << " ]");
+
+        auto readRowsRequest = Ydb::Table::ReadRowsRequest();
+        readRowsRequest.set_path(tablePath);
+
+        NYdb::TValueBuilder keys_builder;
+        keys_builder.BeginList()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("owner_id").Uint64(pathId.OwnerId)
+                    .AddMember("local_path_id").Uint64(pathId.LocalPathId)
+                    .AddMember("stat_type").Uint32(statType)
+                    .AddMember("column_tag").Uint32(columnTag)
+                .EndStruct()
+            .EndList();
+        auto keys = keys_builder.Build();
+        auto protoKeys = readRowsRequest.mutable_keys();
+        *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
+        *protoKeys->mutable_value() = NYdb::TProtoAccessor::GetProto(keys);
+
+        auto actorSystem = TlsActivationContext->ActorSystem();
+        auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
+            std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
+        );
+        rpcFuture.Subscribe([replyTo = SelfId(), queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
+            const auto& response = future.GetValueSync();
+            auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
+
+            if (response.status() == Ydb::StatusIds::SUCCESS) {
+                query_response->Success = true;
+
+                NYdb::TResultSetParser parser(response.result_set());
+                Y_ABORT_UNLESS(parser.RowsCount() < 2);
+
+                SA_LOG_D("[TStatService::ReadRowsResponse] QueryId[ "
+                    << queryId << " ], RowsCount[ " << parser.RowsCount() << " ]");
+
+                while(parser.TryNextRow()) {
+                    auto& col = parser.ColumnParser("data");
+                    query_response->Data = col.GetString();
+                 }
+            } else {
+                SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "
+                    << queryId << " ] " << NYql::IssuesFromMessageAsString(response.issues()));
+                query_response->Success = false;
+            }
+
+            actorSystem->Send(replyTo, query_response.release(), 0, queryId);
+        });
+    }
+
+    void QueryStatistics(const TString& database, const TString& tablePath, ui64 requestId) {
+        SA_LOG_D("[TStatService::QueryStatistics] RequestId[ " << requestId
+            << " ], Database[ " << database << " ], TablePath[ " << tablePath << " ]");
+
+        auto it = InFlight.find(requestId);
+        if (it == InFlight.end()) {
+            SA_LOG_E("[TStatService::QueryStatistics] RequestId[ " << requestId << " ] Not found");
+            ReplyFailed(requestId, true);
+            return;
+        }
+
+        auto& request = it->second;
+        request.StatResponses.reserve(request.StatRequests.size());
+        ui32 reqIndex = 0;
+
+        for (const auto& req : request.StatRequests) {
+            auto& response = request.StatResponses.emplace_back();
+            response.Req = req;
+            if (!req.ColumnTag) {
+                response.Success = false;
+                ++reqIndex;
+                continue;
+            }
+            ui64 queryId = NextLoadQueryCookie++;
+            LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
+
+            LoadStatistics(database, tablePath, req.PathId, request.StatType, *req.ColumnTag, queryId);
+
+            ++request.ReplyCounter;
+            ++reqIndex;
+        }
+    }
+
+    void AddNavigateEntry(TNavigate::TResultSet& items, const TPathId& pathId, bool redirectRequired = false) {
+        auto& entry = items.emplace_back();
+        entry.TableId = TTableId(pathId.OwnerId, pathId.LocalPathId);
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = redirectRequired;
+    }
+
     void Handle(TEvStatistics::TEvGetStatistics::TPtr& ev) {
         ui64 requestId = NextRequestId++;
-
         auto& request = InFlight[requestId];
         request.ReplyToActorId = ev->Sender;
         request.EvCookie = ev->Cookie;
@@ -653,59 +758,63 @@ private:
             return;
         }
 
-        SA_LOG_D("Handle TEvStatistics::TEvGetStatistics, request id = " << requestId
-            << ", ReplyToActorId = " << request.ReplyToActorId
-            << ", StatRequests.size() = " << request.StatRequests.size());
+        SA_LOG_D("[TStatService::TEvGetStatistics] RequestId[ " << requestId
+            << " ], ReplyToActorId[ " << request.ReplyToActorId
+            << "], StatType[ " << static_cast<ui32>(request.StatType)
+            << " ], StatRequestsCount[ " << request.StatRequests.size() << " ]");
 
-        if (request.StatType == EStatType::COUNT_MIN_SKETCH) {
-            const auto tenantName = CanonizePath(AppData()->TenantName);
-            SA_LOG_D("Load COUNT_MIN_SKETCH TenantName: " << tenantName);
-
-            request.StatResponses.reserve(request.StatRequests.size());
-            ui32 reqIndex = 0;
-            for (const auto& req : request.StatRequests) {
-                auto& response = request.StatResponses.emplace_back();
-                response.Req = req;
-                if (!req.ColumnTag) {
-                    response.Success = false;
-                    ++reqIndex;
-                    continue;
-                }
-                ui64 loadCookie = NextLoadQueryCookie++;
-                LoadQueriesInFlight[loadCookie] = std::make_pair(requestId, reqIndex);
-
-                Register(CreateLoadStatisticsActor(loadCookie, SelfId(), tenantName,
-                    req.PathId, request.StatType, *req.ColumnTag, loadCookie));
-                ++request.ReplyCounter;
-                ++reqIndex;
-            }
-            return;
-        }
-
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto navigate = std::make_unique<TNavigate>();
-        for (const auto& req : request.StatRequests) {
-            auto& entry = navigate->ResultSet.emplace_back();
-            entry.TableId = TTableId(req.PathId.OwnerId, req.PathId.LocalPathId);
-            entry.Operation = TNavigate::EOp::OpPath;
-            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-        }
         navigate->Cookie = requestId;
+        for (const auto& req : request.StatRequests) {
+            AddNavigateEntry(navigate->ResultSet, req.PathId, true);
+        }
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+        ui64 cookie = request.StatType == EStatType::COUNT_MIN_SKETCH ? requestId : 0;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()), 0, cookie);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         std::unique_ptr<TNavigate> navigate(ev->Get()->Request.Release());
 
-        auto cookie = navigate->Cookie;
+        auto requestId = ev->Cookie == 0 ? navigate->Cookie : ev->Cookie;
+        SA_LOG_D("[TStatService::TEvNavigateKeySetResult] RequestId[ " << requestId << " ]");
 
-        SA_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, request id = " << cookie);
+        // Search for the database to query to the statistics table.
+        if (ev->Cookie != 0) {
+            auto entry = std::find_if(navigate->ResultSet.begin(), navigate->ResultSet.end(), [](const TNavigate::TEntry& entry){
+                return entry.Status == TNavigate::EStatus::Ok;
+            });
 
-        if (cookie == ResolveSACookie) {
+            if (entry == navigate->ResultSet.end()) {
+                SA_LOG_E("[TStatService::TEvNavigateKeySetResult] RequestId[ " << requestId << " ] Navigate failed");
+                ReplyFailed(requestId, true);
+                return;
+            }
+
+            if (navigate->Cookie == 0) {
+                const auto database = JoinPath(entry->Path);
+                const auto tablePath = CanonizePath(database + StatisticsTable);
+                QueryStatistics(database, tablePath, requestId);
+                return;
+            }
+
+            const auto domainInfo = entry->DomainInfo;
+            const auto& pathId = domainInfo->IsServerless() ? domainInfo->ResourcesDomainKey : domainInfo->DomainKey;
+
+            SA_LOG_D("[TStatService::TEvNavigateKeySetResult] RequestId[ " << requestId
+                << " ] resolve DatabasePath[ " << pathId << " ]");
+            auto navigateRequest = std::make_unique<TNavigate>();
+            AddNavigateEntry(navigateRequest->ResultSet, pathId);
+
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()), 0, ev->Cookie);
+            return;
+        }
+
+        // Identification StatisticsAggregator tablet's identifier in the case of serverless.
+        if (requestId == ResolveSACookie) {
             Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
             auto& entry = navigate->ResultSet.back();
+
             if (entry.Status != TNavigate::EStatus::Ok) {
                 StatisticsAggregatorId = 0;
             } else if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
@@ -717,6 +826,8 @@ private:
                 ConnectToSA();
                 SyncNode();
             } else {
+                // In case of StatisticsAggregator tablet could not be found,
+                // we need to cancel the current requests. No need to delete CountMinSketch requests.
                 for (auto it = InFlight.begin(); it != InFlight.end();) {
                     if (EStatType::COUNT_MIN_SKETCH == it->second.StatType) {
                         ++it;
@@ -729,7 +840,6 @@ private:
             return;
         }
 
-        ui64 requestId = cookie;
         auto itRequest = InFlight.find(requestId);
         if (itRequest == InFlight.end()) {
             return;
@@ -741,62 +851,50 @@ private:
             return;
         }
 
-        std::unordered_set<ui64> ssIds;
-        bool isServerless = false;
-        ui64 aggregatorId = 0;
-        TPathId domainKey, resourcesDomainKey;
-        for (const auto& entry : navigate->ResultSet) {
-            if (entry.Status != TNavigate::EStatus::Ok) {
-                continue;
-            }
-            auto& domainInfo = entry.DomainInfo;
-            ssIds.insert(domainInfo->ExtractSchemeShard());
-            aggregatorId = domainInfo->Params.GetStatisticsAggregator();
-            isServerless = domainInfo->IsServerless();
-            domainKey = domainInfo->DomainKey;
-            resourcesDomainKey = domainInfo->ResourcesDomainKey;
-        }
-        if (ssIds.size() != 1) {
+        auto entry = std::find_if(navigate->ResultSet.begin(), navigate->ResultSet.end(), [](const TNavigate::TEntry& entry){
+            return entry.Status == TNavigate::EStatus::Ok;
+        });
+
+        if (entry == navigate->ResultSet.end()) {
             ReplyFailed(requestId, true);
             return;
         }
-        request.SchemeShardId = *ssIds.begin();
+
+        const auto domainInfo = entry->DomainInfo;
+        request.SchemeShardId = domainInfo->ExtractSchemeShard();
 
         if (Statistics.find(request.SchemeShardId) != Statistics.end()) {
             ReplySuccess(requestId, true);
             return;
         }
 
-        bool isNewSS = (NeedSchemeShards.find(request.SchemeShardId) == NeedSchemeShards.end());
+        auto isNewSS = (NeedSchemeShards.find(request.SchemeShardId) == NeedSchemeShards.end());
         if (isNewSS) {
             NeedSchemeShards.insert(request.SchemeShardId);
         }
 
-        auto navigateDomainKey = [this] (TPathId domainKey) {
-            using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-            auto navigate = std::make_unique<TNavigate>();
-            auto& entry = navigate->ResultSet.emplace_back();
-            entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
-            entry.Operation = TNavigate::EOp::OpPath;
-            entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-            entry.RedirectRequired = false;
-            navigate->Cookie = ResolveSACookie;
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+        auto navigateDomainKey = [this, cookie = ev->Cookie] (const TPathId& domainKey) {
+            auto navigateRequest = std::make_unique<TNavigate>();
+            AddNavigateEntry(navigateRequest->ResultSet, domainKey);
+            navigateRequest->Cookie = ResolveSACookie;
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
             ResolveSAStage = RSA_IN_FLIGHT;
         };
 
+        ui64 aggregatorId = domainInfo->Params.GetStatisticsAggregator();
+
         switch (ResolveSAStage) {
         case RSA_INITIAL:
-            if (!isServerless) {
+            if (!domainInfo->IsServerless()) {
                 if (aggregatorId) {
                     StatisticsAggregatorId = aggregatorId;
                     ResolveSAStage = RSA_FINISHED;
                 } else {
-                    navigateDomainKey(domainKey);
+                    navigateDomainKey(domainInfo->DomainKey);
                     return;
                 }
             } else {
-                navigateDomainKey(resourcesDomainKey);
+                navigateDomainKey(domainInfo->ResourcesDomainKey);
                 return;
             }
             break;
@@ -814,7 +912,6 @@ private:
         if (!SAPipeClientId) {
             ConnectToSA();
             SyncNode();
-
         } else if (isNewSS) {
             auto requestStats = std::make_unique<TEvStatistics::TEvRequestStats>();
             requestStats->Record.SetNodeId(SelfId().NodeId());
@@ -1041,8 +1138,7 @@ private:
     }
 
     void Handle(TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr& ev) {
-        ui64 cookie = ev->Get()->Cookie;
-        auto itLoadQuery = LoadQueriesInFlight.find(cookie);
+        auto itLoadQuery = LoadQueriesInFlight.find(ev->Cookie);
         Y_ABORT_UNLESS(itLoadQuery != LoadQueriesInFlight.end());
         auto [requestId, requestIndex] = itLoadQuery->second;
 
@@ -1063,8 +1159,10 @@ private:
         if (ev->Get()->Success) {
             response.Success = true;
             auto& data = ev->Get()->Data;
-            Y_ABORT_UNLESS(data);
-            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->data(), data->size()));
+
+            if (data) {
+                response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->data(), data->size()));
+            }
         } else {
             response.Success = false;
         }

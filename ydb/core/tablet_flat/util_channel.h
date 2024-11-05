@@ -84,11 +84,9 @@ namespace NUtil {
 
         TChannelsShares() : IsValid(false) {}
 
-        explicit TChannelsShares(const THashMap<ui32, float>& normalizedShares, size_t channelsCount)
+        explicit TChannelsShares(const THashMap<ui32, float>& normalizedShares)
             : Shares(normalizedShares)
-            , IsValid(false) {
-            PrefixSums.reserve(channelsCount);
-        }
+            , IsValid(false) {}
 
         void Update(ui32 channel, float share) {
             Shares[channel] = NormalizeFreeSpaceShare(share);
@@ -96,7 +94,6 @@ namespace NUtil {
         }
 
         ui8 Select(const TVector<ui8>& channels) const {
-            Y_ABORT_UNLESS(channels.size() == PrefixSums.capacity(), "Channels's size and prefixes' capacity mismatch");
             if (!IsValid) {
                 PrefixSums.clear();
                 CreateNormalizedSharesVector(Shares, channels, PrefixSums);

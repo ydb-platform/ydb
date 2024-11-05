@@ -18,8 +18,8 @@ NKikimrConfig::TAppConfig AppCfg() {
     NKikimrConfig::TAppConfig appCfg;
 
     auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
-    rm->SetChannelBufferSize(100);
-    rm->SetMinChannelBufferSize(100);
+    rm->SetChannelBufferSize(50);
+    rm->SetMinChannelBufferSize(50);
     rm->SetMkqlLightProgramMemoryLimit(100 << 20);
     rm->SetMkqlHeavyProgramMemoryLimit(100 << 20);
 
